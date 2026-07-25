@@ -1,4 +1,4 @@
-// On-chain validation of @assay/sui-sdk against the live devnet contract: the full
+// On-chain validation of @essey/sui-sdk against the live devnet contract: the full
 // NON-CUSTODIAL attested flow — init_pool → deposit → disburse_attested (operator ed25519
 // attestation, verified in-Move) → repay. Signs with the sui CLI's active keypair.
 // Env: SUI_PRIVKEY LENDING COINS CAP_USDC CAP_SSPX

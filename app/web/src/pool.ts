@@ -5,7 +5,7 @@ import { fromHex } from "@mysten/sui/utils";
 import {
   ptb, exactCoin, readPool, sharesOf, findPositions,
   accrueIndex, currentDebt, sharesToAssets, utilization, supplyApyPct, borrowRateBps, lenderAssets,
-} from "@assay/sui-sdk";
+} from "@essey/sui-sdk";
 import { PKG, POOL_ID, STABLE_TYPE, STABLE_UNIT, OPERATOR_API, poolReady, borrowReady } from "./config";
 import { marketByCoinType } from "./markets";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
@@ -31,7 +31,7 @@ export function useGovernance() {
       setPerCollateralCap(Number(p.perCollateralCap) / STABLE_UNIT);
     } catch { /* keep last */ }
   }, [client]);
-  useEffect(() => { refresh(); const t = setInterval(refresh, 15000); window.addEventListener("assay:refresh", refresh); return () => { clearInterval(t); window.removeEventListener("assay:refresh", refresh); }; }, [refresh]);
+  useEffect(() => { refresh(); const t = setInterval(refresh, 15000); window.addEventListener("essey:refresh", refresh); return () => { clearInterval(t); window.removeEventListener("essey:refresh", refresh); }; }, [refresh]);
   return { events, reserves, perCollateralCap };
 }
 
@@ -81,8 +81,8 @@ export function usePool() {
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 8000);
-    window.addEventListener("assay:refresh", refresh);
-    return () => { clearInterval(t); window.removeEventListener("assay:refresh", refresh); };
+    window.addEventListener("essey:refresh", refresh);
+    return () => { clearInterval(t); window.removeEventListener("essey:refresh", refresh); };
   }, [refresh]);
 
   const run = useCallback(async (build: (tx: Transaction) => Promise<void> | void) => {
@@ -93,7 +93,7 @@ export function usePool() {
       await build(tx);
       const r = await signAndExecute({ transaction: tx });
       await client.waitForTransaction({ digest: r.digest });
-      window.dispatchEvent(new Event("assay:refresh"));
+      window.dispatchEvent(new Event("essey:refresh"));
       return r.digest;
     } finally { setBusy(false); }
   }, [account, client, signAndExecute]);
@@ -150,7 +150,7 @@ export function useBorrow() {
       });
       const r = await signAndExecute({ transaction: tx });
       await client.waitForTransaction({ digest: r.digest });
-      window.dispatchEvent(new Event("assay:refresh"));
+      window.dispatchEvent(new Event("essey:refresh"));
       return r.digest;
     } finally { setBusy(false); }
   }, [account, client, signAndExecute]);
@@ -172,7 +172,7 @@ export function useFaucet() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "faucet failed");
-      window.dispatchEvent(new Event("assay:refresh"));
+      window.dispatchEvent(new Event("essey:refresh"));
       return j.digest as string;
     } finally { setBusy(false); }
   }, [account]);
@@ -216,8 +216,8 @@ export function usePositions() {
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 8000);
-    window.addEventListener("assay:refresh", refresh);
-    return () => { clearInterval(t); window.removeEventListener("assay:refresh", refresh); };
+    window.addEventListener("essey:refresh", refresh);
+    return () => { clearInterval(t); window.removeEventListener("essey:refresh", refresh); };
   }, [refresh]);
 
   const repay = useCallback(async (pos: PositionView) => {
@@ -234,7 +234,7 @@ export function usePositions() {
       const r = await signAndExecute({ transaction: tx });
       await client.waitForTransaction({ digest: r.digest });
       await refresh();
-      window.dispatchEvent(new Event("assay:refresh"));
+      window.dispatchEvent(new Event("essey:refresh"));
       return r.digest;
     } finally { setBusy(false); }
   }, [account, client, signAndExecute, refresh]);

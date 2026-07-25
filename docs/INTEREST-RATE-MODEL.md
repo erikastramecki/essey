@@ -6,7 +6,7 @@ liquidity sitting in the pool for borrowers to draw? And how is that rate decide
 **The short answer:** you don't pick a fixed rate. In lending protocols the rate is a **function
 of how much of the pool is being borrowed** (utilization). The market sets the equilibrium; you
 only choose the *shape* of the curve. This is the same model Aave and Compound use, and it's the
-right one for Assay.
+right one for Essey.
 
 ---
 
@@ -89,7 +89,7 @@ The standard fixes:
 The honest sequencing: **seed + incentivize to get initial liquidity and borrowers → real
 utilization builds → the dynamic curve takes over and you dial incentives down.**
 
-## 5. What Assay needs to implement (current state → target)
+## 5. What Essey needs to implement (current state → target)
 
 **Today:** the pool stores a single fixed `rate_bps` (set to 0 in the demo, so there's no interest —
 that's why the demo shows ~0% APY). The accrual math (`accrue`) already compounds a rate over time;

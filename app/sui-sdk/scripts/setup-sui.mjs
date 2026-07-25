@@ -1,4 +1,4 @@
-// One-shot on-chain setup for the Assay Sui stack (devnet): init a Pool pinned to the operator
+// One-shot on-chain setup for the Essey Sui stack (devnet): init a Pool pinned to the operator
 // API's ed25519 key, seed it with liquidity, and hand the test-coin faucet caps + a little gas
 // to the operator address (so the hosted /faucet can mint TUSDC/SSPX to visitors). Prints JSON
 // { pool, operatorAddress, operatorPubkey } for dev-up-sui.sh to write into .env.local.

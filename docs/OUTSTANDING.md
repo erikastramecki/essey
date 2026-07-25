@@ -23,7 +23,7 @@ the collateral-type term or the on-chain binding will never match.
 
 **4. ~~`README.md` claims "provably safe."~~ FIXED.** The README now leads with a "What is
 actually proven today" table separating the design's goal from what the deployment enforces, and
-the strongest claims in `WHY-ASSAY-IS-DIFFERENT.md` and `ARCHITECTURE.md` were softened to match.
+the strongest claims in `WHY-ESSEY-IS-DIFFERENT.md` and `ARCHITECTURE.md` were softened to match.
 Re-tighten the language as the circuits land and are audited — the table is meant to change.
 
 **5. Republish required.** `Pool`, `Position` and `OperatorCap` all changed layout, so Sui cannot

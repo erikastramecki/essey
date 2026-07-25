@@ -12,7 +12,7 @@ SPA_REWRITE='{ "rewrites": [{ "source": "/((?!assets/|favicon).*)", "destination
 # so every deploy path MUST run this or it ships nothing.
 bundle_operator() { # bundle_operator <operator-api-dir>
   ( cd "$1" && ./node_modules/.bin/esbuild server-sui.mjs --bundle --platform=node --format=esm \
-      --target=node20 --outfile=assay-operator/api/index.mjs --log-level=error \
+      --target=node20 --outfile=essey-operator/api/index.mjs --log-level=error \
       --banner:js="$ESM_BANNER" ) || { echo "❌ operator bundle failed"; return 1; }
 }
 

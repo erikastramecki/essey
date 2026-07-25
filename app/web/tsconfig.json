@@ -14,7 +14,7 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@assay/sui-sdk": ["../sui-sdk/src/index.ts"],
+      "@essey/sui-sdk": ["../sui-sdk/src/index.ts"],
       "@mysten/sui": ["./node_modules/@mysten/sui"],
       "@mysten/sui/*": ["./node_modules/@mysten/sui/*"]
     }

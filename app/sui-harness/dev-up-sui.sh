@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring up the full Assay SUI stack on devnet: init a seeded pool pinned to the operator key,
+# Bring up the full Essey SUI stack on devnet: init a seeded pool pinned to the operator key,
 # start the Sui Operator API (attestation + /quote + /faucet), and write app/web/.env.local so
 # `cd app/web && npm run dev` is clickable end-to-end (Supply/Borrow/Repay/Withdraw).
 set -uo pipefail

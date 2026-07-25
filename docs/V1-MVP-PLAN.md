@@ -1,6 +1,6 @@
-# Assay V1 MVP — the functional build plan
+# Essey V1 MVP — the functional build plan
 
-Turn the static Assay design into a working app. Sequenced so each phase leaves something
+Turn the static Essey design into a working app. Sequenced so each phase leaves something
 you can click and demo. Cluster: **devnet** (deployable, no real funds; localnet for dev).
 Stack: **Vite + React + TypeScript** frontend, **Solana wallet adapter**, a thin **Node
 (Express) Operator API** for the dregg-authorized borrow. Everything reuses the tested
@@ -14,7 +14,7 @@ backend (`dregg_lending_async` + `pyth.mjs` + `assets.mjs`).
 - **Wire the real markets we have**: TSLAx (mint + Pyth feed) confirmed; add NVDAx/AAPLx/SPYx feed ids to `assets.mjs` (mints from Solscan) so the table isn't hardcoded.
 
 ## Phase 1 — the shell + live data (read-only, no signing)
-- Scaffold the Vite/React app; port the Assay HTML/CSS into components (keep the exact design).
+- Scaffold the Vite/React app; port the Essey HTML/CSS into components (keep the exact design).
 - **Connect wallet** (wallet-adapter, Phantom). → unlocks balances.
 - **Live Pyth** everywhere: ticker, markets table prices, market-hours pill — poll Hermes via
   the shared oracle policy. → the page stops being static.

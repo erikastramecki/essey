@@ -2,8 +2,8 @@
 pragma solidity ^0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
-import {AssayPool} from "../src/AssayPool.sol";
-import {AssayMarkets} from "../src/AssayMarkets.sol";
+import {EsseyPool} from "../src/EsseyPool.sol";
+import {EsseyMarkets} from "../src/EsseyMarkets.sol";
 import {LivenessOracle} from "../src/LivenessOracle.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -57,14 +57,14 @@ contract Deploy is Script {
 
         // 15-minute liveness bound, 10-minute gap trigger, 1-hour post-outage grace.
         LivenessOracle liveness = new LivenessOracle(keeper, guardian, 15 minutes, 1 hours, 10 minutes);
-        AssayMarkets markets =
-            new AssayMarkets(AggregatorV3Interface(sequencer), liveness, admin, assetDec);
+        EsseyMarkets markets =
+            new EsseyMarkets(AggregatorV3Interface(sequencer), liveness, admin, assetDec);
         // Zero-rate to start: the MVP is proving the loan path, not the interest curve.
-        AssayPool pool = new AssayPool(IERC20(usdg), markets, 0, 0, 0, 0);
+        EsseyPool pool = new EsseyPool(IERC20(usdg), markets, 0, 0, 0, 0);
 
         // Conservative v1 parameters — 35% LTV against a 55% liquidation threshold is the 20pp
         // gap that has to absorb a weekend the position cannot be liquidated into.
-        AssayMarkets.Market memory m = AssayMarkets.Market({
+        EsseyMarkets.Market memory m = EsseyMarkets.Market({
             enabled: true,
             ltvBps: 3_500,
             liqThresholdBps: 5_500,

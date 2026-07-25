@@ -1,7 +1,7 @@
-# Scope — Assay on Robinhood Chain
+# Scope — Essey on Robinhood Chain
 
 Target MVP: a user signs in via their own MCP, an AI agent buys stock on Robinhood, the Stock
-Token lands in their self-custody wallet, and they borrow against it in Assay.
+Token lands in their self-custody wallet, and they borrow against it in Essey.
 
 All contract facts below were read from the **deployed, verified source** on
 `robinhoodchain.blockscout.com`, not from documentation — the docs contradicted themselves and
@@ -167,24 +167,24 @@ Solidity, Robinhood Chain (Arbitrum Orbit, EVM). Borrow asset: **USDG**
 (`0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`).
 
 ```
-AssayPool.sol          ERC-4626-style lender vault, USDG deposits, share accounting
+EsseyPool.sol          ERC-4626-style lender vault, USDG deposits, share accounting
                        borrow-index accrual (port the Sui curve, keep the R2-2 bounds
                        and saturating math — that logic was correct and is chain-agnostic)
 
-AssayMarkets.sol       per-collateral registry: Stock Token address, Chainlink feed,
+EsseyMarkets.sol       per-collateral registry: Stock Token address, Chainlink feed,
                        ltvBps, liqThresholdBps, liqBonusBps, per-collateral cap
                        (the isolation cap from the Sui design, which held up in audit)
 
-AssayBorrow.sol        openPosition: pull collateral, read latestRoundData + uiMultiplier,
+EsseyBorrow.sol        openPosition: pull collateral, read latestRoundData + uiMultiplier,
                        enforce LTV on-chain, disburse USDG
                        repay: >= owed with change returned (fixes known-open F5 by
                        construction — do NOT port the exact-equality bug)
 
-AssayLiquidate.sol     permissionless. health = balanceOfUI x price x liqThreshold / debt
+EsseyLiquidate.sol     permissionless. health = balanceOfUI x price x liqThreshold / debt
                        seize only debt x (1 + bonus), REFUND SURPLUS (F3)
                        reconcile balanceOf before seizing (adminBurn shortfall path)
 
-AssayGuard.sol         oracle staleness + sequencer-uptime checks, pause-aware accrual,
+EsseyGuard.sol         oracle staleness + sequencer-uptime checks, pause-aware accrual,
                        shortfall accounting, timelocked admin (R5-2)
 ```
 
@@ -208,23 +208,23 @@ The half that is **available today** and is the actual product hook:
 1. User connects their own MCP client to Robinhood's Trading MCP
    -> "connect a third-party AI agent to a dedicated Robinhood account"
    -> agent places the equity order under the user's own credentials.
-      Assay never holds the account. No custody, no licensing exposure.
+      Essey never holds the account. No custody, no licensing exposure.
 
 2. Robinhood settles the position as a Stock Token in the user's
    self-custody Robinhood Wallet on Robinhood Chain.
 
-3. Assay dApp (or an Assay MCP tool) reads the wallet, prices via Chainlink,
+3. Essey dApp (or an Essey MCP tool) reads the wallet, prices via Chainlink,
    quotes a borrow.
 
 4. User approves + openPosition in one tx. USDG lands in their wallet.
-   Collateral sits in AssayPool, on the same chain, no bridge.
+   Collateral sits in EsseyPool, on the same chain, no bridge.
 ```
 
-Assay is **never** a custodian at any step, which preserves the non-custodial property that the
+Essey is **never** a custodian at any step, which preserves the non-custodial property that the
 custody alternative would have destroyed.
 
-**Worth building: an Assay MCP server.** If the user already drives Robinhood through MCP, exposing
-`assay.quote`, `assay.borrow`, `assay.health`, `assay.repay` as MCP tools makes the whole flow one
+**Worth building: an Essey MCP server.** If the user already drives Robinhood through MCP, exposing
+`essey.quote`, `essey.borrow`, `essey.health`, `essey.repay` as MCP tools makes the whole flow one
 conversation. That is a genuine differentiator and is small next to the contract work.
 
 **Verify before relying on it:** Trading MCP availability by jurisdiction, whether agent trading
@@ -238,9 +238,9 @@ token in wallet.
 | Phase | Work | Gate |
 |---|---|---|
 | **0 — Spike** ✅ **DONE** | All assumptions verified against live mainnet with zero gas and no keys: deny-list default-open, sequencer uptime feed exists, testnet exists, and 67 contracts already hold Stock Tokens in production. `rh-chain/phase0-verify.mjs`, 7/7. | ✅ passed |
-| **1 — Core** (2–3 wks) | AssayPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | Full test suite incl. **mutation tests on every guard** *(note: we have claimed this twice and been wrong twice — an independent sweep of 139 mutations found 50 survivors. Treat as an aspiration, not a status.)* |
+| **1 — Core** (2–3 wks) | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | Full test suite incl. **mutation tests on every guard** *(note: we have claimed this twice and been wrong twice — an independent sweep of 139 mutations found 50 survivors. Treat as an aspiration, not a status.)* |
 | **2 — RH hazards** (1 wk) | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | Fork tests against real Stock Tokens |
-| **3 — Agent** (1–2 wks) | Assay MCP server, dApp borrow flow, Robinhood Wallet integration | End-to-end on testnet |
+| **3 — Agent** (1–2 wks) | Essey MCP server, dApp borrow flow, Robinhood Wallet integration | End-to-end on testnet |
 | **4 — Audit** | Fresh adversarial rounds on the Solidity | All-clean round before mainnet |
 | **5 — Hybrid** (optional) | Sui pools for non-Robinhood RWA; shared markets/risk config. **CCIP** already moves Stock Tokens cross-chain — evaluate, do not assume Sui is a supported lane. | — |
 

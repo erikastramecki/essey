@@ -1,0 +1,6 @@
+[package]
+name = "essey_markets"
+edition = "2024.beta"
+
+[addresses]
+essey_markets = "0x0"

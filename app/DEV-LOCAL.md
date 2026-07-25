@@ -1,4 +1,4 @@
-# Run Assay locally + click-test it
+# Run Essey locally + click-test it
 
 The devnet faucet is throttled, so here's a **fully local, clickable** stack — everything
 real (program, pool, USDC, wallet-signed txs), just on a local validator instead of devnet.

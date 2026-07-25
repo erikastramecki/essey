@@ -74,17 +74,17 @@ cast send <markets> "commitMarket(address)" <stock> --rpc-url rh_testnet --priva
 
 ```bash
 cd mcp && npm install
-ASSAY_CHAIN=rh-testnet ASSAY_POOL=<pool> ASSAY_MARKETS=<markets> node assay-mcp.mjs
+ESSEY_CHAIN=rh-testnet ESSEY_POOL=<pool> ESSEY_MARKETS=<markets> node essey-mcp.mjs
 ```
 
 Register it with your MCP client alongside Robinhood's Trading MCP. Then, in one conversation:
 
 1. *"Buy 10 shares of AAPL"* → Robinhood Trading MCP, under your own credentials
 2. wait for settlement → the Stock Token lands in your self-custody wallet
-3. *"What can I borrow against my AAPL?"* → `assay_quote`
-4. *"Borrow $500"* → `assay_borrow` returns unsigned calldata; your wallet signs
-5. *"How's my loan?"* → `assay_health`
-6. *"Repay it"* → `assay_repay`
+3. *"What can I borrow against my AAPL?"* → `essey_quote`
+4. *"Borrow $500"* → `essey_borrow` returns unsigned calldata; your wallet signs
+5. *"How's my loan?"* → `essey_health`
+6. *"Repay it"* → `essey_repay`
 
 Step 4 is the moment the MVP exists.
 

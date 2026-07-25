@@ -1,6 +1,0 @@
-[package]
-name = "assay_markets"
-edition = "2024.beta"
-
-[addresses]
-assay_markets = "0x0"

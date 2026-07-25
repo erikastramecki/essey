@@ -1,6 +1,6 @@
-# Assay — system architecture (V1 MVP)
+# Essey — system architecture (V1 MVP)
 
-Assay is an RWA lending market **designed around a formally-verified risk kernel** (see the README for what that enforces today): borrow USDC against tokenized stocks
+Essey is an RWA lending market **designed around a formally-verified risk kernel** (see the README for what that enforces today): borrow USDC against tokenized stocks
 (xStocks), where every borrow is authorized in-kernel by dregg and (eventually) settled
 against a zk proof. This doc maps the tiers, who signs what, and what's built vs. to-build.
 
@@ -8,7 +8,7 @@ against a zk proof. This doc maps the tiers, who signs what, and what's built vs
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 1. FRONTEND  (Assay web app — the thing users see)                    │
+│ 1. FRONTEND  (Essey web app — the thing users see)                    │
 │    wallet connect · markets · borrow/repay · supply/withdraw · positions │
 └───────────────┬───────────────────────────────┬───────────────────────┘
                 │ direct-signed txs             │ borrow / liquidate
@@ -60,7 +60,7 @@ frontend + a thin operator API, not a pure dapp.
 
 ## What's NOT built (the V1 MVP gap)
 
-- **The web app** — no frontend exists; Assay is a static HTML mockup (Artifact).
+- **The web app** — no frontend exists; Essey is a static HTML mockup (Artifact).
 - **The Operator API** — the borrow/keeper logic is scripts, not an HTTP service.
 - **A TS client SDK** — instruction builders are copy-pasted in test files, not a reusable lib.
 - **A positions/dashboard view** — not in the current design; needed so a borrower can see + manage loans.

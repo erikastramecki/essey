@@ -1,4 +1,4 @@
-// Unit tests for @assay/sui-sdk — attestation (security-critical), math, PTB builders.
+// Unit tests for @essey/sui-sdk — attestation (security-critical), math, PTB builders.
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import assert from "node:assert";
@@ -28,7 +28,7 @@ const TERMS = {
 console.log("attestation:");
 await t("message binds addr+debt+coll+commit+expiry+pool+TYPEs at correct offsets", () => {
   const m = attestationMessage(TERMS);
-  // "ASSAY_DISBURSE_V1" is 17 chars + a 1-byte ULEB length prefix = 18 bytes of domain tag,
+  // "ESSEY_DISBURSE_V1" is 17 chars + a 1-byte ULEB length prefix = 18 bytes of domain tag,
   // then the fixed region: borrower 32, debt 8, coll 8, loan_commit 32, expiry 8, pool 32.
   const TAG = 18;
   assert.ok(m.length > TAG + 120, "tag + 120 fixed bytes + two length-prefixed type names");

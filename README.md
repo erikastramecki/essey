@@ -1,4 +1,4 @@
-# Assay — RWA lending built around a formally-verified risk kernel
+# Essey — RWA lending built around a formally-verified risk kernel
 
 Multi-chain lending against tokenized real-world assets. Borrow a stablecoin against crypto and
 tokenized equities, where the solvency rule is designed to be enforced by a **formally-verified
@@ -21,7 +21,7 @@ So: "provably safe" describes the design's goal, not the current deployment. Wha
 enforce today is a conservative LTV check against a signed or on-chain price. Everything open is
 listed in **[docs/OUTSTANDING.md](docs/OUTSTANDING.md)**.
 
-**Live demo (devnet):** https://assay-sui-web.vercel.app  ·  Operator API: https://assay-operator-sui.vercel.app
+**Live demo (devnet):** https://essey-sui-web.vercel.app  ·  Operator API: https://assay-operator-sui.vercel.app
 
 **Security audits:** [docs/audits/](docs/audits/) — adversarial rounds with independent verification, published fix-first. **[docs/OUTSTANDING.md](docs/OUTSTANDING.md)** lists everything known-open, including items that block mainnet.
 
@@ -34,11 +34,11 @@ move/
   dregg_lending_async/   the lending program (dynamic rates, isolation caps, attested disburse)
   dregg_verifier/        vendored BN254 Groth16 verifier (generic; from the dregg project)
 app/
-  sui-sdk/               @assay/sui-sdk — PTB builders, object readers, attestation, math
+  sui-sdk/               @essey/sui-sdk — PTB builders, object readers, attestation, math
     scripts/             setup, governance (set-curve), keeper, liquidation-keeper
     test/                on-chain loops, pentest, five-loans evidence
   operator-api/          the operator: /quote (Pyth) + /borrow (attestation) + /faucet
-    assay-operator/      esbuild-bundled Vercel serverless deploy
+    essey-operator/      esbuild-bundled Vercel serverless deploy
   web/                   the site (Vite + React + @mysten/dapp-kit)
   sui-harness/           dev-up-sui.sh (local stack), markets.json (source of truth), add-market.sh
   deploy.sh              one-command deploy (web/operator) with preflight + smoke check

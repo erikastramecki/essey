@@ -5,7 +5,7 @@
 # followed by `python3 gen-configs.py`).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(cd "$HERE/.." && pwd)"
-OPDIR="$ROOT/operator-api"; OPVDIR="$OPDIR/assay-operator"; WEBDIR="$ROOT/web"
+OPDIR="$ROOT/operator-api"; OPVDIR="$OPDIR/essey-operator"; WEBDIR="$ROOT/web"
 . "$ROOT/lib-operator-env.sh"
 
 echo "── operator: env + redeploy ──"
@@ -17,12 +17,12 @@ provision_operator_env "$WEBDIR" "$OPVDIR" || { echo "❌ operator env provision
 # re-bundle (picks up any server code changes) + deploy — shared helpers, so a build/deploy/alias
 # failure exits non-zero instead of silently aliasing or validating the PREVIOUS deployment.
 bundle_operator "$OPDIR" || exit 1
-deploy_and_alias "$OPVDIR" "https://assay-operator-[a-z0-9-]+\.vercel\.app" "assay-operator-sui.vercel.app" || exit 1
+deploy_and_alias "$OPVDIR" "https://essey-operator-[a-z0-9-]+\.vercel\.app" "assay-operator-sui.vercel.app" || exit 1
 
 echo "── web: rebuild + redeploy ──"
 ( cd "$WEBDIR" && npx vite build >/dev/null 2>&1 ) || { echo "❌ web build failed"; exit 1; }
 printf '%s' "$SPA_REWRITE" > "$WEBDIR/dist/vercel.json"
-deploy_and_alias "$WEBDIR/dist" "https://[a-z0-9-]+\.vercel\.app" "assay-sui.vercel.app" || exit 1
+deploy_and_alias "$WEBDIR/dist" "https://[a-z0-9-]+\.vercel\.app" "essey-sui.vercel.app" || exit 1
 
 # FAIL on a bad status (audit R3): this previously piped a 500 body into python and swallowed the
 # error, printing "✅ live. markets: " with an empty count and exiting 0.

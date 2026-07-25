@@ -1,6 +1,6 @@
 // Liveness keeper for Robinhood Chain.
 //
-// Posts a heartbeat to LivenessOracle on a schedule. Liquidations on Assay require a recent
+// Posts a heartbeat to LivenessOracle on a schedule. Liquidations on Essey require a recent
 // heartbeat, so if this process — or the chain — stops, liquidations disable themselves with no
 // transaction needed. That inversion is deliberate: a keeper that tries to PAUSE on an outage
 // cannot send its pause transaction, because the chain it would send it to is down. It could only

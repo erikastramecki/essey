@@ -580,8 +580,8 @@ module dregg_lending_async::async_lending_tests {
         let l = al::liq_attest_msg_for_testing<SSPX, USDC>(
             object::id_from_address(@0xaa), object::id_from_address(@0xcc), 7_000_000_000, 60);
         assert!(d != l, 0);
-        // The tags differ at byte 0 (ULEB length: "ASSAY_DISBURSE_V1" is 17, "ASSAY_LIQUIDATE_V1"
-        // is 18) and at byte 7 ('D' vs 'L'). Byte 1 is 'A' in both — both start "ASSAY_".
+        // The tags differ at byte 0 (ULEB length: "ESSEY_DISBURSE_V1" is 17, "ESSEY_LIQUIDATE_V1"
+        // is 18) and at byte 7 ('D' vs 'L'). Byte 1 is 'A' in both — both start "ESSEY_".
         assert!(*vector::borrow(&d, 0) != *vector::borrow(&l, 0), 1);
         assert!(*vector::borrow(&d, 7) != *vector::borrow(&l, 7), 2);
     }

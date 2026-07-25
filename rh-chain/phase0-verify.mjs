@@ -1,4 +1,4 @@
-// Phase 0 — verify the Robinhood Chain assumptions the Assay port depends on.
+// Phase 0 — verify the Robinhood Chain assumptions the Essey port depends on.
 //
 // READ-ONLY section needs no keys and no gas: run it anywhere.
 // The TRANSFER section needs a funded wallet holding a Stock Token; it is the one

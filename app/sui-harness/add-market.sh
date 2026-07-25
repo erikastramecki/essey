@@ -11,7 +11,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(cd "$HERE/.." && pwd)"; MOVE="$(cd "$ROOT/../move" && pwd)"
 OPERATOR=0x438e70af0318316c75fea50950489fb6dcd2bc9a7d76df08eaa5ff254605671a
 SPEC="${1:?usage: add-market.sh <spec.json>}"
-STAMP=$(date +%s); PKGNAME="assay_ext_$STAMP"; PKGDIR="$MOVE/$PKGNAME"
+STAMP=$(date +%s); PKGNAME="essey_ext_$STAMP"; PKGDIR="$MOVE/$PKGNAME"
 mkdir -p "$PKGDIR/sources"
 cat > "$PKGDIR/Move.toml" <<EOF
 [package]
@@ -27,12 +27,12 @@ import json, sys
 spec, pkgdir, pkgname = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
 for m in spec:
     sym=m["sym"]; mod="t"+sym.lower(); st="T"+sym.upper(); dec=m.get("decimals",8); nm=m.get("name",sym)
-    open(f"{pkgdir}/sources/{mod}.move","w").write(f'''/// Test collateral coin for the Assay {sym} market (devnet demo; mintable via TreasuryCap).
+    open(f"{pkgdir}/sources/{mod}.move","w").write(f'''/// Test collateral coin for the Essey {sym} market (devnet demo; mintable via TreasuryCap).
 module {pkgname}::{mod} {{
     use sui::coin::{{Self, TreasuryCap}};
     public struct {st} has drop {{}}
     fun init(w: {st}, ctx: &mut TxContext) {{
-        let (t, mt) = coin::create_currency(w, {dec}, b"t{sym}", b"{nm}", b"Assay devnet test collateral", option::none(), ctx);
+        let (t, mt) = coin::create_currency(w, {dec}, b"t{sym}", b"{nm}", b"Essey devnet test collateral", option::none(), ctx);
         transfer::public_freeze_object(mt);
         transfer::public_transfer(t, ctx.sender());
     }}

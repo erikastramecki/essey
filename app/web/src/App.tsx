@@ -10,7 +10,7 @@ import { DOCS, type Doc } from "./docs.generated";
 
 const usd = (n: number, d = 2) => "$" + n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
-const REPO = "https://github.com/erikastramecki/assay";
+const REPO = "https://github.com/erikastramecki/essey";
 const GROUPS = ["Protocol", "Risk", "Audits"];
 
 // A short, curated set shown by default; everything else is one search away (scales as we add assets).
@@ -56,7 +56,7 @@ export default function App() {
     <>
       <header className="nav">
         <div className="wrap nav-in">
-          <a className="brand" href="#top"><Hallmark /> <span><b>Assay</b></span></a>
+          <a className="brand" href="#top"><Hallmark /> <span><b>Essey</b></span></a>
           <nav className="nav-links">
             {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
           </nav>
@@ -79,7 +79,7 @@ export default function App() {
         <section className="hero">
           <div className="wrap hero-grid">
             <div>
-              <span className="badge"><Shield /> Every loan assayed · every audit published</span>
+              <span className="badge"><Shield /> Every loan esseyed · every audit published</span>
               <h1>Borrow against your <em>onchain assets</em>.</h1>
               <p className="lede">Post {MARKETS.length} markets of collateral — crypto (BTC, ETH, SOL, SUI…) or tokenized equities — and draw a stablecoin in one transaction, without giving up custody. Every borrow is checked against a conservative live price before it is authorized, and every adversarial audit round we run is published.</p>
               <div className="hero-cta">
@@ -188,7 +188,7 @@ export default function App() {
         <footer>
           <div className="wrap foot-in">
             <div>
-              <p className="disclaim"><b>Assay is a devnet demonstration.</b> Tokenized equities are securities and carry issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an {""}<b>adminBurn</b>{" "}power — verified on-chain to sit with a plain EOA — that can destroy tokens at any address with no pause or block check; posted collateral can therefore cease to exist, and the loss is socialised pro-rata across borrowers. An issuer pause also makes repayment impossible until it is lifted. The Robinhood Chain deployment is fork-tested against real mainnet state but is <b>not yet deployed</b>. Not an offer of securities. Nothing here is financial advice.</p>
+              <p className="disclaim"><b>Essey is a devnet demonstration.</b> Tokenized equities are securities and carry issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an {""}<b>adminBurn</b>{" "}power — verified on-chain to sit with a plain EOA — that can destroy tokens at any address with no pause or block check; posted collateral can therefore cease to exist, and the loss is socialised pro-rata across borrowers. An issuer pause also makes repayment impossible until it is lifted. The Robinhood Chain deployment is fork-tested against real mainnet state but is <b>not yet deployed</b>. Not an offer of securities. Nothing here is financial advice.</p>
               <p className="disclaim" style={{ marginTop: 10 }}>Everything we know is unfinished is published in <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">OUTSTANDING.md</a> — including the items that block mainnet.</p>
             </div>
             <div className="foot-links">
@@ -295,7 +295,7 @@ const CHAINS = [
     id: "rh", name: "Robinhood Chain", sub: "Arbitrum Orbit L2 · chainId 4663", state: "fork" as const,
     lede: "Where the real tokenized equities are. A Solidity port that meets the assets where they already exist, so an agent can buy a stock and borrow against it without a bridge.",
     tech: [
-      ["Program", "AssayPool (ERC-4626) + AssayMarkets, with a 2-day timelock on every risk parameter"],
+      ["Program", "EsseyPool (ERC-4626) + EsseyMarkets, with a 2-day timelock on every risk parameter"],
       ["Collateral", "The real Stock Tokens — beacon proxies with an ERC-8056 uiMultiplier, and an issuer deny-list that can block a transfer"],
       ["Pricing", "Chainlink equity feeds on an 86,400s heartbeat. Borrowing is refused outside the US session, on a stale round, and on a holiday the calendar doesn't know about — the feed must have printed at or after today's open"],
       ["Risk", "The contract enforces one constant: a minimum 20-point gap between LTV and the liquidation threshold, sized to absorb a weekend the position cannot be liquidated into. The launch proposal is 35/55, which is a governed parameter rather than a protocol invariant. Fork-tested against the real feed at 35/55: survives −30%, underwater by −40% (the arithmetic break is −36.4%)"],
@@ -310,7 +310,7 @@ function Chains() {
     <section className="band" id="chains" style={{ paddingTop: 8 }}>
       <div className="wrap">
         <div className="band-head"><div><span className="eyebrow">Chains</span><h2>One protocol, two very different chains</h2>
-          <p>Assay is multi-chain because the collateral is. The tokenized equities worth borrowing against live on Robinhood Chain; the verified risk kernel lives on Sui. Each deployment is built for what its chain actually offers — including what it doesn't.</p></div></div>
+          <p>Essey is multi-chain because the collateral is. The tokenized equities worth borrowing against live on Robinhood Chain; the verified risk kernel lives on Sui. Each deployment is built for what its chain actually offers — including what it doesn't.</p></div></div>
         <div className="chain-grid">
           {CHAINS.map((c) => (
             <article className="chain-card" key={c.id}>

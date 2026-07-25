@@ -4,7 +4,7 @@
 **Goal (Erik):** a user locks **native BTC on the Bitcoin network** (we custody it there) and
 receives a **USDC loan on Sui**. Repay the USDC → reclaim the BTC.
 
-This extends the existing Assay stack (`dregg_lending_async` on Sui + the operator attestation
+This extends the existing Essey stack (`dregg_lending_async` on Sui + the operator attestation
 pattern). It is **not** a new protocol — it reuses the pool, the borrow-index accounting, the
 Pyth oracle, and the ed25519-attested disburse. The one genuinely new thing is that **the
 collateral does not live on Sui**, so it cannot be a `Coin<Collateral>` — it is an off-chain fact

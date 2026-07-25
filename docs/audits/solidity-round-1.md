@@ -1,6 +1,6 @@
 # Solidity port — adversarial audit round 1
 
-**Target:** `rh-chain/` (AssayPool, AssayMarkets, StaleFeedGuard, LivenessOracle,
+**Target:** `rh-chain/` (EsseyPool, EsseyMarkets, StaleFeedGuard, LivenessOracle,
 CollateralReconciler) · **Date:** 2026-07-20 · **Result:** 19 confirmed, 5 refuted · **Not clean.**
 
 Three auditors, two verifiers per finding, PoCs executed against the real contracts.
@@ -23,7 +23,7 @@ the four criticals.
 ## Fixed (full detail — fixes committed in `05a59cb`)
 
 ### CRITICAL — collateral valued in the wrong decimals, 1e12 over-borrow
-`AssayMarkets.collateralValue` divided out only the *feed* decimals and returned a
+`EsseyMarkets.collateralValue` divided out only the *feed* decimals and returned a
 collateral-scaled number, which was then compared against a 6-decimal USDG debt. Every LTV limit
 was 1e12 too permissive: a $2,000 AAPL position could drain the entire lender pool, and the
 resulting position was not even liquidatable because `isUnderwater` made the same comparison.

@@ -4,7 +4,7 @@
 // builds that message byte-for-byte so on-chain and off-chain agree. The layout mirrors
 // `async_lending::attest_msg` exactly — change one, change both:
 //
-//   bcs("ASSAY_DISBURSE_V1")  ULEB-prefixed domain tag (audit F3 — two message types now exist)
+//   bcs("ESSEY_DISBURSE_V1")  ULEB-prefixed domain tag (audit F3 — two message types now exist)
 // ‖ bcs(borrower:address)   32
 // ‖ bcs(debt:u64)            8
 // ‖ bcs(coll_amt:u64)        8
@@ -27,8 +27,8 @@ export const MAX_ATTEST_WINDOW_S = 120;
 /** Domain tags — must match DOMAIN_DISBURSE / DOMAIN_LIQUIDATE in async_lending.move. Two
  *  different things are signed by the same operator key; without distinct prefixes a disburse
  *  attestation and a liquidation attestation could be reinterpreted as one another. */
-const DOMAIN_DISBURSE = "ASSAY_DISBURSE_V1";
-const DOMAIN_LIQUIDATE = "ASSAY_LIQUIDATE_V1";
+const DOMAIN_DISBURSE = "ESSEY_DISBURSE_V1";
+const DOMAIN_LIQUIDATE = "ESSEY_LIQUIDATE_V1";
 
 /** bcs-encoded byte-vector (ULEB length prefix + bytes), matching Move's bcs::to_bytes(&vector<u8>). */
 const tag = (s: string) => bcs.vector(bcs.u8()).serialize(Array.from(new TextEncoder().encode(s))).toBytes();

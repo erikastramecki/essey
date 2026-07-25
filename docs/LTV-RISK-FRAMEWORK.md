@@ -1,6 +1,6 @@
 # LTV & risk-parameter framework
 
-How Assay sets loan-to-value (LTV) and liquidation thresholds safely — the methodology,
+How Essey sets loan-to-value (LTV) and liquidation thresholds safely — the methodology,
 how the big lenders do it, and the concrete schema for our assets (esp. the RWA gap-risk
 that makes equities different from crypto).
 
@@ -82,7 +82,7 @@ off-hours** (15s vs 60s) so a stale equity price is *refused*, and the `assetCla
 keeps crypto (always-fresh) from being wrongly refused. LTV handles the *magnitude* of the
 gap; the oracle handles *not lending on a stale print*.
 
-## Assay's schema (the per-asset table + how a new asset is parameterized)
+## Essey's schema (the per-asset table + how a new asset is parameterized)
 
 **To onboard a market, classify it and set params from this table (conservative to start):**
 
@@ -107,7 +107,7 @@ gap; the oracle handles *not lending on a stale print*.
 5. **Add a reserve/insurance buffer** target (a borrow-fee cut) for residual gap-tail risk.
 6. **Review + monitor:** re-evaluate as vol/liquidity move; tighten fast, loosen slowly.
 
-## Who enforces it (the Assay-specific safety)
+## Who enforces it (the Essey-specific safety)
 The LTV *value* is our risk decision (the table + process above). But unlike a normal
 protocol that just trusts its off-chain risk team, **dregg enforces it provably**: the borrow
 turn is admitted only if `debt ≤ collateral · conservative_price · LTV` **in-kernel**, with

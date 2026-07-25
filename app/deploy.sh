@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command deploy for the Assay stack. Preflight (tsc, optional move test) → build → deploy →
+# One-command deploy for the Essey stack. Preflight (tsc, optional move test) → build → deploy →
 # pin the stable alias → smoke check. Replaces the manual rebuild/vercel/alias dance.
 #   bash deploy.sh              # web + operator
 #   bash deploy.sh --web        # web only
@@ -7,8 +7,8 @@
 #   bash deploy.sh --test       # also run `sui move test` in preflight
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-WEB="$HERE/web"; OPDIR="$HERE/operator-api"; OPV="$OPDIR/assay-operator"
-WEB_ALIAS=assay-sui-web.vercel.app; OP_ALIAS=assay-operator-sui.vercel.app
+WEB="$HERE/web"; OPDIR="$HERE/operator-api"; OPV="$OPDIR/essey-operator"
+WEB_ALIAS=essey-sui-web.vercel.app; OP_ALIAS=assay-operator-sui.vercel.app
 
 
 fail() { echo "❌ $1"; exit 1; }
@@ -30,7 +30,7 @@ if [ "$do_op" = 1 ]; then
   echo "── operator: bundle + deploy ──"
   provision_operator_env "$WEB" "$OPV" || fail "operator env provisioning failed"
   bundle_operator "$OPDIR" || fail "operator bundle failed"
-  deploy_and_alias "$OPV" "https://assay-operator-[a-z0-9-]+\.vercel\.app" "$OP_ALIAS" || fail "operator deploy/alias failed"
+  deploy_and_alias "$OPV" "https://essey-operator-[a-z0-9-]+\.vercel\.app" "$OP_ALIAS" || fail "operator deploy/alias failed"
 fi
 
 # ---- web ----

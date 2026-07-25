@@ -1,6 +1,6 @@
 # What actually works today — and how to test it
 
-The **backend is real and tested**; the **web UI is not built yet** (Assay is a static
+The **backend is real and tested**; the **web UI is not built yet** (Essey is a static
 mockup). Here's exactly what runs, and one command to see it all go green.
 
 ## The one command
@@ -44,7 +44,7 @@ node liquidate_flow.mjs "$PROG"
 (`test-all.sh` runs every Move package, the SDK unit tests, the web typecheck and shell syntax. Live devnet flows — the pentest suite and the operator borrow path — need SUI_PRIVKEY and a deployed package, and are listed at the bottom of that script.)
 
 ## What you CANNOT test yet (because it isn't built)
-- Clicking anything in a real Assay web app — **no frontend exists** (the Artifact is a mockup).
+- Clicking anything in a real Essey web app — **no frontend exists** (the Artifact is a mockup).
 - A borrow from a browser wallet — needs the **Operator API** (not built).
 - Devnet — flows run on **localnet**; no persistent devnet deploy yet.
 

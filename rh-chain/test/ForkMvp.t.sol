@@ -2,8 +2,8 @@
 pragma solidity ^0.8.28;
 
 import {Test, console} from "forge-std/Test.sol";
-import {AssayPool} from "../src/AssayPool.sol";
-import {AssayMarkets} from "../src/AssayMarkets.sol";
+import {EsseyPool} from "../src/EsseyPool.sol";
+import {EsseyMarkets} from "../src/EsseyMarkets.sol";
 import {LivenessOracle} from "../src/LivenessOracle.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -27,8 +27,8 @@ contract ForkMvpTest is Test {
     address constant AAPL_WHALE = 0x9f736F87E6293AC1Bd9142E257dbfAC8b7AcF1ae; // EOA, ~309 AAPL
     address constant USDG_WHALE = 0x2d4d2A025b10C09BDbd794B4FCe4F7ea8C7d7bB4; // EOA, ~50M USDG
 
-    AssayPool pool;
-    AssayMarkets markets;
+    EsseyPool pool;
+    EsseyMarkets markets;
     LivenessOracle liveness;
     address admin = makeAddr("admin");
     address keeper = makeAddr("keeper");
@@ -49,10 +49,10 @@ contract ForkMvpTest is Test {
         // Short grace: this test proves the MVP path, not the liveness timing (unit-tested).
         liveness = new LivenessOracle(keeper, admin, 2 hours, 1 minutes, 30 minutes);
         // address(0): no L2 sequencer uptime feed exists on this chain — LivenessOracle stands in.
-        markets = new AssayMarkets(AggregatorV3Interface(address(0)), liveness, admin, assetDec);
-        pool = new AssayPool(IERC20(USDG), markets, 0, 0, 0, 0);
+        markets = new EsseyMarkets(AggregatorV3Interface(address(0)), liveness, admin, assetDec);
+        pool = new EsseyPool(IERC20(USDG), markets, 0, 0, 0, 0);
 
-        AssayMarkets.Market memory m = AssayMarkets.Market({
+        EsseyMarkets.Market memory m = EsseyMarkets.Market({
             enabled: true, ltvBps: 3_500, liqThresholdBps: 5_500, liqBonusBps: 800,
             collateralDecimals: stockDec, cap: uint128(1_000_000 * (10 ** assetDec))
         });

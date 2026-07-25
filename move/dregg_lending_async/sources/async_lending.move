@@ -53,8 +53,8 @@ module dregg_lending_async::async_lending {
     /// attestation could in principle be reinterpreted as one another — the classic cross-protocol
     /// signature reuse. The tag is length-prefixed by bcs like the type names, so it cannot run
     /// into the following field.
-    const DOMAIN_DISBURSE: vector<u8> = b"ASSAY_DISBURSE_V1";
-    const DOMAIN_LIQUIDATE: vector<u8> = b"ASSAY_LIQUIDATE_V1";
+    const DOMAIN_DISBURSE: vector<u8> = b"ESSEY_DISBURSE_V1";
+    const DOMAIN_LIQUIDATE: vector<u8> = b"ESSEY_LIQUIDATE_V1";
 
     /// Longest life an attestation may be signed for. The operator's oracle discipline
     /// (pyth.mjs: maxStaleSecs 60) only constrains the INSTANT of signing, so the on-chain

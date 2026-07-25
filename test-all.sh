@@ -25,14 +25,14 @@ for d in "$ROOT"/move/*/; do
 done
 
 echo "== SDK unit tests =="
-if ( cd "$ROOT/app/sui-sdk" && npx tsx test/unit.mjs >/tmp/assay-sdk.log 2>&1 ); then
-  green "sui-sdk — $(grep -oE '[0-9]+ passed' /tmp/assay-sdk.log | tail -1)"
-else red "sui-sdk unit tests (see /tmp/assay-sdk.log)"; fi
+if ( cd "$ROOT/app/sui-sdk" && npx tsx test/unit.mjs >/tmp/essey-sdk.log 2>&1 ); then
+  green "sui-sdk — $(grep -oE '[0-9]+ passed' /tmp/essey-sdk.log | tail -1)"
+else red "sui-sdk unit tests (see /tmp/essey-sdk.log)"; fi
 
 echo "== web typecheck =="
-if ( cd "$ROOT/app/web" && npx tsc --noEmit >/tmp/assay-web.log 2>&1 ); then
+if ( cd "$ROOT/app/web" && npx tsc --noEmit >/tmp/essey-web.log 2>&1 ); then
   green "web tsc --noEmit"
-else red "web typecheck (see /tmp/assay-web.log)"; fi
+else red "web typecheck (see /tmp/essey-web.log)"; fi
 
 echo "== shell syntax =="
 sh_ok=1

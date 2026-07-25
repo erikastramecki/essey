@@ -1,8 +1,8 @@
-# Assay — UI/UX component map (every element → wiring → status)
+# Essey — UI/UX component map (every element → wiring → status)
 
-Every interactive component in the Assay design, what it needs to become functional, and
+Every interactive component in the Essey design, what it needs to become functional, and
 its status today. **Status legend:** 🟢 works · 🟡 partial (client-only) · 🔴 dead (no wiring).
-Source of truth for the design: the Assay Artifact. Backend it maps to: `dregg_lending_async`
+Source of truth for the design: the Essey Artifact. Backend it maps to: `dregg_lending_async`
 (instructions in **bold**), `operator/pyth.mjs`, the Operator API (to build).
 
 ## Nav bar

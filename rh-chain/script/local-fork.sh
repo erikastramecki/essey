@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Zero-cost local rig: fork Robinhood Chain mainnet, deploy Assay, drive it to a borrowable state.
+# Zero-cost local rig: fork Robinhood Chain mainnet, deploy Essey, drive it to a borrowable state.
 #
 # Real AAPL Stock Token, real USDG, real mainnet prices, anvil's prefunded keys. No wallet, no gas,
 # no testnet — Robinhood Chain testnet has none of these tokens deployed, so mocking all three
@@ -68,4 +68,4 @@ echo "canBorrow: $(cast call $MK 'canBorrow(address)(bool)' $AAPL --rpc-url $RPC
 echo "liveness:  $(cast call $LV 'liquidationsAllowed()(bool)' --rpc-url $RPC 2>/dev/null)"
 echo
 echo "Drive it from an agent:"
-echo "  ASSAY_CHAIN=local-fork ASSAY_POOL=$PL ASSAY_MARKETS=$MK node ../mcp/assay-mcp.mjs"
+echo "  ESSEY_CHAIN=local-fork ESSEY_POOL=$PL ESSEY_MARKETS=$MK node ../mcp/essey-mcp.mjs"
