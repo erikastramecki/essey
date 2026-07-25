@@ -40,11 +40,12 @@ size-independent). The keccak cost is the next thing to measure, not assume.
 
 1. **Native parser + real fixture — DONE.** `circuit/pyth/` parses a real PNAU update; tests pin
    every field against Hermes (BTC $64,124.49, 13 sigs, 13-hop proof).
-2. **Native full verifier — next.** Verify the 13 guardian ECDSA sigs against guardian-set-index-7
-   addresses (double-keccak body), and verify the Merkle proof to the root. End-to-end ground truth
-   + the witness generator the circuit consumes. Needs the guardian set 7 addresses (from the
-   Wormhole contract / well-known set).
-3. **In-circuit keccak + ECDSA.** Wire gnark's keccak gadget; MEASURE its real cost; integrate with
+2. **Native full verifier — DONE.** `verify.go` verifies the 13 guardian ECDSA sigs (ecrecover over
+   the double-keccak body) against Wormhole guardian-set-7 addresses (`guardians.go`, pulled live
+   from the core contract), and verifies the sorted-pair Merkle proof to the root. Tests confirm the
+   real update passes and that a tampered body or price is rejected. This is the ground truth + the
+   witness generator the circuit consumes.
+3. **In-circuit keccak + ECDSA — next.** Wire gnark's keccak gadget; MEASURE its real cost; integrate with
    the ECDSA quorum. Replace the estimate above with numbers.
 4. **In-circuit Merkle proof** against the root.
 5. **Assemble + bind.** One circuit: VAA verify → extract price → feed the solvency commitment.
