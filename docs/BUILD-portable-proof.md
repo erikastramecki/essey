@@ -90,8 +90,22 @@ audited) verifies ECDSA directly and drops those hashes (design B above).
    Merkle proof, collapsing the marginal to just the solvency check (~2k) — genuinely near-zero.
    (`essey/pyth` is now imported directly by the circuit tests via a local replace, so batch
    witnesses come from real fixtures, not hardcoded blobs.)
-7. **Trusted setup ceremony + audit.** A ~5–6M-constraint circuit: a botched setup forges prices; a
-   wrong constraint drains the pool. Non-negotiable before mainnet.
+7. **Trusted setup + audit — foundation DONE; ceremony & external audit remain.**
+   - **Soundness suite (`soundness_test.go`) — DONE.** The property an audit checks: the circuit
+     accepts ONLY valid witnesses. Five negative cases, each breaking one link of the trust chain,
+     all REJECTED: forged guardian body, forged Merkle inclusion, terms≠commitment, over-borrow, and
+     price substitution (the crux — you cannot swap a favourable price for the attested one).
+     Combined with the completeness proof (the assembled test accepts the real update), this is the
+     circuit's soundness/completeness backbone.
+   - **Trusted setup — decision pending.** Groth16 needs a per-circuit setup; a botched one forges
+     proofs. Two paths: (a) a Groth16 MPC ceremony (gnark `mpcsetup`, N independent participants,
+     secure if ≥1 is honest) — but per-circuit, so batch-size changes re-run it; (b) switch to PLONK,
+     whose universal SRS (from an existing Powers of Tau) needs no per-circuit ceremony, at some
+     prover/proof-size cost. **Recommend PLONK** given the circuit will vary by batch size. Not yet
+     run here (a real ceremony needs external participants).
+   - **Independent audit — external.** A ~2.4M-constraint circuit needs third-party review; a wrong
+     constraint drains the pool. The soundness suite + native reference (`circuit/pyth`) are what an
+     auditor differential-tests against.
 
 ## Reproduce
 
