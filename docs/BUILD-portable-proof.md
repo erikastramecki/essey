@@ -52,12 +52,14 @@ off-circuit, audited) we verify ECDSA directly and drop the pubkey→address has
    from the core contract), and verifies the sorted-pair Merkle proof to the root. Tests confirm the
    real update passes and that a tampered body or price is rejected. This is the ground truth + the
    witness generator the circuit consumes.
-3. **In-circuit keccak + ECDSA — in progress.** keccak cost MEASURED (191,871/block). In-circuit
-   `keccak256(keccak256(real VAA body))` proven to equal the real guardian digest with a full
-   Groth16 proof (`vaa_digest_test.go`, 252k constraints). ECDSA-vs-pubkey quorum already proven
-   (`quorum_bench_test.go`). **Remaining seam:** bridge the 32-byte in-circuit digest to the ECDSA
-   message (`emulated.Element[Secp256k1Fr]` — a bytes→scalar-mod-n recomposition), then assemble
-   into one guardian-verification circuit.
+3. **In-circuit keccak + ECDSA — DONE (single guardian).** keccak cost MEASURED (191,871/block).
+   `singleGuardianCircuit` (`guardian_verify_test.go`) computes `keccak256(keccak256(real body))`
+   in-circuit, bridges the 32-byte digest to a `Secp256k1Fr` scalar (`digestToScalar`: little-endian
+   FromBits + ReduceStrict), and verifies a REAL guardian ECDSA signature over it against the pinned
+   pubkey — full Groth16 proof, 378,163 constraints, ~48s. The seam between the keccak (bytes) and
+   ECDSA (emulated scalar) worlds is closed on real data. Scaling to the 13-guardian quorum is
+   replication: the body digest is computed ONCE and shared, then 13 ECDSA verifies against 13
+   pinned pubkeys — ~1.8M constraints (design B, pubkeys pinned, no address keccak).
 4. **In-circuit Merkle proof** against the root.
 5. **Assemble + bind.** One circuit: VAA verify → extract price → feed the solvency commitment.
 6. **Batch.** N loans, one shared VAA verification, one proof.
