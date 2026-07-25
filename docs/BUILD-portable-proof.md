@@ -44,9 +44,10 @@ every additional hash is only **~60k marginal** (measured: 1 keccak 191,871; 2 k
 | + ECDSA quorum | 1.27M | 1.27M |
 | **full circuit (design B)** | ~4.3M | **~2.5M** |
 
-So realistically **~15–20s prove, ~1 GB key, ~7 GB RAM** — a normal server, not a monster. On-chain
-**verify stays 2 ms / 496 B regardless** (Groth16 verify is size-independent). Confirm by measuring
-the assembled circuit in phase 5.
+So realistically ~15–20s prove — **now confirmed by the assembled circuit (phase 5): 2,396,290
+constraints, 16.9s prove, 684 MB key, 2.7 GB RAM, 4m52s one-time setup, 2 ms verify.** The memory
+came in well under estimate; a laptop can prove this. On-chain **verify stays 2 ms / 496 B
+regardless** (Groth16 verify is size-independent).
 
 **Optimization (measured): pin pubkeys, not addresses.** 13 keccaks only exist to derive guardian
 *addresses* from recovered pubkeys. Pinning the guardian **pubkeys** (derived once off-circuit,
@@ -73,7 +74,13 @@ audited) verifies ECDSA directly and drops those hashes (design B above).
    13-hop Pyth proof — leaf `keccak(0x00||msg)[:20]`, sorted-pair nodes `keccak(0x01||min||max)[:20]`
    (in-circuit compare + conditional swap) — to the real root. 979,085 constraints; verified with
    `test.IsSolved` on the real fixture. Revealed the keccak-amortisation finding above.
-5. **Assemble + bind.** One circuit: VAA verify → extract price → feed the solvency commitment.
+5. **Assemble + bind — DONE.** `portableProofCircuit` (`portable_proof_test.go`) is the whole thing
+   in one circuit: double-keccak digest → 13 ECDSA verifies vs pinned pubkeys → extract the Merkle
+   root from the guardian-signed body (`body[68:88]`) → 13-hop Merkle climb must equal it → extract
+   the price (`message[33:41]`) → bind it into the solvency commitment. **A real Groth16 proof of the
+   full circuit verifies on real Pyth data.** MEASURED: 2,396,290 constraints, 4m52s one-time setup,
+   684 MB proving key, **16.9s prove, 2 ms verify, 2.7 GB RAM.** (Insolvent loans are correctly
+   rejected by the solvency guard — confirmed when a mis-sized test debt failed the inequality.)
 6. **Batch.** N loans, one shared VAA verification, one proof.
 7. **Trusted setup ceremony + audit.** A ~5–6M-constraint circuit: a botched setup forges prices; a
    wrong constraint drains the pool. Non-negotiable before mainnet.
