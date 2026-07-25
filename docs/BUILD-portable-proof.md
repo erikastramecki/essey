@@ -111,6 +111,25 @@ audited) verifies ECDSA directly and drops those hashes (design B above).
      constraint drains the pool. The soundness suite + native reference (`circuit/pyth`) are what an
      auditor differential-tests against.
 
+## Prover service — DONE
+
+The circuit is now **library code** (`portableproof.go` — `BatchCircuit`/`LoanSlot` + helpers moved
+out of `_test.go` so anything can call them), and there is a real proof-generating service:
+
+- `prover/` — `New(pw, nLoans)` compiles + sets up once; `Prove(pw, loans)` builds the witness from a
+  natively-verified Pyth update + loan terms and returns a `Bundle{Proof, PublicInputs, VK}`; `Verify`
+  is the settlement-side check. Exercised end-to-end on the real 2-price update: **196-byte proof**,
+  76-byte public inputs, 560-byte vk — verified with no oracle. (`PROVER=1 go test -run EndToEnd
+  ./prover`.)
+- `cmd/prover/` — the operator-facing HTTP service. `POST /prove {updateHex, loans}` → a bundle; the
+  heavy setup runs lazily per circuit shape (guardians × loans × Merkle depth) and is cached, so only
+  the first request of a shape is slow. The operator (Node) shells out or HTTPs to this Go service and
+  never touches a key. Backend is Groth16 for the fast local end-to-end; production swaps in PLONK
+  (same code path) for the no-ceremony setup.
+- **Note — variable Merkle depth.** The proof depth follows how many feeds Pyth batched into an
+  update, so the circuit shape varies; production pins a max depth (padding proofs) or keeps a prover
+  per shape (the cache already does the latter).
+
 ## Reproduce
 
 ```

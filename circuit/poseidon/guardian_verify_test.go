@@ -11,7 +11,6 @@ import (
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
 	"github.com/consensys/gnark/std/hash/sha3"
-	"github.com/consensys/gnark/std/math/bits"
 	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/std/math/uints"
 	"github.com/consensys/gnark/std/signature/ecdsa"
@@ -25,17 +24,7 @@ const (
 	realSigS = "0bc7b717a59d38124b71259d8d46a2dae41d6f0e3d8308f942fd4915b084a0f2"
 )
 
-// digestToScalar bridges the in-circuit keccak output (32 big-endian bytes) to the secp256k1 scalar
-// the ECDSA gadget takes as its message — the seam between the keccak world (bytes) and the ECDSA
-// world (emulated field element). FromBits is little-endian, so bytes are fed least-significant
-// first, each byte LSB-first; ReduceStrict canonicalises mod n (matching HashToInt).
-func digestToScalar(api frontend.API, fr *emulated.Field[emulated.Secp256k1Fr], digest []uints.U8) *emulated.Element[emulated.Secp256k1Fr] {
-	le := make([]frontend.Variable, 0, len(digest)*8)
-	for i := len(digest) - 1; i >= 0; i-- {
-		le = append(le, bits.ToBinary(api, digest[i].Val, bits.WithNbDigits(8))...)
-	}
-	return fr.ReduceStrict(fr.FromBits(le...))
-}
+// digestToScalar now lives in portableproof.go (library code, shared with the prover).
 
 // singleGuardianCircuit: the seam closed. It computes the guardian-signed digest from the real body
 // in-circuit, then verifies a real guardian ECDSA signature over it against the pinned pubkey. This

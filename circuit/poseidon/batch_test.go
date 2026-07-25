@@ -12,9 +12,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
-	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
-	"github.com/consensys/gnark/std/hash/sha3"
-	"github.com/consensys/gnark/std/math/cmp"
 	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/std/math/uints"
 	"github.com/consensys/gnark/std/signature/ecdsa"
@@ -22,69 +19,7 @@ import (
 	iden3 "github.com/iden3/go-iden3-crypto/poseidon"
 )
 
-// loanSlot is one loan in a batch: its price message + Merkle proof (under the shared root) and its
-// solvency terms, with a per-loan public commitment.
-type loanSlot struct {
-	Message                []uints.U8
-	Proof                  [][]uints.U8
-	PoolHi, PoolLo         frontend.Variable
-	BorrowerHi, BorrowerLo frontend.Variable
-	Debt, Collateral       frontend.Variable
-	LtvBps, Nonce          frontend.Variable
-	TypeHi, TypeLo         frontend.Variable
-	Commit                 frontend.Variable `gnark:",public"`
-}
-
-// batchCircuit verifies the guardian quorum + root ONCE, then proves N loans under that one signed
-// root. The expensive guardian ECDSA is shared across the whole batch; per-loan cost is one Merkle
-// climb + solvency.
-type batchCircuit struct {
-	Body  []uints.U8
-	Pubs  []ecdsa.PublicKey[emulated.Secp256k1Fp, emulated.Secp256k1Fr]
-	Sigs  []ecdsa.Signature[emulated.Secp256k1Fr]
-	Loans []loanSlot
-}
-
-func (c *batchCircuit) Define(api frontend.API) error {
-	uapi, err := uints.New[uints.U64](api)
-	if err != nil {
-		return err
-	}
-	// --- shared: guardian quorum over the body digest ---
-	h1, _ := sha3.NewLegacyKeccak256(api)
-	h1.Write(c.Body)
-	h2, _ := sha3.NewLegacyKeccak256(api)
-	h2.Write(h1.Sum())
-	fr, err := emulated.NewField[emulated.Secp256k1Fr](api)
-	if err != nil {
-		return err
-	}
-	msg := digestToScalar(api, fr, h2.Sum())
-	params := sw_emulated.GetCurveParams[emulated.Secp256k1Fp]()
-	for i := range c.Pubs {
-		c.Pubs[i].Verify(api, params, msg, &c.Sigs[i])
-	}
-	root := c.Body[68:88]
-	cmp160 := cmp.NewBoundedComparator(api, new(big.Int).Lsh(big.NewInt(1), 160), false)
-
-	// --- per loan: Merkle inclusion under the shared root + solvency ---
-	for li := range c.Loans {
-		ln := &c.Loans[li]
-		cur := keccak20(api, append([]uints.U8{uints.NewU8(0)}, ln.Message...))
-		for _, sib := range ln.Proof {
-			lo, hi := sortPair(api, uapi, cmp160, cur, sib)
-			in := append([]uints.U8{uints.NewU8(1)}, lo...)
-			cur = keccak20(api, append(in, hi...))
-		}
-		for i := 0; i < 20; i++ {
-			uapi.ByteAssertEq(root[i], cur[i])
-		}
-		price := packBE(api, ln.Message[33:41])
-		enforceLoan(api, ln.PoolHi, ln.PoolLo, ln.BorrowerHi, ln.BorrowerLo,
-			ln.Debt, ln.Collateral, ln.LtvBps, ln.Nonce, ln.TypeHi, ln.TypeLo, price, ln.Commit)
-	}
-	return nil
-}
+// BatchCircuit + LoanSlot now live in portableproof.go (library code, shared with the prover).
 
 func loadMultiWitness(t *testing.T) *pyth.Witness {
 	t.Helper()
@@ -104,20 +39,20 @@ func loadMultiWitness(t *testing.T) *pyth.Witness {
 }
 
 // build a batch circuit skeleton + witness for the first n loans of the update.
-func batchInputs(t *testing.T, pw *pyth.Witness, n int) (skel, w *batchCircuit) {
+func batchInputs(t *testing.T, pw *pyth.Witness, n int) (skel, w *BatchCircuit) {
 	ng := len(pw.Guardians)
 
-	skel = &batchCircuit{
+	skel = &BatchCircuit{
 		Body: make([]uints.U8, len(pw.Body)),
 		Pubs: make([]ecdsa.PublicKey[emulated.Secp256k1Fp, emulated.Secp256k1Fr], ng),
 		Sigs: make([]ecdsa.Signature[emulated.Secp256k1Fr], ng),
-		Loans: make([]loanSlot, n),
+		Loans: make([]LoanSlot, n),
 	}
-	w = &batchCircuit{
+	w = &BatchCircuit{
 		Body: uints.NewU8Array(pw.Body),
 		Pubs: make([]ecdsa.PublicKey[emulated.Secp256k1Fp, emulated.Secp256k1Fr], ng),
 		Sigs: make([]ecdsa.Signature[emulated.Secp256k1Fr], ng),
-		Loans: make([]loanSlot, n),
+		Loans: make([]LoanSlot, n),
 	}
 	for i, g := range pw.Guardians {
 		w.Pubs[i].X = emulated.ValueOf[emulated.Secp256k1Fp](new(big.Int).SetBytes(g.PubX[:]))

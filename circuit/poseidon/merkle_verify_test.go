@@ -8,7 +8,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
-	"github.com/consensys/gnark/std/hash/sha3"
 	"github.com/consensys/gnark/std/math/cmp"
 	"github.com/consensys/gnark/std/math/uints"
 	"github.com/consensys/gnark/test"
@@ -28,34 +27,7 @@ const (
 		"0bf9ea700137754441732b59591d7aef631aa185"
 )
 
-func keccak20(api frontend.API, in []uints.U8) []uints.U8 {
-	h, _ := sha3.NewLegacyKeccak256(api)
-	h.Write(in)
-	return h.Sum()[:20] // Pyth truncates keccak256 to 160 bits
-}
-
-// packBE folds a 20-byte hash into one 160-bit field element for numeric (== lexicographic)
-// comparison. 160 bits « the BN254 field, so no wrap.
-func packBE(api frontend.API, h []uints.U8) frontend.Variable {
-	acc := frontend.Variable(0)
-	for _, b := range h {
-		acc = api.Add(api.Mul(acc, 256), b.Val)
-	}
-	return acc
-}
-
-// sortPair returns (min, max) of two 20-byte hashes — Pyth hashes the SORTED pair, so proofs carry
-// no left/right flags.
-func sortPair(api frontend.API, uapi *uints.BinaryField[uints.U64], cmp160 *cmp.BoundedComparator, a, b []uints.U8) (lo, hi []uints.U8) {
-	aLE := cmp160.IsLessEq(packBE(api, a), packBE(api, b)) // 1 iff a <= b
-	lo = make([]uints.U8, len(a))
-	hi = make([]uints.U8, len(a))
-	for i := range a {
-		lo[i] = uapi.ByteValueOf(api.Select(aLE, a[i].Val, b[i].Val))
-		hi[i] = uapi.ByteValueOf(api.Select(aLE, b[i].Val, a[i].Val))
-	}
-	return lo, hi
-}
+// keccak20, packBE, sortPair now live in portableproof.go (library code, shared with the prover).
 
 // merkleCircuit proves the price message is included under Root via the Pyth keccak160 Merkle tree.
 type merkleCircuit struct {
