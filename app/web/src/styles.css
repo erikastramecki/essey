@@ -338,7 +338,8 @@ html, body { overflow-x: hidden; }         /* wide tables scroll inside .tbl-scr
 .anychain h2 em { font-style: italic; color: var(--gold); }
 .ac-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
 @media (max-width: 900px) { .ac-grid { grid-template-columns: 1fr; } }
-.ac-contrast { border: 1px solid var(--line); border-radius: 16px; background: var(--s1); padding: 26px; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.ac-contrast { border: 1px solid var(--line); border-radius: 16px; background: var(--s1); padding: 26px; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: space-between; gap: 26px; }
+.ac-conhead { font-family: var(--serif); font-size: 18px; color: var(--tx); }
 .ac-row { display: flex; flex-direction: column; gap: 11px; }
 .ac-rowhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .ac-who { font-family: var(--serif); font-size: 17px; color: var(--tx); }

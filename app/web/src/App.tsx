@@ -241,6 +241,7 @@ function AnyChain() {
         </div></div>
         <div className="ac-grid">
           <div className="ac-contrast">
+            <div className="ac-conhead">Where lending can live</div>
             <div className="ac-row">
               <div className="ac-rowhead"><span className="ac-who them">Every other protocol</span><span className="ac-note">locked to chains with an oracle</span></div>
               <div className="ac-nodes">{Array.from({ length: CHAINS }, (_, i) => <span key={i} className={"node" + (i < 4 ? " on-them" : "")} />)}</div>

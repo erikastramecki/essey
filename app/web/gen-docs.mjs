@@ -10,6 +10,7 @@ const DOCS = join(HERE, "..", "..", "docs");
 // `file` is relative to /docs and doubles as the GitHub source link, so every card in the site can
 // point at the exact file it renders — no separately-maintained list to drift out of sync.
 const PICK = [
+  ["Protocol", "BUILD-portable-proof.md", "Portable proof (any-chain lending)", "The differentiator: an in-circuit Pyth/Wormhole proof so loans settle on chains with no oracle. Built + measured against real mainnet data — the reproducible evidence behind the claim."],
   ["Protocol", "WHY-ESSEY-IS-DIFFERENT.md", "Why Essey is different", "How our lending differs from Aave/Kamino/Suilend — and what is actually enforced today."],
   ["Protocol", "ARCHITECTURE.md", "Architecture", "The four tiers: frontend, operator, on-chain program, and oracle."],
   ["Protocol", "SCOPE-robinhood-chain.md", "Robinhood Chain scope", "The Solidity port: real Stock Tokens, Chainlink feeds, and what the chain does and doesn't give us."],
