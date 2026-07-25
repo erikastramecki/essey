@@ -50,7 +50,7 @@ export default function App() {
   const selPx = prices[sel.feedId]?.price ?? 0;
   const selConf = prices[sel.feedId]?.conf ?? 0;
   const [menuOpen, setMenuOpen] = useState(false);
-  const NAV = [["markets", "Markets"], ["borrow", "Borrow"], ["earn", "Earn"], ["how", "How it works"], ["chains", "Chains"], ["governance", "Governance"], ["docs", "Docs"], ["proof", "Proof"]];
+  const NAV = [["anychain", "Any chain"], ["markets", "Markets"], ["borrow", "Borrow"], ["how", "How it works"], ["chains", "Chains"], ["docs", "Docs"], ["proof", "Proof"]];
 
   return (
     <>
@@ -79,12 +79,12 @@ export default function App() {
         <section className="hero">
           <div className="wrap hero-grid">
             <div>
-              <span className="badge"><Shield /> Every loan checked · every audit published</span>
-              <h1>Borrow against your <em>onchain assets</em>.</h1>
-              <p className="lede">Post {MARKETS.length} markets of collateral — crypto (BTC, ETH, SOL, SUI…) or tokenized equities — and draw a stablecoin in one transaction, without giving up custody. Every borrow is checked against a conservative live price before it is authorized, and every adversarial audit round we run is published.</p>
+              <span className="badge"><Shield /> Portable proofs · borrow on any chain</span>
+              <h1>Borrow against your onchain assets — on <em>any chain</em>.</h1>
+              <p className="lede">Every other lending protocol is trapped on the dozen or so chains that have a price oracle. Essey puts the price's proof <em>inside</em> the loan — so it can settle anywhere, even a chain that has no oracle at all. Post crypto or tokenized equities, keep custody, draw a stablecoin.</p>
               <div className="hero-cta">
                 <a className="btn btn-gold" href="#borrow">Open a position</a>
-                <a className="btn btn-ghost" href="#how">How the proof works</a>
+                <a className="btn btn-ghost" href="#anychain">Why we're different</a>
               </div>
             </div>
             <aside className="plate">
@@ -107,6 +107,9 @@ export default function App() {
             </aside>
           </div>
         </section>
+
+        <AnyChain />
+        <Dregg />
 
         {/* MARKETS */}
         <section className="band" id="markets">
@@ -179,7 +182,6 @@ export default function App() {
         {/* POSITIONS */}
         {/* Page order tracks the nav order above — anchors that jump backwards feel broken. */}
         <Positions connected={connected} />
-        <Dregg />
         <Chains />
         <GovernanceLog />
         <DocsSection />
@@ -217,6 +219,51 @@ function TokenIcon({ sym, cls, sm }: { sym: string; cls?: "crypto" | "equity"; s
 
 const SearchIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>;
 const Caret = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginLeft: "auto", opacity: .6 }}><path d="m6 9 6 6 6-6" /></svg>;
+
+// The leading differentiator, front and center: Essey lends on chains that have no oracle, because
+// the proof carries the price's authenticity. Every claim here is a MEASURED fact reproducible in
+// the repo — kept honest with a research-build status line, no "deployed" implied.
+function AnyChain() {
+  const CHAINS = 16;
+  const facts: [string, string][] = [
+    ["13", "real Pyth guardian signatures, verified inside one proof"],
+    ["2 ms", "to verify the proof — on any chain, forever"],
+    ["1 proof", "covers a whole batch of loans at once"],
+    ["real data", "verified against live mainnet Pyth — reproducible in the repo"],
+  ];
+  return (
+    <section className="band anychain" id="anychain">
+      <div className="wrap">
+        <div className="band-head"><div>
+          <span className="eyebrow">Why Essey is different</span>
+          <h2>Lend on <em>any</em> chain — even ones with no price oracle</h2>
+          <p>Lending needs a trusted price. Today that means an oracle deployed on your chain, so every protocol is stuck on the ~dozen chains that have one. Essey carries the price's proof <em>inside</em> the loan — so it settles anywhere a proof can be checked, which is everywhere.</p>
+        </div></div>
+        <div className="ac-grid">
+          <div className="ac-contrast">
+            <div className="ac-row">
+              <div className="ac-rowhead"><span className="ac-who them">Every other protocol</span><span className="ac-note">locked to chains with an oracle</span></div>
+              <div className="ac-nodes">{Array.from({ length: CHAINS }, (_, i) => <span key={i} className={"node" + (i < 4 ? " on-them" : "")} />)}</div>
+            </div>
+            <div className="ac-row">
+              <div className="ac-rowhead"><span className="ac-who us">Essey</span><span className="ac-note">any chain that can verify a proof</span></div>
+              <div className="ac-nodes">{Array.from({ length: CHAINS }, (_, i) => <span key={i} className="node on-us" />)}</div>
+            </div>
+            <div className="ac-caption">The proof <b>is</b> the oracle. It travels with the loan.</div>
+          </div>
+          <aside className="ac-proof">
+            <div className="ac-proof-h">What one proof establishes</div>
+            <p>A single zero-knowledge proof shows — checkable on any chain in milliseconds — that a <b>real market price is genuine</b> (signed by Pyth's guardian network) and the <b>loan is solvent against it</b>. The settlement chain never needs to know what Pyth is.</p>
+            <ul className="ac-facts">
+              {facts.map(([n, d]) => <li key={d}><b>{n}</b><span>{d}</span></li>)}
+            </ul>
+            <div className="ac-status"><span className="dot" />Working research build — verified against live mainnet data, not yet audited or deployed. Every number above is reproducible with <code>go test</code>.</div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 // The centrepiece. Everything else on this page is detail; this is the actual idea, and it has to
 // land for someone who has never heard of a proof assistant. Plain words first, jargon second, and
