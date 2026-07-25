@@ -97,12 +97,16 @@ audited) verifies ECDSA directly and drops those hashes (design B above).
      price substitution (the crux — you cannot swap a favourable price for the attested one).
      Combined with the completeness proof (the assembled test accepts the real update), this is the
      circuit's soundness/completeness backbone.
-   - **Trusted setup — decision pending.** Groth16 needs a per-circuit setup; a botched one forges
-     proofs. Two paths: (a) a Groth16 MPC ceremony (gnark `mpcsetup`, N independent participants,
-     secure if ≥1 is honest) — but per-circuit, so batch-size changes re-run it; (b) switch to PLONK,
-     whose universal SRS (from an existing Powers of Tau) needs no per-circuit ceremony, at some
-     prover/proof-size cost. **Recommend PLONK** given the circuit will vary by batch size. Not yet
-     run here (a real ceremony needs external participants).
+   - **Trusted setup — PLONK migration demonstrated.** Groth16 needs a per-circuit setup; a botched
+     one forges proofs, and it re-runs every time the circuit changes (batch size, guardian-set
+     rotation, a new asset). `plonk_test.go` proves the fix: the SAME circuit definition compiles
+     (`scs` builder) and proves under **PLONK**, whose canonical KZG SRS is **universal** — one
+     public Powers-of-Tau SRS (thousands of existing contributors) serves every circuit forever, so
+     changing the circuit needs NO new ceremony. The per-circuit Lagrange form is a deterministic
+     transform, not a ceremony. Verified end-to-end on the solvency circuit; soundness (over-borrow
+     rejection) preserved across the backend swap. Production swaps the test SRS for the public one;
+     nothing else in the flow changes. Tradeoff: PLONK proofs are larger/slower to generate than
+     Groth16 — irrelevant here (proving is off-chain and batched; on-chain verify stays cheap).
    - **Independent audit — external.** A ~2.4M-constraint circuit needs third-party review; a wrong
      constraint drains the pool. The soundness suite + native reference (`circuit/pyth`) are what an
      auditor differential-tests against.
