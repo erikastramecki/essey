@@ -33,15 +33,24 @@ ECDSA are now MEASURED in gnark: one keccak256 block = **191,871** constraints (
 | solvency core | — | 2,235 |
 | **full circuit (measured)** | ~29 | **~6.8M** |
 
-**keccak is 82% of the circuit — the ECDSA is the minority.** Extrapolating the measured 1.27M
-pipeline (×5.4): **~40s prove, ~13 min one-time setup, ~1.9 GB proving key, ~14 GB RAM.** Runtime-
-feasible for a *batch* (one proof over many loans), but proving wants a real machine. On-chain
-**verify stays 2 ms / 496 B regardless** — Groth16 verify is size-independent.
+**keccak lookup tables AMORTISE — the 6.8M above was an over-count.** Building the Merkle circuit
+revealed keccak is not 192k *each*: the first hash pays ~192k to build the shared lookup tables,
+every additional hash is only **~60k marginal** (measured: 1 keccak 191,871; 2 keccak 252,062,
+Δ 60,191; 14-keccak Merkle 979,085 ≈ 192k + 13×60k). Corrected projection:
+
+| | naive (192k each) | measured marginal (~60k) |
+|---|---|---|
+| keccak, design B (16 hashes) | ~3.0M | 192k + 15×60k ≈ **~1.1M** |
+| + ECDSA quorum | 1.27M | 1.27M |
+| **full circuit (design B)** | ~4.3M | **~2.5M** |
+
+So realistically **~15–20s prove, ~1 GB key, ~7 GB RAM** — a normal server, not a monster. On-chain
+**verify stays 2 ms / 496 B regardless** (Groth16 verify is size-independent). Confirm by measuring
+the assembled circuit in phase 5.
 
 **Optimization (measured): pin pubkeys, not addresses.** 13 keccaks only exist to derive guardian
-*addresses* from recovered pubkeys. If the pool pins the guardian **pubkeys** (derived once,
-off-circuit, audited) we verify ECDSA directly and drop the pubkey→address hashes:
-**~2.5M constraints gone → ~4.3M full circuit.** Adopt this in phase 5.
+*addresses* from recovered pubkeys. Pinning the guardian **pubkeys** (derived once off-circuit,
+audited) verifies ECDSA directly and drops those hashes (design B above).
 
 ## Phases
 
@@ -60,7 +69,10 @@ off-circuit, audited) we verify ECDSA directly and drop the pubkey→address has
    ECDSA (emulated scalar) worlds is closed on real data. Scaling to the 13-guardian quorum is
    replication: the body digest is computed ONCE and shared, then 13 ECDSA verifies against 13
    pinned pubkeys — ~1.8M constraints (design B, pubkeys pinned, no address keccak).
-4. **In-circuit Merkle proof** against the root.
+4. **In-circuit Merkle proof — DONE.** `merkleCircuit` (`merkle_verify_test.go`) climbs the real
+   13-hop Pyth proof — leaf `keccak(0x00||msg)[:20]`, sorted-pair nodes `keccak(0x01||min||max)[:20]`
+   (in-circuit compare + conditional swap) — to the real root. 979,085 constraints; verified with
+   `test.IsSolved` on the real fixture. Revealed the keccak-amortisation finding above.
 5. **Assemble + bind.** One circuit: VAA verify → extract price → feed the solvency commitment.
 6. **Batch.** N loans, one shared VAA verification, one proof.
 7. **Trusted setup ceremony + audit.** A ~5–6M-constraint circuit: a botched setup forges prices; a
