@@ -20,21 +20,28 @@ trust a price with no oracle, the verifier must reproduce all of:
 
 ## Honest cost re-scope
 
-The earlier benchmark (1.27M constraints, ~7s prove) was the **ECDSA core only**. The real circuit
-also needs keccak256 in-circuit, which is ~150k constraints each:
+The earlier benchmark (1.27M constraints, ~7s prove) was the **ECDSA core only**. Both keccak and
+ECDSA are now MEASURED in gnark: one keccak256 block = **191,871** constraints (higher than the
+~150k guess); one secp256k1 ECDSA = 121,435; the 13-sig quorum = 1,266,437.
 
-| Component | keccak256 hashes | est. constraints |
+| Component | keccak256 hashes | measured constraints |
 |---|---|---|
-| ECDSA quorum (measured) | — | 1.27M |
-| body double-hash | 2 | ~0.3M |
-| guardian pubkey → address (×13) | 13 | ~2.0M |
-| Merkle path (leaf + 13 hops) | 14 | ~2.1M |
-| **total (estimate)** | ~29 | **~5–6M** |
+| ECDSA quorum (verify vs pubkey) | — | 1.27M |
+| body double-hash | 2 | ~0.38M |
+| guardian pubkey → address (×13) | 13 | ~2.49M |
+| Merkle path (leaf + 13 hops) | 14 | ~2.69M |
+| solvency core | — | 2,235 |
+| **full circuit (measured)** | ~29 | **~6.8M** |
 
-So realistic figures, extrapolating the measured ~7s / 1.27M linearly: **~30–40s prove, ~10 min
-one-time setup, ~1.5 GB proving key, ~10 GB RAM.** Still runtime-feasible for a *batch* (one proof
-amortized over many loans); the on-chain **verify stays 2 ms / 496 B regardless** (Groth16 verify is
-size-independent). The keccak cost is the next thing to measure, not assume.
+**keccak is 82% of the circuit — the ECDSA is the minority.** Extrapolating the measured 1.27M
+pipeline (×5.4): **~40s prove, ~13 min one-time setup, ~1.9 GB proving key, ~14 GB RAM.** Runtime-
+feasible for a *batch* (one proof over many loans), but proving wants a real machine. On-chain
+**verify stays 2 ms / 496 B regardless** — Groth16 verify is size-independent.
+
+**Optimization (measured): pin pubkeys, not addresses.** 13 keccaks only exist to derive guardian
+*addresses* from recovered pubkeys. If the pool pins the guardian **pubkeys** (derived once,
+off-circuit, audited) we verify ECDSA directly and drop the pubkey→address hashes:
+**~2.5M constraints gone → ~4.3M full circuit.** Adopt this in phase 5.
 
 ## Phases
 
