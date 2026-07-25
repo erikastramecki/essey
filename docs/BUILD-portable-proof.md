@@ -81,7 +81,15 @@ audited) verifies ECDSA directly and drops those hashes (design B above).
    full circuit verifies on real Pyth data.** MEASURED: 2,396,290 constraints, 4m52s one-time setup,
    684 MB proving key, **16.9s prove, 2 ms verify, 2.7 GB RAM.** (Insolvent loans are correctly
    rejected by the solvency guard — confirmed when a mis-sized test debt failed the inequality.)
-6. **Batch.** N loans, one shared VAA verification, one proof.
+6. **Batch — DONE.** `batchCircuit` (`batch_test.go`) verifies the guardian quorum + root ONCE, then
+   proves N loans under it — built and solved on a REAL 3-price Pyth update (BTC/ETH/SOL, one signed
+   root). MEASURED marginal per added loan: **~873k constraints** (n=1 2,396,290; n=2 3,269,702; n=3
+   4,143,112). So the ~1.5M guardian verification (the expensive "price is real" part) amortises to
+   ~0 per loan; each loan carries only its own Merkle inclusion proof (~873k) + solvency. Per-loan
+   prove time drops from ~17s (standalone) toward ~6s at scale. **Same-asset** loans share one
+   Merkle proof, collapsing the marginal to just the solvency check (~2k) — genuinely near-zero.
+   (`essey/pyth` is now imported directly by the circuit tests via a local replace, so batch
+   witnesses come from real fixtures, not hardcoded blobs.)
 7. **Trusted setup ceremony + audit.** A ~5–6M-constraint circuit: a botched setup forges prices; a
    wrong constraint drains the pool. Non-negotiable before mainnet.
 
