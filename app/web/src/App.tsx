@@ -79,7 +79,7 @@ export default function App() {
         <section className="hero">
           <div className="wrap hero-grid">
             <div>
-              <span className="badge"><Shield /> Every loan esseyed · every audit published</span>
+              <span className="badge"><Shield /> Every loan checked · every audit published</span>
               <h1>Borrow against your <em>onchain assets</em>.</h1>
               <p className="lede">Post {MARKETS.length} markets of collateral — crypto (BTC, ETH, SOL, SUI…) or tokenized equities — and draw a stablecoin in one transaction, without giving up custody. Every borrow is checked against a conservative live price before it is authorized, and every adversarial audit round we run is published.</p>
               <div className="hero-cta">
