@@ -8,7 +8,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WEB="$HERE/web"; OPDIR="$HERE/operator-api"; OPV="$OPDIR/essey-operator"
-WEB_ALIAS=essey-sui-web.vercel.app; OP_ALIAS=assay-operator-sui.vercel.app
+WEB_ALIAS=essey.xyz; OP_ALIAS=assay-operator-sui.vercel.app
 
 
 fail() { echo "❌ $1"; exit 1; }

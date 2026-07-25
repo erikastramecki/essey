@@ -22,7 +22,7 @@ deploy_and_alias "$OPVDIR" "https://essey-operator-[a-z0-9-]+\.vercel\.app" "ass
 echo "── web: rebuild + redeploy ──"
 ( cd "$WEBDIR" && npx vite build >/dev/null 2>&1 ) || { echo "❌ web build failed"; exit 1; }
 printf '%s' "$SPA_REWRITE" > "$WEBDIR/dist/vercel.json"
-deploy_and_alias "$WEBDIR/dist" "https://[a-z0-9-]+\.vercel\.app" "essey-sui.vercel.app" || exit 1
+deploy_and_alias "$WEBDIR/dist" "https://[a-z0-9-]+\.vercel\.app" "essey.xyz" || exit 1
 
 # FAIL on a bad status (audit R3): this previously piped a 500 body into python and swallowed the
 # error, printing "✅ live. markets: " with an empty count and exiting 0.
