@@ -95,17 +95,36 @@ proof exists. ~1 week.
 hole. Independent review + differential fuzzing: for random inputs, circuit-accepts iff the real
 inequality holds.
 
+## Progress
+
+- **Phase 1 — DONE.** `circuit/poseidon/solvency.go` + tests. `SolvencyCircuit` compiles to 2235
+  R1CS constraints; a real Groth16 Setup/Prove/Verify passes locally; over-borrow is rejected and
+  the commitment binding holds against a swapped term.
+- **Phase 2 linchpin — VERIFIED.** The top integration risk below is retired. Proven by
+  known-answer test that `sui::poseidon::poseidon_bn254` equals the iden3/gnark Poseidon for BOTH
+  `[1,2]` (`7853200…459813530`) and the exact 11-field commitment vector
+  (`411147357…806772785`). So the circuit's in-Move commitment will match `loan_commit_of`.
+
 ## Risks / decisions to make first
 
 1. **Oracle binding is the substance.** Decide on-chain price check vs signature-in-circuit before
-   writing constraints. Everything downstream depends on it.
+   writing constraints. Everything downstream depends on it. **← the open decision.**
 2. **Single-loan zk is near-redundant with an on-chain check.** Commit to the batch path as the
    actual goal, or accept the circuit is a stepping stone.
-3. **Poseidon param match** (Sui native vs gnark) is the top integration risk.
+3. ~~**Poseidon param match** (Sui native vs gnark) is the top integration risk.~~ **VERIFIED equal
+   (Phase 2 linchpin above).**
 4. **Trusted setup.** Groth16 needs a per-circuit ceremony; a bad/backdoored setup = forgeable
    proofs. Consider gnark's PLONK backend (universal setup, no per-circuit ceremony) at a
    proof-size/cost tradeoff.
 5. **Schema change** to `loan_commit_of` ripples to the async path and every fixture.
+
+## Remaining Phase 2 (after the decision)
+
+- Serialize the gnark verifying key into the format `sui::groth16::prepare_verifying_key` expects,
+  and encode the public input so `bcs::to_bytes(commit)` matches `public_proof_inputs_from_bytes`.
+- Amend `loan_commit_of` to include `price`.
+- Green localnet test: `verifier::assert_verify(vk, payment_id, proof)` passes with a
+  gnark-produced proof.
 
 ## Rough effort
 
