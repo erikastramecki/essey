@@ -10,14 +10,21 @@ package prover
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"math/big"
+	"os"
+	"path/filepath"
 
 	"essey/pyth"
 	poseidon "dregg/poseidon-gadget"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/groth16"
+	"github.com/consensys/gnark/backend/solidity"
+	groth16bn254 "github.com/consensys/gnark/backend/groth16/bn254"
 	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
@@ -48,7 +55,8 @@ type Bundle struct {
 	Proof        []byte
 	PublicInputs []byte
 	VK           []byte
-	Commitments  []*big.Int // one per loan, for reference/inspection
+	Calldata     []byte     // proof.MarshalSolidity() — the bytes the on-chain verifyProof takes
+	Commitments  []*big.Int // loan commitments = the public inputs, one per loan
 }
 
 // Prover holds a compiled circuit + keys for one circuit shape (guardian count, loan count, byte
@@ -62,17 +70,20 @@ type Prover struct {
 
 type shape struct{ nGuard, nLoans, bodyLen, msgLen, hops int }
 
-// New compiles the portable-proof circuit for the given shape and runs the (one-time) setup.
-func New(pw *pyth.Witness, nLoans int) (*Prover, error) {
-	s := shape{
+func shapeOf(pw *pyth.Witness, nLoans int) shape {
+	return shape{
 		nGuard:  len(pw.Guardians),
 		nLoans:  nLoans,
 		bodyLen: len(pw.Body),
 		msgLen:  len(pw.Prices[0].Message),
 		hops:    len(pw.Prices[0].Proof),
 	}
-	skel := skeleton(s)
-	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, skel)
+}
+
+// New compiles the portable-proof circuit for the given shape and runs the (one-time) setup.
+func New(pw *pyth.Witness, nLoans int) (*Prover, error) {
+	s := shapeOf(pw, nLoans)
+	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, skeleton(s))
 	if err != nil {
 		return nil, fmt.Errorf("compile: %w", err)
 	}
@@ -81,6 +92,82 @@ func New(pw *pyth.Witness, nLoans int) (*Prover, error) {
 		return nil, fmt.Errorf("setup: %w", err)
 	}
 	return &Prover{ccs: ccs, pk: pk, vk: vk, shape: s}, nil
+}
+
+// NewCached loads ccs/pk/vk for this shape from dir, or runs setup once and persists them. The heavy
+// setup happens on the first call; every later demo run is just prove + verify.
+func NewCached(pw *pyth.Witness, nLoans int, dir string) (*Prover, bool, error) {
+	s := shapeOf(pw, nLoans)
+	tag := fmt.Sprintf("%dg-%dl-%db-%dm-%dh", s.nGuard, s.nLoans, s.bodyLen, s.msgLen, s.hops)
+	pcs := filepath.Join(dir, tag+".ccs")
+	ppk := filepath.Join(dir, tag+".pk")
+	pvk := filepath.Join(dir, tag+".vk")
+
+	if fileExists(pcs) && fileExists(ppk) && fileExists(pvk) {
+		ccs := groth16.NewCS(ecc.BN254)
+		pk := groth16.NewProvingKey(ecc.BN254)
+		vk := groth16.NewVerifyingKey(ecc.BN254)
+		if err := readFrom(pcs, ccs); err != nil {
+			return nil, false, err
+		}
+		if err := readFrom(ppk, pk); err != nil {
+			return nil, false, err
+		}
+		if err := readFrom(pvk, vk); err != nil {
+			return nil, false, err
+		}
+		return &Prover{ccs: ccs, pk: pk, vk: vk, shape: s}, true, nil
+	}
+
+	p, err := New(pw, nLoans)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, false, err
+	}
+	if err := writeTo(pcs, p.ccs); err != nil {
+		return nil, false, err
+	}
+	if err := writeTo(ppk, p.pk); err != nil {
+		return nil, false, err
+	}
+	if err := writeTo(pvk, p.vk); err != nil {
+		return nil, false, err
+	}
+	return p, false, nil
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+func writeTo(path string, x io.WriterTo) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = x.WriteTo(f)
+	return err
+}
+func readFrom(path string, x io.ReaderFrom) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// Keys we generated ourselves: skip subgroup checks on load (seconds vs minutes for a 684MB pk).
+	if u, ok := x.(interface {
+		UnsafeReadFrom(io.Reader) (int64, error)
+	}); ok {
+		_, err = u.UnsafeReadFrom(f)
+		return err
+	}
+	_, err = x.ReadFrom(f)
+	return err
+}
+
+// ExportSolidity writes the Groth16 verifier contract for this circuit's vk.
+func (p *Prover) ExportSolidity(w io.Writer) error {
+	return p.vk.(*groth16bn254.VerifyingKey).ExportSolidity(w)
 }
 
 func skeleton(s shape) *poseidon.BatchCircuit {
@@ -164,7 +251,9 @@ func (p *Prover) Prove(pw *pyth.Witness, loans []LoanTerms) (*Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	proof, err := groth16.Prove(p.ccs, p.pk, full)
+	// sha256 hash-to-field for the lookup-argument commitment — MUST match the exported Solidity
+	// verifier (which hardcodes sha256), or the on-chain check rejects a valid proof.
+	proof, err := groth16.Prove(p.ccs, p.pk, full, solidity.WithProverTargetSolidityVerifier(backend.GROTH16))
 	if err != nil {
 		return nil, fmt.Errorf("prove: %w", err)
 	}
@@ -183,7 +272,29 @@ func (p *Prover) Prove(pw *pyth.Witness, loans []LoanTerms) (*Bundle, error) {
 	if _, err := p.vk.WriteTo(&vkb); err != nil {
 		return nil, err
 	}
-	return &Bundle{Proof: pb.Bytes(), PublicInputs: pubb.Bytes(), VK: vkb.Bytes(), Commitments: commits}, nil
+	calldata := solidityProofArgs(proof.(*groth16bn254.Proof).MarshalSolidity())
+	return &Bundle{Proof: pb.Bytes(), PublicInputs: pubb.Bytes(), VK: vkb.Bytes(), Calldata: calldata, Commitments: commits}, nil
+}
+
+// solidityProofArgs turns MarshalSolidity() into clean 32-byte-aligned verifyProof args. For a proof
+// with Pedersen commitments, WriteRawTo encodes Commitments as a SLICE — a 4-byte length prefix
+// sits between Krs and the commitment points, which misaligns naive word-splitting. Strip it so the
+// result is exactly proof[8] ++ commitments[2*nc] ++ commitmentPok[2].
+func solidityProofArgs(raw []byte) []byte {
+	const proofBytes = 8 * 32
+	if len(raw) == proofBytes {
+		return raw // no commitments
+	}
+	proof8 := raw[:proofBytes]
+	nc := int(binary.BigEndian.Uint32(raw[proofBytes : proofBytes+4]))
+	body := raw[proofBytes+4:]
+	comms := body[:nc*2*32]
+	pok := body[nc*2*32 : nc*2*32+2*32]
+	out := make([]byte, 0, proofBytes+len(comms)+len(pok))
+	out = append(out, proof8...)
+	out = append(out, comms...)
+	out = append(out, pok...)
+	return out
 }
 
 // Verify is what a settlement chain (or anyone) runs to check a bundle — deserialize and verify.
@@ -204,5 +315,5 @@ func Verify(b *Bundle) error {
 	if _, err := pub.ReadFrom(bytes.NewReader(b.PublicInputs)); err != nil {
 		return err
 	}
-	return groth16.Verify(proof, vk, pub)
+	return groth16.Verify(proof, vk, pub, solidity.WithVerifierTargetSolidityVerifier(backend.GROTH16))
 }

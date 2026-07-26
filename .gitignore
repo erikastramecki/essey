@@ -27,3 +27,6 @@ lib/
 out/
 cache/
 broadcast/
+
+# portable-proof demo cached keys (large, regenerated)
+circuit/poseidon/.demo-keys/
