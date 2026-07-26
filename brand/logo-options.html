@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1320px;height:520px;background:#0A0C11}
+  .row{display:flex;height:520px}
+  .cell{width:440px;height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;border-right:1px solid #1a1f2b}
+  .disc{width:300px;height:300px;border-radius:50%;position:relative;
+    background:radial-gradient(220px 220px at 50% 44%,rgba(212,169,78,.16),transparent 62%),radial-gradient(circle at 50% 40%,#14171F,#0A0C11 72%);
+    display:grid;place-items:center}
+  .mk{width:172px;height:172px;filter:drop-shadow(0 8px 26px rgba(212,169,78,.28))}
+  .lab{font-family:"SFMono-Regular",Menlo,monospace;font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:#98A0B0}
+  defs{}
+</style></head>
+<body>
+  <div class="row">
+    <!-- A: current — check -->
+    <div class="cell">
+      <div class="disc">
+        <svg class="mk" viewBox="0 0 100 100" fill="none">
+          <defs>
+            <linearGradient id="gA" x1="50" y1="6" x2="50" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E7C57A"/><stop offset="1" stop-color="#C89A3E"/></linearGradient>
+            <linearGradient id="gfA" x1="50" y1="6" x2="50" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="rgba(212,169,78,.16)"/><stop offset="1" stop-color="rgba(212,169,78,.04)"/></linearGradient>
+          </defs>
+          <path d="M50 7.81 L89.06 28.13 L89.06 71.88 L50 92.19 L10.94 71.88 L10.94 28.13 Z" fill="url(#gfA)" stroke="url(#gA)" stroke-width="3.4" stroke-linejoin="round"/>
+          <path d="M34.4 50.6 L45 61.25 L66.9 37.5" stroke="#E7C57A" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="lab">A · check (current)</div>
+    </div>
+
+    <!-- B: E monogram (serif, ties to wordmark) -->
+    <div class="cell">
+      <div class="disc">
+        <svg class="mk" viewBox="0 0 100 100" fill="none">
+          <defs>
+            <linearGradient id="gB" x1="50" y1="6" x2="50" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E7C57A"/><stop offset="1" stop-color="#C89A3E"/></linearGradient>
+            <linearGradient id="gfB" x1="50" y1="6" x2="50" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="rgba(212,169,78,.16)"/><stop offset="1" stop-color="rgba(212,169,78,.04)"/></linearGradient>
+          </defs>
+          <path d="M50 7.81 L89.06 28.13 L89.06 71.88 L50 92.19 L10.94 71.88 L10.94 28.13 Z" fill="url(#gfB)" stroke="url(#gB)" stroke-width="3.4" stroke-linejoin="round"/>
+          <text x="50" y="50" text-anchor="middle" dominant-baseline="central" font-family="Didot,'Bodoni 72',Georgia,serif" font-size="52" fill="#E7C57A">E</text>
+        </svg>
+      </div>
+      <div class="lab">B · E monogram</div>
+    </div>
+
+    <!-- C: check + node-contrast dot (verify + portability) -->
+    <div class="cell" style="border-right:0">
+      <div class="disc">
+        <svg class="mk" viewBox="0 0 100 100" fill="none">
+          <defs>
+            <linearGradient id="gC" x1="50" y1="6" x2="50" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E7C57A"/><stop offset="1" stop-color="#C89A3E"/></linearGradient>
+            <linearGradient id="gfC" x1="50" y1="6" x2="50" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="rgba(212,169,78,.16)"/><stop offset="1" stop-color="rgba(212,169,78,.04)"/></linearGradient>
+          </defs>
+          <path d="M50 7.81 L89.06 28.13 L89.06 71.88 L50 92.19 L10.94 71.88 L10.94 28.13 Z" fill="url(#gfC)" stroke="url(#gC)" stroke-width="3.4" stroke-linejoin="round"/>
+          <!-- three nested check-strokes: a proof "propagating" -->
+          <path d="M30 50 L42 62 L70 33" stroke="#E7C57A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M30 50 L42 62 L70 33" stroke="#E7C57A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" transform="translate(9 0)" opacity="0.28"/>
+        </svg>
+      </div>
+      <div class="lab">C · propagating proof</div>
+    </div>
+  </div>
+</body></html>

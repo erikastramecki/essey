@@ -1,0 +1,535 @@
+<title>Essey — Twitter Playbook</title>
+<style>
+  :root {
+    --ink:#0A0C11; --s1:#12151C; --s2:#191D27; --s3:#212633; --line:#242B39; --line2:#313a4c;
+    --gold:#D4A94E; --gold-hi:#E7C57A; --gold-dim:rgba(212,169,78,.12); --gold-line:rgba(212,169,78,.30);
+    --tx:#ECEAE3; --tx-mut:#9AA0AD; --tx-faint:#646C7B;
+    --good:#4FBE87; --warn:#E0993F;
+    --serif:"Didot","Bodoni 72","New York","Hoefler Text",Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --wrap:940px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --ink:#EFE9DC; --s1:#F6F1E7; --s2:#FBF7EF; --s3:#F1EADC; --line:#DAD0BE; --line2:#c9bda6;
+      --gold:#A9822F; --gold-hi:#8f6d24; --gold-dim:rgba(169,130,47,.10); --gold-line:rgba(169,130,47,.28);
+      --tx:#211F19; --tx-mut:#5C574C; --tx-faint:#8A8272; --good:#2E8F5F; --warn:#B4711F; }
+  }
+  :root[data-theme="dark"]{ --ink:#0A0C11; --s1:#12151C; --s2:#191D27; --s3:#212633; --line:#242B39; --line2:#313a4c;
+    --gold:#D4A94E; --gold-hi:#E7C57A; --gold-dim:rgba(212,169,78,.12); --gold-line:rgba(212,169,78,.30);
+    --tx:#ECEAE3; --tx-mut:#9AA0AD; --tx-faint:#646C7B; --good:#4FBE87; --warn:#E0993F; }
+  :root[data-theme="light"]{ --ink:#EFE9DC; --s1:#F6F1E7; --s2:#FBF7EF; --s3:#F1EADC; --line:#DAD0BE; --line2:#c9bda6;
+    --gold:#A9822F; --gold-hi:#8f6d24; --gold-dim:rgba(169,130,47,.10); --gold-line:rgba(169,130,47,.28);
+    --tx:#211F19; --tx-mut:#5C574C; --tx-faint:#8A8272; --good:#2E8F5F; --warn:#B4711F; }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--tx);font-family:var(--sans);font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 500px at 82% -10%,var(--gold-dim),transparent 60%);
+    background-attachment:fixed;}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+  a{color:var(--gold);text-decoration:none}
+  h1,h2,h3{font-family:var(--serif);font-weight:500;margin:0;text-wrap:balance;letter-spacing:-.01em;line-height:1.12}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold)}
+  .mut{color:var(--tx-mut)} .faint{color:var(--tx-faint)}
+
+  /* hero */
+  header{padding:76px 0 52px;border-bottom:1px solid var(--line)}
+  .brandline{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+  .hex{width:30px;height:30px}
+  .brandline b{font-family:var(--serif);font-size:20px}
+  header h1{font-size:clamp(34px,6vw,62px);margin:14px 0 0}
+  header h1 em{font-style:italic;color:var(--gold)}
+  .lede{font-size:19px;color:var(--tx-mut);max-width:60ch;margin:22px 0 0;line-height:1.55}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+  .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;padding:7px 12px;border:1px solid var(--line2);
+    border-radius:999px;color:var(--tx-mut);background:var(--s1)}
+  .tag.gold{color:var(--gold);border-color:var(--gold-line);background:var(--gold-dim)}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  .kicker{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+  .kicker .num{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.1em}
+  section h2{font-size:clamp(26px,3.6vw,36px)}
+  section > .wrap > p.intro{color:var(--tx-mut);max-width:64ch;margin:14px 0 0;font-size:17px}
+
+  /* north star */
+  .northstar{border:1px solid var(--gold-line);background:linear-gradient(180deg,var(--gold-dim),var(--s1) 70%);
+    border-radius:18px;padding:34px 34px;margin-top:26px}
+  .northstar .q{font-family:var(--serif);font-size:clamp(22px,3.2vw,30px);line-height:1.28;color:var(--tx)}
+  .northstar .q b{color:var(--gold)}
+  .northstar .sub{margin-top:16px;color:var(--tx-mut);font-size:15px;max-width:70ch}
+
+  /* generic cards grid */
+  .grid{display:grid;gap:14px;margin-top:26px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:760px){.g2,.g3{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);background:var(--s1);border-radius:14px;padding:22px}
+  .card h3{font-size:19px}
+  .card .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:9px}
+  .card p{margin:9px 0 0;font-size:14.5px;color:var(--tx-mut);line-height:1.6}
+  .card .who{margin-top:12px;font-size:12.5px;color:var(--tx-faint);font-style:italic}
+
+  /* pillars numbered */
+  .pillar{border:1px solid var(--line);background:var(--s1);border-radius:14px;padding:20px 22px;display:flex;gap:18px}
+  .pillar .pn{font-family:var(--mono);font-size:13px;color:var(--gold);flex:none;padding-top:3px}
+  .pillar h3{font-size:18px}
+  .pillar p{margin:7px 0 0;font-size:14px;color:var(--tx-mut)}
+  .pillar .mix{margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--tx-faint);letter-spacing:.04em}
+
+  /* calendar */
+  .cal{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px}
+  @media(max-width:820px){.cal{grid-template-columns:1fr 1fr}}
+  @media(max-width:480px){.cal{grid-template-columns:1fr}}
+  .act{border:1px solid var(--line);border-radius:14px;background:var(--s1);padding:18px;position:relative;overflow:hidden}
+  .act::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold);opacity:.5}
+  .act.peak::before{opacity:1;box-shadow:0 0 14px var(--gold)}
+  .act .wk{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--tx-faint);text-transform:uppercase}
+  .act h3{font-size:17px;margin:8px 0 6px}
+  .act .goal{font-size:13px;color:var(--tx-mut);line-height:1.5}
+  .act .flag{margin-top:12px;font-size:12px;color:var(--gold);font-family:var(--mono);line-height:1.5}
+  .act.peak{border-color:var(--gold-line);background:linear-gradient(180deg,var(--gold-dim),var(--s1) 70%)}
+
+  /* cadence table */
+  .rhythm{margin-top:24px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .rrow{display:grid;grid-template-columns:120px 1fr;gap:0;border-top:1px solid var(--line)}
+  .rrow:first-child{border-top:0}
+  .rrow .d{background:var(--s2);padding:14px 18px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--gold);text-transform:uppercase}
+  .rrow .w{padding:14px 18px;font-size:14.5px;color:var(--tx-mut);background:var(--s1)}
+  .rrow .w b{color:var(--tx);font-weight:600}
+  @media(max-width:520px){.rrow{grid-template-columns:88px 1fr}}
+
+  /* threads = tweet mockups */
+  .thread{margin-top:30px}
+  .thread-h{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .thread-h .t{font-family:var(--serif);font-size:22px;color:var(--tx)}
+  .thread-h .role{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+  .tweets{border:1px solid var(--line);border-radius:16px;background:var(--s1);overflow:hidden}
+  .tw{padding:18px 20px;border-top:1px solid var(--line);display:flex;gap:14px}
+  .tw:first-child{border-top:0}
+  .tw .ava{width:42px;height:42px;flex:none;border-radius:50%;background:radial-gradient(circle at 50% 42%,#14171F,#0A0C11);
+    display:grid;place-items:center;border:1px solid var(--line2)}
+  .tw .ava svg{width:26px;height:26px}
+  .tw .body{flex:1;min-width:0}
+  .tw .hd{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .tw .hd b{font-size:15px;color:var(--tx)}
+  .tw .hd .h,.tw .hd .dot{color:var(--tx-faint);font-size:14px}
+  .tw .hd .n{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--gold)}
+  .tw .txt{margin:6px 0 0;font-size:15px;line-height:1.55;color:var(--tx);white-space:pre-wrap}
+  .tw .txt .k{color:var(--gold)}
+  .tw .txt code{font-family:var(--mono);font-size:13px;background:var(--s3);padding:1px 6px;border-radius:5px;color:var(--gold-hi)}
+  .tw .media{margin-top:12px;border:1px dashed var(--line2);border-radius:12px;padding:16px;display:flex;align-items:center;gap:12px;
+    background:var(--s2);color:var(--tx-faint);font-size:13px}
+  .tw .media .play{width:34px;height:34px;border-radius:50%;border:1px solid var(--gold-line);color:var(--gold);display:grid;place-items:center;flex:none}
+  .note{margin-top:12px;font-size:13px;color:var(--tx-faint);font-style:italic}
+
+  /* post bank */
+  .bank{columns:2;column-gap:14px;margin-top:24px}
+  @media(max-width:760px){.bank{columns:1}}
+  .post{break-inside:avoid;border:1px solid var(--line);border-radius:12px;background:var(--s1);padding:15px 16px;margin-bottom:14px}
+  .post .pl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+  .post .pl.receipts{color:var(--good)} .post .pl.explain{color:var(--gold)}
+  .post .pl.thesis{color:var(--gold-hi)} .post .pl.build{color:var(--tx-mut)} .post .pl.takes{color:var(--warn)}
+  .post p{margin:0;font-size:14px;line-height:1.5;color:var(--tx)}
+
+  /* lists */
+  ul.clean{list-style:none;padding:0;margin:20px 0 0;display:flex;flex-direction:column;gap:12px}
+  ul.clean li{padding-left:22px;position:relative;color:var(--tx-mut);font-size:15px;line-height:1.55}
+  ul.clean li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:2px;background:var(--gold);transform:rotate(45deg)}
+  ul.clean li b{color:var(--tx)}
+
+  .guard{border-left:3px solid var(--warn);padding:4px 0 4px 18px;margin-top:8px;color:var(--tx-mut);font-size:14.5px;line-height:1.6}
+  .guard b{color:var(--tx)}
+
+  .metric{display:flex;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid var(--line)}
+  .metric:first-child{border-top:0}
+  .metric .m{font-size:15px;color:var(--tx)} .metric .m span{display:block;font-size:13px;color:var(--tx-faint);margin-top:2px}
+  .metric .v{font-family:var(--mono);font-size:12px;color:var(--gold);text-align:right;white-space:nowrap}
+
+  footer{padding:48px 0 70px;color:var(--tx-faint);font-size:13px;text-align:center}
+  footer b{color:var(--gold);font-family:var(--serif);font-weight:500;font-size:15px}
+
+  /* theme toggle */
+  .toggle{position:fixed;top:16px;right:16px;z-index:10;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+    background:var(--s1);border:1px solid var(--line2);color:var(--tx-mut);border-radius:999px;padding:7px 13px;cursor:pointer}
+  .toggle:hover{border-color:var(--gold-line);color:var(--gold)}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media(prefers-reduced-motion:no-preference){.tweets,.card,.act{transition:border-color .15s}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="mk" viewBox="0 0 100 100">
+  <path d="M50 7.81 L89.06 28.13 L89.06 71.88 L50 92.19 L10.94 71.88 L10.94 28.13 Z" fill="none" stroke="#D4A94E" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M34.4 50.6 L45 61.25 L66.9 37.5" fill="none" stroke="#E7C57A" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol></svg>
+
+<button class="toggle" id="tg" aria-label="Toggle theme">◑ THEME</button>
+
+<header>
+  <div class="wrap">
+    <div class="brandline"><svg class="hex"><use href="#mk"/></svg><b>Essey</b><span class="faint" style="font-family:var(--mono);font-size:11px;letter-spacing:.14em">@ESSEYMARKETS</span></div>
+    <span class="eyebrow">Twitter Playbook · 8-week series</span>
+    <h1>Trust <em>math</em>, not middlemen.<br>A strategy for saying so.</h1>
+    <p class="lede">Essey is verifiable, portable credit — lending you can check instead of trust, on a proof that travels to any chain. This is how we tell that story on Twitter: the positioning, a multi-week narrative arc, drafted threads, a post bank, and a weekly rhythm. Twitter only, on purpose.</p>
+    <div class="meta">
+      <span class="tag gold">Channel · Twitter/X only</span>
+      <span class="tag">Cadence · 1 flagship thread + 3–4 posts / week</span>
+      <span class="tag">Arc · 4 acts, 8 weeks</span>
+      <span class="tag">Ethos · receipts over promises</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">01</span><span class="eyebrow">The North Star</span></div>
+    <h2>One thesis, everything ladders to it</h2>
+    <div class="northstar">
+      <div class="q">Finance is going two directions at once — <b>agentic</b> and <b>multi-chain</b>. Credit that survives both has to be two things: <b>verifiable</b>, and <b>portable</b>. Everyone is building one. Essey is building both.</div>
+      <div class="sub">Every post should reinforce some corner of this. If a draft doesn't make Essey feel more <em>verifiable</em>, more <em>portable</em>, or more <em>honest</em> than the alternatives — it's decoration, cut it.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">02</span><span class="eyebrow">The wedge</span></div>
+    <h2>Why we win attention on Crypto Twitter</h2>
+    <p class="intro">CT is saturated with two things we are not: overclaiming, and vaporware. We have the opposite of both, and that contrast is the whole growth strategy.</p>
+    <div class="grid g2">
+      <div class="card">
+        <div class="lab">Wedge 1 · Radical honesty</div>
+        <h3>We publish the audits that came back dirty</h3>
+        <p>66 confirmed findings across six adversarial rounds on our Sui code; not one round was clean first pass. We post a public "what's actually proven today." In a space built on trust-me-bro, receipts are a superpower — and almost nobody uses them.</p>
+      </div>
+      <div class="card">
+        <div class="lab">Wedge 2 · A real breakthrough</div>
+        <h3>A proof that lets a loan settle on any chain</h3>
+        <p>We put a live oracle price's proof <em>inside</em> the loan — verified on a chain with no oracle, ~338k gas, reproducible from the repo. It's not a pitch; it runs in one command. Novelty + proof is the rarest combination on the timeline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">03</span><span class="eyebrow">Who we're talking to</span></div>
+    <h2>Five audiences, one voice</h2>
+    <p class="intro">Write for the sharpest reader in the room; the rest lean in. Each thread should have at least one line that lands for the builders and one that lands for the traders.</p>
+    <div class="grid g3">
+      <div class="card"><div class="lab">Primary</div><h3>Crypto builders & devs</h3><p>Care about the ZK depth, formal verification, the reproducible demo. They amplify. Win them with rigor and receipts.</p></div>
+      <div class="card"><div class="lab">Primary</div><h3>DeFi natives</h3><p>"Borrow against my bags," RWA, yield. They want the product and the numbers. Win them with clarity, not jargon.</p></div>
+      <div class="card"><div class="lab">Amplifier</div><h3>ZK / infra crowd</h3><p>Pyth, Wormhole, proof-system people. Our tech is catnip to them. Win them by engaging in their conversations, not broadcasting at them.</p></div>
+      <div class="card"><div class="lab">Amplifier</div><h3>RWA / Sui ecosystem</h3><p>Tokenized equities, the Robinhood angle, Sui builders and funds. Win them by tying Essey to narratives they already push.</p></div>
+      <div class="card"><div class="lab">Watching</div><h3>Investors & funds</h3><p>They read, rarely reply. They're convinced by consistency and substance over weeks, not one viral tweet. The whole arc is for them too.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">04</span><span class="eyebrow">Content pillars</span></div>
+    <h2>Five recurring lanes</h2>
+    <p class="intro">Every post is one of these. The mix per week keeps the account from becoming all-vision (vaporware smell) or all-shipping (no narrative).</p>
+    <div class="grid" style="margin-top:26px">
+      <div class="pillar"><div class="pn">P1</div><div><h3>Receipts</h3><p>Build-in-public honesty. Published audit rounds, "what's proven today," reproducible numbers, demo runs. The trust engine — and the differentiator no one copies.</p><div class="mix">~25% of posts · the brand's backbone</div></div></div>
+      <div class="pillar"><div class="pn">P2</div><div><h3>Explainers</h3><p>Teach the tech in plain language. "The proof is the oracle," ZK for normies, formal verification, why oracles trap lending. Screenshots &amp; simple diagrams.</p><div class="mix">~25% of posts · the education engine</div></div></div>
+      <div class="pillar"><div class="pn">P3</div><div><h3>The Thesis</h3><p>The vision — cross-chain credit, agentic finance, RWA everywhere, the Robinhood future. Big-picture takes that make people quote-tweet.</p><div class="mix">~20% of posts · the narrative engine</div></div></div>
+      <div class="pillar"><div class="pn">P4</div><div><h3>The Build</h3><p>Short shipping updates. "Migrated to PLONK," "on-chain verifier live in the repo," milestones. Proof of momentum, low effort, high frequency.</p><div class="mix">~15% of posts · the momentum engine</div></div></div>
+      <div class="pillar"><div class="pn">P5</div><div><h3>Takes</h3><p>Quote-tweet ecosystem news (Pyth, Wormhole, Sui, Robinhood, RWA) with a POV that positions Essey. The fastest way onto other people's timelines.</p><div class="mix">~15% of posts · the reach engine</div></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">05</span><span class="eyebrow">The 8-week arc</span></div>
+    <h2>Four acts that build to a reveal</h2>
+    <p class="intro">The story isn't random threads — it's a sequence. Establish who we are, prove the foundation, detonate the breakthrough, then point at the future. Week&nbsp;5 is the peak: the demo reveal.</p>
+    <div class="cal">
+      <div class="act"><div class="wk">Weeks 1–2 · Act I</div><h3>Establish the thesis</h3><div class="goal">Introduce the problem (lending is trapped) and the ethos (we build in the open). Pin the launch thread. Hook the right followers.</div><div class="flag">▸ Flagship: "Why lending is trapped"</div></div>
+      <div class="act"><div class="wk">Weeks 3–4 · Act II</div><h3>Prove the foundation</h3><div class="goal">The rigor story: formal verification on Sui, dregg, and the published dirty audits. Earn credibility before the flex.</div><div class="flag">▸ Flagship: "We publish the dirty audits"</div></div>
+      <div class="act peak"><div class="wk">Weeks 5–6 · Act III</div><h3>Detonate the breakthrough</h3><div class="goal">The portable proof + the one-command demo video. The peak. This is the tweet that's built to travel. Everything before earns the right to it.</div><div class="flag">▸ Flagship: "A live price → a loan on a chain with no oracle"</div></div>
+      <div class="act"><div class="wk">Weeks 7–8 · Act IV</div><h3>Point at the future</h3><div class="goal">Agentic + Robinhood: credit for the agent economy. Convert momentum into a forward narrative and a community that expects what's next.</div><div class="flag">▸ Flagship: "The agent economy needs credit that travels"</div></div>
+    </div>
+    <p class="note">Then loop: the arc is a template, not a one-shot. Re-run it with new proof points (mainnet testnet, audit results, first live loan) as milestones land.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">06</span><span class="eyebrow">Weekly rhythm</span></div>
+    <h2>The default week</h2>
+    <p class="intro">Consistency beats volume. This cadence is sustainable for a small team and trains the algorithm and your followers to expect you. Everything is postable in &lt;30 min except the Monday thread.</p>
+    <div class="rhythm">
+      <div class="rrow"><div class="d">Mon</div><div class="w"><b>Flagship thread</b> — the week's one big idea (from the arc). Post 9–11am ET. This is 60% of the week's reach.</div></div>
+      <div class="rrow"><div class="d">Tue</div><div class="w"><b>Reply day</b> — no original post. 30 min replying in ZK / RWA / Sui / DeFi conversations. Be useful, not promotional.</div></div>
+      <div class="rrow"><div class="d">Wed</div><div class="w"><b>Explainer</b> — one single tweet + a visual (a screenshot, the node diagram, a gas number). Digestible, saveable.</div></div>
+      <div class="rrow"><div class="d">Thu</div><div class="w"><b>Take</b> — quote-tweet a relevant ecosystem post with a sharp POV that positions Essey. Fastest reach lever.</div></div>
+      <div class="rrow"><div class="d">Fri</div><div class="w"><b>Build update</b> — what shipped this week, one line, link to the repo. Proof of momentum.</div></div>
+      <div class="rrow"><div class="d">Sat/Sun</div><div class="w"><b>One lighter post</b> — a thesis one-liner or a poll — plus ambient engagement. Don't go dark; don't grind.</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">07</span><span class="eyebrow">Drafted flagship threads</span></div>
+    <h2>The four anchors, copy-ready</h2>
+    <p class="intro">These are the spine of the arc — written to post as-is. Numbering is real (it's a thread). Keep each tweet under ~270 characters so it never truncates. Bracketed notes are for you, not the tweet.</p>
+
+    <!-- THREAD 1 -->
+    <div class="thread">
+      <div class="thread-h"><span class="t">Act I — Launch</span><span class="role">pin this</span></div>
+      <div class="tweets">
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">1/</span></div><p class="txt">Every lending protocol in DeFi is trapped on the same dozen chains.
+
+Not by choice. By a constraint nobody talks about.
+
+We spent months breaking it. Here's the constraint — and what borrowing looks like once it's gone. 🧵</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">2/</span></div><p class="txt">To lend against an asset, you need a trusted price.
+
+A trusted price means an oracle — Chainlink, Pyth — deployed and maintained on your chain.
+
+Oracles live on ~a dozen chains. So lending lives on ~a dozen chains. Full stop.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">3/</span></div><p class="txt">Every new L2, every app-rollup, every chain launching this year is born with no oracle.
+
+Which means it's born unable to host lending.
+
+The oracle is the leash. Everyone's pulling on the same one.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">4/</span></div><p class="txt">Essey cuts the leash.
+
+We put the price's <span class="k">proof</span> inside the loan itself. The proof carries the price's authenticity with it.
+
+The chain doesn't need an oracle. It checks the proof. The proof <span class="k">is</span> the oracle — and it travels.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">5/</span></div><p class="txt">This isn't a whitepaper.
+
+We built it. It takes a live Bitcoin price — signed by Pyth's 13 guardians — proves it inside a zero-knowledge proof, and verifies it on a blockchain that has never heard of Pyth.
+
+196-byte proof. ~338k gas. ~13 seconds.</p><div class="media"><span class="play">▶</span><span>[attach the demo screen-recording here — this is the money tweet]</span></div></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">6/</span></div><p class="txt">Where we are, honestly: this is a working research build. Not deployed, not audited yet.
+
+But it's real and reproducible — every number above falls out of <code>go test</code>. The repo is open.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">7/</span></div><p class="txt">This is Essey.
+
+Lending you can verify instead of trust. Credit that travels to any chain.
+
+We build in the open — the wins and the dirty audits both. Follow along. 👇
+essey.xyz</p></div></div>
+      </div>
+      <p class="note">Why it opens cold: no "gm", no logo drop. A constraint + a promise. The video in 5/ is the shareable unit — everything before it earns the click.</p>
+    </div>
+
+    <!-- THREAD 2 -->
+    <div class="thread">
+      <div class="thread-h"><span class="t">Act II — The foundation</span><span class="role">credibility</span></div>
+      <div class="tweets">
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">1/</span></div><p class="txt">Most DeFi protocols say "audited by [firm]" and move on.
+
+We publish the audits that came back <span class="k">dirty</span>.
+
+66 confirmed findings across 6 rounds on our Sui code. Not one round was clean on the first pass.
+
+That's not embarrassing. That's the point. 🧵</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">2/</span></div><p class="txt">The dirty secret of DeFi security:
+
+nearly every nine-figure hack happened to <span class="k">audited</span> code.
+
+An audit is a very good code review. It is not a guarantee. You're trusting that the reviewers thought of everything.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">3/</span></div><p class="txt">Essey's core rule — "never lend more than the collateral covers" — isn't just audited. It's <span class="k">formally verified</span>.
+
+Written in Lean 4. A proof assistant checks it holds for EVERY possible input. Not the 100 cases a tester imagined. All of them.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">4/</span></div><p class="txt">Then we attack our own code, adversarially, every round — and publish everything. Clean or not.
+
+An audit trail you only publish when it's flattering isn't an audit trail. It's marketing.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">5/</span></div><p class="txt">We also keep a public "what's actually proven today" table.
+
+The verified kernel is real — but it's not yet what gates the live code. The circuits aren't audited yet. We say exactly that, in writing, on the site.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">6/</span></div><p class="txt">Why hold ourselves to this in a space built on overclaiming?
+
+Because the product is "trust math, not middlemen." You can't sell verifiable credit while fudging what's verified.
+
+The receipts are the brand. 👇
+essey.xyz/#docs</p></div></div>
+      </div>
+      <p class="note">This thread converts skeptics. It also inoculates: by naming what <em>isn't</em> done, no one can "gotcha" you with it later.</p>
+    </div>
+
+    <!-- THREAD 3 -->
+    <div class="thread">
+      <div class="thread-h"><span class="t">Act III — The breakthrough</span><span class="role">the peak · attach video</span></div>
+      <div class="tweets">
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">1/</span></div><p class="txt">We just ran something no lending protocol on earth can do.
+
+A LIVE Bitcoin price → a zero-knowledge proof it's genuine → a solvent loan → verified on a blockchain with no oracle on it.
+
+One command. Watch. 🧵</p><div class="media"><span class="play">▶</span><span>[the one-command demo recording — lead with it]</span></div></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">2/</span></div><p class="txt">Step by step, on real mainnet data:
+
+→ pull a live BTC price from Pyth
+→ verify it was signed by Pyth's 13 guardians
+→ prove, in ZK, a loan is solvent against it
+→ export a verifier &amp; check the proof on a fresh EVM chain</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">3/</span></div><p class="txt">The trick:
+
+normally the settlement chain reads an oracle to learn the price. That's the dependency.
+
+Essey's proof <span class="k">contains</span> the price's whole chain of authenticity — 13 guardian signatures, verified inside the proof. The chain checks the proof, not an oracle.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">4/</span></div><p class="txt">The numbers, measured — not estimated:
+
+• 196-byte proof
+• ~338k gas to verify on-chain — flat, regardless of circuit size
+• ~13s to generate
+• verifies on any EVM chain
+
+Cheaper than plenty of DeFi actions you already pay for.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">5/</span></div><p class="txt">What it unlocks:
+
+lending on chains that literally cannot host it today. Minimal L2s. App-rollups. Ecosystems born without oracle infrastructure.
+
+The market stops being "chains with oracles" and becomes "chains."</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">6/</span></div><p class="txt">Honest status: research build, pre-audit, not deployed.
+
+But it's all reproducible — <code>bash demo.sh</code> on the repo does exactly what the video shows. Try to break it.
+
+The proof is the oracle. And it travels. 👇
+essey.xyz</p></div></div>
+      </div>
+      <p class="note">Post this only after Acts I–II have run. The "no protocol can do this" claim needs the credibility bank behind it, or it reads as hype.</p>
+    </div>
+
+    <!-- THREAD 4 -->
+    <div class="thread">
+      <div class="thread-h"><span class="t">Act IV — The future</span><span class="role">forward narrative</span></div>
+      <div class="tweets">
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">1/</span></div><p class="txt">Soon your AI agent will buy you a stock on Robinhood while you sleep.
+
+Then it hits a wall: you can't borrow against that stock without moving it, trusting a bridge, and praying an oracle exists where it lands.
+
+Unless the credit travels with it. 🧵</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">2/</span></div><p class="txt">Robinhood just opened agentic trading — agents can place trades through their MCP, and positions land onchain as tokenized stocks.
+
+The buying is getting automated. The <span class="k">credit</span> layer underneath it isn't ready.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">3/</span></div><p class="txt">The Essey path:
+
+your agent buys AAPL → it settles onchain as a Stock Token → you borrow a stablecoin against it on Essey → and the loan can settle anywhere, because the proof of that price travels.
+
+Tokenized equities + crypto, one venue.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">4/</span></div><p class="txt">Why this is the whole game:
+
+finance is going agentic (software acts for you) and multi-chain (assets scatter) at the same time.
+
+Credit for that world has to be two things: verifiable, and portable. That's the entire Essey thesis.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">5/</span></div><p class="txt">What's real today: we've fork-tested the Robinhood Chain side against live Stock Tokens and Chainlink feeds, and built the agent-facing tooling.
+
+What's ahead: wiring it end to end. We'll show it here as it comes together.</p></div></div>
+        <div class="tw"><div class="ava"><svg><use href="#mk"/></svg></div><div class="body"><div class="hd"><b>Essey</b><span class="h">@EsseyMarkets</span><span class="n">6/</span></div><p class="txt">The short version:
+
+the agent economy needs credit that can be trusted by math and can go anywhere its collateral goes.
+
+That's what we're building. 👇
+essey.xyz</p></div></div>
+      </div>
+      <p class="note">Ends the arc looking forward, not back — the note you want investors and builders to leave on.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">08</span><span class="eyebrow">Post bank</span></div>
+    <h2>Singles for the in-between days</h2>
+    <p class="intro">A starting stock of standalone tweets by pillar. Rotate, remix, and add the demo-derived facts as they come. Colour = pillar.</p>
+    <div class="bank">
+      <div class="post"><div class="pl receipts">Receipts</div><p>196 bytes. That's the size of a proof that a Bitcoin price is real and your loan is solvent. It verifies on any chain for ~338k gas. Both numbers come out of `go test`, not a pitch deck.</p></div>
+      <div class="post"><div class="pl explain">Explainer</div><p>"The proof is the oracle" in one line: instead of the chain asking an oracle "what's the price?", the loan arrives carrying a proof the price is real. The chain checks the proof. No oracle needed.</p></div>
+      <div class="post"><div class="pl thesis">Thesis</div><p>The winner in RWA lending won't be whoever supports the most chains. It'll be whoever needs the fewest — because their proof works everywhere.</p></div>
+      <div class="post"><div class="pl receipts">Receipts</div><p>Reminder that nearly every nine-figure DeFi hack happened to *audited* code. Audits catch the bugs someone thought to look for. We formally verify the one rule that can't be wrong. Different tool, different job.</p></div>
+      <div class="post"><div class="pl explain">Explainer</div><p>Formal verification, explained: testing checks the cases you thought of. A proof assistant checks *every* case — including the ones no human would try. For "never lend more than the collateral covers," you want the second one.</p></div>
+      <div class="post"><div class="pl build">Build</div><p>Migrated our proving system to PLONK. Translation: we never have to run a risky trusted-setup ceremony again when the circuit changes. Boring infra win, big operational one.</p></div>
+      <div class="post"><div class="pl takes">Take (QT Pyth/Wormhole)</div><p>This is the exact machinery our proof verifies — in zero knowledge — so a loan can trust a Pyth price on a chain Pyth was never deployed to.</p></div>
+      <div class="post"><div class="pl thesis">Thesis</div><p>Two things are happening to finance at once: it's getting agentic, and it's getting multi-chain. Credit that survives both has to be verifiable AND portable. Most are building one. We're building both.</p></div>
+      <div class="post"><div class="pl takes">Take (QT an L2 launch)</div><p>Congrats on the launch. You don't have a lending market yet because you don't have an oracle yet. We're building the version where you don't need one.</p></div>
+      <div class="post"><div class="pl explain">Explainer</div><p>Why can't DeFi lending run on every chain? It needs a trusted price → a trusted price needs an oracle → oracles live on ~a dozen chains. Remove that dependency and lending goes everywhere. That's the whole idea.</p></div>
+      <div class="post"><div class="pl receipts">Receipts</div><p>New audit round posted. [n] confirmed, [m] refuted, nothing hidden — including the findings that made us look bad. We publish these clean or dirty. Link below.</p></div>
+      <div class="post"><div class="pl takes">Take (QT Robinhood agentic)</div><p>The agent can buy the stock. The missing piece is credit against it that travels. That's the part we're building.</p></div>
+      <div class="post"><div class="pl build">Build (poll)</div><p>Your AI agent just bought you $500 of AAPL onchain. Should it be able to borrow against it automatically? · Yes · No · Only with my sign-off</p></div>
+      <div class="post"><div class="pl explain">Explainer</div><p>On-chain proof verification costs the same ~338k gas whether the circuit behind it is 2,000 constraints or 2.4 million. That flatness is why "verify on any chain" is actually affordable.</p></div>
+      <div class="post"><div class="pl thesis">Thesis</div><p>Bridges move the asset and hope. We move the proof and verify. One of these gets exploited every few months; the other is math.</p></div>
+      <div class="post"><div class="pl receipts">Receipts</div><p>Everything we claim, you can run: `bash demo.sh` → live Pyth price → ZK proof → verified on a fresh chain. If it doesn't do what we say, tell us. That's the deal.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">09</span><span class="eyebrow">Growth tactics</span></div>
+    <h2>How the account actually grows</h2>
+    <ul class="clean">
+      <li><b>The demo video is the hero asset.</b> A 30–60s screen recording of `demo.sh` — live price to on-chain verify — is more convincing than any thread. Cut it once, reuse it in every act. Caption it so it works muted.</li>
+      <li><b>Reply, don't broadcast.</b> From ~0 followers, thoughtful replies in Pyth / Wormhole / Sui / ZK / RWA threads reach more of the right people than your own posts. 30 min/day, be genuinely useful, drop the pitch.</li>
+      <li><b>Quote-tweet the ecosystem into your narrative.</b> Every Pyth, Wormhole, Robinhood, or new-L2 post is a chance to say "here's why that matters for portable credit." You borrow their reach; they get a smart take.</li>
+      <li><b>Consistency is the algorithm.</b> The Monday-thread rhythm, held for 8 weeks, beats one viral spike. The account that shows up every week reads as a team that ships.</li>
+      <li><b>Make threads saveable, not just likeable.</b> A clear diagram, a "what's proven today" table, a numbers tweet — people bookmark those and come back. Bookmarks are the real signal.</li>
+      <li><b>Engage the sharp replies.</b> When a builder pushes back on the tech, answer in depth in public. Those exchanges are the best content you'll never have to write.</li>
+      <li><b>Don't buy engagement or chase ratios.</b> The audience you want (funds, builders) can smell it. Substance compounds; farming doesn't.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">10</span><span class="eyebrow">Voice &amp; guardrails</span></div>
+    <h2>How Essey sounds — and the lines we don't cross</h2>
+    <div class="grid g2">
+      <div class="card">
+        <div class="lab">Voice</div>
+        <h3>Confident, precise, dry</h3>
+        <p>Technical but translated — a builder should respect it, a trader should get it. Short sentences. Numbers over adjectives. A little dryness is fine; hype is not. Never "gm ser," never "revolutionary," never fake urgency. We sound like people who'd rather show you the repo than the roadmap.</p>
+      </div>
+      <div class="card">
+        <div class="lab">The honesty rules</div>
+        <h3>Non-negotiable guardrails</h3>
+        <div class="guard"><b>Never</b> imply it's live, deployed, or on mainnet. It's a research build — say "built" and "demonstrated," not "launched."</div>
+        <div class="guard"><b>Every number is reproducible</b> or it doesn't get posted. If you can't point to `go test` / the repo, don't claim it.</div>
+        <div class="guard"><b>Audits are fix-first.</b> Publish findings after the fix lands; never hide a dirty round; never promise a timeline.</div>
+      </div>
+    </div>
+    <p class="note">The guardrails aren't a constraint on the brand — they <em>are</em> the brand. "Trust math, not middlemen" only works if we never make the reader trust us on our word.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker"><span class="num">11</span><span class="eyebrow">Measure what matters</span></div>
+    <h2>Signals, not vanity</h2>
+    <p class="intro">Follower count is a lagging, gameable metric. Track whether the <em>right</em> people are engaging and moving toward the product.</p>
+    <div style="margin-top:22px">
+      <div class="metric"><div class="m">Quality of replies<span>Are builders / known CT accounts engaging, not just bots?</span></div><div class="v">weekly · qualitative</div></div>
+      <div class="metric"><div class="m">Demo video views &amp; completion<span>The hero asset — is it landing?</span></div><div class="v">per post</div></div>
+      <div class="metric"><div class="m">Bookmarks on threads<span>The truest "this was worth it" signal on Twitter</span></div><div class="v">per thread</div></div>
+      <div class="metric"><div class="m">Profile → essey.xyz clicks<span>Attention converting to intent</span></div><div class="v">weekly</div></div>
+      <div class="metric"><div class="m">Repo stars / clones<span>Builders taking us seriously enough to run it</span></div><div class="v">weekly</div></div>
+      <div class="metric"><div class="m">Who follows<span>Funds, founders, ZK/RWA people &gt; raw count</span></div><div class="v">ongoing</div></div>
+    </div>
+    <p class="note">North-star for the 8 weeks: not "10k followers." It's "the people who could fund, build on, or partner with Essey now know exactly what it is — and believe the receipts."</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <svg class="hex" style="width:26px;height:26px;vertical-align:middle;margin-bottom:12px"><use href="#mk"/></svg>
+    <div><b>Essey</b> — verifiable, portable credit.</div>
+    <div style="margin-top:8px">Twitter playbook · @EsseyMarkets · essey.xyz · build in the open</div>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var root=document.documentElement, btn=document.getElementById('tg');
+    function cur(){ return root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'); }
+    btn.addEventListener('click',function(){
+      var next = cur()==='dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+    });
+  })();
+</script>
