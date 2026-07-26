@@ -1,0 +1,98 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1200px;height:675px;overflow:hidden;background:#07090D}
+  body{display:grid;place-items:center;
+    background-image:radial-gradient(700px 400px at 78% -12%,rgba(212,169,78,.12),transparent 60%);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  .win{width:1000px;height:560px;background:#0B0E14;border:1px solid #232B39;border-radius:14px;
+    box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column}
+  .bar{height:44px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid #1a2130;background:#0d1119}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .r{background:#E0666A}.y{background:#E0993F}.g{background:#4FBE87}
+  .title{margin-left:14px;font-size:13px;color:#8b93a3;letter-spacing:.02em;display:flex;align-items:center;gap:9px}
+  .mk{width:17px;height:17px}
+  .live{margin-left:auto;font-size:11px;letter-spacing:.14em;color:#D4A94E;display:flex;align-items:center;gap:7px}
+  .live .pulse{width:7px;height:7px;border-radius:50%;background:#4FBE87;box-shadow:0 0 8px #4FBE87}
+  .body{flex:1;padding:22px 26px;font-size:16px;line-height:1.75;color:#E7E4DC;white-space:pre;overflow:hidden}
+  .b{color:#8b93a3}.gold{color:#E7C57A}.ok{color:#4FBE87}.dim{color:#5a6272}
+  .cur{display:inline-block;width:9px;height:18px;background:#D4A94E;vertical-align:-3px;margin-left:2px;animation:bl 1s steps(1) infinite}
+  @keyframes bl{50%{opacity:0}}
+  .line{opacity:0}
+  .line.show{opacity:1}
+</style></head>
+<body>
+  <div class="win">
+    <div class="bar">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="title">
+        <svg class="mk" viewBox="0 0 100 100" fill="none"><path d="M50 9 L88 29 L88 71 L50 91 L12 71 L12 29 Z" stroke="#D4A94E" stroke-width="4"/><text x="50" y="52" text-anchor="middle" dominant-baseline="central" font-family="Didot,Georgia,serif" font-size="46" fill="#E7C57A">E</text></svg>
+        essey — demo.sh
+      </span>
+      <span class="live"><span class="pulse"></span>LIVE DATA</span>
+    </div>
+    <div class="body" id="scr"></div>
+  </div>
+
+<script>
+  const L = [
+    ['<span class="b">$</span> bash demo.sh', 0],
+    ['', 60],
+    ['<span class="gold">  ESSEY · a loan, proven against a live price, verified on-chain</span>', 40],
+    ['', 20],
+    ['  [0] live BTC price from Pyth <span class="dim">···········</span> <span class="gold">$64,356</span>  <span class="b">signed update</span>', 20],
+    ['  [1] verify guardian quorum <span class="dim">·············</span> <span class="gold">13 / 13</span> signatures <span class="ok">✓</span>', 20],
+    ['  [2] proving keys <span class="dim">·······················</span> loaded', 20],
+    ['  [3] prove loan solvent <span class="b">(zero-knowledge)</span> <span class="dim">···</span> <span class="gold">13.4s → 196-byte proof</span>', 20],
+    ['  [4] verify proof off-chain <span class="dim">·············</span> valid <span class="ok">✓</span>', 20],
+    ['  [5] export on-chain verifier <span class="dim">···········</span> Verifier.sol', 20],
+    ['  [6] verify <span class="gold">ON-CHAIN</span> <span class="b">(fresh EVM, no oracle)</span> <span class="dim">·</span> <span class="ok">✓  337,975 gas</span>', 20],
+    ['', 30],
+    ['<span class="gold">  a live price → a ZK proof → verified on a chain with no oracle.</span>', 0],
+    ['<span class="dim">  every step real · reproducible · essey.xyz</span>', 0],
+  ];
+  const scr = document.getElementById('scr');
+  const nodes = L.map(([html]) => {
+    const d = document.createElement('div');
+    d.className = 'line'; d.innerHTML = html || '&nbsp;';
+    scr.appendChild(d); return d;
+  });
+  const cur = document.createElement('span'); cur.className = 'cur';
+
+  async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+  async function run(){
+    // reset
+    nodes.forEach(n=>n.classList.remove('show'));
+    // type the command char by char
+    const cmd = nodes[0]; const full = cmd.innerHTML; cmd.classList.add('show');
+    cmd.innerHTML = '<span class="b">$</span> '; cmd.appendChild(cur);
+    const typed = 'bash demo.sh';
+    for (let i=0;i<typed.length;i++){ cur.remove(); cmd.innerHTML = '<span class="b">$</span> '+typed.slice(0,i+1); cmd.appendChild(cur); await sleep(55); }
+    await sleep(360);
+    cur.remove();
+    // reveal each output line
+    for (let i=1;i<nodes.length;i++){
+      nodes[i].classList.add('show');
+      const [,pause] = L[i];
+      // step lines get a "working" beat
+      await sleep(i>=4 && i<=10 ? 620 : 260);
+    }
+    nodes[nodes.length-1].appendChild(cur);
+    await sleep(3200);
+    cur.remove();
+  }
+  // Deterministic frame control for recording: window.frame(k) reveals lines 0..k.
+  window.frame = function(k){
+    const cmd = nodes[0]; cur.remove();
+    if (k < 0){ nodes.forEach(n=>n.classList.remove('show')); cmd.innerHTML=''; return; }
+    cmd.classList.add('show');
+    cmd.innerHTML = '<span class="b">$</span> bash demo.sh';
+    for (let i=1;i<nodes.length;i++){ nodes[i].classList.toggle('show', i<=k); }
+    if (k >= nodes.length-1){ nodes[nodes.length-1].appendChild(cur); }
+  };
+  window.FRAMES = nodes.length;
+  var qf = new URLSearchParams(location.search).get('frame');
+  if (qf !== null){ document.querySelector('.cur') && document.querySelector('.cur').remove(); window.frame(parseInt(qf,10)); }
+  else if (location.hash === '#manual'){ window.frame(-1); }
+  else { (async function loop(){ while(true){ await run(); await sleep(700); } })(); }
+</script>
+</body></html>
