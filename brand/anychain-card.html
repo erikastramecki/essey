@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1600px;height:900px;overflow:hidden}
+  .card{width:1600px;height:900px;position:relative;background:#0A0C11;
+    background-image:
+      radial-gradient(900px 520px at 84% -14%, rgba(212,169,78,.16), transparent 60%),
+      radial-gradient(720px 460px at 12% 118%, rgba(120,140,190,.07), transparent 60%);
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    display:flex;flex-direction:column;justify-content:center;padding:0 110px}
+  .eyebrow{font-family:"SFMono-Regular",Menlo,monospace;font-size:19px;letter-spacing:.28em;
+    text-transform:uppercase;color:#D4A94E}
+  h1{font-family:"Didot","Bodoni 72","New York",Georgia,serif;font-size:104px;line-height:.98;
+    color:#F3EFE7;letter-spacing:-.01em;margin:24px 0 0}
+  h1 em{font-style:italic;color:#D4A94E}
+  .rows{margin:56px 0 0;display:flex;flex-direction:column;gap:26px;max-width:1180px}
+  .row{display:flex;align-items:center;gap:26px}
+  .lab{width:340px;flex:none}
+  .lab .t{font-family:"Didot",Georgia,serif;font-size:30px;color:#F3EFE7}
+  .lab.them .t{color:#98A0B0}
+  .lab .s{font-family:"SFMono-Regular",Menlo,monospace;font-size:14px;letter-spacing:.06em;color:#616A7B;margin-top:4px}
+  .nodes{display:flex;gap:12px}
+  .n{width:38px;height:38px;border-radius:9px;background:#1A2030;border:1px solid #2E3648}
+  .n.dim{background:#3a4356;border-color:#4a5568}
+  .n.on{background:#D4A94E;border-color:#E7C57A;box-shadow:0 0 14px rgba(212,169,78,.4)}
+  .foot{margin:64px 0 0;display:flex;align-items:center;gap:16px}
+  .foot .cap{font-size:26px;color:#C7CDDA;font-weight:300}
+  .foot .cap b{color:#F3EFE7;font-weight:500}
+  .brand{position:absolute;right:110px;bottom:60px;display:flex;align-items:center;gap:13px}
+  .brand .mk{width:38px;height:38px}
+  .brand .u{font-family:"SFMono-Regular",Menlo,monospace;font-size:20px;letter-spacing:.14em;color:#D4A94E}
+</style></head>
+<body>
+  <div class="card">
+    <div class="eyebrow">Why Essey is different</div>
+    <h1>Lend on <em>any</em> chain.</h1>
+    <div class="rows">
+      <div class="row">
+        <div class="lab them"><div class="t">Every other protocol</div><div class="s">needs an oracle on-chain</div></div>
+        <div class="nodes">
+          <span class="n dim"></span><span class="n dim"></span><span class="n dim"></span><span class="n dim"></span>
+          <span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lab us"><div class="t" style="color:#E7C57A">Essey</div><div class="s">any chain that can verify a proof</div></div>
+        <div class="nodes">
+          <span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span><span class="n on"></span>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><div class="cap">The proof <b>is</b> the oracle. It travels with the loan.</div></div>
+    <div class="brand">
+      <svg class="mk" viewBox="0 0 100 100" fill="none"><path d="M50 9 L88 29 L88 71 L50 91 L12 71 L12 29 Z" stroke="#D4A94E" stroke-width="4"/><text x="50" y="52" text-anchor="middle" dominant-baseline="central" font-family="Didot,Georgia,serif" font-size="46" fill="#E7C57A">E</text></svg>
+      <span class="u">essey.xyz</span>
+    </div>
+  </div>
+</body></html>
