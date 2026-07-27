@@ -19,13 +19,24 @@ func enforceLoan(api frontend.API,
 	c := PoseidonBn254(api, []frontend.Variable{poolHi, poolLo, bHi, bLo, debt, coll, ltvBps, nonce, tHi, tLo, price})
 	api.AssertIsEqual(c, commit)
 
-	// 2) Range-bound the operands so no product can wrap the BN254 field and hide an overflow.
+	// 2+3) Range checks + solvency inequality.
+	enforceSolvent(api, debt, coll, ltvBps, price)
+}
+
+// enforceSolvent range-bounds the operands and asserts the core solvency inequality:
+//
+//	debt * 10000 <= collateral * price * ltvBps
+//
+// It lives in one place and is shared by the loan-commitment path (enforceLoan) and the
+// state-transition path (TransitionCircuit), so the rule dregg verifies in Lean has exactly
+// one in-circuit encoding.
+func enforceSolvent(api frontend.API, debt, coll, ltvBps, price frontend.Variable) {
+	// Range-bound the operands so no product can wrap the BN254 field and hide an overflow.
 	api.ToBinary(debt, 64)
 	api.ToBinary(coll, 64)
 	api.ToBinary(price, 96)
 	api.ToBinary(ltvBps, 16)
 
-	// 3) Solvency: debt * 10000 <= collateral * price * ltvBps.
 	lhs := api.Mul(debt, bpsDenom)
 	rhs := api.Mul(api.Mul(coll, price), ltvBps)
 	api.AssertIsLessOrEqual(lhs, rhs)
