@@ -29,13 +29,27 @@ const PICK = [
   ["Audits", "audits/solidity-round-1.md", "Solidity — round 1", "19 confirmed, 5 refuted against the lending engine. Not clean."],
 ];
 
+// Founder rule (2026-08): competitor names never appear on the site. The repo docs keep their
+// engineering ground truth (measured reference data must stay attributable in source); the SITE
+// renders them neutralized. Order matters: possessive first.
+const sanitize = (md) => md
+  .replace(/stonkbrokers\.cash/gi, "the reference protocol's site")
+  .replace(/Stonk\s?Brokers?'s/gi, "the reference protocol's")
+  .replace(/Stonk\s?Brokers?'/gi, "the reference protocol's")
+  .replace(/Stonk\s?Brokers?/gi, "the reference protocol")
+  .replace(/Stonk(?=[A-Z])/g, "Ref") // their contract identifiers: StonkLoanVault -> RefLoanVault
+  .replace(/(^|[.!?]\s+)the reference protocol/g, "$1The reference protocol"); // sentence starts
+
 const missing = [];
 const docs = PICK.map(([group, file, title, desc]) => {
   let md = "";
-  try { md = readFileSync(join(DOCS, file), "utf8"); } catch { missing.push(file); md = `# ${title}\n\n_(document unavailable)_`; }
+  try { md = sanitize(readFileSync(join(DOCS, file), "utf8")); } catch { missing.push(file); md = `# ${title}\n\n_(document unavailable)_`; }
   const slug = file.replace(/\.md$/, "").toLowerCase().replace(/\//g, "-");
   return { slug, group, file, title, desc, md };
 });
+// The rule is a hard gate, not a best effort: fail the build if any reference survives.
+const leak = docs.filter((d) => /stonk/i.test(d.md));
+if (leak.length) { console.error(`gen-docs: competitor reference leaked in ${leak.map((d) => d.file).join(", ")}`); process.exit(1); }
 // A doc that silently renders as "(document unavailable)" is worse than a failed build — it ships
 // a dead card to visitors. Fail loudly instead.
 if (missing.length) { console.error(`gen-docs: MISSING ${missing.join(", ")}`); process.exit(1); }
