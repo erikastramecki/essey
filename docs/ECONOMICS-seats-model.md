@@ -43,25 +43,25 @@ their day-16 numbers as the optimistic bound and their visible decay as the real
 
 **Collection size: 2,222 Seats** (placeholder pending final call). Grounding: their market — with a
 hot chain, a free-mint history, and launch hype — absorbed ~2,200 into real wallets. Sizing our whole
-collection to their *absorbed* number (not their headline) means the Floor can genuinely sell through,
-and scarcity works for us. The Floor holds unsold inventory as float, price-releasing it — their model,
+collection to their *absorbed* number (not their headline) means the Exchange can genuinely sell through,
+and scarcity works for us. The Exchange holds unsold inventory as float, price-releasing it — their model,
 adopted deliberately. (The Bell's O(1) accumulator puts no technical cap on supply; this is purely an
 economic choice.)
 
-**Tier fees: set by the ladder rule at launch, in $ESSEY, against the live Floor price.** Keep our
-weight ratios (100/160/200/333). Calibrate fees so upgrade cost-per-weight-point ≤ (Floor price +
+**Tier fees: set by the ladder rule at launch, in $ESSEY, against the live Exchange price.** Keep our
+weight ratios (100/160/200/333). Calibrate fees so upgrade cost-per-weight-point ≤ (Exchange price +
 Tier-1 fee) per weight-point — the verified StonkBrokers rule that keeps every tier rational. 50%
 burn / 50% treasury, expectations set by insight #4.
 
-**Floor fees: 10% swap / 15% snipe on ETH notional (their proven schedule), TWAP-sandwich oracle.**
-With cross-product coherence: any Note origination/exit fee must be ≥ the Floor exit fee so lending
+**Exchange fees: 10% swap / 15% snipe on ETH notional (their proven schedule), TWAP-sandwich oracle.**
+With cross-product coherence: any Note origination/exit fee must be ≥ the Exchange exit fee so lending
 can't be a discount exit (their verified invariant, adopted).
 
 **Bell pot run-rate — model three sources, honestly:**
 
 | Source | Character | Day-16-calibrated illustration |
 |---|---|---|
-| Floor trade fees | launch spike → fast decay | 10 trades/day × (0.1–0.15 × notional) — assume this decays ~90% from launch week, per their measured shape |
+| Exchange trade fees | launch spike → fast decay | 10 trades/day × (0.1–0.15 × notional) — assume this decays ~90% from launch week, per their measured shape |
 | Re-activation churn | recurring, transfer-driven | transfers/day × avg tier fee — but note: in our design (as in theirs) tier fees go burn/treasury, **not** the pot |
 | **Loan interest share** | **recurring, TVL-driven — OUR structural edge** | reserve share of interest: e.g. $1M borrowed × 8% APR × 10% reserve share ≈ $8k/yr baseline, scaling linearly with TVL and immune to NFT-market mood |
 
@@ -74,8 +74,8 @@ borrow-against-stock): every loop through it grows the *durable* pot source.
 ## Explicit unknowns / to revisit
 
 - Their exact USD total distributed (order-of-magnitude corroborated only) and historical drop-size
-  decay curve (would sharpen the Floor-fee decay assumption).
+  decay curve (would sharpen the Exchange-fee decay assumption).
 - ETH fee-inflow path (internal transfers not sampled) and where AMM ETH liquidity sits.
-- Our $ESSEY launch pricing (Floor price in $ESSEY) — tier fees derive from it; can't be set until
+- Our $ESSEY launch pricing (Exchange price in $ESSEY) — tier fees derive from it; can't be set until
   token economics exist.
 - All "illustrative" numbers above are labeled as such; nothing here is a revenue projection.

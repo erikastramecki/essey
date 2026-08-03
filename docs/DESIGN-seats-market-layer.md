@@ -14,19 +14,19 @@ the ZK stack in `circuit/poseidon` (see `docs/SCOPE-solvency-rollup.md`).
 | **Seat** | membership NFT — like an exchange seat: scarce, tradeable, entitled to a share of the floor | Broker (4,444) |
 | **Vault** | the Seat's ERC-6551 token-bound wallet; holds collateral + earned Payouts | broker's TBA |
 | **Tier** | staking level — stake $ESSEY to raise a Seat's Tier → bigger share of fees | activation tiers |
-| **the Floor** | the Seat AMM — swap $ESSEY ⇄ a Seat, or snipe a specific # | Anvil NFT AMM |
+| **the Exchange** | the Seat AMM — swap $ESSEY ⇄ a Seat, or snipe a specific # | Anvil NFT AMM |
 | **the Bell** | permissionless payout event — anyone *rings the Bell* when the fee pot is full, earns a tip | Clock In |
 | **Payout** | the fee-funded reward the Bell distributes into active Seats' Vaults, by Tier (NOT "dividend") | the stock drop |
 | **After Hours** | a second payout engine (e.g. liquidation revenue) | Overtime |
 | **Note** | a loan position as a transferable NFT whose Vault holds the collateral | Certificate/deed |
 | **the Tape** | live public feed of Bells, Payouts, proofs, and loans — each row a real tx | live drops ticker |
-| **$ESSEY** | the access/sink token — buy Seats on the Floor, raise Tier, etc. | $STONKBROKER |
+| **$ESSEY** | the access/sink token — buy Seats on the Exchange, raise Tier, etc. | $STONKBROKER |
 
 ## The two NFTs
 
 **1. Seat (membership collection).** A fixed collection (e.g. 4,444) of ERC-721 Seats, each an
 **ERC-6551** token that owns a **Vault** (its token-bound wallet). Seats are the engagement flywheel:
-acquire one on the Floor, raise its Tier by staking $ESSEY, and it earns a share of protocol fees at
+acquire one on the Exchange, raise its Tier by staking $ESSEY, and it earns a share of protocol fees at
 every Bell. The Vault (and everything in it) travels with the NFT on transfer — sell the Seat, sell the
 Vault. *(Foundation built — `src/market/Seat.sol`, `SeatVault.sol`; the core mechanic is proven in
 `test/Seat.t.sol`.)*
@@ -46,12 +46,12 @@ meets the hard tech: a Note is a self-contained, provably-solvent, portable cred
   can own its collateral objects directly, so the Note/Vault is just how Sui already works; the
   formally-verified `dregg` core gets this for free.
 - **Fee → reward distribution ("the Bell").** Protocol fees (loan origination, a slice of interest,
-  liquidation bonus, Floor AMM fees) accrue in a **Booster** contract. When the pot is full, *anyone*
+  liquidation bonus, Exchange AMM fees) accrue in a **Booster** contract. When the pot is full, *anyone*
   can ring the Bell (pay gas, earn a tipper's cut). It swaps the fee asset into the reward lineup and
   distributes pro-rata by Tier into every active Seat's Vault. 100% on-chain, permissionless, no bot.
 - **Staking / Tiers.** Stake $ESSEY to raise a Seat's Tier, each a higher payout multiplier. Activation
   fee partly **burned** (token sink), partly to protocol. A whale mechanic + a real $ESSEY sink.
-- **The Floor (Seat AMM).** A vault-AMM: swap a flat amount of $ESSEY (+ small fee) for the next Seat,
+- **The Exchange (Seat AMM).** A vault-AMM: swap a flat amount of $ESSEY (+ small fee) for the next Seat,
   or snipe a specific #. Makes an illiquid NFT liquid and creates fee flow that feeds the Booster.
 - **Fee-recycling buyback.** A slice of fees recycles into $ESSEY buybacks — and here Essey's ZK makes
   the trigger *provably* unfront-runnable, not just "trust the VRNG."
@@ -71,7 +71,7 @@ Every gamified element routes through the ZK stack:
 ## Architecture / where each piece lives
 
 - **EVM / `rh-chain/`** (Robinhood Chain — the consumer surface, same as StonkBrokers): Seat (ERC-721 +
-  ERC-6551), SeatVault, Booster/Bell, Tier staking, the Floor AMM, Note integration into `EsseyPool`.
+  ERC-6551), SeatVault, Booster/Bell, Tier staking, the Exchange AMM, Note integration into `EsseyPool`.
   New contracts are **additive**; the one edit to audited code is switching `EsseyPool` position auth
   from stored `borrower` → `ownerOf(id)`.
 - **Sui / `move/`**: Notes/Vaults are native objects; a later port once the EVM design settles.
@@ -127,10 +127,17 @@ Every gamified element routes through the ZK stack:
    the portable solvency proof riding with the Note — deferred because it adds external calls to the
    liquidation path (the most safety-critical code) for a property that is composability, not security;
    it gets its own design pass. (Back half of the flywheel now functional: stocks in Vaults → borrow.)
-4. **The Floor (Seat AMM) + buyback recycling.** Elevated per founder decision — the NFT trading
-   mechanics are a core engagement + fee engine, not an accessory: in StonkBrokers' economy the Floor's
-   10%/15% trade fees are the primary pot filler. **Supply size and every fee parameter to be set from
-   the economics model (below), not copied blind.**
+4. **The Exchange (Seat AMM).** ✅ Built. `EsseyExchange.sol` — a two-sided flat-price vault-AMM:
+   holds a Seat inventory + an $ESSEY reserve and trades between them. **buy** (next Seat), **snipe**
+   (specific #, premium fee), **sell** (return a Seat for the flat price). Every trade fee is charged in
+   the **Bell's reward token** and split `boosterShareBps`/rest → **Bell pot** / treasury (fees feed the
+   Bell by plain transfer — verified end-to-end: buy → ring → claim lands in a Vault). Faithful flat
+   price + float (inventory) as the scarcity dial; **adminless over funds** (only a `seeder` role that
+   can add float, never move funds); decoupled from minting (float via `seed`/sell-backs). v1
+   simplification: flat immutable price + flat immutable fees (no oracle to manipulate, no admin to
+   move) — a %-of-ETH-notional TWAP-sandwich fee is a possible v2. Tests: 10/10 (buy/snipe/sell, fee
+   routing, pot-feed, seeder auth, empty-inventory / absent-snipe / dry-reserve guards, config guards).
+   $ESSEY token (`EsseyToken.sol`) also built (fixed supply, adminless, burnable+permit).
 5. **The Case system** (founder-prioritized) — stock gacha + two-sided fee engine (buy fee + sell-back
    spread), prizes = stock sealed in Vault-NFTs, feeds the Bell. Reuses Seat/Vault; two reg-differentiated
    variants; provably-fair + provably-solvent-bankroll twist; entropy source TBD. See the Phase-5 section
@@ -143,23 +150,23 @@ Every gamified element routes through the ZK stack:
 The market layer is **the new focus** of what Essey is building. essey.xyz and all public messaging get
 reframed around it once the core technical build lands:
 
-- **Tone:** fun, gamified, engaging — the Market (Seats, Tiers, the Bell, the Floor, the Tape) front and
+- **Tone:** fun, gamified, engaging — the Market (Seats, Tiers, the Bell, the Exchange, the Tape) front and
   center, with the provable-trust spine as the differentiator ("provably fair AND provably solvent").
 - **Experimental-software warning:** a StonkBrokers-style first-visit modal — experimental software,
   nothing is financial advice, assets are volatile, no guarantee of payouts, user responsible for their
   jurisdiction — worded honestly per our no-overclaim discipline (and "Payout" never "dividend").
 - Update landing sections, the docs reading room, and align social/tweet copy with the new direction.
-- Tracked as task #14; sequenced after converter/Notes/Floor unless slack appears.
+- Tracked as task #14; sequenced after converter/Notes/Exchange unless slack appears.
 
 ## Economics modeling (in progress — measured, not assumed)
 
-Calibrate our collection size, tier fees, and Floor fee bps from StonkBrokers' *measured* on-chain
+Calibrate our collection size, tier fees, and Exchange fee bps from StonkBrokers' *measured* on-chain
 economy (their contracts are public on Blockscout). Inputs being pulled: fee inflow cadence, drop
 sizes, activation rate by tier, $STONKBROKER burn total, AMM trade volume, protocol age. Already
 captured from their live site (2026-08-02): **$349,083 total distributed** across ~746 Clock In + ~208
 Overtime rounds; recent drops 0.014–0.70 ETH; **~1,662 of 4,444 activated (~37%)**. Output: an
 economics memo with defensible assumptions for supply (do we want 4,444?), tier-ladder pricing (per the
-verified ladder rule), Floor fees, and projected Bell pot run-rate.
+verified ladder rule), Exchange fees, and projected Bell pot run-rate.
 
 Every contract phase goes through the 3-agent audit gate (see `docs/audits/`) before push.
 
@@ -204,14 +211,14 @@ Every contract phase goes through the 3-agent audit gate (see `docs/audits/`) be
   real $ESSEY fees are set (our test numbers are placeholders).
 - **Cross-product fee coherence** (LoanVault header): their cheapest borrow fee (15% of notional) is
   deliberately ≥ the 15% snipe fee and > the 10% swap fee so *lending can never be a discount exit from
-  the AMM*. Same invariant must hold between Note origination fees and Floor exit fees.
+  the AMM*. Same invariant must hold between Note origination fees and Exchange exit fees.
 - **Restricted-transfer resilience** (StockBooster `_tryTransfer`): real Robinhood stock tokens can carry
   transfer restrictions; one poisoned recipient must never brick a round. Their fix is skip-and-roll-
   forward inside the push loop; our pull-claims get this isolation *by construction* (a failing claim
   only affects that Seat), but reward-token choice should still prefer unrestricted assets.
 - **Manipulation-resistant fee notional** (AMM vault): fee base = `max(slowTWAP, min(fastTWAP,
   slow × spikeCap))` — pushing price down can't cut fees below the slow average; pushing up is capped.
-  Adopt for the Floor's ETH-notional fees.
+  Adopt for the Exchange's ETH-notional fees.
 - **`activateBatch`** with a single fee pull — cheap UX win to add to the Bell later.
 
 ## Trust & migration model (why adminless is safe here — and how we migrate anyway)
@@ -231,7 +238,7 @@ transient fee flows. We adopt the same principle, but our architecture needs eve
   token can never be swept — recovers fat-fingered tokens with provably zero power over the pot. (ETH
   cannot enter at all: no `receive`.)
 - **Migration = reroute the source, never drain the module.** Fees are routed at their origin (pool,
-  Floor). To ship Bell v2: deploy it, point new fees at it, and v1 winds down as holders claim out.
+  the Exchange). To ship Bell v2: deploy it, point new fees at it, and v1 winds down as holders claim out.
   Fund-custody immutability ≠ topology immutability.
 - **Known constraint:** `Seat.setHook` is one-shot, so a future Bell won't get transfer callbacks. The
   v2 pattern is **ownership epochs** (record owner at activation; lazily clear on any touch if the owner
@@ -266,7 +273,7 @@ revenue, deed-sealing, ownerless machines. Essey's twists:
   StonkBrokers built miner-backed DERP + a conductor. Options: their conductor, our own commit-to-future-
   entropy scheme, or a ZK-draw design. Decide at scoping time.
 - Fee/spread parameters come from the economics memo, and the cross-product fee-coherence rule applies
-  (case fees vs Floor fees vs Note fees must not create a discount exit).
+  (case fees vs Exchange fees vs Note fees must not create a discount exit).
 
 ## Security posture & deferred hardening (from the 3-agent audit gate)
 

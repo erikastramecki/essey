@@ -29,7 +29,7 @@ The engine runs on **three assets, each with exactly one job** — and it never 
 ## $ESSEY — the design
 
 ### Three-asset separation (adopted)
-- **$ESSEY** = access + volatility. Spent to buy Seats on the Floor and to activate/upgrade Tiers.
+- **$ESSEY** = access + volatility. Spent to buy Seats on the Exchange and to activate/upgrade Tiers.
 - **USDG / ETH** = fees.
 - **Stocks / USDG** = Payouts (via the Bell → Vaults).
 Rewards are **never** paid in $ESSEY. You spend the volatile token to earn the stable asset, so the
@@ -39,7 +39,7 @@ rule, and it's why we don't need staking-emissions at all.
 ### Supply & emission
 - **Fixed supply, no staking emissions.** The reward is stocks, so there is nothing to inflate.
   This alone differentiates us from ~every GameFi token that inflates itself to pay "yield."
-- A float-control reserve (like their escrow) holds unsold supply for the Floor and liquidity.
+- A float-control reserve (like their escrow) holds unsold supply for the Exchange and liquidity.
 
 ### Distribution / mint (founder direction: free or near-free)
 Free mint maximizes reach (their 12k holders prove it). Recommended model — **free mint earned by
@@ -56,7 +56,7 @@ StonkBrokers has two (trade fees + royalties). We have three, because we're also
 
 | Engine | Source | Durability |
 |---|---|---|
-| Launch trade fees | Floor swap/snipe fees | spike → fast decay (their measured shape) |
+| Launch trade fees | Exchange swap/snipe fees | spike → fast decay (their measured shape) |
 | **Royalties** | enforced Seat secondary-sale royalty (~5–6.66%, ERC-2981 + transfer policy → OpenSea pays) | recurring, secondary-driven — **their durable engine** |
 | **Loan interest** | a reserve share of `EsseyPool` interest | recurring, **TVL-driven, uncorrelated to NFT mood** — *the one they can't build* |
 
@@ -68,15 +68,15 @@ Founder decision (2026-08): **no buyback** — StonkBrokers doesn't have one, an
 close to their proven model *and* strengthens reg posture (a token that captures protocol cash flow via
 buyback looks more security-like; a pure access/utility token does not). So $ESSEY's value comes from
 demand to *use* it, exactly as $STONKBROKER's does:
-1. **Access demand** — you need $ESSEY to buy Seats (the Floor), activate/upgrade Tiers, and buy Cases
+1. **Access demand** — you need $ESSEY to buy Seats (the Exchange), activate/upgrade Tiers, and buy Cases
    (below). This is the whole thesis. It's recurring, not one-time: Tiers clear on transfer, so
    activation is a *churning* sink (StonkBrokers ran ~29 activations/day into week 3). Cases add a second
    recurring $ESSEY sink.
-2. **Float control** — a reserve holds unsold supply; the Floor price-releases it against demand (their
+2. **Float control** — a reserve holds unsold supply; the Exchange price-releases it against demand (their
    escrow model). Scarcity is a managed dial.
 3. **Burn** — keep the 50% Tier-fee (and a slice of Case) burn as flavor, not the value thesis (their
    burn was 0.046% of supply in 16 days — cosmetic at scale; never lead messaging with it).
-4. **Governance** (optional, later) — over the reward lineup and Floor/Case params.
+4. **Governance** (optional, later) — over the reward lineup and Exchange/Case params.
 
 This is deliberately **demand-driven and volatile**: when people want in (buying Seats/Cases, activating
 Tiers) $ESSEY has strong utility pull; when they don't, it fades — which is the engagement volatility the
@@ -143,9 +143,31 @@ governance-over-fees) nudges toward security-like characteristics. "Buyback-and-
 fees is common but not risk-free; "Payout," never "dividend"; and the stock-token payout features are
 already US-restricted on StonkBrokers for a reason. These are choices for legal review, not defaults.
 
-## Open decisions for the founder
-1. Mint model: usage-gated free [rec] / open free / small fee (task #17).
-2. Royalty rate (model ~5–6.66%) and whether to enforce via transfer policy like they do.
-3. Buyback rate: what % of protocol fees + royalties funds $ESSEY buybacks vs treasury runway.
-4. Loan-interest reserve share routed to the Bell (trades off lender yield vs Seat rewards).
-5. Governance scope for $ESSEY (reward lineup / Floor params / buyback rate).
+## Decisions (locked 2026-08-02)
+
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | **Mint** | **Free mint** (founder). Model: primarily **usage-earned** (borrow/supply on EsseyPool → earn a Seat allocation) so the free mint seeds the lending flywheel + resists sybils, with a minter-controlled whitelist tranche reserved for early community/partners (StonkBrokers' `setWhitelist` pattern). *(delegated → recommended)* |
+| 2 | **Royalty** | **6%** (founder), ERC-2981 + a transfer policy so marketplaces (OpenSea) must honor it — enforcement is the whole point (StonkBrokers enforce theirs). Routes to the Bell. *(rate locked by founder; enforcement recommended)* |
+| 3 | **Buyback** | **None in v1** (founder). Revisitable later, separately reviewed. |
+| 4 | **Loan-interest → Bell** | *(delegated → recommended)* **Leave lender economics untouched.** `EsseyPool.reserveBps` (the protocol's cut of interest) is unchanged, so lenders' yield doesn't move. Of that *protocol reserve* only, route **~50% to the Bell** (Seat rewards) and keep ~50% as treasury runway — tunable. This gives Seats a TVL-durable reward stream (the engine StonkBrokers can't build) *without* touching what lenders earn. Needs a small `EsseyPool` reserve-routing addition + its own audit gate. |
+| 5 | **Governance** | *(delegated → recommended)* **No on-chain governance in v1** — it adds admin surface against the adminless posture the audit rewarded. Reward-lineup rotation is handled by a timelocked registrar (like the converter's append-only registry), not a token vote. $ESSEY governance is a deliberate later addition. |
+| 6 | **Purchase currency** | Seats (the Exchange) and Cases are bought in **$ESSEY** — this is the primary access-demand sink that gives the token utility. Fees are charged/collected in USDG/ETH; Payouts are stocks/USDG. |
+
+### Still open (decide at build time, not blocking)
+- Case variants to ship first (fair-value "401k pack" vs multiplier "degen case") + jurisdiction gating.
+- Entropy source on Robinhood Chain (miner-DERP conductor / commit-to-future-entropy / ZK draw).
+- Exact tier fee numbers in $ESSEY (set against the launch Exchange price, per the ladder-pricing rule).
+- The float-reserve / liquidity / community allocation split (operational transfers from the treasury).
+
+### Token contract — BUILT (`rh-chain/src/market/EsseyToken.sol`)
+Fixed supply **2,222,222,222 × 1e18** (the 2,222-Seat motif; same order as the reference economy's
+proven 2.455B scale). ERC20 + **Burnable** (real supply-reducing burns; the Bell's dEaD sink also
+works) + **Permit** (gasless approvals → one-tx Tier activation). **Adminless**: no mint function, no
+owner, no pause, no blocklist — entire supply minted once to the distribution treasury; float/LP/
+community splits happen by ordinary transfers. Tests (4): fixed supply, burn-only monotonic supply,
+EIP-2612 permit flow, and an end-to-end Tier activation using the real token through the shipped Bell
+(50% burn / 50% treasury verified). Needs the 3-agent gate before push, like everything money-touching.
+
+*Naming note (2026-08-02):* the Seat AMM is **"the Exchange"** (founder rejected "the Floor";
+runner-up: "the Pit") — "a Seat on the Exchange" being the real-world idiom the Seat NFT is named for.
