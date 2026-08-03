@@ -102,16 +102,17 @@ contract MintDistributorTest is Test, IERC721Receiver {
 
     function test_SetSeatHookWiresTheBell() public {
         // The distributor is the Seat's immutable minter, so ONLY this passthrough can set the hook.
-        address bell = address(0xBE11);
+        // Must be a CONTRACT: a codeless hook is rejected outright (it would brick transfers).
+        address bell = address(dist);
         dist.setSeatHook(bell);
         assertEq(seat.hook(), bell, "hook wired through the distributor");
     }
 
     function test_SetSeatHookIsOneShot() public {
-        dist.setSeatHook(address(0xBE11));
+        dist.setSeatHook(address(dist));
         // Seat.setHook is itself one-shot — a second attempt bubbles up HookAlreadySet.
         vm.expectRevert(Seat.HookAlreadySet.selector);
-        dist.setSeatHook(address(0xBEEF));
+        dist.setSeatHook(address(this));
     }
 
     function test_OnlyAdminSetsSeatHook() public {

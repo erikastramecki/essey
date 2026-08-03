@@ -50,6 +50,7 @@ contract MintDistributor is ReentrancyGuard {
 
     event SeatInitialized(address indexed seat);
     event SeatHookSet(address indexed hook);
+    event SeatArtSet(address indexed art);
     event RootProposed(uint256 indexed stage, bytes32 root, uint256 eta);
     event RootCommitted(uint256 indexed stage, bytes32 root);
     event StageOpenSet(uint256 indexed stage, bool open);
@@ -105,6 +106,17 @@ contract MintDistributor is ReentrancyGuard {
         if (address(seat) == address(0)) revert SeatNotSet();
         seat.setHook(hook_);
         emit SeatHookSet(hook_);
+    }
+
+    /// Wire the Seat's metadata renderer — same reasoning as `setSeatHook`: this distributor is the
+    /// Seat's immutable minter, so it is the ONLY possible caller of the minter-gated `Seat.setArt`;
+    /// without this passthrough the collection could never have on-chain art. One-shot via the
+    /// Seat's own `ArtAlreadySet`.
+    function setSeatArt(address art_) external onlyAdmin {
+        if (address(seat) == address(0)) revert SeatNotSet();
+        if (art_ == address(0)) revert ZeroAddress(); // a zero passthrough would only emit a lying event
+        seat.setArt(art_);
+        emit SeatArtSet(art_);
     }
 
     // ---------------------------------------------------------------- claim (public, Merkle-gated)

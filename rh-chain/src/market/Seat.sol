@@ -5,6 +5,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {SeatVault} from "./SeatVault.sol";
 import {ISeatHook} from "./ISeatHook.sol";
+import {ISeatArt} from "./ISeatArt.sol";
 
 /// Seat — Essey's membership NFT, like a seat on an exchange: scarce, tradeable, and entitled to a share
 /// of the floor's activity. Each Seat deterministically owns a Vault (its token-bound account), created
@@ -38,6 +39,9 @@ contract Seat is ERC721 {
     error NotMinter();
     error SoldOut();
     error HookAlreadySet();
+    error HookNotContract();
+    error ArtAlreadySet();
+    error ArtNotContract();
 
     constructor(string memory name_, string memory symbol_, uint256 maxSupply_, address minter_)
         ERC721(name_, symbol_)
@@ -73,7 +77,30 @@ contract Seat is ERC721 {
     function setHook(address hook_) external {
         if (msg.sender != minter) revert NotMinter();
         if (hook != address(0)) revert HookAlreadySet();
+        // A codeless hook would brick EVERY transfer forever with the one-shot consumed — the
+        // onSeatTransfer call expects no returndata, so solc's extcodesize check reverts each
+        // _update. Mirror of setArt's guard (audit F6): reject it while it can still be fixed.
+        if (hook_ != address(0) && hook_.code.length == 0) revert HookNotContract();
         hook = hook_;
+    }
+
+    /// The metadata renderer, wired once by the minter (same trust shape as the hook: settable
+    /// exactly once, so holders can never have the art swapped underneath them). Unset = empty URI.
+    address public art;
+
+    function setArt(address art_) external {
+        if (msg.sender != minter) revert NotMinter();
+        if (art != address(0)) revert ArtAlreadySet();
+        // A codeless renderer would make tokenURI revert forever with the one-shot consumed —
+        // reject it here, loudly, while it can still be fixed. (setArt(0) stays a non-consuming
+        // no-op: an accidental zero can never brick the URI.)
+        if (art_ != address(0) && art_.code.length == 0) revert ArtNotContract();
+        art = art_;
+    }
+
+    function tokenURI(uint256 id) public view override returns (string memory) {
+        _requireOwned(id);
+        return art == address(0) ? "" : ISeatArt(art).tokenURI(id);
     }
 
     /// Notify the hook on true ownership transfers only — mints (from == 0) stand up fresh state and
