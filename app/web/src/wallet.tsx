@@ -22,10 +22,11 @@ type WalletState = {
   chainOk: boolean;
   hasProvider: boolean;
   connect: () => Promise<void>;
+  switchChain: () => Promise<void>;
   error: string | null;
 };
 
-const Ctx = createContext<WalletState>({ address: null, chainOk: false, hasProvider: false, connect: async () => {}, error: null });
+const Ctx = createContext<WalletState>({ address: null, chainOk: false, hasProvider: false, connect: async () => {}, switchChain: async () => {}, error: null });
 export const useWallet = () => useContext(Ctx);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -44,6 +45,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Switch (or add) to Robinhood Chain testnet. Extracted so a wrong-chain user can re-trigger it
+  // from an inline button, not only inside the initial connect.
+  const switchChain = async (): Promise<boolean> => {
+    const p = injected();
+    if (!p) return false;
+    try {
+      await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: RH_CHAIN.chainId }] });
+    } catch {
+      // 4902 = unknown chain: offer to add it. Any other failure falls through to a false result,
+      // which the UI reports honestly rather than pretending.
+      await p.request({ method: "wallet_addEthereumChain", params: [RH_CHAIN] }).catch(() => {});
+    }
+    const now = (await p.request({ method: "eth_chainId" })) as string;
+    const ok = now.toLowerCase() === RH_CHAIN.chainId;
+    setChainOk(ok);
+    return ok;
+  };
+
   const connect = async () => {
     setError(null);
     const p = injected();
@@ -52,37 +71,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const accounts = (await p.request({ method: "eth_requestAccounts" })) as string[];
       setAddress(accounts[0] ?? null);
       const chain = (await p.request({ method: "eth_chainId" })) as string;
-      if (chain.toLowerCase() !== RH_CHAIN.chainId) {
-        try {
-          await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: RH_CHAIN.chainId }] });
-        } catch {
-          // 4902 = unknown chain: offer to add it. Any other failure falls through to chainOk=false,
-          // which the UI reports honestly rather than pretending.
-          await p.request({ method: "wallet_addEthereumChain", params: [RH_CHAIN] }).catch(() => {});
-        }
-        const now = (await p.request({ method: "eth_chainId" })) as string;
-        setChainOk(now.toLowerCase() === RH_CHAIN.chainId);
-      } else {
-        setChainOk(true);
-      }
+      if (chain.toLowerCase() !== RH_CHAIN.chainId) await switchChain();
+      else setChainOk(true);
     } catch (e) {
       setError((e as { message?: string })?.message ?? "Connection rejected.");
     }
   };
 
-  return <Ctx.Provider value={{ address, chainOk, hasProvider: !!eth, connect, error }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ address, chainOk, hasProvider: !!eth, connect, switchChain: async () => { await switchChain(); }, error }}>{children}</Ctx.Provider>;
 }
 
 const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 
-/// The connect control. Honest states: no provider, wrong chain, connected.
+/// The connect control. Honest states: no provider, wrong chain (with a working switch), connected.
 export function ConnectButton() {
   const w = useWallet();
+  if (w.address && !w.chainOk) {
+    // Connected but on the wrong network — give them a button that actually fixes it (not a dead chip).
+    return <button className="btn btn-gold wallet-switch" onClick={w.switchChain}>Switch to Robinhood Chain</button>;
+  }
   if (w.address) {
     return (
-      <span className="wallet-chip num" title={w.chainOk ? "Connected to Robinhood Chain" : "Wrong network"}>
-        <span className="dot" style={{ background: w.chainOk ? "var(--good)" : "var(--warn)" }} />
-        {short(w.address)}{!w.chainOk && " · wrong chain"}
+      <span className="wallet-chip num" title="Connected to Robinhood Chain testnet">
+        <span className="dot" style={{ background: "var(--good)" }} />
+        {short(w.address)}
       </span>
     );
   }

@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address } from "viem";
 import { EMonogram } from "./market";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, flows, fmt } from "./live";
+import { ADDR, flows, fmt, niceError } from "./live";
 
 // On-chain testnet inventory → a reveal Item. The live Cases hold AAPL (0.5 share) and NVDA (0.8),
 // both fair-value at ~$100; rarity here is cosmetic tiering for the reveal, not a payout signal.
@@ -186,7 +186,7 @@ export function CasesArcade() {
     setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setStage("approving"); setPhase("spinning");
     flows.openCase(w.address as Address, setStage)
       .then(({ token, amount }) => { setWon(liveItem(token, amount)); setStage(null); })
-      .catch((e) => { setStage("err:" + String((e as Error).message ?? e).slice(0, 90)); });
+      .catch((e) => { setStage("err:" + niceError(e)); });
   };
 
   // The animation must start AFTER the spinning phase has rendered the rail — reading railRef in
@@ -271,9 +271,9 @@ export function CasesArcade() {
                   {live
                     ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN A CASE · LIVE</button>
                         <i>real draw on testnet — AAPL or NVDA, play money</i></>
-                    : w.address
+                    : w.address && !w.chainOk
                       ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
-                          <i>switch to Robinhood Chain testnet to open for real</i></>
+                          <i>simulated draw — <span className="live-connect"><ConnectButton /></span> to open a real one</i></>
                       : <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
                           <i>simulated — <span className="live-connect"><ConnectButton /></span> to go live</i></>}
                 </div>

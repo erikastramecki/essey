@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { parseUnits } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, NET, BORROW_OPENS, flows, reads, fmt } from "./live";
+import { ADDR, NET, BORROW_OPENS, flows, reads, fmt, niceError } from "./live";
 
 type PoolState = Awaited<ReturnType<typeof reads.poolState>>;
 
@@ -71,7 +71,7 @@ function SupplyPanel({ a, pool, onDone }: { a: Address; pool: PoolState | null; 
       else await flows.withdrawSupply(a, wei);
       setMsg(mode === "supply" ? `✓ supplied ${amt} USDG — now earning` : `✓ withdrew ${amt} USDG`);
       setAmt(""); onDone();
-    } catch (e) { setMsg(String((e as Error).message ?? e).slice(0, 140)); }
+    } catch (e) { setMsg(niceError(e)); }
     finally { setBusy(false); }
   };
 
@@ -130,14 +130,14 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
       await flows.borrow(a, token, parseUnits(coll, 18), parseUnits(debt, 18));
       setMsg(`✓ borrowed ${debt} USDG against ${coll} ${token === ADDR.aapl ? "AAPL" : "NVDA"} — your position is a Note you can repay anytime`);
       setColl(""); setDebt(""); load(); onDone();
-    } catch (e) { setMsg(String((e as Error).message ?? e).slice(0, 160)); }
+    } catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
   };
 
   const repay = async (id: bigint, owed: bigint) => {
     setBusy("repay" + id); setMsg(null);
     try { await flows.repay(a, id, owed); setMsg(`✓ repaid loan #${id} — your collateral is back`); load(); onDone(); }
-    catch (e) { setMsg(String((e as Error).message ?? e).slice(0, 140)); }
+    catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
   };
 

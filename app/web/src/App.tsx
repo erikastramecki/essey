@@ -20,8 +20,8 @@ const GROUPS = ["The Market", "The engine", "Audits"];
 // each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
 const NAV = [
   ["/start", "Start"],
-  ["/market", "Market"],
-  ["/bell", "Stake"],
+  ["/market", "Exchange"],
+  ["/bell", "Bell"],
   ["/cases", "Cases"],
   ["/lend", "Lend"],
   ["/tape", "Tape"],
@@ -29,18 +29,14 @@ const NAV = [
   ["/docs", "Docs"],
 ] as const;
 
-/// Every app page opens with the journey strip + a one-line "what you're testing" header, so a
-/// newcomer always knows where they are and what's next.
-function AppPage({ title, what, here, children }: { title: string; what: string; here?: StepId; children: ReactNode }) {
+/// Every app page opens with the journey strip — the shared "where am I / what's next" affordance.
+/// Each page's own band-head carries its title + description, so the strip stays thin (no double
+/// header). `here` pins the strip to this page's step even if an earlier one is unfinished.
+function AppPage({ title, here, children }: { title: string; here?: StepId; children: ReactNode }) {
   useEffect(() => { document.title = `${title} · Essey`; }, [title]);
   return (
     <>
       <JourneyStrip here={here} />
-      <div className="wrap app-page-head">
-        <span className="eyebrow">You're testing</span>
-        <h1 className="app-page-title">{title}</h1>
-        <p className="app-page-what">{what}</p>
-      </div>
       {children}
     </>
   );
@@ -56,21 +52,12 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
             <Route path="/start" element={<StartPage />} />
-            <Route path="/market" element={
-              <AppPage title="The Market" here="seat" what="Trade $ESSEY for a Seat on the Exchange — buy the next one, snipe an exact number, or sell one back. Every trade fee feeds the Bell's pot.">
-                <LiveExchange /><Mechanics />
-              </AppPage>} />
-            <Route path="/bell" element={
-              <AppPage title="Stake &amp; the Bell" here="stake" what="Stake $ESSEY on a Seat to raise its Tier, ring the Bell when the pot's worth it, and claim your Payout into the Seat's Vault.">
-                <LiveBell />
-              </AppPage>} />
-            <Route path="/cases" element={
-              <AppPage title="Cases" here="case" what="Open a Case for a provably-fair stock draw — every pull is ~fair value; the draw only decides which name.">
-                <CasesArcade />
-              </AppPage>} />
-            <Route path="/lend" element={<LendPage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/tape" element={<TapeRoom />} />
+            <Route path="/market" element={<AppPage title="The Exchange" here="seat"><LiveExchange /><Mechanics /></AppPage>} />
+            <Route path="/bell" element={<AppPage title="The Bell" here="stake"><LiveBell /></AppPage>} />
+            <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesArcade /></AppPage>} />
+            <Route path="/lend" element={<AppPage title="Lend" here="supply"><LendPage /></AppPage>} />
+            <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
+            <Route path="/portfolio" element={<AppPage title="Portfolio"><PortfolioPage /></AppPage>} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
             <Route path="/docs" element={<DocsPage />} />
@@ -142,15 +129,16 @@ function Landing() {
             <div>
               <span className="eyebrow">Live on testnet</span>
               <h2>Play the whole thing, free</h2>
-              <p>Every mechanic is deployed and playable right now with play money. Follow the six-step tour and
-                you'll trade a Seat, stake a Tier, ring the Bell, claim a Payout, and open a Case — no risk, real contracts.</p>
+              <p>Every mechanic is live on testnet and playable right now with play money. Follow the guided tour
+                and you'll trade a Seat, stake a Tier, ring the Bell, claim a Payout, open a Case, and supply
+                liquidity — no risk, real contracts.</p>
             </div>
             <Link className="btn btn-gold start-cta-btn" to="/start">Start testing →</Link>
           </div>
           <div className="dest-grid" style={{ marginTop: 22 }}>
             {[
-              ["/market", "⬡", "Market", "Buy, snipe, or sell a Seat on the live Exchange."],
-              ["/bell", "🔔", "Stake", "Raise a Tier, ring the Bell, claim a Payout into your Vault."],
+              ["/market", "⬡", "Exchange", "Buy, snipe, or sell a Seat on the live Exchange."],
+              ["/bell", "🔔", "The Bell", "Stake a Tier, ring the Bell, claim a Payout into your Vault."],
               ["/cases", "🎁", "Cases", "Open a Case for a provably-fair real-stock draw."],
               ["/lend", "⚖", "Lend", "Supply USDG to earn, or borrow against the stock you win."],
               ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, loans."],

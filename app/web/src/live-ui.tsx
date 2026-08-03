@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, NET, PRICE, TIERS, flows, reads, fmt } from "./live";
+import { ADDR, NET, PRICE, TIERS, flows, reads, fmt, niceError } from "./live";
 
 export function TestnetBanner() {
   return (
@@ -23,47 +23,6 @@ function useBalances() {
   }, [w.address]);
   useEffect(() => { refresh(); }, [refresh]);
   return { bal, refresh };
-}
-
-/// Get play money: testnet ETH from the chain faucet (external), then $ESSEY + mock USDG from ours.
-export function FaucetCard() {
-  const w = useWallet();
-  const { bal, refresh } = useBalances();
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const drip = async () => {
-    if (!w.address) return;
-    setBusy(true); setMsg(null);
-    try {
-      await flows.drip(w.address as Address);
-      setMsg("✓ 5,000 $ESSEY + 1,000 USDG dripped");
-      refresh();
-    } catch (e) {
-      const m = String((e as Error).message ?? e);
-      setMsg(m.includes("TooSoon") ? "Faucet cooldown — 8h between drips" : m.slice(0, 120));
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="live-card">
-      <div className="live-h">PLAY MONEY <span className="preview-chip">testnet</span></div>
-      {w.address ? (
-        <>
-          <div className="live-bal num">
-            {bal ? <>{fmt(bal.essey)} $ESSEY · {fmt(bal.usdg)} USDG · {bal.seats.toString()} Seats</> : "…"}
-          </div>
-          <div className="live-row">
-            <button className="btn btn-gold" disabled={busy} onClick={drip}>{busy ? "dripping…" : "Get 5,000 $ESSEY + 1,000 USDG"}</button>
-            <a className="btn btn-ghost" href={NET.faucet} target="_blank" rel="noreferrer">Need gas ETH? ↗</a>
-          </div>
-          {msg && <div className="live-msg">{msg}</div>}
-        </>
-      ) : (
-        <div className="live-row"><span className="live-note">Connect a wallet to get test funds and play for real.</span><ConnectButton /></div>
-      )}
-    </div>
-  );
 }
 
 /// The live Exchange: real float, real fees feeding the real pot.
@@ -88,7 +47,7 @@ export function LiveExchange() {
   const act = async (label: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(label); setMsg(null);
     try { await fn(); setMsg(ok); load(); refresh(); }
-    catch (e) { setMsg(String((e as Error).message ?? e).slice(0, 140)); }
+    catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
   };
 
@@ -172,7 +131,7 @@ export function LiveBell() {
   const act = async (label: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(label); setMsg(null);
     try { await fn(); setMsg(ok); loadPot(); loadSel(); loadSeats(); }
-    catch (e) { setMsg(String((e as Error).message ?? e).slice(0, 140)); }
+    catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
   };
 

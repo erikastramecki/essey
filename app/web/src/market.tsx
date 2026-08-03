@@ -1,7 +1,7 @@
 // The Market layer surface — the gamified face of Essey per docs/DESIGN-website-rebrand.md.
 // Everything here is STATIC (P0): the toys are client-side sandboxes, the Bell/Tape are labeled
 // previews. Guardrail from the design doc: no section may claim more than the contracts deliver —
-// the market contracts are built and three-round audited but NOT deployed, and every live-looking
+// the market contracts are audited and live on testnet; the toys here are still client-side sandboxes
 // surface says so on the surface itself, not in a footnote.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -83,11 +83,11 @@ export function WarningModal() {
             ordinary software has ordinary bugs. Proof removes one <em>class</em> of risk, not all of it.</li>
           <li><b>Your jurisdiction is your responsibility.</b> Some features are restricted in some places for good
             reason.</li>
-          <li><b>Early and small.</b> The Market contracts are built and adversarially audited, but <b>not yet
-            deployed</b>. Nothing on this page moves real money today.</li>
+          <li><b>Testnet, play money.</b> Everything here is live on Robinhood Chain <b>testnet</b> — real
+            contracts, real mechanics, but the tokens have <b>no real value</b>. This is not on mainnet.</li>
         </ul>
-        <button className="btn btn-gold warn-accept" onClick={accept}>I understand — enter the Exchange</button>
-        <a className="warn-docs" href="#docs" onClick={accept}>Read the full docs first →</a>
+        <button className="btn btn-gold warn-accept" onClick={accept}>I understand — let me in</button>
+        <Link className="warn-docs" to="/start" onClick={accept}>Or start the guided tour →</Link>
       </div>
     </div>
   );
@@ -148,7 +148,7 @@ export function ExchangeHero() {
         <aside className={"bell-plate" + (rung ? " rung" : "")}>
           <div className="bell-head">
             <span className="bell-title">THE BELL</span>
-            <span className="preview-chip" title="The Market contracts are audited but not yet deployed. This widget is a sandbox — it moves no money.">preview</span>
+            <span className="preview-chip live" title="Live on Robinhood Chain testnet — connect to ring the real Bell.">testnet</span>
           </div>
           <div className="bell-pot">
             <span className="bell-emoji" aria-hidden>🔔</span>
@@ -427,8 +427,8 @@ export function Mechanics() {
         <div className="band-head"><div>
           <span className="eyebrow">The Market</span>
           <h2>Every mechanic, playable before it costs anything</h2>
-          <p>Tap a card to play with the mechanic — safe sandboxes, no wallet, no risk. Each maps to a real audited
-            contract (or says plainly that it's still in design).</p>
+          <p>Tap a card to play with the mechanic in a no-wallet sandbox — then do it for real on its own page.
+            Each maps to a live, audited contract on testnet.</p>
         </div></div>
         <div className="mech-grid">
           {CARDS.map((c) => {
@@ -476,8 +476,8 @@ export function EngineSection() {
           ))}
         </div>
         <div className="twist-status" style={{ marginTop: 16 }}>Built and fork-tested against real Robinhood
-          Chain state; not yet deployed. The full specs — oracle discipline, risk framework, rate model, and
-          everything still open — are in the docs room below, rendered from the repo's own files.</div>
+          Chain state and live on Robinhood Chain testnet. The full specs — oracle discipline, risk framework, rate
+          model, and everything still open — are in the docs room, rendered from the repo's own files.</div>
       </div>
     </section>
   );
@@ -497,8 +497,7 @@ export function ProvableTwist() {
         <div className="twist-grid">
           <div className="twist-card">
             <div className="twist-h">⬡ Provably fair</div>
-            <p>Every Bell split is deterministic accumulator math anyone can re-run. Every Case draw (when Cases ship)
-              commits its entropy before you open. The odds aren't a promise — they're arithmetic.</p>
+            <p>Every Bell split is deterministic accumulator math anyone can re-run. Every Case draw commits its entropy before you open. The odds aren't a promise — they're arithmetic.</p>
           </div>
           <div className="twist-card">
             <div className="twist-h">⬡ Provably solvent</div>
@@ -507,9 +506,9 @@ export function ProvableTwist() {
           </div>
         </div>
         <div className="twist-status">Status, honestly: the Market contracts (Seat, Vault, Bell, the Exchange, Notes,
-          $ESSEY, the mint distributor) are <b>built — 189 passing tests, three published adversarial audit
-          rounds</b> — and <b>not yet deployed</b>. When they deploy, every claim above gets a verify button; until
-          then this page says "designed to," not "does." <a href={`${REPO}/tree/main/docs/audits`} target="_blank" rel="noreferrer">Read the audits ↗</a>
+          $ESSEY, the mint distributor, the lending pool) are <b>adversarially audited across six published rounds
+          and live on Robinhood Chain testnet</b> — you can play the whole thing with play money right now, and
+          every event links a real transaction. Not on mainnet yet. <a href={`${REPO}/tree/main/docs/audits`} target="_blank" rel="noreferrer">Read the audits ↗</a>
         </div>
       </div>
     </section>

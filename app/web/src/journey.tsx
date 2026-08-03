@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { reads, flows, fmt, NET, type Portfolio } from "./live";
+import { reads, flows, fmt, NET, BORROW_OPENS, type Portfolio, niceError } from "./live";
 
 export type StepId = "connect" | "fund" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow";
 
@@ -16,14 +16,15 @@ export type Step = {
   what: string; // one line: what you're testing
   to: string; // where you do it
   cta: string;
+  bonus?: boolean; // optional step — doesn't block the "all done" completion payoff
   done: (p: Portfolio | null, connected: boolean) => boolean;
 };
 
 export const STEPS: Step[] = [
   { id: "connect", n: 1, title: "Connect", what: "Connect a wallet on Robinhood Chain testnet.", to: "/start", cta: "Connect",
     done: (_p, c) => c },
-  { id: "fund", n: 2, title: "Get play money", what: "Grab testnet gas, then 5,000 $ESSEY + 1,000 USDG from the faucet.", to: "/start", cta: "Open the faucet",
-    done: (p) => !!p && p.essey > 0n && p.usdg > 0n },
+  { id: "fund", n: 2, title: "Get play money", what: "Grab gas ETH from the chain faucet FIRST, then 5,000 $ESSEY + 1,000 USDG from ours.", to: "/start", cta: "Open the faucet",
+    done: (p) => !!p && p.gas > 0n && p.essey > 0n && p.usdg > 0n },
   { id: "seat", n: 3, title: "Buy a Seat", what: "Trade $ESSEY for a Seat on the Exchange — the fee feeds the Bell's pot.", to: "/market", cta: "Go to the Market",
     done: (p) => !!p && p.seats.length > 0 },
   { id: "stake", n: 4, title: "Stake a Tier", what: "Stake $ESSEY on your Seat to earn a bigger slice of every Payout.", to: "/bell", cta: "Go to Stake",
@@ -34,7 +35,7 @@ export const STEPS: Step[] = [
     done: (p) => !!p && (p.wins.aapl > 0n || p.wins.nvda > 0n) },
   { id: "supply", n: 7, title: "Supply liquidity", what: "Supply USDG to the lending pool and earn the interest borrowers pay.", to: "/lend", cta: "Go to Lend",
     done: (p) => !!p && p.pool.mine > 0n },
-  { id: "borrow", n: 8, title: "Borrow against your stock", what: "Borrow USDG against the stock you drew — the full loop. (Collateral markets open Aug 5.)", to: "/lend", cta: "Go to Lend",
+  { id: "borrow", n: 8, title: "Borrow against your stock", what: `Borrow USDG against the stock you drew — the full loop. (Opens ${BORROW_OPENS.toUTCString().slice(5, 11)}.)`, to: "/lend", cta: "Go to Lend", bonus: true,
     done: (p) => !!p && p.loans.length > 0 },
 ];
 
@@ -55,24 +56,36 @@ export function useJourney() {
   useEffect(() => { refresh(); const t = setInterval(refresh, 20_000); return () => clearInterval(t); }, [refresh]);
 
   const steps = STEPS.map((s) => ({ ...s, complete: s.done(p, connected) }));
-  const next = steps.find((s) => !s.complete) ?? steps[steps.length - 1];
+  const required = steps.filter((s) => !s.bonus);
+  // "next" prefers an unfinished required step; only points at a bonus if all required are done.
+  const next = required.find((s) => !s.complete) ?? steps.find((s) => !s.complete) ?? steps[steps.length - 1];
   const doneCount = steps.filter((s) => s.complete).length;
-  return { portfolio: p, steps, next, doneCount, connected, loading, refresh };
+  const allRequiredDone = required.every((s) => s.complete);
+  return { portfolio: p, steps, required, next, doneCount, allRequiredDone, connected, loading, refresh };
 }
 
-/// Compact strip for the top of app pages: "Step 3 of 6 · Buy a Seat →" with a dot tracker.
+/// Compact strip for the top of app pages: "Next: Buy a Seat →" with a dot tracker, and — crucially —
+/// a working action inline when the next step is connect/switch/fund (the strip must never point at
+/// something with no button here).
 export function JourneyStrip({ here }: { here?: StepId }) {
-  const { steps, next, doneCount } = useJourney();
+  const w = useWallet();
+  const { steps, next, doneCount, allRequiredDone } = useJourney();
   const cur = here ? steps.find((s) => s.id === here) ?? next : next;
+  const onboarding = cur.id === "connect" || cur.id === "fund"; // handled at /start (funds live there)
   return (
     <div className="journey-strip">
       <div className="js-dots" aria-hidden>
         {steps.map((s) => <span key={s.id} className={"js-dot" + (s.complete ? " done" : s.id === cur.id ? " on" : "")} />)}
       </div>
       <span className="js-label">
-        <b className="num">{doneCount}/{steps.length}</b> {cur.complete ? "all steps done — explore freely" : <>Next: <b>{cur.title}</b> — {cur.what}</>}
+        <b className="num">{doneCount}/{steps.length}</b> {allRequiredDone ? "core loop done — explore freely, or try the bonus" : <>Next: <b>{cur.title}</b> — {cur.what}</>}
       </span>
-      {!cur.complete && cur.to !== "/start" && <Link className="js-go" to={cur.to}>{cur.cta} →</Link>}
+      {!allRequiredDone && (
+        cur.id === "connect" && !w.address ? <span className="js-go"><ConnectButton /></span>
+        : cur.id === "connect" && w.address && !w.chainOk ? <button className="js-go js-btn" onClick={w.switchChain}>Switch network →</button>
+        : onboarding ? <Link className="js-go" to="/start">Set up →</Link>
+        : <Link className="js-go" to={cur.to}>{cur.cta} →</Link>
+      )}
       <Link className="js-map" to="/start">Guide</Link>
     </div>
   );
@@ -105,7 +118,7 @@ export function StartPage() {
               <li key={s.id} className={"journey-step" + (s.complete ? " complete" : "")}>
                 <span className="jstep-n num">{s.complete ? "✓" : s.n}</span>
                 <div className="jstep-body">
-                  <div className="jstep-title">{s.title}</div>
+                  <div className="jstep-title">{s.title}{s.bonus && <span className="jstep-bonus">bonus</span>}</div>
                   <div className="jstep-what">{s.what}</div>
                 </div>
                 {s.complete
@@ -132,7 +145,7 @@ function FundsPanel({ connected, address, portfolio, onFund }: { connected: bool
     if (!address) return;
     setBusy(true); setMsg(null);
     try { await flows.drip(address); setMsg("✓ 5,000 $ESSEY + 1,000 USDG dripped"); onFund(); }
-    catch (e) { const m = String((e as Error).message ?? e); setMsg(m.includes("TooSoon") ? "Faucet cooldown — 8h between drips" : m.slice(0, 120)); }
+    catch (e) { setMsg(niceError(e)); }
     finally { setBusy(false); }
   };
   return (
@@ -145,11 +158,21 @@ function FundsPanel({ connected, address, portfolio, onFund }: { connected: bool
           <div className="live-bal num">
             {portfolio ? <>{fmt(portfolio.gas, 4)} ETH (gas) · {fmt(portfolio.essey)} $ESSEY · {fmt(portfolio.usdg)} USDG · {portfolio.seats.length} Seats</> : "…"}
           </div>
+          {/* Gas FIRST: every transaction needs it, and it comes from the chain's own faucet (a
+              separate step from our token drip). Emphasize it until they actually have some. */}
+          {portfolio && portfolio.gas === 0n && (
+            <div className="fund-gas">
+              <span className="fund-step num">1</span>
+              <span>You have <b>no gas ETH</b> — nothing will send without it. Get some from the chain faucet first (it's free, opens in a new tab).</span>
+              <a className="btn btn-gold" href={NET.faucet} target="_blank" rel="noreferrer">Get gas ETH ↗</a>
+            </div>
+          )}
           <div className="live-row">
-            <button className="btn btn-gold" disabled={busy} onClick={drip}>{busy ? "dripping…" : "Get 5,000 $ESSEY + 1,000 USDG"}</button>
-            <a className="btn btn-ghost" href={NET.faucet} target="_blank" rel="noreferrer">Need gas ETH? ↗</a>
+            {portfolio && portfolio.gas > 0n && <a className="btn btn-ghost" href={NET.faucet} target="_blank" rel="noreferrer">More gas ↗</a>}
+            <button className="btn btn-gold" disabled={busy} onClick={drip}>
+              {busy ? "dripping…" : portfolio && portfolio.gas === 0n ? "2 · Then get 5,000 $ESSEY + 1,000 USDG" : "Get 5,000 $ESSEY + 1,000 USDG"}
+            </button>
           </div>
-          {portfolio && portfolio.gas === 0n && <div className="live-note">You have no gas ETH yet — grab some from the chain faucet (button above) before any transaction.</div>}
           {msg && <div className="live-msg">{msg}</div>}
         </>
       )}

@@ -1,16 +1,28 @@
-// Portfolio — the account view: what you hold, what your Seats are worth, what you've won. Read-only
-// and honest; the actions live on their own pages (linked from here) so this stays a clean dashboard.
-import { useEffect } from "react";
+// Portfolio — the returning tester's hub: what you hold, and one-click ways to do the things you do
+// again and again (claim a Payout, buy/stake/open/supply). Actions that are cheap to do here happen
+// here; heavier flows link out.
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { useJourney } from "./journey";
-import { NET, ADDR, TIERS, fmt } from "./live";
+import { NET, ADDR, TIERS, flows, fmt, niceError } from "./live";
 
 export function PortfolioPage() {
   const w = useWallet();
-  const { portfolio: p, connected, doneCount, steps } = useJourney();
+  const { portfolio: p, connected, doneCount, steps, allRequiredDone, refresh } = useJourney();
   useEffect(() => { document.title = "Portfolio · Essey"; }, []);
   const next = steps.find((s) => !s.complete);
+  const a = w.address as Address | null;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const run = async (label: string, fn: () => Promise<unknown>, ok: string) => {
+    setBusy(label); setMsg(null);
+    try { await fn(); setMsg(ok); refresh(); }
+    catch (e) { setMsg(niceError(e)); }
+    finally { setBusy(null); }
+  };
 
   return (
     <section className="band" id="portfolio" style={{ paddingTop: 34 }}>
@@ -19,7 +31,7 @@ export function PortfolioPage() {
           <span className="eyebrow">Portfolio</span>
           <h2>Your Essey</h2>
           <p>Everything you hold on testnet — balances, Seats and their Tiers, the Payouts sitting in each
-            Vault, and the stock you've drawn from Cases.</p>
+            Vault, and the stock you've drawn from Cases. Come back here to do it all again.</p>
         </div>
           {connected && <span className="preview-chip live">{doneCount}/{steps.length} tested</span>}
         </div>
@@ -40,12 +52,25 @@ export function PortfolioPage() {
               <Stat label="Seats" value={p.seats.length.toString()} sub="membership" />
             </div>
 
-            {next && (
-              <div className="pf-next">
-                <span>Next step in the tour: <b>{next.title}</b> — {next.what}</span>
-                <Link className="btn btn-gold" to={next.to}>{next.cta} →</Link>
-              </div>
-            )}
+            {/* Returning-user launchpad: the repeat actions, one hop each. */}
+            <div className="pf-quick">
+              <span className="pf-quick-h">Quick actions</span>
+              <Link className="pf-quick-btn" to="/market">⬡ Buy a Seat</Link>
+              <Link className="pf-quick-btn" to="/bell">🔔 Stake / Ring</Link>
+              <Link className="pf-quick-btn" to="/cases">🎁 Open a Case</Link>
+              <Link className="pf-quick-btn" to="/lend">⚖ Supply</Link>
+              <Link className="pf-quick-btn" to="/tape">📈 The Tape</Link>
+            </div>
+
+            {next
+              ? (
+                <div className="pf-next">
+                  <span>{allRequiredDone ? <>Bonus step: <b>{next.title}</b> — {next.what}</> : <>Next step in the tour: <b>{next.title}</b> — {next.what}</>}</span>
+                  <Link className="btn btn-gold" to={next.to}>{next.cta} →</Link>
+                </div>
+              )
+              : <div className="pf-next"><span>✓ You've tested every flow. Play freely — everything above is live.</span></div>}
+            {msg && <div className="live-msg" style={{ marginBottom: 14 }}>{msg}</div>}
 
             {/* Seats */}
             <div className="pf-block">
@@ -67,8 +92,9 @@ export function PortfolioPage() {
                       <div className="pf-seat-actions">
                         <a className="pf-link" href={`${NET.explorer}/token/${ADDR.seat}?a=${s.id}`} target="_blank" rel="noreferrer">Seat ↗</a>
                         <a className="pf-link" href={`${NET.explorer}/address/${s.vault}`} target="_blank" rel="noreferrer">Vault ↗</a>
-                        {s.tier === 0 ? <Link className="pf-link gold" to="/bell">stake →</Link>
-                          : s.pending > 0n ? <Link className="pf-link gold" to="/bell">claim →</Link>
+                        {s.pending > 0n
+                          ? <button className="pf-link gold pf-inline-btn" disabled={busy === "claim" + s.id} onClick={() => a && run("claim" + s.id, () => flows.claimPayout(a, s.id), `✓ Payout claimed into Seat #${s.id}'s Vault`)}>{busy === "claim" + s.id ? "claiming…" : "claim now"}</button>
+                          : s.tier === 0 ? <Link className="pf-link gold" to="/bell">stake →</Link>
                           : <Link className="pf-link" to="/bell">upgrade →</Link>}
                       </div>
                     </div>

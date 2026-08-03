@@ -352,6 +352,25 @@ export const flows = {
   },
 };
 
+/// Turn a raw wallet/RPC error into something a first-timer can act on. Falls back to a trimmed
+/// message rather than a bare revert selector.
+export function niceError(e: unknown): string {
+  const m = String((e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? e);
+  const s = m.toLowerCase();
+  if (s.includes("user rejected") || s.includes("user denied") || s.includes("rejected the request")) return "You cancelled the transaction.";
+  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH — grab some from the chain faucet on the Start page.";
+  if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown — 8h between drips.";
+  if (s.includes("chain") && s.includes("match")) return "Wrong network — switch to Robinhood Chain testnet.";
+  if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first — try again and confirm both wallet popups.";
+  if (s.includes("marketclosed") || s.includes("notinsession")) return "Borrowing is only open during US market hours — try again during the session.";
+  if (s.includes("soldout") || s.includes("emptyinventory")) return "Sold out — no inventory left right now.";
+  if (s.includes("notseatowner") || s.includes("notborrower")) return "That isn't yours to act on.";
+  if (s.includes("alreadyactive")) return "That Seat is already staked — use upgrade instead.";
+  if (s.includes("potbelowminimum") || s.includes("noactiveseats")) return "The pot isn't ringable yet — trade a bit to grow it, or wait for an active Seat.";
+  // Otherwise: strip the noisy viem wrapper, keep the first human line.
+  return m.split("\n")[0].replace(/^(Error|ContractFunctionExecutionError):?\s*/i, "").slice(0, 150);
+}
+
 export const fmt = (n: bigint, dp = 0) => {
   const whole = n / 10n ** 18n;
   if (dp === 0) return whole.toLocaleString();
