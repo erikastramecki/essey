@@ -5,9 +5,26 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { reads, flows, fmt, NET, BORROW_OPENS, type Portfolio, niceError } from "./live";
+import { reads, flows, fmt, NET, BORROW_OPENS, WHITELIST_SPOTS, type Portfolio, niceError } from "./live";
 
-export type StepId = "connect" | "fund" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow";
+export type StepId = "connect" | "fund" | "join" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow" | "invite";
+
+// Referral capture: a ?ref=0x… link stashes the referrer so a later on-chain register credits them.
+const REF_KEY = "essey-ref";
+export function captureRef() {
+  try {
+    const r = new URLSearchParams(location.search).get("ref");
+    if (r && /^0x[a-fA-F0-9]{40}$/.test(r)) localStorage.setItem(REF_KEY, r);
+  } catch { /* ignore */ }
+}
+export function storedRef(self?: Address | null): Address {
+  const ZERO = "0x0000000000000000000000000000000000000000" as Address;
+  try {
+    const r = localStorage.getItem(REF_KEY);
+    if (r && /^0x[a-fA-F0-9]{40}$/.test(r) && r.toLowerCase() !== self?.toLowerCase()) return r as Address;
+  } catch { /* ignore */ }
+  return ZERO;
+}
 
 export type Step = {
   id: StepId;
@@ -25,17 +42,21 @@ export const STEPS: Step[] = [
     done: (_p, c) => c },
   { id: "fund", n: 2, title: "Get play money", what: "Grab gas ETH from the chain faucet FIRST, then 5,000 $ESSEY + 1,000 USDG from ours.", to: "/start", cta: "Open the faucet",
     done: (p) => !!p && p.gas > 0n && p.essey > 0n && p.usdg > 0n },
-  { id: "seat", n: 3, title: "Buy a Seat", what: "Trade $ESSEY for a Seat on the Exchange — the fee feeds the Bell's pot.", to: "/market", cta: "Go to the Market",
+  { id: "join", n: 3, title: "Join the quest", what: "Register on-chain to enter the whitelist raffle (one tx; credits your referrer if you came from a link).", to: "/start", cta: "Join",
+    done: (p) => !!p && p.quest.registered },
+  { id: "seat", n: 4, title: "Buy a Seat", what: "Trade $ESSEY for a Seat on the Exchange — the fee feeds the Bell's pot.", to: "/market", cta: "Go to the Exchange",
     done: (p) => !!p && p.seats.length > 0 },
-  { id: "stake", n: 4, title: "Stake a Tier", what: "Stake $ESSEY on your Seat to earn a bigger slice of every Payout.", to: "/bell", cta: "Go to Stake",
+  { id: "stake", n: 5, title: "Stake a Tier", what: "Stake $ESSEY on your Seat to earn a bigger slice of every Payout.", to: "/bell", cta: "Go to the Bell",
     done: (p) => !!p && p.seats.some((s) => s.tier > 0) },
-  { id: "payout", n: 5, title: "Ring & claim", what: "Ring the Bell, then claim your Payout — it lands in your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
+  { id: "payout", n: 6, title: "Ring & claim", what: "Ring the Bell, then claim your Payout — it lands in your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
     done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n) },
-  { id: "case", n: 6, title: "Open a Case", what: "Open a Case for a real stock draw — AAPL or NVDA, fair value either way.", to: "/cases", cta: "Go to Cases",
+  { id: "case", n: 7, title: "Open a Case", what: "Open a Case for a real stock draw — AAPL or NVDA, fair value either way.", to: "/cases", cta: "Go to Cases",
     done: (p) => !!p && (p.wins.aapl > 0n || p.wins.nvda > 0n) },
-  { id: "supply", n: 7, title: "Supply liquidity", what: "Supply USDG to the lending pool and earn the interest borrowers pay.", to: "/lend", cta: "Go to Lend",
+  { id: "supply", n: 8, title: "Supply liquidity", what: "Supply USDG to the lending pool and earn the interest borrowers pay.", to: "/lend", cta: "Go to Lend",
     done: (p) => !!p && p.pool.mine > 0n },
-  { id: "borrow", n: 8, title: "Borrow against your stock", what: `Borrow USDG against the stock you drew — the full loop. (Opens ${BORROW_OPENS.toUTCString().slice(5, 11)}.)`, to: "/lend", cta: "Go to Lend", bonus: true,
+  { id: "invite", n: 9, title: "Invite a friend", what: "Share your referral link — every friend who joins the quest boosts your odds.", to: "/start", cta: "Get your link", bonus: true,
+    done: (p) => !!p && p.quest.referrals > 0n },
+  { id: "borrow", n: 10, title: "Borrow against your stock", what: `Borrow USDG against the stock you drew — the full loop. (Opens ${BORROW_OPENS.toUTCString().slice(5, 11)}.)`, to: "/lend", cta: "Go to Lend", bonus: true,
     done: (p) => !!p && p.loans.length > 0 },
 ];
 
@@ -56,12 +77,13 @@ export function useJourney() {
   useEffect(() => { refresh(); const t = setInterval(refresh, 20_000); return () => clearInterval(t); }, [refresh]);
 
   const steps = STEPS.map((s) => ({ ...s, complete: s.done(p, connected) }));
-  const required = steps.filter((s) => !s.bonus);
+  const required = steps.filter((s) => !s.bonus); // the core quest — completing all = whitelist-eligible
   // "next" prefers an unfinished required step; only points at a bonus if all required are done.
   const next = required.find((s) => !s.complete) ?? steps.find((s) => !s.complete) ?? steps[steps.length - 1];
   const doneCount = steps.filter((s) => s.complete).length;
+  const coreDone = required.filter((s) => s.complete).length;
   const allRequiredDone = required.every((s) => s.complete);
-  return { portfolio: p, steps, required, next, doneCount, allRequiredDone, connected, loading, refresh };
+  return { portfolio: p, steps, required, coreDone, coreTotal: required.length, next, doneCount, allRequiredDone, connected, loading, refresh };
 }
 
 /// Compact strip for the top of app pages: "Next: Buy a Seat →" with a dot tracker, and — crucially —
@@ -71,7 +93,7 @@ export function JourneyStrip({ here }: { here?: StepId }) {
   const w = useWallet();
   const { steps, next, doneCount, allRequiredDone } = useJourney();
   const cur = here ? steps.find((s) => s.id === here) ?? next : next;
-  const onboarding = cur.id === "connect" || cur.id === "fund"; // handled at /start (funds live there)
+  const onboarding = cur.id === "connect" || cur.id === "fund" || cur.id === "join" || cur.id === "invite"; // all handled at /start
   return (
     <div className="journey-strip">
       <div className="js-dots" aria-hidden>
@@ -91,49 +113,108 @@ export function JourneyStrip({ here }: { here?: StepId }) {
   );
 }
 
-/// The Start page: the funds panel + the full numbered checklist.
+/// The Quest — complete the tasks to earn a whitelist spot for the mainnet mint. Progress bar,
+/// on-chain tasks, a referral link, and an honest raffle explainer.
 export function StartPage() {
   const w = useWallet();
   const a = w.address as Address | null;
-  const { portfolio: p, steps, doneCount, connected, refresh } = useJourney();
-  useEffect(() => { document.title = "Start here · Essey"; }, []);
+  const { portfolio: p, steps, coreDone, coreTotal, allRequiredDone, connected, refresh } = useJourney();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { document.title = "The Quest · Essey"; captureRef(); }, []);
+
+  const join = async () => {
+    if (!a) return;
+    setBusy("join"); setMsg(null);
+    try { await flows.registerQuest(a, storedRef(a)); setMsg("✓ You're in the quest — complete the tasks to enter the raffle."); refresh(); }
+    catch (e) { setMsg(niceError(e)); }
+    finally { setBusy(null); }
+  };
+
+  const pct = Math.round((coreDone / coreTotal) * 100);
 
   return (
-    <>
-      <section className="band" id="start" style={{ paddingTop: 34 }}>
-        <div className="wrap">
-          <div className="band-head"><div>
-            <span className="eyebrow">Start here</span>
-            <h2>Test the whole club, step by step</h2>
-            <p>Everything below is live on Robinhood Chain testnet with play money — real contracts, real
-              mechanics, nothing at risk. Do them in order the first time; each ticks itself off as you go.</p>
-          </div>
-            <span className="preview-chip live">{doneCount}/{steps.length} done</span>
-          </div>
-
-          <FundsPanel connected={connected} address={a} portfolio={p} onFund={refresh} />
-
-          <ol className="journey-list">
-            {steps.map((s) => (
-              <li key={s.id} className={"journey-step" + (s.complete ? " complete" : "")}>
-                <span className="jstep-n num">{s.complete ? "✓" : s.n}</span>
-                <div className="jstep-body">
-                  <div className="jstep-title">{s.title}{s.bonus && <span className="jstep-bonus">bonus</span>}</div>
-                  <div className="jstep-what">{s.what}</div>
-                </div>
-                {s.complete
-                  ? <span className="jstep-done">done</span>
-                  : s.id === "connect"
-                    ? <ConnectButton />
-                    : s.id === "fund"
-                      ? <a className="btn btn-ghost" href="#funds" onClick={(e) => { e.preventDefault(); document.getElementById("funds")?.scrollIntoView({ behavior: "smooth" }); }}>Faucet ↑</a>
-                      : <Link className="btn btn-gold" to={s.to}>{s.cta} →</Link>}
-              </li>
-            ))}
-          </ol>
+    <section className="band" id="start" style={{ paddingTop: 34 }}>
+      <div className="wrap">
+        <div className="band-head"><div>
+          <span className="eyebrow">The Quest</span>
+          <h2>Earn a whitelist spot for the mint</h2>
+          <p>Test the whole club on testnet — real contracts, play money — and you're in the raffle for one of
+            <b> {WHITELIST_SPOTS.toLocaleString()}</b> mainnet mint spots. Every task is a real on-chain action;
+            it's your activity, recorded on-chain, that qualifies you.</p>
         </div>
-      </section>
-    </>
+        </div>
+
+        {/* progress bar */}
+        <div className="quest-bar-wrap">
+          <div className="quest-bar"><div className="quest-bar-fill" style={{ width: `${pct}%` }} /></div>
+          <div className="quest-bar-label num">
+            {allRequiredDone
+              ? <><b className="good">✓ Quest complete</b> — you're in the raffle{p && p.quest.referrals > 0n ? <> · {p.quest.referrals.toString()} friend{p.quest.referrals > 1n ? "s" : ""} invited</> : null}</>
+              : <><b>{coreDone}/{coreTotal}</b> core tasks · {pct}% to a whitelist spot</>}
+          </div>
+        </div>
+
+        {allRequiredDone && (
+          <div className="quest-done">
+            🎉 <b>You've completed the quest.</b> Your wallet is in the pool for one of {WHITELIST_SPOTS.toLocaleString()} whitelist
+            spots. Boost your odds with the bonus tasks below — invite friends, and (from {BORROW_OPENS.toUTCString().slice(5, 11)}) borrow against your stock.
+          </div>
+        )}
+
+        <FundsPanel connected={connected} address={a} portfolio={p} onFund={refresh} />
+
+        {connected && <ReferralCard address={a!} quest={p?.quest} />}
+
+        <ol className="journey-list">
+          {steps.map((s) => (
+            <li key={s.id} className={"journey-step" + (s.complete ? " complete" : "")}>
+              <span className="jstep-n num">{s.complete ? "✓" : s.n}</span>
+              <div className="jstep-body">
+                <div className="jstep-title">{s.title}{s.bonus && <span className="jstep-bonus">bonus</span>}</div>
+                <div className="jstep-what">{s.what}</div>
+              </div>
+              {s.complete
+                ? <span className="jstep-done">done</span>
+                : s.id === "connect" ? <ConnectButton />
+                : s.id === "fund" ? <a className="btn btn-ghost" href="#funds" onClick={(e) => { e.preventDefault(); document.getElementById("funds")?.scrollIntoView({ behavior: "smooth" }); }}>Faucet ↑</a>
+                : s.id === "join" ? (connected ? <button className="btn btn-gold" disabled={busy === "join"} onClick={join}>{busy === "join" ? "joining…" : "Join the quest"}</button> : <ConnectButton />)
+                : s.id === "invite" ? <a className="btn btn-ghost" href="#refer" onClick={(e) => { e.preventDefault(); document.getElementById("refer")?.scrollIntoView({ behavior: "smooth" }); }}>Your link ↑</a>
+                : <Link className="btn btn-gold" to={s.to}>{s.cta} →</Link>}
+            </li>
+          ))}
+        </ol>
+        {msg && <div className="live-msg" style={{ marginTop: 12 }}>{msg}</div>}
+
+        <div className="quest-fine">
+          How selection works, honestly: completing the core quest enters your wallet into the pool. At mint,
+          up to {WHITELIST_SPOTS.toLocaleString()} wallets are chosen — weighted toward earlier and more active
+          testers and those who brought others, and reviewed for sybil farming (many wallets, one person). Your
+          on-chain activity is the record; this is an early-tester reward, not a purchase or a guarantee.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/// Your referral link + how many friends have joined. The link carries ?ref=<you>; when a friend
+/// registers, the on-chain graph credits you.
+function ReferralCard({ address, quest }: { address: Address; quest?: { referrals: bigint; total: bigint } }) {
+  const [copied, setCopied] = useState(false);
+  const link = `${location.origin}/start?ref=${address}`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
+  };
+  return (
+    <div className="live-card" id="refer" style={{ marginBottom: 22 }}>
+      <div className="live-h">INVITE FRIENDS — BOOST YOUR ODDS <span className="preview-chip live">{quest ? `${quest.referrals} joined` : "…"}</span></div>
+      <div className="refer-row">
+        <input className="refer-link num" readOnly value={link} onFocus={(e) => e.target.select()} aria-label="your referral link" />
+        <button className="btn btn-gold" onClick={copy}>{copied ? "✓ copied" : "Copy link"}</button>
+      </div>
+      <div className="live-note">Share it. Every friend who connects, gets set up, and joins the quest is credited to you
+        on-chain{quest && quest.total > 0n ? <> · {quest.total.toString()} testers in the quest so far</> : null} — more invites, better odds.</div>
+    </div>
   );
 }
 

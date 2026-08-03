@@ -25,7 +25,11 @@ export const ADDR = {
   // Lending stack
   pool: "0x283a4891458180f502E82E40470d3e06321ba748" as Address,
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
+  quest: "0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427" as Address,
 };
+
+// Whitelist raffle size — 2,222 mint spots (the Seat supply).
+export const WHITELIST_SPOTS = 2222;
 
 // Collateral markets open after the 2-day parameter timelock (a real safety feature, not a knob).
 export const BORROW_OPENS = new Date("2026-08-05T18:55:00Z");
@@ -102,6 +106,12 @@ export const marketsAbi = parseAbi([
   "function maxBorrow(address token, uint256 rawAmount) view returns (uint256)",
 ]);
 export const noteAbi = parseAbi(["function ownerOf(uint256) view returns (address)"]);
+export const questAbi = parseAbi([
+  "function registered(address) view returns (bool)",
+  "function referralCount(address) view returns (uint256)",
+  "function totalRegistered() view returns (uint256)",
+  "function register(address referrer)",
+]);
 
 export const pub = createPublicClient({ transport: http(NET.rpc) });
 
@@ -236,15 +246,25 @@ export const reads = {
     return out;
   },
 
+  quest: async (a: Address | null) => {
+    const total = await pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "totalRegistered" }) as bigint;
+    if (!a) return { registered: false, referrals: 0n, total };
+    const [registered, referrals] = await Promise.all([
+      pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "registered", args: [a] }) as Promise<boolean>,
+      pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "referralCount", args: [a] }) as Promise<bigint>,
+    ]);
+    return { registered, referrals, total };
+  },
+
   /// Everything the Portfolio and the guided journey need, in one pass: balances, each owned Seat
-  /// with its tier + claimable + Vault balance, Case winnings, and pool position.
+  /// with its tier + claimable + Vault balance, Case winnings, pool position, and quest status.
   portfolio: async (a: Address) => {
-    const [gas, bal, ids, wins, pool, loans] = await Promise.all([
-      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a),
+    const [gas, bal, ids, wins, pool, loans, quest] = await Promise.all([
+      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a), reads.quest(a),
     ]);
     const seats = await Promise.all(ids.map(async (id) => ({ id, ...(await reads.seatState(id)), vaultUsdg: 0n as bigint })));
     for (const s of seats) s.vaultUsdg = await reads.vaultBalance(s.vault);
-    return { gas, ...bal, seats, wins, pool, loans };
+    return { gas, ...bal, seats, wins, pool, loans, quest };
   },
 };
 
@@ -298,6 +318,9 @@ export const flows = {
   },
 
   ringBell: (a: Address): Promise<Hex> => send(a, ADDR.bell, bellAbi, "ring"),
+
+  /// Join the quest, crediting a referrer (0x0 if none). One-shot per wallet.
+  registerQuest: (a: Address, referrer: Address): Promise<Hex> => send(a, ADDR.quest, questAbi, "register", [referrer]),
 
   /// Claim a Seat's accrued Payout — it lands in that Seat's Vault (permissionless, but the funds go
   /// to the Vault the Seat owner controls, never the caller).

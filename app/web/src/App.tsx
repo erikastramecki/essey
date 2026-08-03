@@ -7,7 +7,7 @@ import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
 import { CasesArcade } from "./cases";
 import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
-import { StartPage, JourneyStrip, type StepId } from "./journey";
+import { StartPage, JourneyStrip, captureRef, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
 import { LendPage } from "./lend-ui";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
@@ -19,7 +19,7 @@ const GROUPS = ["The Market", "The engine", "Audits"];
 // Action-clear nav (founder: a tester must know where each flow lives). The landing tells the story;
 // each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
 const NAV = [
-  ["/start", "Start"],
+  ["/start", "Quest"],
   ["/market", "Exchange"],
   ["/bell", "Bell"],
   ["/cases", "Cases"],
@@ -73,6 +73,7 @@ export default function App() {
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  useEffect(() => { captureRef(); }, []); // stash any ?ref= referral on first load
   return null;
 }
 
@@ -127,13 +128,13 @@ function Landing() {
         <div className="wrap">
           <div className="start-cta">
             <div>
-              <span className="eyebrow">Live on testnet</span>
-              <h2>Play the whole thing, free</h2>
-              <p>Every mechanic is live on testnet and playable right now with play money. Follow the guided tour
-                and you'll trade a Seat, stake a Tier, ring the Bell, claim a Payout, open a Case, and supply
-                liquidity — no risk, real contracts.</p>
+              <span className="eyebrow">Live on testnet · earn a mint spot</span>
+              <h2>Test the club, earn your whitelist</h2>
+              <p>Every mechanic is live on testnet with play money. Complete the quest — trade a Seat, stake a
+                Tier, ring the Bell, claim a Payout, open a Case, supply liquidity, invite friends — and you're in
+                the raffle for one of 2,222 mainnet mint spots. No risk, real contracts.</p>
             </div>
-            <Link className="btn btn-gold start-cta-btn" to="/start">Start testing →</Link>
+            <Link className="btn btn-gold start-cta-btn" to="/start">Start the quest →</Link>
           </div>
           <div className="dest-grid" style={{ marginTop: 22 }}>
             {[

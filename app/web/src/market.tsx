@@ -140,7 +140,7 @@ export function ExchangeHero() {
           <p className="lede">Buy a Seat. Earn Payouts in real stock. Borrow against them. Every ring, every draw,
             every loan — verifiable on-chain.</p>
           <div className="hero-cta">
-            <Link className="btn btn-gold" to="/start">Start testing — it's free</Link>
+            <Link className="btn btn-gold" to="/start">Start the quest — earn a mint spot</Link>
             <Link className="btn btn-ghost" to="/portfolio">Your portfolio</Link>
           </div>
           <div className="proof-strip num">⬡ 2,222 Seats · fees pay out as stock · every claim links a real tx</div>

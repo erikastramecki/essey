@@ -18,6 +18,7 @@
 | **EsseyPool** (lending, BELL_SINK=Bell) | `0x283a4891458180f502E82E40470d3e06321ba748` |
 | EsseyMarkets | `0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732` |
 | LivenessOracle | `0x750e88be1621902486Cd612D866E63587F3A2bf7` |
+| QuestRegistry (whitelist quest referral graph) | `0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427` |
 
 Wiring verified from chain state: `seat.minter() == distributor`, `seat.hook() == bell`,
 `seat.art() == art`, `maxSupply == 2222`. Smoke: Seat Nº 0001 minted
