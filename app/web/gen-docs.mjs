@@ -10,6 +10,10 @@ const DOCS = join(HERE, "..", "..", "docs");
 // `file` is relative to /docs and doubles as the GitHub source link, so every card in the site can
 // point at the exact file it renders — no separately-maintained list to drift out of sync.
 const PICK = [
+  ["The Market", "DESIGN-seats-market-layer.md", "The Market layer — design", "Seats, Vaults, Tiers, the Bell, the Exchange, Notes, Cases — the full mechanic spec, grounded in verified on-chain reference data."],
+  ["The Market", "TOKENOMICS-essey.md", "$ESSEY tokenomics", "Three-asset separation, fixed supply, no emissions, free mint, royalties → the Bell. The anti-death-spiral rule: rewards are never paid in $ESSEY."],
+  ["The Market", "ECONOMICS-seats-model.md", "Seat economics — measured", "The economy modeled from the reference protocol's real on-chain data, not copied from its marketing."],
+  ["The Market", "DESIGN-whitelist-onboarding.md", "Earning a Seat — the whitelist", "The testnet trading-day quest: earn a free mint by using the protocol, committed on-chain as a timelocked Merkle root anyone can recompute."],
   ["Protocol", "BUILD-portable-proof.md", "Portable proof (any-chain lending)", "The differentiator: an in-circuit Pyth/Wormhole proof so loans settle on chains with no oracle. Built + measured against real mainnet data — the reproducible evidence behind the claim."],
   ["Protocol", "WHY-ESSEY-IS-DIFFERENT.md", "Why Essey is different", "How our lending differs from Aave/Kamino/Suilend — and what is actually enforced today."],
   ["Protocol", "ARCHITECTURE.md", "Architecture", "The four tiers: frontend, operator, on-chain program, and oracle."],
@@ -20,6 +24,9 @@ const PICK = [
   ["Audits", "audits/README.md", "How we audit", "Independent agents attack every change; findings are published fix-first, clean or not."],
   ["Audits", "audits/sui-rounds-1-6.md", "Move / Sui — rounds 1–6", "66 confirmed findings across six adversarial rounds. No round came back clean."],
   ["Audits", "audits/solidity-round-1.md", "Solidity — round 1", "19 confirmed, 5 refuted against the Robinhood Chain port. Not clean."],
+  ["Audits", "audits/market-layer-round-1.md", "Market layer — round 1", "Seats, Vaults, the Bell, the converter, Notes: the first adversarial gate on the game's contracts."],
+  ["Audits", "audits/market-layer-round-2.md", "Market layer — round 2", "$ESSEY and the Exchange: one hardening applied, re-audit clean."],
+  ["Audits", "audits/market-layer-round-3.md", "Market layer — round 3", "The mint distributor: two hardenings — including a deploy-unfixable defect the gate caught before it could ship."],
   ["Audits", "AUDIT-2026-07-14-sui.md", "Security audit & pentest", "Adversarial review + penetration test — one critical bug found and fixed."],
   ["Audits", "EVIDENCE-2026-07-14.md", "Evidence", "On-chain proofs, the penetration test, and full end-to-end loans."],
 ];

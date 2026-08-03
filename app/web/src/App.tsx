@@ -7,11 +7,12 @@ import { usePool, usePositions, useBorrow, useFaucet, useGovernance } from "./po
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
+import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist } from "./market";
 
 const usd = (n: number, d = 2) => "$" + n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
 const REPO = "https://github.com/erikastramecki/essey";
-const GROUPS = ["Protocol", "Risk", "Audits"];
+const GROUPS = ["The Market", "Protocol", "Risk", "Audits"];
 
 // A short, curated set shown by default; everything else is one search away (scales as we add assets).
 const FEATURED = ["BTC", "ETH", "SOL", "SUI", "HYPE", "NVDA", "AAPL", "TSLA", "SPY", "COIN"];
@@ -50,18 +51,20 @@ export default function App() {
   const selPx = prices[sel.feedId]?.price ?? 0;
   const selConf = prices[sel.feedId]?.conf ?? 0;
   const [menuOpen, setMenuOpen] = useState(false);
-  const NAV = [["anychain", "Any chain"], ["markets", "Markets"], ["borrow", "Borrow"], ["how", "How it works"], ["chains", "Chains"], ["docs", "Docs"], ["proof", "Proof"]];
+  const NAV = [["club", "How it works"], ["market", "The Market"], ["provable", "Provable"], ["markets", "Lending"], ["docs", "Docs"], ["proof", "Proof"]];
 
   return (
     <>
+      <WarningModal />
       <header className="nav">
         <div className="wrap nav-in">
-          <a className="brand" href="#top"><Hallmark /> <span><b>Essey</b></span></a>
+          <a className="brand" href="#top"><EMonogram /> <span><b>Essey</b></span></a>
           <nav className="nav-links">
             {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
           </nav>
           <div className="nav-right">
             <span className="net"><span className="dot" style={{ background: ok ? "var(--good)" : "var(--warn)" }} />{cluster}</span>
+            <ThemeToggle />
             {connected && <FaucetButton />}
             <ConnectButton />
             <button className="nav-burger" aria-label="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>{menuOpen ? "✕" : "☰"}</button>
@@ -75,39 +78,14 @@ export default function App() {
       </header>
 
       <main id="top">
-        {/* HERO */}
-        <section className="hero">
-          <div className="wrap hero-grid">
-            <div>
-              <span className="badge"><Shield /> Portable proofs · borrow on any chain</span>
-              <h1>Borrow against your onchain assets — on <em>any chain</em>.</h1>
-              <p className="lede">Every other lending protocol is trapped on the dozen or so chains that have a price oracle. Essey puts the price's proof <em>inside</em> the loan — so it can settle anywhere, even a chain that has no oracle at all. Post crypto or tokenized equities, keep custody, draw a stablecoin.</p>
-              <div className="hero-cta">
-                <a className="btn btn-gold" href="#borrow">Open a position</a>
-                <a className="btn btn-ghost" href="#anychain">Why we're different</a>
-              </div>
-            </div>
-            <aside className="plate">
-              <div className="plate-top">
-                <span className="eyebrow">Collateral · Pyth oracle</span>
-                <span className="status-pill"><span className="bar" />{session ? "US markets open" : "US markets closed"}</span>
-              </div>
-              <div className="ticker">
-                {MARKETS.slice(0, 5).map((m) => {
-                  const p = prices[m.feedId];
-                  return (
-                    <div className="ticker-row" key={m.symbol}>
-                      <span className="sym">{m.symbol}<span>{m.name}</span></span>
-                      <span className="px num">{p ? usd(p.price, m.assetClass === "crypto" && p.price > 1000 ? 0 : 2) : "…"}</span>
-                      <span className="chg" style={{ color: "var(--tx-faint)" }}>{p ? `${p.ageSec}s` : ""}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </aside>
-          </div>
-        </section>
+        {/* HERO — "The Exchange" (§2 of the rebrand): the game up front, the proof beside it. */}
+        <ExchangeHero />
+        <ClubFlow />
+        <Mechanics />
+        <ProvableTwist />
 
+        {/* THE LENDING ENGINE UNDERNEATH — the original serious surface, reframed: this is why the
+            Payouts are real. Same components, same honesty. */}
         <AnyChain />
         <Dregg />
 
@@ -116,9 +94,10 @@ export default function App() {
           <div className="wrap">
             <div className="band-head">
               <div>
-                <span className="eyebrow">Markets</span>
+                <span className="eyebrow">The lending engine underneath</span>
                 <h2>Collateral, priced live</h2>
-                <p>{MARKETS.length} markets on Sui, priced by Pyth. LTV is conservative for equities (24/7 token vs. session underlying), higher for crypto.</p>
+                <p>Where the Payouts come from: real loans against real collateral. {MARKETS.length} markets priced by
+                  Pyth ({session ? "US markets open" : "US markets closed"}). LTV is conservative for equities (24/7 token vs. session underlying), higher for crypto.</p>
               </div>
               <div className="status-pill" style={{ color: "var(--tx-mut)", fontSize: 12.5 }}>
                 <span className="bar" style={{ background: "var(--gold)" }} />{ok ? "Prices stream from Pyth" : "reconnecting…"}
@@ -190,7 +169,12 @@ export default function App() {
         <footer>
           <div className="wrap foot-in">
             <div>
-              <p className="disclaim"><b>Essey is a devnet demonstration.</b> Tokenized equities are securities and carry issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an {""}<b>adminBurn</b>{" "}power — verified on-chain to sit with a plain EOA — that can destroy tokens at any address with no pause or block check; posted collateral can therefore cease to exist, and the loss is socialised pro-rata across borrowers. An issuer pause also makes repayment impossible until it is lifted. The Robinhood Chain deployment is fork-tested against real mainnet state but is <b>not yet deployed</b>. Not an offer of securities. Nothing here is financial advice.</p>
+              <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to
+                Seat holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
+                guaranteed, ever. The Market contracts are built and adversarially audited (three published rounds)
+                but <b>not yet deployed</b> — nothing on the Market surface moves real money today.{" "}
+                <button className="linklike" onClick={() => window.dispatchEvent(new Event("essey:reopen-warning"))}>Terms &amp; risk</button></p>
+              <p className="disclaim" style={{ marginTop: 10 }}><b>Essey is a devnet demonstration.</b> Tokenized equities are securities and carry issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an {""}<b>adminBurn</b>{" "}power — verified on-chain to sit with a plain EOA — that can destroy tokens at any address with no pause or block check; posted collateral can therefore cease to exist, and the loss is socialised pro-rata across borrowers. An issuer pause also makes repayment impossible until it is lifted. The Robinhood Chain deployment is fork-tested against real mainnet state but is <b>not yet deployed</b>. Not an offer of securities. Nothing here is financial advice.</p>
               <p className="disclaim" style={{ marginTop: 10 }}>Everything we know is unfinished is published in <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">OUTSTANDING.md</a> — including the items that block mainnet.</p>
             </div>
             <div className="foot-links">
@@ -843,9 +827,6 @@ function Gauge({ hf, color }: { hf: number; color: string }) {
 
 const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
-const Hallmark = () => (
-  <svg className="hallmark" viewBox="0 0 32 32" fill="none" aria-hidden><path d="M16 2.5 28.5 9v14L16 29.5 3.5 23V9L16 2.5Z" stroke="var(--gold)" strokeWidth="1.6" fill="var(--gold-dim)" /><path d="M11 16.2l3.4 3.4L21.4 12" stroke="var(--gold)" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
 const Shield = () => (
   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" /><path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
