@@ -22,7 +22,13 @@ export const ADDR = {
   faucet: "0xFF9866C43BbaeDD143AF7224c49ba7681beD0eAA" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
   nvda: "0x8393cc99FAC1CF79E3bEceA56f344159ddFd91E9" as Address,
+  // Lending stack
+  pool: "0x283a4891458180f502E82E40470d3e06321ba748" as Address,
+  markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
 };
+
+// Collateral markets open after the 2-day parameter timelock (a real safety feature, not a knob).
+export const BORROW_OPENS = new Date("2026-08-05T18:55:00Z");
 
 // Launch parameters as deployed (18-dec mock USDG on testnet).
 export const PRICE = { seat: 500n * 10n ** 18n, swapFee: 10n * 10n ** 18n, snipeFee: 15n * 10n ** 18n, sellFee: 8n * 10n ** 18n, casePrice: 100n * 10n ** 18n, caseFee: 5n * 10n ** 18n };
@@ -74,6 +80,28 @@ export const faucetAbi = parseAbi([
   "function drip()",
   "function lastDrip(address) view returns (uint256)",
 ]);
+export const poolAbi = parseAbi([
+  "function totalAssets() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function convertToAssets(uint256) view returns (uint256)",
+  "function maxWithdraw(address) view returns (uint256)",
+  "function borrowRateBps() view returns (uint256)",
+  "function utilizationBps() view returns (uint256)",
+  "function reserveBps() view returns (uint256)",
+  "function deposit(uint256 assets, address receiver) returns (uint256)",
+  "function withdraw(uint256 assets, address receiver, address owner) returns (uint256)",
+  "function borrow(address token, uint256 collateralRaw, uint256 debt) returns (uint256)",
+  "function repay(uint256 id, uint256 amount)",
+  "function debtOf(uint256 id) view returns (uint256)",
+  "function positions(uint256) view returns (address token, uint256 collateralRaw, uint256 principal, uint256 indexSnapshot)",
+  "function nextPositionId() view returns (uint256)",
+  "function note() view returns (address)",
+]);
+export const marketsAbi = parseAbi([
+  "function canBorrow(address) view returns (bool)",
+  "function maxBorrow(address token, uint256 rawAmount) view returns (uint256)",
+]);
+export const noteAbi = parseAbi(["function ownerOf(uint256) view returns (address)"]);
 
 export const pub = createPublicClient({ transport: http(NET.rpc) });
 
@@ -169,15 +197,54 @@ export const reads = {
     return { aapl, nvda };
   },
 
+  /// Pool state: TVL, this address's supplied value, the live rates. Supply APY is derived — borrow
+  /// APR × utilization × (1 − reserve cut) — the standard ERC-4626 lending identity.
+  poolState: async (a: Address | null) => {
+    const [tvl, borrowBps, utilBps, reserveBps, shares] = await Promise.all([
+      pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "totalAssets" }),
+      pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "borrowRateBps" }),
+      pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "utilizationBps" }),
+      pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "reserveBps" }),
+      a ? pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "balanceOf", args: [a] }) : Promise.resolve(0n),
+    ]);
+    const mine = shares > 0n ? await pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "convertToAssets", args: [shares] }) : 0n;
+    const borrowApr = Number(borrowBps) / 100;
+    const supplyApy = (borrowApr * (Number(utilBps) / 10_000) * (1 - Number(reserveBps) / 10_000));
+    return { tvl, mine, shares, borrowApr, supplyApy, utilPct: Number(utilBps) / 100 };
+  },
+
+  canBorrow: (token: Address) => pub.readContract({ address: ADDR.markets, abi: marketsAbi, functionName: "canBorrow", args: [token] }),
+  maxBorrow: (token: Address, collateralRaw: bigint) =>
+    pub.readContract({ address: ADDR.markets, abi: marketsAbi, functionName: "maxBorrow", args: [token, collateralRaw] }),
+
+  /// Open loan positions held by `a`, found by scanning the Note collection's Transfer events (same
+  /// approach as Seats) and keeping the ones still owned with live debt.
+  myLoans: async (a: Address): Promise<{ id: bigint; token: Address; collateralRaw: bigint; debt: bigint }[]> => {
+    const note = await pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "note" }) as Address;
+    const logs = await pub.getLogs({ address: note, event: seatAbi[5], args: { to: a }, fromBlock: DEPLOY_BLOCK, toBlock: "latest" });
+    const ids = [...new Set(logs.map((l) => (l.args as { tokenId?: bigint }).tokenId).filter((x): x is bigint => x !== undefined))];
+    const out: { id: bigint; token: Address; collateralRaw: bigint; debt: bigint }[] = [];
+    for (const id of ids) {
+      const owner = await pub.readContract({ address: note, abi: noteAbi, functionName: "ownerOf", args: [id] }).catch(() => null);
+      if (owner?.toLowerCase() !== a.toLowerCase()) continue; // closed (burned) or transferred away
+      const [pos, debt] = await Promise.all([
+        pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "positions", args: [id] }) as Promise<readonly [Address, bigint, bigint, bigint]>,
+        pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "debtOf", args: [id] }) as Promise<bigint>,
+      ]);
+      out.push({ id, token: pos[0], collateralRaw: pos[1], debt });
+    }
+    return out;
+  },
+
   /// Everything the Portfolio and the guided journey need, in one pass: balances, each owned Seat
-  /// with its tier + claimable + Vault balance, and Case winnings. One call the whole UI reads from.
+  /// with its tier + claimable + Vault balance, Case winnings, and pool position.
   portfolio: async (a: Address) => {
-    const [gas, bal, ids, wins] = await Promise.all([
-      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a),
+    const [gas, bal, ids, wins, pool, loans] = await Promise.all([
+      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a),
     ]);
     const seats = await Promise.all(ids.map(async (id) => ({ id, ...(await reads.seatState(id)), vaultUsdg: 0n as bigint })));
     for (const s of seats) s.vaultUsdg = await reads.vaultBalance(s.vault);
-    return { gas, ...bal, seats, wins };
+    return { gas, ...bal, seats, wins, pool, loans };
   },
 };
 
@@ -235,6 +302,23 @@ export const flows = {
   /// Claim a Seat's accrued Payout — it lands in that Seat's Vault (permissionless, but the funds go
   /// to the Vault the Seat owner controls, never the caller).
   claimPayout: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.bell, bellAbi, "claim", [id]),
+
+  // ---- lending ----
+  supply: async (a: Address, amount: bigint): Promise<Hex> => {
+    await ensureAllowance(a, ADDR.usdg, ADDR.pool, amount);
+    return send(a, ADDR.pool, poolAbi, "deposit", [amount, a]);
+  },
+  withdrawSupply: (a: Address, amount: bigint): Promise<Hex> => send(a, ADDR.pool, poolAbi, "withdraw", [amount, a, a]),
+
+  /// Borrow USDG against stock collateral: approve the stock, then borrow — mints a Note, sends USDG.
+  borrow: async (a: Address, token: Address, collateralRaw: bigint, debt: bigint): Promise<Hex> => {
+    await ensureAllowance(a, token, ADDR.pool, collateralRaw);
+    return send(a, ADDR.pool, poolAbi, "borrow", [token, collateralRaw, debt]);
+  },
+  repay: async (a: Address, id: bigint, owed: bigint): Promise<Hex> => {
+    await ensureAllowance(a, ADDR.usdg, ADDR.pool, owed + owed / 100n); // headroom for a second of interest
+    return send(a, ADDR.pool, poolAbi, "repay", [id, (owed * 1001n) / 1000n]); // repay accepts >= owed, refunds change
+  },
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.

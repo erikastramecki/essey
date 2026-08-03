@@ -7,7 +7,7 @@ import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { reads, flows, fmt, NET, type Portfolio } from "./live";
 
-export type StepId = "connect" | "fund" | "seat" | "stake" | "payout" | "case";
+export type StepId = "connect" | "fund" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow";
 
 export type Step = {
   id: StepId;
@@ -32,6 +32,10 @@ export const STEPS: Step[] = [
     done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n) },
   { id: "case", n: 6, title: "Open a Case", what: "Open a Case for a real stock draw — AAPL or NVDA, fair value either way.", to: "/cases", cta: "Go to Cases",
     done: (p) => !!p && (p.wins.aapl > 0n || p.wins.nvda > 0n) },
+  { id: "supply", n: 7, title: "Supply liquidity", what: "Supply USDG to the lending pool and earn the interest borrowers pay.", to: "/lend", cta: "Go to Lend",
+    done: (p) => !!p && p.pool.mine > 0n },
+  { id: "borrow", n: 8, title: "Borrow against your stock", what: "Borrow USDG against the stock you drew — the full loop. (Collateral markets open Aug 5.)", to: "/lend", cta: "Go to Lend",
+    done: (p) => !!p && p.loans.length > 0 },
 ];
 
 /// Live progress, polled. Returns the portfolio, per-step done flags, and the next unfinished step.
@@ -87,11 +91,11 @@ export function StartPage() {
         <div className="wrap">
           <div className="band-head"><div>
             <span className="eyebrow">Start here</span>
-            <h2>Test the whole club in six steps</h2>
+            <h2>Test the whole club, step by step</h2>
             <p>Everything below is live on Robinhood Chain testnet with play money — real contracts, real
               mechanics, nothing at risk. Do them in order the first time; each ticks itself off as you go.</p>
           </div>
-            <span className="preview-chip live">{doneCount}/6 done</span>
+            <span className="preview-chip live">{doneCount}/{steps.length} done</span>
           </div>
 
           <FundsPanel connected={connected} address={a} portfolio={p} onFund={refresh} />

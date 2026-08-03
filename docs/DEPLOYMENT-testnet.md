@@ -13,6 +13,11 @@
 | EsseyCases | `0xf8B6D4a83c5afe6c1339390947cb8dbf9AF2D8bd` |
 | Mock USDG (test fixture, 18-dec) | `0x7461E670d44FF4397A3E48030C5b06f6163a5De2` |
 | Mock USDG/USD feed (test fixture) | `0x6ac94CAb7302415A9a29d9746Fb6051523592E3b` |
+| TestnetFaucet | `0xFF9866C43BbaeDD143AF7224c49ba7681beD0eAA` |
+| Mock AAPL / NVDA (Case stock) | `0xaC6cd493e69eb82e8f113E33De8e5542F313B731` / `0x8393cc99FAC1CF79E3bEceA56f344159ddFd91E9` |
+| **EsseyPool** (lending, BELL_SINK=Bell) | `0x283a4891458180f502E82E40470d3e06321ba748` |
+| EsseyMarkets | `0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732` |
+| LivenessOracle | `0x750e88be1621902486Cd612D866E63587F3A2bf7` |
 
 Wiring verified from chain state: `seat.minter() == distributor`, `seat.hook() == bell`,
 `seat.art() == art`, `maxSupply == 2222`. Smoke: Seat Nº 0001 minted
@@ -25,5 +30,10 @@ were scaled to the mock's 18 decimals). Admin/treasury/seeder/bankroll are all t
 deployer — mainnet uses the multisig. The launch tier ladder + prices in the script are defaults
 pending founder review.
 
-**Not yet on testnet:** EsseyPool with `BELL_SINK` (lending-side redeploy), StockConverter,
-whitelist roots, Exchange float seeding, Case inventory.
+**Lending (deployed 2026-08-03):** EsseyPool wired with `BELL_SINK` = the Bell, 100k USDG liquidity
+seeded, 10% base APR, 50% of skimmed loan-interest → the pot. AAPL/NVDA collateral markets are
+PROPOSED; the 2-day parameter timelock (a safety feature) means **borrowing opens 2026-08-05 18:55
+UTC** — supply/withdraw works now. After the timelock, call `markets.commitMarket(aapl)` and
+`commitMarket(nvda)` to open borrowing (and keep a keeper beating the LivenessOracle for liquidations).
+
+**Not yet on testnet:** StockConverter (stock-denominated payouts), whitelist roots, CoinVoyage onramp.

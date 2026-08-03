@@ -9,6 +9,7 @@ import { CasesArcade } from "./cases";
 import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
 import { StartPage, JourneyStrip, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
+import { LendPage } from "./lend-ui";
 import { WalletProvider, ConnectButton } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -21,6 +22,7 @@ const NAV = [
   ["/market", "Market"],
   ["/bell", "Stake"],
   ["/cases", "Cases"],
+  ["/lend", "Lend"],
   ["/portfolio", "Portfolio"],
   ["/docs", "Docs"],
 ] as const;
@@ -64,6 +66,7 @@ export default function App() {
               <AppPage title="Cases" here="case" what="Open a Case for a provably-fair stock draw — every pull is ~fair value; the draw only decides which name.">
                 <CasesArcade />
               </AppPage>} />
+            <Route path="/lend" element={<LendPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
@@ -145,7 +148,8 @@ function Landing() {
               ["/market", "⬡", "Market", "Buy, snipe, or sell a Seat on the live Exchange."],
               ["/bell", "🔔", "Stake", "Raise a Tier, ring the Bell, claim a Payout into your Vault."],
               ["/cases", "🎁", "Cases", "Open a Case for a provably-fair real-stock draw."],
-              ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, winnings."],
+              ["/lend", "⚖", "Lend", "Supply USDG to earn, or borrow against the stock you win."],
+              ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, loans."],
             ].map(([to, icon, h, p]) => (
               <Link key={to} className="dest-card" to={to}>
                 <span className="dest-icon" aria-hidden>{icon}</span>
