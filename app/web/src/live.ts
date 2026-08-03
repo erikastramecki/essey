@@ -49,13 +49,27 @@ export const casesAbi = parseAbi([
   "event CaseBought(uint256 indexed caseId, address indexed buyer, uint64 drawBlock)",
   "event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)",
 ]);
-export const bellAbi = parseAbi(["function pot() view returns (uint256)"]);
+export const bellAbi = parseAbi([
+  "function pot() view returns (uint256)",
+  "function tierCount() view returns (uint256)",
+  "function tierFees(uint256) view returns (uint256)",
+  "function tierWeights(uint256) view returns (uint256)",
+  "function seats(uint256) view returns (uint8 tier, uint248 weight, uint256 rewardDebt, uint256 pendingStored)",
+  "function pendingOf(uint256) view returns (uint256)",
+  "function activate(uint256 id, uint8 tier)",
+  "function upgrade(uint256 id, uint8 newTier)",
+  "function ring()",
+  "function claim(uint256 id) returns (uint256)",
+]);
 export const seatAbi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function ownerOf(uint256) view returns (address)",
   "function approve(address,uint256)",
   "function tokenURI(uint256) view returns (string)",
+  "function vaultOf(uint256) view returns (address)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
 ]);
+const DEPLOY_BLOCK = 96_550_000n; // Seat deployed ~here; owned-Seat scan starts from this
 export const faucetAbi = parseAbi([
   "function drip()",
   "function lastDrip(address) view returns (uint256)",
@@ -110,7 +124,50 @@ export const reads = {
     return Promise.all(Array.from({ length: count }, (_, i) =>
       pub.readContract({ address: ADDR.exchange, abi: exchangeAbi, functionName: "inventoryAt", args: [BigInt(i)] })));
   },
+
+  /// Seats the address currently owns — computed from Transfer events (Seat isn't Enumerable), which
+  /// is exact and honest: in minus out. Bounded to the collection's lifetime so the scan stays cheap.
+  ownedSeats: async (a: Address): Promise<bigint[]> => {
+    const [inLogs, outLogs] = await Promise.all([
+      pub.getLogs({ address: ADDR.seat, event: seatAbi[5], args: { to: a }, fromBlock: DEPLOY_BLOCK, toBlock: "latest" }),
+      pub.getLogs({ address: ADDR.seat, event: seatAbi[5], args: { from: a }, fromBlock: DEPLOY_BLOCK, toBlock: "latest" }),
+    ]);
+    const owned = new Set<string>();
+    // Order across the two lists by block then logIndex so the latest movement of each id wins.
+    const evts = [...inLogs.map((l) => ({ l, dir: "in" as const })), ...outLogs.map((l) => ({ l, dir: "out" as const }))]
+      .sort((x, y) => x.l.blockNumber === y.l.blockNumber ? Number(x.l.logIndex - y.l.logIndex) : Number(x.l.blockNumber - y.l.blockNumber));
+    for (const { l, dir } of evts) {
+      const id = (l.args as { tokenId?: bigint }).tokenId?.toString();
+      if (id === undefined) continue;
+      if (dir === "in") owned.add(id); else owned.delete(id);
+    }
+    return [...owned].map(BigInt).sort((x, y) => (x < y ? -1 : 1));
+  },
+
+  seatState: async (id: bigint): Promise<{ tier: number; pending: bigint; vault: Address }> => {
+    const [state, pending, vault] = await Promise.all([
+      pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "seats", args: [id] }),
+      pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "pendingOf", args: [id] }),
+      pub.readContract({ address: ADDR.seat, abi: seatAbi, functionName: "vaultOf", args: [id] }),
+    ]);
+    return { tier: Number((state as readonly unknown[])[0]), pending: pending as bigint, vault: vault as Address };
+  },
+
+  tierFee: (tierIndex: number) => // cumulative $ESSEY to reach tier (tierIndex is 0-based)
+    pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "tierFees", args: [BigInt(tierIndex)] }),
+
+  vaultBalance: (vault: Address) =>
+    pub.readContract({ address: ADDR.usdg, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
 };
+
+// The four launch tiers EXACTLY as deployed by DeployMarket._ladder (cumulative $ESSEY fee, payout
+// weight). tier N = arrays[N-1]. Verified against chain via reads.tierFee at render time.
+export const TIERS = [
+  { tier: 1, name: "Tier I", fee: 1_000n * 10n ** 18n, weight: 100 },
+  { tier: 2, name: "Tier II", fee: 1_600n * 10n ** 18n, weight: 160 },
+  { tier: 3, name: "Tier III", fee: 2_000n * 10n ** 18n, weight: 200 },
+  { tier: 4, name: "Tier IV", fee: 3_330n * 10n ** 18n, weight: 333 },
+];
 
 // ---------------------------------------------------------------- flows
 export const flows = {
@@ -138,6 +195,23 @@ export const flows = {
     await send(a, ADDR.seat, seatAbi, "approve", [ADDR.exchange, id]);
     return send(a, ADDR.exchange, exchangeAbi, "sell", [id]);
   },
+
+  /// Stake $ESSEY to activate a Seat at `tier` (or upgrade if already active). Half the fee burns,
+  /// half goes to treasury; the Seat starts earning payout weight from the next ring.
+  setTier: async (a: Address, id: bigint, tier: number): Promise<Hex> => {
+    const cur = Number((await pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "seats", args: [id] }) as readonly unknown[])[0]);
+    const fee = await reads.tierFee(tier - 1); // cumulative; activate/upgrade pull the right delta
+    await ensureAllowance(a, ADDR.essey, ADDR.bell, fee);
+    return cur === 0
+      ? send(a, ADDR.bell, bellAbi, "activate", [id, tier])
+      : send(a, ADDR.bell, bellAbi, "upgrade", [id, tier]);
+  },
+
+  ringBell: (a: Address): Promise<Hex> => send(a, ADDR.bell, bellAbi, "ring"),
+
+  /// Claim a Seat's accrued Payout — it lands in that Seat's Vault (permissionless, but the funds go
+  /// to the Vault the Seat owner controls, never the caller).
+  claimPayout: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.bell, bellAbi, "claim", [id]),
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.

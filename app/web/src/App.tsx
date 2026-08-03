@@ -6,7 +6,7 @@ import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
 import { CasesArcade } from "./cases";
-import { TestnetBanner, FaucetCard, LiveExchange } from "./live-ui";
+import { TestnetBanner, FaucetCard, LiveExchange, LiveBell } from "./live-ui";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -17,6 +17,7 @@ const GROUPS = ["The Market", "The engine", "Audits"];
 const NAV = [
   ["/market", "The Market"],
   ["/cases", "Cases"],
+  ["/bell", "The Bell"],
   ["/provable", "Provable"],
   ["/engine", "The engine"],
   ["/docs", "Docs"],
@@ -31,8 +32,9 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
-            <Route path="/market" element={<PageShell title="The Market"><div className="wrap" style={{paddingTop:28}}><FaucetCard /></div><LiveExchange /><Mechanics /></PageShell>} />
+            <Route path="/market" element={<PageShell title="The Market"><div className="wrap" style={{paddingTop:28}}><FaucetCard /></div><LiveExchange /><LiveBell /><Mechanics /></PageShell>} />
             <Route path="/cases" element={<CasesPage />} />
+            <Route path="/bell" element={<BellPage />} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
             <Route path="/docs" element={<DocsPage />} />
@@ -103,6 +105,7 @@ function Landing() {
             {[
               ["/market", "⬡", "The Market", "Every mechanic, playable before it costs anything — Seats, Tiers, the Bell, Notes."],
               ["/cases", "🎁", "Cases", "Open a Case, get real stock. Fair value always; the draw decides the name."],
+              ["/bell", "🔔", "The Bell", "Stake a Tier, ring the Bell, claim a Payout into your Vault — the full loop, live."],
               ["/provable", "✓", "Provable", "The part they can't copy: provably fair AND provably solvent."],
               ["/engine", "⚙", "The engine", "The lending protocol underneath — why the Payouts are real."],
             ].map(([to, icon, h, p]) => (
@@ -140,6 +143,16 @@ function CasesPage() {
           </div>
         </div>
       </section>
+    </>
+  );
+}
+
+function BellPage() {
+  useEffect(() => { document.title = "The Bell · Essey"; }, []);
+  return (
+    <>
+      <div className="wrap" style={{ paddingTop: 28 }}><FaucetCard /></div>
+      <LiveBell />
     </>
   );
 }
