@@ -6,6 +6,7 @@ import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
 import { CasesArcade } from "./cases";
+import { TestnetBanner, FaucetCard, LiveExchange } from "./live-ui";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -30,7 +31,7 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
-            <Route path="/market" element={<PageShell title="The Market"><Mechanics /></PageShell>} />
+            <Route path="/market" element={<PageShell title="The Market"><div className="wrap" style={{paddingTop:28}}><FaucetCard /></div><LiveExchange /><Mechanics /></PageShell>} />
             <Route path="/cases" element={<CasesPage />} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
@@ -75,6 +76,7 @@ function Layout() {
         )}
       </header>
       <main id="top">
+        <TestnetBanner />
         <Outlet />
         <Footer />
       </main>
@@ -123,6 +125,7 @@ function CasesPage() {
   useEffect(() => { document.title = "Cases · Essey"; }, []);
   return (
     <>
+      <div className="wrap" style={{paddingTop:28}}><FaucetCard /></div>
       <CasesArcade />
       <section className="band" style={{ paddingTop: 0 }}>
         <div className="wrap">

@@ -4,13 +4,14 @@
 // acquisition onramp (API-driven) and rides on top of this connection, not inside it.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-// Robinhood Chain (Arbitrum Orbit) — the only chain the app targets.
+// The chain the app targets. TESTNET while the playground is live; flips to mainnet (4663) with
+// the real deployment. 46630 = 0xB626.
 export const RH_CHAIN = {
-  chainId: "0x1237", // 4663
-  chainName: "Robinhood Chain",
+  chainId: "0xb626", // 46630
+  chainName: "Robinhood Chain Testnet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"],
-  blockExplorerUrls: ["https://explorer.mainnet.chain.robinhood.com"],
+  rpcUrls: ["https://rpc.testnet.chain.robinhood.com"],
+  blockExplorerUrls: ["https://explorer.testnet.chain.robinhood.com"],
 };
 
 type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown>; on?: (e: string, cb: (x: unknown) => void) => void; removeListener?: (e: string, cb: (x: unknown) => void) => void };

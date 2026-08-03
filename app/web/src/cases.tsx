@@ -7,7 +7,23 @@
 // column stays flat on purpose — that flatness IS the product ("always ~fair value; the draw decides
 // which stock"). No multipliers exist here, and the UI must never imply them.
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Address } from "viem";
 import { EMonogram } from "./market";
+import { useWallet, ConnectButton } from "./wallet";
+import { ADDR, flows, fmt } from "./live";
+
+// On-chain testnet inventory → a reveal Item. The live Cases hold AAPL (0.5 share) and NVDA (0.8),
+// both fair-value at ~$100; rarity here is cosmetic tiering for the reveal, not a payout signal.
+function liveItem(token: Address, amount: bigint): Item {
+  const t = token.toLowerCase();
+  if (t === ADDR.aapl.toLowerCase()) return { sym: "AAPL", name: "Apple", unit: `${fmt(amount, 2)} shares`, value: 100, rarity: "preferred", odds: 0 };
+  if (t === ADDR.nvda.toLowerCase()) return { sym: "NVDA", name: "NVIDIA", unit: `${fmt(amount, 2)} shares`, value: 100, rarity: "alpha", odds: 0 };
+  return { sym: "STOCK", name: token.slice(0, 10), unit: `${fmt(amount, 2)}`, value: 100, rarity: "bluechip", odds: 0 };
+}
+const LIVE_ITEMS: Item[] = [
+  { sym: "AAPL", name: "Apple", unit: "0.5 shares", value: 100, rarity: "preferred", odds: 60 },
+  { sym: "NVDA", name: "NVIDIA", unit: "0.8 shares", value: 100, rarity: "alpha", odds: 40 },
+];
 
 const reducedMotion = () =>
   typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -125,10 +141,17 @@ export function CasesArcade() {
   const [won, setWon] = useState<Item | null>(null);
   const [pulls, setPulls] = useState<Item[]>([]);
   const [sold, setSold] = useState(false);
+  const [stage, setStage] = useState<string | null>(null); // live-draw narration
   const railRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const gen = useRef(0);
+  // Refs so the reel's finish() closure reads current draw state without re-subscribing.
+  const stagePendingRef = useRef(false);
+  const wonRef = useRef<Item | null>(null);
+  const w = useWallet();
+  const live = !!w.address && w.chainOk;
   const c = CASES[caseIdx];
+  const reelItems = live ? LIVE_ITEMS : c.items;
 
   const byOdds = useMemo(() => [...c.items].sort((a, b) => b.odds - a.odds), [c]);
 
@@ -137,17 +160,33 @@ export function CasesArcade() {
     setCaseIdx(i); setPhase("idle"); setWon(null); setSold(false);
   };
 
-  const spin = () => {
-    if (phase === "spinning") return;
-    const winner = weightedDraw(c.items);
-    const cards: Item[] = Array.from({ length: 54 }, () => weightedDraw(c.items));
+  // Build the reel strip around a (possibly not-yet-known) winner. In live mode the winner arrives
+  // from chain mid-spin, so we seed the strip with a plausible one and correct it on reveal.
+  const buildStrip = (winner: Item): Item[] => {
+    const cards: Item[] = Array.from({ length: 54 }, () => weightedDraw(reelItems));
     cards[WIN] = winner;
-    // The classic near-miss: sometimes a gold-leaf gleams one slot past where you stop.
     if (winner.rarity !== "goldleaf" && Math.random() < 0.35) {
-      const gold = c.items.filter((i) => i.rarity === "goldleaf" || i.rarity === "alpha");
+      const gold = reelItems.filter((i) => i.rarity === "goldleaf" || i.rarity === "alpha");
       if (gold.length) cards[WIN + 1] = gold[Math.floor(Math.random() * gold.length)];
     }
-    setStrip(cards); setWon(winner); setSold(false); setPhase("spinning");
+    return cards;
+  };
+
+  const spin = () => {
+    if (phase === "spinning") return;
+    if (live) return spinLive();
+    const winner = weightedDraw(c.items);
+    setStrip(buildStrip(winner)); setWon(winner); setSold(false); setStage(null); setPhase("spinning");
+  };
+
+  // Live: fire the real on-chain draw AND start the reel; the reel's ~6.4s tension overlaps the
+  // real draw-commit wait honestly. When the chain resolves, the true stock becomes the reveal.
+  const spinLive = () => {
+    const provisional = weightedDraw(LIVE_ITEMS);
+    setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setStage("approving"); setPhase("spinning");
+    flows.openCase(w.address as Address, setStage)
+      .then(({ token, amount }) => { setWon(liveItem(token, amount)); setStage(null); })
+      .catch((e) => { setStage("err:" + String((e as Error).message ?? e).slice(0, 90)); });
   };
 
   // The animation must start AFTER the spinning phase has rendered the rail — reading railRef in
@@ -155,7 +194,16 @@ export function CasesArcade() {
   // ref was always null in that tick, so every open jumped straight to the reveal).
   useEffect(() => {
     if (phase !== "spinning" || !won) return;
-    const finish = () => { setPhase("revealed"); setPulls((p) => [won, ...p].slice(0, 8)); };
+    // In live mode the reel is done spinning but must WAIT for the real draw before revealing — the
+    // reveal is authoritative from chain, never the provisional item. `stageRef` tracks pending state.
+    const finish = () => {
+      if (live && stagePendingRef.current) {
+        setTimeout(finish, 500); // draw still sealing on chain — hold the reel at rest, poll
+        return;
+      }
+      setPhase("revealed");
+      setPulls((p) => (wonRef.current ? [wonRef.current, ...p].slice(0, 8) : p));
+    };
     const g = ++gen.current;
     const rail = railRef.current, stage = stageRef.current;
     if (!rail || !stage || reducedMotion()) { finish(); return; } // reduced motion: no reel
@@ -183,8 +231,14 @@ export function CasesArcade() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  const again = () => { setPhase("idle"); setWon(null); setSold(false); };
+  // Keep the finish() closure's refs current: pending while a live stage is set and not an error;
+  // won mirrors the authoritative winner.
+  useEffect(() => { stagePendingRef.current = live && stage !== null && !stage.startsWith("err:"); }, [live, stage]);
+  useEffect(() => { wonRef.current = won; }, [won]);
+
+  const again = () => { setPhase("idle"); setWon(null); setSold(false); setStage(null); };
   const rWon = won ? RARITY[won.rarity] : null;
+  const stageLabel: Record<string, string> = { approving: "approving spend…", buying: "buying the case…", sealing: "sealing the draw on-chain…", opening: "opening…" };
 
   return (
     <section className="band cases-arcade" id="cases">
@@ -196,7 +250,9 @@ export function CasesArcade() {
             never how much. Rarity is scarcity, not size: chasing the gold leaf costs you nothing but the
             spin. Keep it, borrow against it, or sell it back at a 5% spread.</p>
         </div>
-          <span className="preview-chip" title="The Case contract is audited but not deployed; this arcade simulates the draw client-side.">sandbox — simulated draw</span>
+          {live
+            ? <span className="preview-chip live" title="Connected to Robinhood Chain testnet — this opens a real Case on-chain with play money.">LIVE · testnet draw</span>
+            : <span className="preview-chip" title="Connect a wallet on testnet to open a real Case; otherwise the draw is simulated.">simulated — connect to go live</span>}
         </div>
 
         {/* case picker */}
@@ -211,9 +267,15 @@ export function CasesArcade() {
               {phase === "idle" ? (
                 <div className="spin-idle">
                   <EMonogram size={40} />
-                  <p>{c.name} · {usd(c.price)} in $ESSEY</p>
-                  <button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
-                  <i>simulated — no wallet, no cost</i>
+                  <p>{live ? "The 401(k) Pack" : c.name} · {usd(c.price)} in $ESSEY</p>
+                  {live
+                    ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN A CASE · LIVE</button>
+                        <i>real draw on testnet — AAPL or NVDA, play money</i></>
+                    : w.address
+                      ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
+                          <i>switch to Robinhood Chain testnet to open for real</i></>
+                      : <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
+                          <i>simulated — <span className="live-connect"><ConnectButton /></span> to go live</i></>}
                 </div>
               ) : (
                 <>
@@ -222,6 +284,7 @@ export function CasesArcade() {
                     {strip.map((it, i) => <ItemCard key={i} it={it} />)}
                   </div>
                   <div className="spin-fade left" /><div className="spin-fade right" />
+                  {stage && <div className={"spin-stage-label num" + (stage.startsWith("err:") ? " err" : "")}>{stage.startsWith("err:") ? stage.slice(4) : (stageLabel[stage] ?? stage)}</div>}
                 </>
               )}
             </div>
