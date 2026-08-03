@@ -13,7 +13,7 @@ and the off-chain + UI system around it.
   `setHook` is one-shot. There is **no on-chain whitelist function anywhere yet.**
 - `rh-chain/foundry.toml` — Robinhood Chain **testnet** `rh_testnet` (chainId **46630**,
   `rpc.testnet.chain.robinhood.com/rpc`) and **mainnet** (chainId 4663).
-- Reference: StonkBrokers' `setWhitelist(stage, wallets[], allocations[])`, `MINT_PRICE = 0`, whitelist
+- On-chain shape: `setWhitelist(stage, wallets[], allocations[])`, `MINT_PRICE = 0`, whitelist
   earned by burning a prior NFT. We keep the shape, **swap the earn-condition from "burn an NFT" to
   "dogfship the protocol on testnet."**
 
@@ -61,7 +61,7 @@ not a tx — it teaches the brand.
 | 3 | **Post a Note** | Deposit stock collateral, **borrow** USDG → this **mints a Note** (`Note.sol`, minted by the pool on borrow) | Notes, collateral, LTV, the portable bearer deed | The single richest teaching moment: collateral, health, and "your loan is an NFT you could sell." |
 | 4 | **Buy a Seat** | On **the Exchange** (`EsseyExchange.sol`), swap testnet $ESSEY → the next **Seat** (`buy`) | the Exchange AMM, Seats, the Vault (ERC-6551) that travels with it | Gets the user their membership object — the thing the whole club is about. |
 | 5 | **Raise your Tier** | **Stake** $ESSEY on your Seat to activate a **Tier** (`Bell.sol` tier staking, 50% burn) | Tiers, the $ESSEY sink, payout weight | Teaches the access-demand loop and sets up a non-zero payout weight for stations 6–7. |
-| 6 | **Ring the Bell** | Call `ring()` on the **Bell** when the fee pot is full — permissionless, earns the tipper's cut | the Bell, permissionless payouts, O(1) accumulator | "Anyone can ring, and you get paid to" is the most StonkBrokers-fun moment — a real reward for a real tx. |
+| 6 | **Ring the Bell** | Call `ring()` on the **Bell** when the fee pot is full — permissionless, earns the tipper's cut | the Bell, permissionless payouts, O(1) accumulator | "Anyone can ring, and you get paid to" is the flow's most electric moment — a real reward for a real tx. |
 | 7 | **Claim your Payout** | **Claim** the Tier-weighted Payout into your Seat's **Vault** | Payouts (never "dividend"), Vaults as the wallet | Closes the flywheel loop the user just powered: fees → Bell → Payout into *your* Vault. |
 | 8 | **Crack a Case** *(bonus)* | Buy + open a **Case**, receive stock sealed in a Vault-NFT | the gacha/stock-acquisition path, sell-back spread | Bonus until Phase 5 testnet contract exists. High-delight, so it's the natural "extra credit." |
 | 9 | **Verify it yourself** | Click **Verify** on a Tape row (a proof, solvency, or a fair draw) | the moat: *provably fair AND provably solvent* | Not a tx — a click. Teaches that "verify it yourself" is a button, not a slogan. The brand payoff. |
@@ -90,7 +90,7 @@ that floor, depth and earliness earn a better **stage** (mint earlier) and occas
 |---|---|---|
 | **Founding** | ~222 (first-N completers) | Full core quest **+** curated review (§3). Mints first, guaranteed 1 Seat, gets the "Founder" badge. |
 | **General (earned)** | ~1,600 | Full core quest, passes anti-sybil + attestor review. Guaranteed 1 Seat within the General window. |
-| **Partner/Community** | ~200 | Minter discretion (early community, integrations, StonkBrokers-style partners) — decision #1's reserved tranche. |
+| **Partner/Community** | ~200 | Minter discretion (early community, integration partners) — decision #1's reserved tranche. |
 | **Float / LP / treasury** | remainder | Never minted to individuals; the Exchange's inventory + liquidity (per TOKENOMICS float-control). |
 
 If earned demand exceeds the earned tranches, **completion still guarantees eligibility** but mint order
@@ -103,7 +103,7 @@ Completion of all 7 core stations = **1.0 base** (the guaranteed floor). Everyth
 **priority multiplier / additive**, capped, so no single lever is farmable into a landslide:
 
 - **First-N-completers bonus** — the first ~222 verified completers → **Founding** stage. Pure
-  earliness; the strongest, fairest motivator (StonkBrokers' whitelist was also earliness-gated).
+  earliness; the strongest, fairest motivator.
 - **Depth bonus (small, capped):** supplied ≥ 2× the minimum, or held the Note healthy past the
   time-gate (§3) → +0.25. Rewards *meaningful* usage over dust.
 - **Streak bonus (capped):** touched the quest across ≥ 3 distinct UTC days → +0.25. Time is the one
@@ -220,7 +220,7 @@ questers emit events   ──►  Indexer reads logs per address  ──►  Att
    on the **MintDistributor**.
 5. **Questers** call `mint()` on the distributor; it verifies their allocation (Merkle proof against the
    committed root, or the stored mapping) and mints their Seat **for free** (`MINT_PRICE = 0`, per
-   TOKENOMICS + the StonkBrokers reference), respecting per-address caps and stage timing.
+   TOKENOMICS), respecting per-address caps and stage timing.
 
 ### The trust assumption, stated plainly
 
@@ -258,7 +258,7 @@ completion → mainnet allowlist. We keep that honest by making it **auditable, 
 
 ## 5. The gamification wrapper
 
-Point StonkBrokers' engagement energy at *real usage* — every flashy moment is backed by a real testnet
+Point launch-day engagement energy at *real usage* — every flashy moment is backed by a real testnet
 tx and reuses the market-club vocabulary (Seats / Tiers / the Bell / the Exchange / the Tape).
 
 - **The board — "The Trading Desk."** The quest home is a live board of the nine stations styled as a
@@ -281,7 +281,7 @@ tx and reuses the market-club vocabulary (Seats / Tiers / the Bell / the Exchang
 - **The "you're whitelisted" moment — "You've earned your Seat."** On attestation, the closing bell
   rings, a stamped **Ticket** card is issued (your address, stage, allocation, a shareable image) and the
   UI flips to a countdown to the mainnet mint window for your stage. This is the payoff screen — make it
-  as loud as StonkBrokers' mint reveal, but the thing being celebrated is *"you already know how to use
+  as loud as any mint reveal, but the thing being celebrated is *"you already know how to use
   this,"* which is true.
 - **Vocabulary discipline.** Never invent parallel jargon. It's Seats, Tiers, the Bell, the Exchange,
   Notes, the Tape, Payouts (never "dividend"), Vaults. The quest teaches the *actual* nouns the mainnet
@@ -384,7 +384,7 @@ interface IMintDistributor {
 
 **Required properties (audit checklist):**
 - **Immutable Seat binding** — holds the Seat address immutably; is the sole minter.
-- **Free mint** — `MINT_PRICE = 0` constant (TOKENOMICS decision #1; StonkBrokers reference).
+- **Free mint** — `MINT_PRICE = 0` constant (TOKENOMICS decision #1).
 - **Per-address cap** — 1 earned Seat per address across Founding+General; double-mint impossible even
   across stages (track `minted[who]`).
 - **Global supply cap** — never mints past the reserved earned tranches; respects Seat's own `maxSupply`.

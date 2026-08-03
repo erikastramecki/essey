@@ -13,9 +13,8 @@ const DOCS = join(HERE, "..", "..", "docs");
 // `file` is relative to /docs and doubles as the GitHub source link, so every card in the site can
 // point at the exact file it renders — no separately-maintained list to drift out of sync.
 const PICK = [
-  ["The Market", "DESIGN-seats-market-layer.md", "The Market layer — design", "Seats, Vaults, Tiers, the Bell, the Exchange, Notes, Cases — the full mechanic spec, grounded in verified on-chain reference data."],
-  ["The Market", "TOKENOMICS-essey.md", "$ESSEY tokenomics", "Three-asset separation, fixed supply, no emissions, free mint, royalties → the Bell. The anti-death-spiral rule: rewards are never paid in $ESSEY."],
-  ["The Market", "ECONOMICS-seats-model.md", "Seat economics — measured", "The economy modeled from the reference protocol's real on-chain data, not copied from its marketing."],
+  ["The Market", "THE-MARKET.md", "The Market layer — design", "Seats, Vaults, Tiers, the Bell, the Exchange, Notes, Cases — every mechanic, why it's shaped that way, and what's enforced vs designed."],
+  ["The Market", "TOKENOMICS.md", "$ESSEY tokenomics", "Three assets, three jobs, never crossed. Fixed supply, no emissions, free mint, three fee engines ranked by durability — and how it fails, stated plainly."],
   ["The Market", "DESIGN-whitelist-onboarding.md", "Earning a Seat — the whitelist", "The testnet trading-day quest: earn a free mint by using the protocol, committed on-chain as a timelocked Merkle root anyone can recompute."],
   ["The engine", "SCOPE-robinhood-chain.md", "Robinhood Chain scope", "The lending engine underneath: real Stock Tokens, Chainlink feeds, and what the chain does and doesn't give us."],
   ["The engine", "LTV-RISK-FRAMEWORK.md", "LTV & risk framework", "How loan-to-value limits are chosen per asset from a stress model."],
@@ -29,9 +28,10 @@ const PICK = [
   ["Audits", "audits/solidity-round-1.md", "Solidity — round 1", "19 confirmed, 5 refuted against the lending engine. Not clean."],
 ];
 
-// Founder rule (2026-08): competitor names never appear on the site. The repo docs keep their
-// engineering ground truth (measured reference data must stay attributable in source); the SITE
-// renders them neutralized. Order matters: possessive first.
+// Founder rule (2026-08, strengthened): the site presents our design and tokenomics ON THEIR OWN
+// MERITS — no competitor names AND no borrowed-provenance framing ("modeled on", "the reference
+// protocol"). Internal modeling docs stay in the repo for engineering; the site renders standalone
+// public docs instead, and the sanitizer + gate below are the backstop, not the plan.
 const sanitize = (md) => md
   .replace(/stonkbrokers\.cash/gi, "the reference protocol's site")
   .replace(/Stonk\s?Brokers?'s/gi, "the reference protocol's")
@@ -48,7 +48,7 @@ const docs = PICK.map(([group, file, title, desc]) => {
   return { slug, group, file, title, desc, md };
 });
 // The rule is a hard gate, not a best effort: fail the build if any reference survives.
-const leak = docs.filter((d) => /stonk/i.test(d.md));
+const leak = docs.filter((d) => /stonk|reference protocol/i.test(d.md));
 if (leak.length) { console.error(`gen-docs: competitor reference leaked in ${leak.map((d) => d.file).join(", ")}`); process.exit(1); }
 // A doc that silently renders as "(document unavailable)" is worse than a failed build — it ships
 // a dead card to visitors. Fail loudly instead.
