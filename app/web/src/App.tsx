@@ -6,22 +6,41 @@ import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
 import { CasesArcade } from "./cases";
-import { TestnetBanner, FaucetCard, LiveExchange, LiveBell } from "./live-ui";
-import { WalletProvider, ConnectButton, useWallet } from "./wallet";
+import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
+import { StartPage, JourneyStrip, type StepId } from "./journey";
+import { PortfolioPage } from "./portfolio";
+import { WalletProvider, ConnectButton } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
 const GROUPS = ["The Market", "The engine", "Audits"];
 
-// Every tab is its own page (founder rule): the landing tells the story; the app surfaces are
-// destinations. One narrative per page, and one page per destination.
+// Action-clear nav (founder: a tester must know where each flow lives). The landing tells the story;
+// each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
 const NAV = [
-  ["/market", "The Market"],
+  ["/start", "Start"],
+  ["/market", "Market"],
+  ["/bell", "Stake"],
   ["/cases", "Cases"],
-  ["/bell", "The Bell"],
-  ["/provable", "Provable"],
-  ["/engine", "The engine"],
+  ["/portfolio", "Portfolio"],
   ["/docs", "Docs"],
 ] as const;
+
+/// Every app page opens with the journey strip + a one-line "what you're testing" header, so a
+/// newcomer always knows where they are and what's next.
+function AppPage({ title, what, here, children }: { title: string; what: string; here?: StepId; children: ReactNode }) {
+  useEffect(() => { document.title = `${title} · Essey`; }, [title]);
+  return (
+    <>
+      <JourneyStrip here={here} />
+      <div className="wrap app-page-head">
+        <span className="eyebrow">You're testing</span>
+        <h1 className="app-page-title">{title}</h1>
+        <p className="app-page-what">{what}</p>
+      </div>
+      {children}
+    </>
+  );
+}
 
 export default function App() {
   return (
@@ -32,9 +51,20 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
-            <Route path="/market" element={<PageShell title="The Market"><div className="wrap" style={{paddingTop:28}}><FaucetCard /></div><LiveExchange /><LiveBell /><Mechanics /></PageShell>} />
-            <Route path="/cases" element={<CasesPage />} />
-            <Route path="/bell" element={<BellPage />} />
+            <Route path="/start" element={<StartPage />} />
+            <Route path="/market" element={
+              <AppPage title="The Market" here="seat" what="Trade $ESSEY for a Seat on the Exchange — buy the next one, snipe an exact number, or sell one back. Every trade fee feeds the Bell's pot.">
+                <LiveExchange /><Mechanics />
+              </AppPage>} />
+            <Route path="/bell" element={
+              <AppPage title="Stake &amp; the Bell" here="stake" what="Stake $ESSEY on a Seat to raise its Tier, ring the Bell when the pot's worth it, and claim your Payout into the Seat's Vault.">
+                <LiveBell />
+              </AppPage>} />
+            <Route path="/cases" element={
+              <AppPage title="Cases" here="case" what="Open a Case for a provably-fair stock draw — every pull is ~fair value; the draw only decides which name.">
+                <CasesArcade />
+              </AppPage>} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
             <Route path="/docs" element={<DocsPage />} />
@@ -98,61 +128,38 @@ function Landing() {
     <>
       <ExchangeHero />
       <ClubFlow />
-      {/* The landing tells the story; the pages are the destinations. */}
-      <section className="band">
+      {/* The one funnel: the landing points everyone at the guided journey. */}
+      <section className="band" style={{ paddingTop: 8 }}>
         <div className="wrap">
-          <div className="dest-grid">
+          <div className="start-cta">
+            <div>
+              <span className="eyebrow">Live on testnet</span>
+              <h2>Play the whole thing, free</h2>
+              <p>Every mechanic is deployed and playable right now with play money. Follow the six-step tour and
+                you'll trade a Seat, stake a Tier, ring the Bell, claim a Payout, and open a Case — no risk, real contracts.</p>
+            </div>
+            <Link className="btn btn-gold start-cta-btn" to="/start">Start testing →</Link>
+          </div>
+          <div className="dest-grid" style={{ marginTop: 22 }}>
             {[
-              ["/market", "⬡", "The Market", "Every mechanic, playable before it costs anything — Seats, Tiers, the Bell, Notes."],
-              ["/cases", "🎁", "Cases", "Open a Case, get real stock. Fair value always; the draw decides the name."],
-              ["/bell", "🔔", "The Bell", "Stake a Tier, ring the Bell, claim a Payout into your Vault — the full loop, live."],
-              ["/provable", "✓", "Provable", "The part they can't copy: provably fair AND provably solvent."],
-              ["/engine", "⚙", "The engine", "The lending protocol underneath — why the Payouts are real."],
+              ["/market", "⬡", "Market", "Buy, snipe, or sell a Seat on the live Exchange."],
+              ["/bell", "🔔", "Stake", "Raise a Tier, ring the Bell, claim a Payout into your Vault."],
+              ["/cases", "🎁", "Cases", "Open a Case for a provably-fair real-stock draw."],
+              ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, winnings."],
             ].map(([to, icon, h, p]) => (
               <Link key={to} className="dest-card" to={to}>
                 <span className="dest-icon" aria-hidden>{icon}</span>
                 <b>{h}</b>
                 <p>{p}</p>
-                <span className="dest-go">Enter →</span>
+                <span className="dest-go">Open →</span>
               </Link>
             ))}
           </div>
-        </div>
-      </section>
-    </>
-  );
-}
-
-function CasesPage() {
-  const w = useWallet();
-  useEffect(() => { document.title = "Cases · Essey"; }, []);
-  return (
-    <>
-      <div className="wrap" style={{paddingTop:28}}><FaucetCard /></div>
-      <CasesArcade />
-      <section className="band" style={{ paddingTop: 0 }}>
-        <div className="wrap">
-          <div className="twist-status">
-            {w.address
-              ? <>Wallet connected{w.chainOk ? " to Robinhood Chain" : " — switch to Robinhood Chain"}. Live case
-                  opening unlocks here when the audited contracts deploy; until then the arcade above is a
-                  simulation and nothing moves real money.</>
-              : <>When the audited contracts deploy, you'll connect a wallet here to buy and open Cases on
-                  Robinhood Chain — with an acquisition onramp so you can start from any chain. Until then the
-                  arcade above is a simulation and nothing moves real money.</>}
+          <div className="learn-row">
+            Curious how it holds together? <Link to="/provable">Provable</Link> · <Link to="/engine">The engine</Link> · <Link to="/docs">Docs</Link>
           </div>
         </div>
       </section>
-    </>
-  );
-}
-
-function BellPage() {
-  useEffect(() => { document.title = "The Bell · Essey"; }, []);
-  return (
-    <>
-      <div className="wrap" style={{ paddingTop: 28 }}><FaucetCard /></div>
-      <LiveBell />
     </>
   );
 }
@@ -164,8 +171,9 @@ function Footer() {
         <div>
           <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to
             Seat holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
-            guaranteed, ever. The Market contracts are built and adversarially audited (published rounds in the
-            docs room) but <b>not yet deployed</b> — nothing on this site moves real money today.{" "}
+            guaranteed, ever. The Market contracts are adversarially audited (published rounds in the docs room)
+            and <b>live on Robinhood Chain testnet</b> — everything here is play money with no real value; not
+            on mainnet.{" "}
             <button className="linklike" onClick={() => window.dispatchEvent(new Event("essey:reopen-warning"))}>Terms &amp; risk</button></p>
           <p className="disclaim" style={{ marginTop: 10 }}><b>Tokenized equities are securities</b> and carry
             issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an

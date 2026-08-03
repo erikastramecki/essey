@@ -158,7 +158,30 @@ export const reads = {
 
   vaultBalance: (vault: Address) =>
     pub.readContract({ address: ADDR.usdg, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
+
+  gasBalance: (a: Address) => pub.getBalance({ address: a }),
+
+  stockWins: async (a: Address): Promise<{ aapl: bigint; nvda: bigint }> => {
+    const [aapl, nvda] = await Promise.all([
+      pub.readContract({ address: ADDR.aapl, abi: erc20Abi, functionName: "balanceOf", args: [a] }),
+      pub.readContract({ address: ADDR.nvda, abi: erc20Abi, functionName: "balanceOf", args: [a] }),
+    ]);
+    return { aapl, nvda };
+  },
+
+  /// Everything the Portfolio and the guided journey need, in one pass: balances, each owned Seat
+  /// with its tier + claimable + Vault balance, and Case winnings. One call the whole UI reads from.
+  portfolio: async (a: Address) => {
+    const [gas, bal, ids, wins] = await Promise.all([
+      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a),
+    ]);
+    const seats = await Promise.all(ids.map(async (id) => ({ id, ...(await reads.seatState(id)), vaultUsdg: 0n as bigint })));
+    for (const s of seats) s.vaultUsdg = await reads.vaultBalance(s.vault);
+    return { gas, ...bal, seats, wins };
+  },
 };
+
+export type Portfolio = Awaited<ReturnType<typeof reads.portfolio>>;
 
 // The four launch tiers EXACTLY as deployed by DeployMarket._ladder (cumulative $ESSEY fee, payout
 // weight). tier N = arrays[N-1]. Verified against chain via reads.tierFee at render time.
