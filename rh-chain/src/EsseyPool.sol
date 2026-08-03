@@ -9,6 +9,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {EsseyMarkets} from "./EsseyMarkets.sol";
 import {CollateralReconciler} from "./CollateralReconciler.sol";
+import {Note} from "./market/Note.sol";
 
 /// Lending pool: USDG in from lenders, Stock Tokens in as collateral, USDG out as loans.
 ///
@@ -46,8 +47,10 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     event Repaid(uint256 indexed id, uint256 paid, uint256 collateralReturned);
     event Liquidated(uint256 indexed id, address liquidator, uint256 repaid, uint256 seized, uint256 refunded);
 
+    /// The borrower is NOT stored: it is whoever holds the position's Note (an ERC-721 minted at
+    /// borrow, burned at close). Repay authority, returned collateral, and liquidation surplus all
+    /// follow `note.ownerOf(id)` at execution time, making positions transferable bearer instruments.
     struct Position {
-        address borrower;
         address token;
         uint256 collateralRaw;
         uint256 principal;
@@ -62,6 +65,8 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     uint256 public constant MAX_RATE_BPS = 100_000; // 1000% APR
 
     EsseyMarkets public immutable markets;
+    /// The position deed collection, deployed and owned by this pool (mint on borrow, burn on close).
+    Note public immutable note;
 
     uint256 public totalBorrows;
     uint256 public totalReserves;
@@ -84,6 +89,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         ERC4626(IERC20(address(asset_)))
     {
         if (base_ + s1_ + s2_ > MAX_RATE_BPS || reserve_ > BPS) revert BadCurve();
+        note = new Note(); // binds itself to this pool as its only minter/burner
         markets = markets_;
         baseBps = base_;
         slope1Bps = s1_;
@@ -244,7 +250,8 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         marketBorrows[token] = would;
         totalBorrows += debt;
         id = nextPositionId++;
-        positions[id] = Position(msg.sender, token, collateralRaw, debt, borrowIndex);
+        positions[id] = Position(token, collateralRaw, debt, borrowIndex);
+        note.mint(msg.sender, id); // the position deed — holder is the borrower from here on
         IERC20(asset()).safeTransfer(msg.sender, debt);
         emit Borrowed(id, msg.sender, token, collateralRaw, debt);
     }
@@ -257,10 +264,11 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     function repay(uint256 id, uint256 amount) external nonReentrant {
         accrue();
         Position memory p = positions[id];
-        if (p.borrower != msg.sender) revert NotBorrower();
-        // No zero-debt check: borrow() rejects debt == 0, so an open position always owes
-        // something, and a closed one fails the borrower check above. A guard here would be
-        // unreachable — the mutation sweep proved it by deleting it with the suite still green.
+        // A closed position is deleted (principal 0) and its Note burned; there is no borrower to
+        // authorise. Same NotBorrower the pre-Note pool threw via its borrower==address(0) check.
+        if (p.principal == 0) revert NotBorrower();
+        // The borrower is whoever holds the Note NOW — positions are transferable bearer deeds.
+        if (note.ownerOf(id) != msg.sender) revert NotBorrower();
         uint256 owed = debtOf(id);
         if (amount < owed) revert Undercollateralised(amount, owed);
 
@@ -273,8 +281,8 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // total is the denominator). This is what stops one borrower being made whole out of
         // another's collateral after an adminBurn.
         uint256 give = _effectiveCollateral(p.token, p.collateralRaw);
-        _closePosition(id, p, owed);
-        IERC20(p.token).safeTransfer(p.borrower, give);
+        _closePosition(id, p, owed); // burns the Note; msg.sender was verified as its holder above
+        IERC20(p.token).safeTransfer(msg.sender, give);
         emit Repaid(id, owed, give);
     }
 
@@ -308,9 +316,12 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         if (seize > available) seize = available;
 
         uint256 refund = available - seize;
+        // Read the holder BEFORE the close path burns the Note — the surplus belongs to whoever
+        // holds the position deed at liquidation time (F3, carried over to bearer semantics).
+        address holder = note.ownerOf(id);
         _closePositionTail(id, p);
         IERC20(p.token).safeTransfer(msg.sender, seize);
-        if (refund > 0) IERC20(p.token).safeTransfer(p.borrower, refund);
+        if (refund > 0) IERC20(p.token).safeTransfer(holder, refund);
         emit Liquidated(id, msg.sender, owed, seize, refund);
     }
 
@@ -336,9 +347,12 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         marketBorrows[p.token] = mb > p.principal ? mb - p.principal : 0;
     }
 
-    /// Collateral-side release. The ONE place a position leaves the books (R5/R6).
+    /// Collateral-side release. The ONE place a position leaves the books (R5/R6) — and therefore
+    /// the one place its Note burns: a spent deed cannot exist, so nobody can be sold a claim on a
+    /// position that already ended.
     function _closePositionTail(uint256 id, Position memory p) internal {
         _debitCollateral(p.token, p.collateralRaw);
         delete positions[id];
+        note.burn(id);
     }
 }

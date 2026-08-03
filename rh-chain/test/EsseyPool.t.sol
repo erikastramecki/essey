@@ -40,7 +40,7 @@ contract EsseyPoolTest is Test {
     uint256 constant GRACE = 1 hours;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
 
-    function setUp() public {
+    function setUp() public virtual {
         ADMIN = makeAddr("admin"); KEEPER = makeAddr("keeper"); GUARDIAN = makeAddr("guardian");
         LENDER = makeAddr("lender"); ALICE = makeAddr("alice"); LIQUIDATOR = makeAddr("liquidator");
         vm.warp(MON_IN_SESSION);
