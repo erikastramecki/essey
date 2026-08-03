@@ -582,3 +582,21 @@ main#top { padding-bottom: 44px; }
 .refer-row { display: flex; gap: 8px; align-items: center; }
 .refer-link { flex: 1; min-width: 0; background: var(--s2); border: 1px solid var(--line-2); border-radius: 10px; color: var(--tx-mut); padding: 10px 12px; font-size: 12px; }
 .refer-link:focus { border-color: var(--gold-line); outline: none; color: var(--tx); }
+
+/* ---- leaderboard ---- */
+.lb-you { border: 1px solid var(--gold-line); border-radius: 16px; background: linear-gradient(180deg, var(--gold-dim), var(--s1) 70%); padding: 18px 20px; margin-bottom: 16px; }
+.lb-you-rank { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.lb-rank-num { font-size: 34px; font-weight: 700; color: var(--gold); min-width: 60px; }
+.lb-you-h { font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--tx-faint); }
+.lb-you-sub { font-size: 14px; color: var(--tx); margin-top: 2px; }
+.lb-you-rank .btn { margin-left: auto; }
+.lb-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line-2); }
+.lb-badge { font-size: 12px; color: var(--tx-faint); border: 1px solid var(--line-2); background: var(--s2); border-radius: 999px; padding: 5px 12px; opacity: .55; }
+.lb-badge.on { opacity: 1; color: var(--gold); border-color: var(--gold-line); background: var(--gold-dim); }
+.lb-list { border: 1px solid var(--line); border-radius: 16px; background: var(--s1); overflow: hidden; }
+.lb-row { display: grid; grid-template-columns: 56px 1fr auto auto; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--line); }
+.lb-row:last-child { border-bottom: 0; } .lb-row.me { background: var(--gold-dim); }
+.lb-pos { font-size: 15px; } .lb-addr { font-size: 13px; color: var(--tx); }
+.lb-qual { font-size: 13px; color: var(--tx-mut); } .lb-qual b { color: var(--good); font-size: 15px; }
+.lb-tot { font-size: 12px; color: var(--tx-faint); }
+@media (max-width: 620px) { .lb-row { grid-template-columns: 40px 1fr auto; } .lb-tot { display: none; } .lb-you-rank .btn { margin-left: 0; } }

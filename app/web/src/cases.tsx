@@ -141,6 +141,9 @@ export function CasesArcade() {
   const [won, setWon] = useState<Item | null>(null);
   const [pulls, setPulls] = useState<Item[]>([]);
   const [sold, setSold] = useState(false);
+  const [wonToken, setWonToken] = useState<Address | null>(null); // on-chain token of a live win (for sell-back)
+  const [sellBusy, setSellBusy] = useState(false);
+  const [sellMsg, setSellMsg] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null); // live-draw narration
   const railRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -185,8 +188,16 @@ export function CasesArcade() {
     const provisional = weightedDraw(LIVE_ITEMS);
     setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setStage("approving"); setPhase("spinning");
     flows.openCase(w.address as Address, setStage)
-      .then(({ token, amount }) => { setWon(liveItem(token, amount)); setStage(null); })
+      .then(({ token, amount }) => { setWon(liveItem(token, amount)); setWonToken(token); setStage(null); })
       .catch((e) => { setStage("err:" + niceError(e)); });
+  };
+
+  const sellBack = async () => {
+    if (!live || !wonToken) { setSold(true); return; } // simulated
+    setSellBusy(true); setSellMsg(null);
+    try { await flows.sellCaseStock(w.address as Address, wonToken); setSold(true); setSellMsg("✓ sold back for USDG — the spread fed the Bell"); }
+    catch (e) { setSellMsg(niceError(e)); }
+    finally { setSellBusy(false); }
   };
 
   // The animation must start AFTER the spinning phase has rendered the rail — reading railRef in
@@ -302,14 +313,15 @@ export function CasesArcade() {
               </div>
               <div className="reveal-actions">
                 {sold
-                  ? <div className="reveal-sold num">sold back · {usd(Math.round(won.value * 0.95))} · 5% spread → the Bell</div>
+                  ? <div className="reveal-sold num">{sellMsg ?? `sold back · ${usd(Math.round(won.value * 0.95))} · 5% spread → the Bell`}</div>
                   : <>
                     <button className="btn btn-gold" onClick={again}>Keep it · open another</button>
-                    <button className="btn btn-ghost" onClick={() => setSold(true)}>Sell back · {usd(Math.round(won.value * 0.95))}</button>
+                    <button className="btn btn-ghost" disabled={sellBusy} onClick={sellBack}>{sellBusy ? "selling…" : `Sell back · ${usd(Math.round(won.value * 0.95))}`}</button>
                   </>}
                 {sold && <button className="linklike" onClick={again}>open another →</button>}
               </div>
-              <div className="reveal-verify num">draw = keccak(blockhash(commit), caseId) % inventory · at launch this line is a real tx ↗</div>
+              {sellMsg && !sold && <div className="reveal-verify num" style={{ color: "var(--crit)" }}>{sellMsg}</div>}
+              <div className="reveal-verify num">{live ? "keep it, borrow against it on Lend, or sell it back — real testnet stock" : "draw = keccak(blockhash(commit), caseId) % inventory · live when you connect"}</div>
             </div>
           )}
         </div>

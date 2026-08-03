@@ -11,6 +11,7 @@ import { StartPage, JourneyStrip, captureRef, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
 import { LendPage } from "./lend-ui";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
+import { LeaderboardPage } from "./leaderboard";
 import { WalletProvider, ConnectButton } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -25,6 +26,7 @@ const NAV = [
   ["/cases", "Cases"],
   ["/lend", "Lend"],
   ["/tape", "Tape"],
+  ["/leaderboard", "Leaders"],
   ["/portfolio", "Portfolio"],
   ["/docs", "Docs"],
 ] as const;
@@ -57,6 +59,7 @@ export default function App() {
             <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesArcade /></AppPage>} />
             <Route path="/lend" element={<AppPage title="Lend" here="supply"><LendPage /></AppPage>} />
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
+            <Route path="/leaderboard" element={<AppPage title="Leaderboard"><LeaderboardPage /></AppPage>} />
             <Route path="/portfolio" element={<AppPage title="Portfolio"><PortfolioPage /></AppPage>} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />

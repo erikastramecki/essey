@@ -26,6 +26,7 @@ export const ADDR = {
   pool: "0x283a4891458180f502E82E40470d3e06321ba748" as Address,
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
   quest: "0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427" as Address,
+  lens: "0x307d0E17e0c7412E61657f6BA6dE96f0c29294eB" as Address,
 };
 
 // Whitelist raffle size — 2,222 mint spots (the Seat supply).
@@ -111,6 +112,17 @@ export const questAbi = parseAbi([
   "function referralCount(address) view returns (uint256)",
   "function totalRegistered() view returns (uint256)",
   "function register(address referrer)",
+  "event Registered(address indexed participant, address indexed referrer)",
+]);
+export const lensAbi = parseAbi([
+  "function qualified(address) view returns (bool)",
+  "function qualifiedMany(address[]) view returns (bool[])",
+  "function status(address) view returns ((bool registered, bool ownsSeat, bool supplied, bool wonStock, uint256 referrals))",
+]);
+// Cases sell-back — approve the stock unit, then sell it back at oracle value minus the spread.
+export const casesSellAbi = parseAbi([
+  "function sellBack(address token) returns (uint256 paid)",
+  "function stocks(address) view returns (uint256 unitAmount, uint8 tokenDecimals, bool listed)",
 ]);
 
 export const pub = createPublicClient({ transport: http(NET.rpc) });
@@ -246,6 +258,38 @@ export const reads = {
     return out;
   },
 
+  /// The referral leaderboard, scored on-chain. Reads the quest's Registered events (bounded window,
+  /// like the Tape), then ONE qualifiedMany call scores every referred wallet — so this scales to
+  /// hundreds of testers in a couple of RPC round-trips, not hundreds of reads.
+  leaderboard: async (): Promise<{ board: { addr: Address; qualified: number; total: number }[]; totalQuesters: number }> => {
+    const head = await pub.getBlockNumber();
+    const from = head > 400_000n ? head - 400_000n : 0n;
+    const logs = await pub.getLogs({ address: ADDR.quest, event: questAbi[4], fromBlock: from, toBlock: head }).catch(() => []);
+    const referredBy = new Map<string, string[]>(); // referrer -> [referred]
+    const questers = new Set<string>();
+    for (const l of logs) {
+      const p = (l.args as { participant?: string }).participant;
+      const r = (l.args as { referrer?: string }).referrer;
+      if (p) questers.add(p.toLowerCase());
+      if (p && r && r !== "0x0000000000000000000000000000000000000000") {
+        const key = r.toLowerCase();
+        (referredBy.get(key) ?? referredBy.set(key, []).get(key)!).push(p);
+      }
+    }
+    const referrers = [...referredBy.keys()];
+    if (referrers.length === 0) return { board: [], totalQuesters: questers.size };
+    // Batch-qualify every referred wallet in one call.
+    const allReferred = [...new Set([...referredBy.values()].flat())] as Address[];
+    const flags = await pub.readContract({ address: ADDR.lens, abi: lensAbi, functionName: "qualifiedMany", args: [allReferred] }) as boolean[];
+    const isQual = new Map(allReferred.map((w, i) => [w.toLowerCase(), flags[i]]));
+    const board = referrers.map((r) => {
+      const refs = referredBy.get(r)!;
+      return { addr: r as Address, total: refs.length, qualified: refs.filter((w) => isQual.get(w.toLowerCase())).length };
+    }).filter((row) => row.qualified > 0 || row.total > 0)
+      .sort((x, y) => y.qualified - x.qualified || y.total - x.total);
+    return { board, totalQuesters: questers.size };
+  },
+
   quest: async (a: Address | null) => {
     const total = await pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "totalRegistered" }) as bigint;
     if (!a) return { registered: false, referrals: 0n, total };
@@ -322,6 +366,14 @@ export const flows = {
   /// Join the quest, crediting a referrer (0x0 if none). One-shot per wallet.
   registerQuest: (a: Address, referrer: Address): Promise<Hex> => send(a, ADDR.quest, questAbi, "register", [referrer]),
 
+  /// Sell a won stock unit back to the Cases contract for USDG (oracle value minus the spread).
+  /// Approves the exact unit size, then sells. Session-gated on chain (US market hours + fresh feed).
+  sellCaseStock: async (a: Address, token: Address): Promise<Hex> => {
+    const [unit] = await pub.readContract({ address: ADDR.cases, abi: casesSellAbi, functionName: "stocks", args: [token] }) as readonly [bigint, number, boolean];
+    await ensureAllowance(a, token, ADDR.cases, unit);
+    return send(a, ADDR.cases, casesSellAbi, "sellBack", [token]);
+  },
+
   /// Claim a Seat's accrued Payout — it lands in that Seat's Vault (permissionless, but the funds go
   /// to the Vault the Seat owner controls, never the caller).
   claimPayout: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.bell, bellAbi, "claim", [id]),
@@ -385,7 +437,7 @@ export function niceError(e: unknown): string {
   if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown — 8h between drips.";
   if (s.includes("chain") && s.includes("match")) return "Wrong network — switch to Robinhood Chain testnet.";
   if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first — try again and confirm both wallet popups.";
-  if (s.includes("marketclosed") || s.includes("notinsession")) return "Borrowing is only open during US market hours — try again during the session.";
+  if (s.includes("marketclosed") || s.includes("notinsession")) return "Only open during US market hours — try again while the stock market is open (weekdays, ~9:30am–4pm ET).";
   if (s.includes("soldout") || s.includes("emptyinventory")) return "Sold out — no inventory left right now.";
   if (s.includes("notseatowner") || s.includes("notborrower")) return "That isn't yours to act on.";
   if (s.includes("alreadyactive")) return "That Seat is already staked — use upgrade instead.";
