@@ -10,6 +10,7 @@ import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
 import { StartPage, JourneyStrip, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
 import { LendPage } from "./lend-ui";
+import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { WalletProvider, ConnectButton } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -23,6 +24,7 @@ const NAV = [
   ["/bell", "Stake"],
   ["/cases", "Cases"],
   ["/lend", "Lend"],
+  ["/tape", "Tape"],
   ["/portfolio", "Portfolio"],
   ["/docs", "Docs"],
 ] as const;
@@ -68,6 +70,7 @@ export default function App() {
               </AppPage>} />
             <Route path="/lend" element={<LendPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/tape" element={<TapeRoom />} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
             <Route path="/docs" element={<DocsPage />} />
@@ -115,6 +118,7 @@ function Layout() {
         <Outlet />
         <Footer />
       </main>
+      <TickerTapeRail />
     </>
   );
 }
