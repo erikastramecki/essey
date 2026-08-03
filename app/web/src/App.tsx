@@ -4,6 +4,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
+import { CasesArcade } from "./cases";
 
 const REPO = "https://github.com/erikastramecki/essey";
 const GROUPS = ["The Market", "The engine", "Audits"];
@@ -13,7 +14,7 @@ const GROUPS = ["The Market", "The engine", "Audits"];
 // git history and the docs room, not on the page.
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const NAV = [["club", "How it works"], ["market", "The Market"], ["provable", "Provable"], ["engine", "The engine"], ["docs", "Docs"]];
+  const NAV = [["club", "How it works"], ["market", "The Market"], ["cases", "Cases"], ["provable", "Provable"], ["engine", "The engine"], ["docs", "Docs"]];
 
   return (
     <>
@@ -41,6 +42,7 @@ export default function App() {
         <ExchangeHero />
         <ClubFlow />
         <Mechanics />
+        <CasesArcade />
         <ProvableTwist />
         <EngineSection />
         <DocsSection />
