@@ -450,6 +450,38 @@ export function Mechanics() {
   );
 }
 
+// ---------------------------------------------------------------- the engine underneath
+// The lending engine, compressed to its role in THIS narrative: it is why the Payouts are real.
+// (The old site's full lending surface — live markets, borrow/earn panels, chain comparisons —
+// belonged to a previous iteration and was removed; the docs room keeps the specs.)
+export function EngineSection() {
+  const CARDS: [string, string][] = [
+    ["Conservative by construction", "Collateral is priced by session-gated Chainlink feeds with fail-closed discipline: a stale feed, a holiday gap, or an off-hours equity price refuses rather than guesses. No loan and no Case buyback ever settles on an unverifiable price."],
+    ["Positions are Notes", "Every loan is a bearer NFT — debt, collateral, and its solvency state travel together, sellable as one object. The same engine's interest is a designed Bell stream, so borrowing literally funds the Payouts."],
+    ["Audited in the open", "Every adversarial audit round is published, clean or not — including the ones that found real bugs the day before they'd have shipped. The audit trail is the product."],
+  ];
+  return (
+    <section className="band engine" id="engine">
+      <div className="wrap">
+        <div className="band-head"><div>
+          <span className="eyebrow">The engine underneath</span>
+          <h2>Why the Payouts are real</h2>
+          <p>The game sits on a lending protocol for tokenized stocks on Robinhood Chain. Fees from real
+            loans, real trades, and real royalties fill the pot — not emissions, not promises.</p>
+        </div></div>
+        <div className="flow">
+          {CARDS.map(([h, p]) => (
+            <div className="step" key={h}><h3>{h}</h3><p>{p}</p></div>
+          ))}
+        </div>
+        <div className="twist-status" style={{ marginTop: 16 }}>Built and fork-tested against real Robinhood
+          Chain state; not yet deployed. The full specs — oracle discipline, risk framework, rate model, and
+          everything still open — are in the docs room below, rendered from the repo's own files.</div>
+      </div>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------- the provable twist (§4.5)
 export function ProvableTwist() {
   return (

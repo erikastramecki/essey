@@ -93,10 +93,11 @@ work. No meme token can make that claim.
 A CS:GO-case-style front door to stock, and a *second two-sided fee engine* feeding the Bell. Full build
 scope in `docs/DESIGN-seats-market-layer.md`; here is its economic role.
 
-**The loop:** spend to buy a **Case** → it contains real Robinhood Stock Tokens sealed in a Vault-NFT
-(the Seat/Vault primitive reused) → **keep it** (hold the stock, or borrow against it on `EsseyPool`),
-trade it, or **sell it back** to the system at a discount. "Spend to get a good 401k; if you don't like
-it, sell it back."
+**The loop:** spend to buy a **Case** → the draw delivers real Robinhood Stock Tokens straight to your
+wallet (v1 build decision: no wrapper NFT — stock tokens are already `EsseyPool` collateral, so
+keep/borrow works with zero extra machinery) → **keep it** (hold, or borrow against it), trade it, or
+**sell it back** to the system at a discount. "Spend to get a good 401k; if you don't like it, sell it
+back."
 
 **Two-sided fees (the founder's key point) — both route to the Bell's pot:**
 - **Buy-side fee** — charged on purchase (flat and/or %).
@@ -122,9 +123,23 @@ and it closes the flywheel from a new angle: **buy a Case → get stock → borr
 machine always reserves the worst-case payout in real stock (their inventory-bound reservation, made
 verifiable). "The only case system where the odds AND the bankroll are provable."
 
-**Open dependency:** entropy on Robinhood Chain — no Chainlink VRF on the production path; StonkBrokers
-built miner-backed DERP. Options: their conductor, a commit-to-future-entropy scheme, or a ZK draw.
-Decide at build time.
+**Entropy (DECIDED at build, 2026-08 — `EsseyCases.sol`):** commit-to-future-blockhash, viable ONLY for
+the fair-value variant. The draw is unpredictable at buy; once public, all post-draw optionality is
+removed — no re-rolls exist, and an expired case pays the *current lowest-value* unit, so abandoning a
+draw is strictly dominated by opening it (draw-shopping has negative expectancy by construction).
+Residual buyer/sequencer influence is bounded by (256-block window × minutes of drift) against a
+spread floored at 1% — and the audit gate holds this entropy source as *insufficient for the degen
+variant*, which requires a hardened VRF before it can exist.
+
+**Accepted economic exposures (documented, deploy-time decisions — audit round 1):**
+- **The buyback reserve is $ESSEY-drift exposed.** Cases cost fixed $ESSEY (sunk to treasury); sell-backs
+  pay oracle USD from the reserve. If $ESSEY depreciates, cases become cheap claims on the reserve —
+  bounded by reserve balance (payouts revert when dry) and managed by sizing `casePrice`/spread with
+  downside margin and treating `fundBuyback` as the standing top-up path. Keeper-monitor the ratio.
+- **Inventory fair-value decays under two-sided flow.** Sellers return losers and keep winners, so the
+  prize pool's average value drifts below `casePrice` over time. The *solvency* invariant (every unopened
+  case backed by a real unit) always holds; the *fair-value* claim is a seed-time property that the
+  bankroll must maintain by re-seeding fresh units. Say "backed", never "guaranteed par".
 
 ## How this fails (read before shipping)
 - **Royalty-dependence needs secondary volume.** If Seats don't trade, the durable-looking royalty
