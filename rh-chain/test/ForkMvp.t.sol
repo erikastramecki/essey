@@ -50,7 +50,7 @@ contract ForkMvpTest is Test {
         liveness = new LivenessOracle(keeper, admin, 2 hours, 1 minutes, 30 minutes);
         // address(0): no L2 sequencer uptime feed exists on this chain — LivenessOracle stands in.
         markets = new EsseyMarkets(AggregatorV3Interface(address(0)), liveness, admin, assetDec);
-        pool = new EsseyPool(IERC20(USDG), markets, 0, 0, 0, 0);
+        pool = new EsseyPool(IERC20(USDG), markets, 0, 0, 0, 0, address(0), address(0x7EA), 0);
 
         EsseyMarkets.Market memory m = EsseyMarkets.Market({
             enabled: true, ltvBps: 3_500, liqThresholdBps: 5_500, liqBonusBps: 800,

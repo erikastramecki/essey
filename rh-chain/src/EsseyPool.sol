@@ -11,6 +11,13 @@ import {EsseyMarkets} from "./EsseyMarkets.sol";
 import {CollateralReconciler} from "./CollateralReconciler.sol";
 import {Note} from "./market/Note.sol";
 
+/// The one thing the pool needs to know about a Bell: what token its pot counts. A minimal interface
+/// (rather than importing the market layer) keeps the lending core's dependency arrow pointing the
+/// right way — the game sits on the engine, never the reverse.
+interface IRewardSink {
+    function reward() external view returns (IERC20);
+}
+
 /// Lending pool: USDG in from lenders, Stock Tokens in as collateral, USDG out as loans.
 ///
 /// The accrual and share maths are ported from the Sui implementation, which is the one part of
@@ -42,10 +49,12 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     error ExceedsMarketCap(uint256 would, uint256 cap);
     error InsufficientLiquidity(uint256 want, uint256 have);
     error BadCurve();
+    error BadSink();
 
     event Borrowed(uint256 indexed id, address indexed borrower, address indexed token, uint256 collateral, uint256 debt);
     event Repaid(uint256 indexed id, uint256 paid, uint256 collateralReturned);
     event Liquidated(uint256 indexed id, address liquidator, uint256 repaid, uint256 seized, uint256 refunded);
+    event ReservesSkimmed(address indexed caller, uint256 toBell, uint256 toTreasury);
 
     /// The borrower is NOT stored: it is whoever holds the position's Note (an ERC-721 minted at
     /// borrow, burned at close). Repay authority, returned collateral, and liquidation surplus all
@@ -84,25 +93,56 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// Borrowed principal per collateral token, against EsseyMarkets' per-market cap.
     mapping(address => uint256) public marketBorrows;
 
-    constructor(IERC20 asset_, EsseyMarkets markets_, uint256 base_, uint256 s1_, uint256 s2_, uint256 reserve_)
-        ERC20("Essey Pool Share", "aUSDG")
-        ERC4626(IERC20(address(asset_)))
-    {
+    /// Loan-interest routing — the third Bell engine, and the durable one: it pays as long as anyone
+    /// is borrowing, independent of NFT volume. `bellShareBps` of every skimmed reserve goes to the
+    /// Bell (a plain transfer of the pool asset, which the constructor proves IS the Bell's reward
+    /// token, so it lands in the pot); the remainder goes to the reserve treasury. Lender yield is
+    /// untouched by construction: `totalAssets` already excludes reserves, so a skim moves cash and
+    /// `totalReserves` down in lockstep and the share price cannot move.
+    address public immutable bellSink; // address(0) = no Bell wired (pre-market-layer deploys): all to treasury
+    address public immutable reserveTreasury;
+    uint256 public immutable bellShareBps;
+
+    constructor(
+        IERC20 asset_,
+        EsseyMarkets markets_,
+        uint256 base_,
+        uint256 s1_,
+        uint256 s2_,
+        uint256 reserve_,
+        address bellSink_,
+        address reserveTreasury_,
+        uint256 bellShareBps_
+    ) ERC20("Essey Pool Share", "aUSDG") ERC4626(IERC20(address(asset_))) {
         if (base_ + s1_ + s2_ > MAX_RATE_BPS || reserve_ > BPS) revert BadCurve();
+        if (reserveTreasury_ == address(0) || bellShareBps_ > BPS) revert BadSink();
+        // Deployment-coherence guard (the Exchange's lesson made a rule): if a Bell is wired, this
+        // pool's asset must BE its reward token, or the skim would send funds the Bell never counts.
+        if (bellSink_ != address(0) && address(IRewardSink(bellSink_).reward()) != address(asset_)) {
+            revert BadSink();
+        }
         note = new Note(); // binds itself to this pool as its only minter/burner
         markets = markets_;
         baseBps = base_;
         slope1Bps = s1_;
         slope2Bps = s2_;
         reserveBps = reserve_;
+        bellSink = bellSink_;
+        reserveTreasury = reserveTreasury_;
+        bellShareBps = bellShareBps_;
         lastAccrual = block.timestamp;
     }
 
     // ---------------------------------------------------------------- accrual
 
+    /// Utilization over LENDABLE supply: protocol reserves are cash that was never lendable, so the
+    /// skimmable part is excluded from the denominator. Without this, the rate borrowers pay would be
+    /// a function of skim-keeper diligence — suppressed while reserves idle in the pool, then jumping
+    /// discontinuously the moment anyone skims (audit F-1; the Compound-lineage lesson).
     function utilizationBps() public view returns (uint256) {
         uint256 cash = IERC20(asset()).balanceOf(address(this));
-        uint256 denom = cash + totalBorrows;
+        uint256 skimmable = totalReserves > cash ? cash : totalReserves;
+        uint256 denom = (cash - skimmable) + totalBorrows;
         if (denom == 0) return 0;
         return (totalBorrows * BPS) / denom;
     }
@@ -216,6 +256,33 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         uint256 cash = IERC20(asset()).balanceOf(address(this));
         if (assets_ > cash) revert InsufficientLiquidity(assets_, cash);
         super._withdraw(caller, receiver, owner_, assets_, shares);
+    }
+
+    // ---------------------------------------------------------------- reserves -> the Bell
+
+    /// Route accrued protocol reserves: `bellShareBps` to the Bell's pot, the rest to the reserve
+    /// treasury. Permissionless, like ringing the Bell itself — the split is immutable, so there is
+    /// no discretion for a caller to abuse, only a chore anyone may do.
+    ///
+    /// Bounded by cash: reserves are an accounting claim on cash + borrows, and only the cash part
+    /// can move today. Skimming never touches lender value (`totalAssets` excludes reserves — cash
+    /// and `totalReserves` fall in lockstep), and never moves the rate curve (`utilizationBps`
+    /// already excludes the skimmable part). Two accepted notes from the audit: a skim can race a
+    /// withdrawal or borrow for the same idle cash — one-shot, gas-cost griefing at worst, the lender simply
+    /// retries; and in a catastrophic issuer-burn of pool cash, reserves rank effectively senior to
+    /// lender shares (skim takes cash while totalAssets floors at zero) — a priority-of-claims
+    /// choice made explicit here rather than left implicit.
+    function skimReserves() external nonReentrant returns (uint256 toBell, uint256 toTreasury) {
+        accrue();
+        uint256 cash = IERC20(asset()).balanceOf(address(this));
+        uint256 take = totalReserves > cash ? cash : totalReserves;
+        if (take == 0) return (0, 0);
+        totalReserves -= take;
+        toBell = bellSink != address(0) ? (take * bellShareBps) / BPS : 0;
+        toTreasury = take - toBell;
+        if (toBell != 0) IERC20(asset()).safeTransfer(bellSink, toBell);
+        if (toTreasury != 0) IERC20(asset()).safeTransfer(reserveTreasury, toTreasury);
+        emit ReservesSkimmed(msg.sender, toBell, toTreasury);
     }
 
     // ---------------------------------------------------------------- borrowers

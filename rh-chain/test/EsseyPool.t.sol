@@ -52,7 +52,7 @@ contract EsseyPoolTest is Test {
         liv = new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, GAP);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, ADMIN, 6); // USDG is 6dp
         // zero-rate pool: isolates the invariants under test from accrual drift
-        pool = new EsseyPool(usdg, mk, 0, 0, 0, 0);
+        pool = new EsseyPool(usdg, mk, 0, 0, 0, 0, address(0), address(0x7EA), 0);
 
         EsseyMarkets.Market memory m = EsseyMarkets.Market({
             enabled: true, ltvBps: 3_500, liqThresholdBps: 5_500, liqBonusBps: 800,
@@ -230,7 +230,7 @@ contract EsseyPoolTest is Test {
     // ---------------------------------------------------------------- accrual
 
     function test_interestAccruesAndLenderEarns() public {
-        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0); // flat 10% APR
+        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0); // flat 10% APR
         vm.startPrank(LENDER);
         usdg.approve(address(p2), type(uint256).max);
         p2.deposit(100_000e6, LENDER);
@@ -292,7 +292,7 @@ contract EsseyPoolTest is Test {
 
     /// R1-AUDIT: interest must not accrue while the issuer's pause makes repayment impossible.
     function test_accrualSuspendsWhileCollateralIsPaused() public {
-        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0);
+        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0);
         vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
         vm.startPrank(ALICE);
         tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
@@ -314,7 +314,7 @@ contract EsseyPoolTest is Test {
     /// This test exists because setting _decimalsOffset() to 0 previously left the whole suite
     /// green — the mitigation was present but nothing proved it worked.
     function test_firstDepositorInflationAttackFails() public {
-        EsseyPool p2 = new EsseyPool(usdg, mk, 0, 0, 0, 0);
+        EsseyPool p2 = new EsseyPool(usdg, mk, 0, 0, 0, 0, address(0), address(0x7EA), 0);
         address ATTACKER = makeAddr("attacker");
         address VICTIM = makeAddr("victim");
         usdg.mint(ATTACKER, 200_000e6);
@@ -382,7 +382,7 @@ contract EsseyPoolTest is Test {
     }
 
     function test_borrowBeyondPoolLiquidityReverts() public {
-        EsseyPool p2 = new EsseyPool(usdg, mk, 0, 0, 0, 0); // empty pool: no cash at all
+        EsseyPool p2 = new EsseyPool(usdg, mk, 0, 0, 0, 0, address(0), address(0x7EA), 0); // empty pool: no cash at all
         vm.startPrank(ALICE);
         tok.approve(address(p2), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.InsufficientLiquidity.selector, 700e6, 0));
@@ -411,7 +411,7 @@ contract EsseyPoolTest is Test {
 
     function test_curveSumIsBounded() public {
         vm.expectRevert(EsseyPool.BadCurve.selector);
-        new EsseyPool(usdg, mk, 90_000, 90_000, 90_000, 0); // legs individually ok, sum is not
+        new EsseyPool(usdg, mk, 90_000, 90_000, 90_000, 0, address(0), address(0x7EA), 0); // legs individually ok, sum is not
     }
 
     function test_withdrawBeyondCashReverts() public {

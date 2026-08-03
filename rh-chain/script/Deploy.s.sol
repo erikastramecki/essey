@@ -25,6 +25,41 @@ contract Deploy is Script {
     address constant AAPL_MAINNET = 0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9;
     address constant AAPL_FEED_MAINNET = 0x6B22A786bAa607d76728168703a39Ea9C99f2cD0;
 
+    /// Own frame: run() is at the stack ceiling, and the reserve-routing config belongs together.
+    /// No Bell wired at MVP deploy (BELL_SINK=0 -> everything to the treasury); when the market
+    /// layer ships, redeploy with BELL_SINK + BELL_SHARE_BPS (the constructor proves reward
+    /// coherence, so a mis-wired sink is un-deployable).
+    function _deployPool(address usdg, EsseyMarkets markets, address admin) internal returns (EsseyPool) {
+        return new EsseyPool(
+            IERC20(usdg), markets, 0, 0, 0, 0,
+            vm.envOr("BELL_SINK", address(0)),
+            vm.envOr("RESERVE_TREASURY", admin),
+            vm.envOr("BELL_SHARE_BPS", uint256(0))
+        );
+    }
+
+    /// Own frame (run() sits at the stack ceiling). Conservative v1 parameters — 35% LTV against a
+    /// 55% liquidation threshold is the 20pp gap that has to absorb a weekend the position cannot be
+    /// liquidated into.
+    function _proposeMarket(
+        EsseyMarkets markets,
+        address stock,
+        address feed,
+        uint8 feedDec,
+        uint8 stockDec,
+        uint8 assetDec
+    ) internal {
+        EsseyMarkets.Market memory m = EsseyMarkets.Market({
+            enabled: true,
+            ltvBps: 3_500,
+            liqThresholdBps: 5_500,
+            liqBonusBps: 800,
+            collateralDecimals: stockDec, // read from the token, never typed by hand
+            cap: uint128(vm.envOr("MARKET_CAP", uint256(10_000)) * (10 ** assetDec))
+        });
+        markets.proposeMarket(stock, AggregatorV3Interface(feed), 90_000, feedDec, m);
+    }
+
     function run() external {
         address usdg = vm.envOr("USDG", USDG_MAINNET);
         address stock = vm.envOr("STOCK", AAPL_MAINNET);
@@ -60,19 +95,9 @@ contract Deploy is Script {
         EsseyMarkets markets =
             new EsseyMarkets(AggregatorV3Interface(sequencer), liveness, admin, assetDec);
         // Zero-rate to start: the MVP is proving the loan path, not the interest curve.
-        EsseyPool pool = new EsseyPool(IERC20(usdg), markets, 0, 0, 0, 0);
+        EsseyPool pool = _deployPool(usdg, markets, admin);
 
-        // Conservative v1 parameters — 35% LTV against a 55% liquidation threshold is the 20pp
-        // gap that has to absorb a weekend the position cannot be liquidated into.
-        EsseyMarkets.Market memory m = EsseyMarkets.Market({
-            enabled: true,
-            ltvBps: 3_500,
-            liqThresholdBps: 5_500,
-            liqBonusBps: 800,
-            collateralDecimals: stockDec, // read from the token, never typed by hand
-            cap: uint128(vm.envOr("MARKET_CAP", uint256(10_000)) * (10 ** assetDec))
-        });
-        markets.proposeMarket(stock, AggregatorV3Interface(feed), 90_000, feedDec, m);
+        _proposeMarket(markets, stock, feed, feedDec, stockDec, assetDec);
 
         vm.stopBroadcast();
 
