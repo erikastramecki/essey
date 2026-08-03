@@ -4,6 +4,7 @@
 // the market contracts are built and three-round audited but NOT deployed, and every live-looking
 // surface says so on the surface itself, not in a footnote.
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 const REPO = "https://github.com/erikastramecki/essey";
 
@@ -139,8 +140,8 @@ export function ExchangeHero() {
           <p className="lede">Buy a Seat. Earn Payouts in real stock. Borrow against them. Every ring, every draw,
             every loan — verifiable on-chain.</p>
           <div className="hero-cta">
-            <a className="btn btn-gold" href="#market">Enter the Market</a>
-            <a className="btn btn-ghost" href="#club">How it works</a>
+            <Link className="btn btn-gold" to="/market">Enter the Market</Link>
+            <Link className="btn btn-ghost" to="/cases">Open a Case</Link>
           </div>
           <div className="proof-strip num">⬡ 2,222 Seats · fees pay out as stock · every claim links a real tx</div>
         </div>

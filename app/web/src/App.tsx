@@ -1,84 +1,175 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { BrowserRouter, Routes, Route, NavLink, Link, Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
 import { CasesArcade } from "./cases";
+import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
 const GROUPS = ["The Market", "The engine", "Audits"];
 
-// One narrative per page (founder rule): everything here serves the current Market-layer story.
-// Prior iterations' surfaces — the any-chain pitch, the Sui demo app, the chain comparison — live in
-// git history and the docs room, not on the page.
-export default function App() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const NAV = [["club", "How it works"], ["market", "The Market"], ["cases", "Cases"], ["provable", "Provable"], ["engine", "The engine"], ["docs", "Docs"]];
+// Every tab is its own page (founder rule): the landing tells the story; the app surfaces are
+// destinations. One narrative per page, and one page per destination.
+const NAV = [
+  ["/market", "The Market"],
+  ["/cases", "Cases"],
+  ["/provable", "Provable"],
+  ["/engine", "The engine"],
+  ["/docs", "Docs"],
+] as const;
 
+export default function App() {
+  return (
+    <BrowserRouter>
+      <WalletProvider>
+        <ScrollToTop />
+        <WarningModal />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Landing />} />
+            <Route path="/market" element={<PageShell title="The Market"><Mechanics /></PageShell>} />
+            <Route path="/cases" element={<CasesPage />} />
+            <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
+            <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/docs/:slug" element={<DocsPage />} />
+            <Route path="*" element={<Landing />} />
+          </Route>
+        </Routes>
+      </WalletProvider>
+    </BrowserRouter>
+  );
+}
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
+function Layout() {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <>
-      <WarningModal />
       <header className="nav">
         <div className="wrap nav-in">
-          <a className="brand" href="#top"><EMonogram /> <span><b>Essey</b></span></a>
+          <Link className="brand" to="/"><EMonogram /> <span><b>Essey</b></span></Link>
           <nav className="nav-links">
-            {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+            {NAV.map(([to, label]) => (
+              <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>
+            ))}
           </nav>
           <div className="nav-right">
             <ThemeToggle />
-            <a className="btn btn-gold" href="#market">Enter the Market</a>
+            <ConnectButton />
             <button className="nav-burger" aria-label="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>{menuOpen ? "✕" : "☰"}</button>
           </div>
         </div>
         {menuOpen && (
           <nav className="nav-mobile" onClick={() => setMenuOpen(false)}>
-            {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+            {NAV.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
           </nav>
         )}
       </header>
-
       <main id="top">
-        <ExchangeHero />
-        <ClubFlow />
-        <Mechanics />
-        <CasesArcade />
-        <ProvableTwist />
-        <EngineSection />
-        <DocsSection />
-
-        <footer>
-          <div className="wrap foot-in">
-            <div>
-              <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to
-                Seat holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
-                guaranteed, ever. The Market contracts are built and adversarially audited (published rounds in the
-                docs room) but <b>not yet deployed</b> — nothing on this page moves real money today.{" "}
-                <button className="linklike" onClick={() => window.dispatchEvent(new Event("essey:reopen-warning"))}>Terms &amp; risk</button></p>
-              <p className="disclaim" style={{ marginTop: 10 }}><b>Tokenized equities are securities</b> and carry
-                issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an
-                adminBurn power — verified on-chain — that can destroy tokens at any address; posted collateral
-                can therefore cease to exist. Not an offer of securities. Nothing here is financial advice.</p>
-              <p className="disclaim" style={{ marginTop: 10 }}>Everything we know is unfinished is published in{" "}
-                <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">OUTSTANDING.md</a> — deliberately.</p>
-            </div>
-            <div className="foot-links">
-              <a href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
-              <a href={`${REPO}/tree/main/docs/audits`} target="_blank" rel="noreferrer">Audits ↗</a>
-              <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">Known-open ↗</a>
-              <a href="#docs">Docs</a>
-            </div>
-          </div>
-        </footer>
+        <Outlet />
+        <Footer />
       </main>
     </>
   );
 }
 
-// EVERY overlay renders into <body>, never into the section that triggered it.
-// `section { position: relative; z-index: 1 }` makes each section a stacking context, which caps
-// everything inside it no matter how high the child's own z-index is — the sticky header would paint
-// over a nested modal. The scroll lock is REFCOUNTED so stacked overlays can't strand a hidden body.
+/// Thin wrapper for single-section pages: consistent top spacing, document title.
+function PageShell({ title, children }: { title: string; children: ReactNode }) {
+  useEffect(() => { document.title = `${title} · Essey`; }, [title]);
+  return <>{children}</>;
+}
+
+function Landing() {
+  useEffect(() => { document.title = "Essey — the stock-market club where the odds and the books are both provable"; }, []);
+  return (
+    <>
+      <ExchangeHero />
+      <ClubFlow />
+      {/* The landing tells the story; the pages are the destinations. */}
+      <section className="band">
+        <div className="wrap">
+          <div className="dest-grid">
+            {[
+              ["/market", "⬡", "The Market", "Every mechanic, playable before it costs anything — Seats, Tiers, the Bell, Notes."],
+              ["/cases", "🎁", "Cases", "Open a Case, get real stock. Fair value always; the draw decides the name."],
+              ["/provable", "✓", "Provable", "The part they can't copy: provably fair AND provably solvent."],
+              ["/engine", "⚙", "The engine", "The lending protocol underneath — why the Payouts are real."],
+            ].map(([to, icon, h, p]) => (
+              <Link key={to} className="dest-card" to={to}>
+                <span className="dest-icon" aria-hidden>{icon}</span>
+                <b>{h}</b>
+                <p>{p}</p>
+                <span className="dest-go">Enter →</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function CasesPage() {
+  const w = useWallet();
+  useEffect(() => { document.title = "Cases · Essey"; }, []);
+  return (
+    <>
+      <CasesArcade />
+      <section className="band" style={{ paddingTop: 0 }}>
+        <div className="wrap">
+          <div className="twist-status">
+            {w.address
+              ? <>Wallet connected{w.chainOk ? " to Robinhood Chain" : " — switch to Robinhood Chain"}. Live case
+                  opening unlocks here when the audited contracts deploy; until then the arcade above is a
+                  simulation and nothing moves real money.</>
+              : <>When the audited contracts deploy, you'll connect a wallet here to buy and open Cases on
+                  Robinhood Chain — with an acquisition onramp so you can start from any chain. Until then the
+                  arcade above is a simulation and nothing moves real money.</>}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function Footer() {
+  return (
+    <footer>
+      <div className="wrap foot-in">
+        <div>
+          <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to
+            Seat holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
+            guaranteed, ever. The Market contracts are built and adversarially audited (published rounds in the
+            docs room) but <b>not yet deployed</b> — nothing on this site moves real money today.{" "}
+            <button className="linklike" onClick={() => window.dispatchEvent(new Event("essey:reopen-warning"))}>Terms &amp; risk</button></p>
+          <p className="disclaim" style={{ marginTop: 10 }}><b>Tokenized equities are securities</b> and carry
+            issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an
+            adminBurn power — verified on-chain — that can destroy tokens at any address; posted collateral
+            can therefore cease to exist. Not an offer of securities. Nothing here is financial advice.</p>
+          <p className="disclaim" style={{ marginTop: 10 }}>Everything we know is unfinished is published in{" "}
+            <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">OUTSTANDING.md</a> — deliberately.</p>
+        </div>
+        <div className="foot-links">
+          <a href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
+          <a href={`${REPO}/tree/main/docs/audits`} target="_blank" rel="noreferrer">Audits ↗</a>
+          <Link to="/docs">Docs</Link>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+// EVERY overlay renders into <body> — sections are stacking contexts and the sticky header would
+// paint over a nested modal. Scroll lock is refcounted so stacked overlays can't strand a hidden body.
 let scrollLocks = 0;
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])';
 
@@ -91,8 +182,6 @@ function Overlay({ onClose, lockScroll = true, trapFocus = false, children }: { 
     const restoreTo = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { close.current(); return; }
-      // aria-modal is a promise that the rest of the page is unreachable — keep it by actually
-      // cycling Tab inside the overlay.
       if (!trapFocus || e.key !== "Tab") return;
       const f = box.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
       if (!f?.length) return;
@@ -111,15 +200,18 @@ function Overlay({ onClose, lockScroll = true, trapFocus = false, children }: { 
     };
   }, [lockScroll, trapFocus]);
 
-  // display:contents — the wrapper exists only to scope the focus trap, never to affect layout.
   return createPortal(<div ref={box} className="overlay-root">{children}</div>, document.body);
 }
 
-// Docs — renders the repo docs (bundled at build) in a reader modal.
-function DocsSection() {
-  const [open, setOpen] = useState<Doc | null>(null);
+/// Docs — the reading room. Deep-linkable: /docs/:slug opens the reader; closing returns to /docs.
+function DocsPage() {
+  const { slug } = useParams();
+  const navigate = useNavigate();
+  const open = slug ? DOCS.find((d) => d.slug === slug) ?? null : null;
+  useEffect(() => { document.title = open ? `${open.title} · Essey` : "Docs · Essey"; }, [open]);
+  const close = () => navigate("/docs");
   return (
-    <section className="band" id="docs" style={{ paddingTop: 8 }}>
+    <section className="band" id="docs">
       <div className="wrap">
         <div className="band-head"><div><span className="eyebrow">Docs</span><h2>Read the whole thing</h2>
           <p>The Market's design, the tokenomics, the risk framework, every adversarial audit round, and the list of
@@ -133,11 +225,11 @@ function DocsSection() {
               <div className="docs-grid">
                 {inGroup.map((d) => (
                   <div key={d.slug} className="doc-card">
-                    <button className="doc-card-hit" onClick={() => setOpen(d)} aria-label={`Read ${d.title}`}>
+                    <Link className="doc-card-hit" to={`/docs/${d.slug}`} aria-label={`Read ${d.title}`}>
                       <span className="doc-t">{d.title}</span>
                       <span className="doc-d">{d.desc}</span>
                       <span className="doc-r">Read →</span>
-                    </button>
+                    </Link>
                     <div className="doc-foot">
                       <a className="doc-src" href={`${REPO}/blob/main/docs/${d.file}`} target="_blank" rel="noreferrer">source ↗</a>
                     </div>
@@ -149,13 +241,13 @@ function DocsSection() {
         })}
       </div>
       {open && (
-        <Overlay onClose={() => setOpen(null)} trapFocus>
-          <div className="doc-modal" onClick={() => setOpen(null)}>
+        <Overlay onClose={close} trapFocus>
+          <div className="doc-modal" onClick={close}>
             {/* key: switching documents must remount the scroll container, or the next doc opens at
-                the previous one's scroll offset. role/aria-modal belong on the reader, not the backdrop. */}
+                the previous one's scroll offset. */}
             <div className="doc-reader" key={open.slug} tabIndex={-1} data-autofocus
                  role="dialog" aria-modal="true" aria-label={open.title} onClick={(e) => e.stopPropagation()}>
-              <div className="doc-reader-h"><span>{open.title}</span><button onClick={() => setOpen(null)} aria-label="close">×</button></div>
+              <div className="doc-reader-h"><span>{open.title}</span><button onClick={close} aria-label="close">×</button></div>
               <div className="doc-md" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(open.md) as string, { FORBID_TAGS: ["form", "input", "button", "textarea"] }) }} />
             </div>
           </div>

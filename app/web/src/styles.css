@@ -396,3 +396,19 @@ html, body { overflow-x: hidden; }         /* wide content scrolls inside its ow
 .recent-pulls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
 .rp-h { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--tx-faint); }
 .rp-chip { font-size: 11.5px; color: var(--tx); border: 1px solid color-mix(in srgb, var(--rar) 55%, var(--line-2)); background: color-mix(in srgb, var(--rar) 10%, var(--s2)); border-radius: 999px; padding: 3px 10px; }
+
+/* ---- multi-page chrome ---- */
+.nav-links a.on { color: var(--gold); background: var(--gold-dim); }
+.wallet-chip { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--s1); font-size: 12.5px; color: var(--tx); }
+.wallet-chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+.wallet-wrap { position: relative; display: inline-flex; }
+.wallet-err { position: absolute; top: 110%; right: 0; white-space: nowrap; font-size: 11px; color: var(--crit); font-style: normal; }
+.dest-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 980px) { .dest-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .dest-grid { grid-template-columns: 1fr; } }
+.dest-card { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--line); border-radius: 14px; background: var(--s1); padding: 20px; transition: border-color .15s, transform .2s cubic-bezier(.2,.8,.2,1); }
+.dest-card:hover { border-color: var(--gold-line); transform: translateY(-3px); }
+.dest-icon { font-size: 20px; }
+.dest-card b { font-family: var(--serif); font-size: 17px; color: var(--tx); font-weight: 600; }
+.dest-card p { margin: 0; font-size: 12.5px; color: var(--tx-mut); line-height: 1.55; flex: 1; }
+.dest-go { font-size: 13px; color: var(--gold); font-weight: 600; }
