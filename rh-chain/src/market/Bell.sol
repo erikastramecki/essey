@@ -34,6 +34,11 @@ contract Bell is ISeatHook, ReentrancyGuard {
     uint256 public immutable tipBps; // ringer's cut of the pot
     /// Optional claim-edge converter for payout choice (address(0) = base-asset payouts only).
     IConverter public immutable converter;
+    /// Where a Seat with NO explicit payout choice is paid: address(0) = the base asset (USDG), or a
+    /// converter-supported target (e.g. the BUNDLE sentinel) so unset Seats are paid in stock by
+    /// default. Only meaningful when `converter` is set; still fails open to base if conversion can't
+    /// settle (closed session, stale feed, thin reserve).
+    address public immutable defaultPayout;
 
     uint256[] public tierFees; // cumulative $ESSEY fee to reach tier i+1 (strictly increasing)
     uint256[] public tierWeights; // payout weight of tier i+1 (strictly increasing)
@@ -90,12 +95,18 @@ contract Bell is ISeatHook, ReentrancyGuard {
         uint256 tipBps_,
         uint256[] memory tierFees_,
         uint256[] memory tierWeights_,
-        IConverter converter_
+        IConverter converter_,
+        address defaultPayout_
     ) {
         if (
             address(seat_) == address(0) || address(essey_) == address(0) || address(reward_) == address(0)
                 || treasury_ == address(0) || tipBps_ > MAX_TIP_BPS || tierFees_.length == 0
                 || tierFees_.length != tierWeights_.length || tierFees_.length > type(uint8).max
+                // A default payout must be a converter-supported target (e.g. the BUNDLE sentinel):
+                // this catches a typo'd sentinel or an unseeded bundle at DEPLOY, instead of silently
+                // paying base forever with no revert-time signal.
+                || (defaultPayout_ != address(0)
+                    && (address(converter_) == address(0) || !converter_.isSupported(defaultPayout_)))
         ) revert BadConfig();
         for (uint256 i = 1; i < tierFees_.length; i++) {
             // Strictly increasing, so an upgrade always owes a positive fee delta and higher tiers
@@ -111,6 +122,7 @@ contract Bell is ISeatHook, ReentrancyGuard {
         tierFees = tierFees_;
         tierWeights = tierWeights_;
         converter = converter_;
+        defaultPayout = defaultPayout_;
     }
 
     // ---------------------------------------------------------------- views
@@ -238,7 +250,11 @@ contract Bell is ISeatHook, ReentrancyGuard {
         reserved -= amount;
         address vault = seat.vaultOf(id);
 
+        // Hybrid payout: an explicit choice wins; an unset Seat falls to `defaultPayout` (the bundle),
+        // so "pay me in stock" is the default without every holder having to opt in. Either way the
+        // convert path below fails open to the base asset if it can't settle.
         address pref = payoutTokenOf[id];
+        if (pref == address(0)) pref = defaultPayout;
         if (pref != address(0) && address(converter) != address(0)) {
             reward.forceApprove(address(converter), amount);
             try converter.convert(amount, pref, vault) returns (uint256 out) {

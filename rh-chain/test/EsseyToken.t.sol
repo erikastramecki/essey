@@ -79,7 +79,7 @@ contract EsseyTokenTest is Test {
         fees[0] = 100e18;
         uint256[] memory weights = new uint256[](1);
         weights[0] = 100;
-        Bell bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)));
+        Bell bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
         seat.setHook(address(bell));
 
         vm.prank(treasury);

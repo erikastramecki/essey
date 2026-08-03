@@ -27,7 +27,13 @@ export const ADDR = {
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
   quest: "0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427" as Address,
   lens: "0x307d0E17e0c7412E61657f6BA6dE96f0c29294eB" as Address,
+  // Stock-payout converter — set at the stock-payout redeploy (address(0) = base-only payouts).
+  converter: "0x0000000000000000000000000000000000000000" as Address,
 };
+
+// The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
+// Matches BundleConverter.BUNDLE; used as the Seat payout preference for the default mix.
+export const BUNDLE = "0x000000000000000000000000000000000000B0B1" as Address;
 
 // Whitelist raffle size — 2,222 mint spots (the Seat supply).
 export const WHITELIST_SPOTS = 2222;
@@ -71,6 +77,19 @@ export const bellAbi = parseAbi([
   "function upgrade(uint256 id, uint8 newTier)",
   "function ring()",
   "function claim(uint256 id) returns (uint256)",
+  "function setPayoutToken(uint256 id, address token)",
+  "function payoutTokenOf(uint256) view returns (address)",
+  "function defaultPayout() view returns (address)",
+  "function converter() view returns (address)",
+  "event ClaimConverted(uint256 indexed id, address token, uint256 amountOut)",
+  "event ClaimFellBack(uint256 indexed id, address token)",
+]);
+// The stock-payout converter (inventory BundleConverter). Supports single stocks + the BUNDLE basket.
+export const converterAbi = parseAbi([
+  "function isSupported(address) view returns (bool)",
+  "function bundleSize() view returns (uint256)",
+  "function bundleAt(uint256) view returns (address)",
+  "function reserveOf(address) view returns (uint256)",
 ]);
 export const seatAbi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
@@ -209,6 +228,20 @@ export const reads = {
   vaultBalance: (vault: Address) =>
     pub.readContract({ address: ADDR.usdg, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
 
+  /// Stock held in a Seat's Vault — what a stock Payout lands as (and what you'd borrow against).
+  vaultStocks: async (vault: Address): Promise<{ aapl: bigint; nvda: bigint }> => {
+    const [aapl, nvda] = await Promise.all([
+      pub.readContract({ address: ADDR.aapl, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
+      pub.readContract({ address: ADDR.nvda, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
+    ]);
+    return { aapl, nvda };
+  },
+
+  /// A Seat's payout preference: 0x0 = the default bundle, else the chosen stock. Only meaningful once
+  /// a converter is wired (address(0) converter ⇒ everything pays base USDG regardless).
+  payoutPref: (id: bigint) =>
+    pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "payoutTokenOf", args: [id] }) as Promise<Address>,
+
   gasBalance: (a: Address) => pub.getBalance({ address: a }),
 
   stockWins: async (a: Address): Promise<{ aapl: bigint; nvda: bigint }> => {
@@ -306,8 +339,11 @@ export const reads = {
     const [gas, bal, ids, wins, pool, loans, quest] = await Promise.all([
       reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a), reads.quest(a),
     ]);
-    const seats = await Promise.all(ids.map(async (id) => ({ id, ...(await reads.seatState(id)), vaultUsdg: 0n as bigint })));
-    for (const s of seats) s.vaultUsdg = await reads.vaultBalance(s.vault);
+    const seats = await Promise.all(ids.map(async (id) => {
+      const st = await reads.seatState(id);
+      const [vaultUsdg, vaultStock] = await Promise.all([reads.vaultBalance(st.vault), reads.vaultStocks(st.vault)]);
+      return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda };
+    }));
     return { gas, ...bal, seats, wins, pool, loans, quest };
   },
 };
@@ -377,6 +413,11 @@ export const flows = {
   /// Claim a Seat's accrued Payout — it lands in that Seat's Vault (permissionless, but the funds go
   /// to the Vault the Seat owner controls, never the caller).
   claimPayout: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.bell, bellAbi, "claim", [id]),
+
+  /// Set how a Seat's Payouts are delivered: BUNDLE (the default basket), a single stock, or 0x0 to
+  /// reset to the default. Owner-only on-chain; clears on Seat transfer.
+  setPayoutToken: (a: Address, id: bigint, token: Address): Promise<Hex> =>
+    send(a, ADDR.bell, bellAbi, "setPayoutToken", [id, token]),
 
   // ---- lending ----
   supply: async (a: Address, amount: bigint): Promise<Hex> => {

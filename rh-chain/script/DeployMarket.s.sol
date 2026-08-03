@@ -63,6 +63,7 @@ contract DeployMarket is Script {
         AggregatorV3Interface usdgFeed; // USDG/USD Chainlink feed (Cases sell-back base leg)
         AggregatorV3Interface sequencerFeed; // address(0) on this chain; see StaleFeedGuard
         IConverter converter; // optional stock-payout converter; address(0) = base-only at launch
+        address defaultPayout; // payout target for Seats with no explicit choice; e.g. BundleConverter.BUNDLE
         uint256 reserveCap; // admin's hard mint ceiling: Exchange float + partner tranche
         uint256 minRing; // pot floor before the Bell can ring (reward units)
         uint256 seatPrice; // Exchange flat price, $ESSEY
@@ -92,6 +93,7 @@ contract DeployMarket is Script {
         c.usdgFeed = AggregatorV3Interface(vm.envAddress("USDG_FEED"));
         c.sequencerFeed = AggregatorV3Interface(vm.envOr("SEQUENCER_FEED", address(0)));
         c.converter = IConverter(vm.envOr("CONVERTER", address(0)));
+        c.defaultPayout = vm.envOr("DEFAULT_PAYOUT", address(0)); // BUNDLE sentinel to pay unset Seats in stock
         c.reserveCap = vm.envOr("RESERVE_CAP", uint256(1311)); // ~1111 float + 200 partners
         c.minRing = vm.envOr("MIN_RING", uint256(10e6)); // 10 USDG
         c.seatPrice = vm.envOr("SEAT_PRICE", uint256(500e18));
@@ -108,7 +110,7 @@ contract DeployMarket is Script {
         d.seat = new Seat("Essey Seat", "SEAT", MAX_SUPPLY, address(d.distributor));
         d.essey = new EsseyToken(c.treasury);
         (uint256[] memory fees, uint256[] memory weights) = _ladder();
-        d.bell = new Bell(d.seat, d.essey, c.usdg, c.treasury, c.minRing, TIP_BPS, fees, weights, c.converter);
+        d.bell = new Bell(d.seat, d.essey, c.usdg, c.treasury, c.minRing, TIP_BPS, fees, weights, c.converter, c.defaultPayout);
         // SeatArt is deliberately NOT constructed here: its constructor asserts seat.hook() == bell,
         // so it can only exist after the admin's setSeatHook — see wireAll. (The first draft of this
         // script constructed it here and the guard correctly refused to deploy.)

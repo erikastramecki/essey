@@ -3,7 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, NET, PRICE, TIERS, flows, reads, fmt, niceError } from "./live";
+import { ADDR, BUNDLE, NET, PRICE, TIERS, flows, reads, fmt, niceError } from "./live";
+
+const ZERO = "0x0000000000000000000000000000000000000000";
+// Stock payouts light up once the converter is wired at the redeploy; until then claims pay USDG and
+// the payout selector stays hidden (no half-working UI pointing at a converter that isn't there).
+const CONVERTER_LIVE = ADDR.converter.toLowerCase() !== ZERO;
+
+// Which payout bucket a Seat's stored preference maps to (unset / BUNDLE both mean the default basket).
+function prefKey(pref: Address | null): "Bundle" | "AAPL" | "NVDA" {
+  const p = (pref ?? ZERO).toLowerCase();
+  if (p === ADDR.aapl.toLowerCase()) return "AAPL";
+  if (p === ADDR.nvda.toLowerCase()) return "NVDA";
+  return "Bundle";
+}
 
 export function TestnetBanner() {
   return (
@@ -111,6 +124,8 @@ export function LiveBell() {
   const [sel, setSel] = useState<bigint | null>(null);
   const [state, setState] = useState<{ tier: number; pending: bigint; vault: Address } | null>(null);
   const [vaultBal, setVaultBal] = useState<bigint | null>(null);
+  const [vaultStock, setVaultStock] = useState<{ aapl: bigint; nvda: bigint } | null>(null);
+  const [pref, setPref] = useState<Address | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -121,7 +136,12 @@ export function LiveBell() {
   }, [a]);
   const loadSel = useCallback(() => {
     if (sel === null) { setState(null); return; }
-    reads.seatState(sel).then(async (st) => { setState(st); setVaultBal(await reads.vaultBalance(st.vault)); }).catch(() => {});
+    reads.seatState(sel).then(async (st) => {
+      setState(st);
+      setVaultBal(await reads.vaultBalance(st.vault));
+      setVaultStock(await reads.vaultStocks(st.vault));
+    }).catch(() => {});
+    if (CONVERTER_LIVE) reads.payoutPref(sel).then(setPref).catch(() => {});
   }, [sel]);
 
   useEffect(() => { loadPot(); const t = setInterval(loadPot, 15_000); return () => clearInterval(t); }, [loadPot]);
@@ -180,6 +200,9 @@ export function LiveBell() {
                   <div className="live-bal num">
                     Seat #{sel?.toString()} · {state.tier === 0 ? "Base (inactive)" : (TIERS[state.tier - 1]?.name ?? `Tier ${state.tier}`)} ·
                     claimable {fmt(state.pending, 4)} USDG · Vault holds {vaultBal !== null ? fmt(vaultBal, 4) : "…"} USDG
+                    {vaultStock && (vaultStock.aapl > 0n || vaultStock.nvda > 0n) && (
+                      <> · <b>{vaultStock.aapl > 0n && `${fmt(vaultStock.aapl, 2)} AAPL`}{vaultStock.aapl > 0n && vaultStock.nvda > 0n ? " · " : ""}{vaultStock.nvda > 0n && `${fmt(vaultStock.nvda, 2)} NVDA`}</b> in stock</>
+                    )}
                   </div>
 
                   <div className="tier-buttons">
@@ -198,15 +221,32 @@ export function LiveBell() {
                     })}
                   </div>
 
+                  {CONVERTER_LIVE && (
+                    <div className="payout-pref">
+                      <span className="pp-label">Paid in</span>
+                      {(["Bundle", "AAPL", "NVDA"] as const).map((k) => (
+                        <button key={k} className={"pp-btn" + (prefKey(pref) === k ? " on" : "")} disabled={!!busy}
+                          onClick={() => act("pref", () => flows.setPayoutToken(a!, sel!, k === "Bundle" ? BUNDLE : k === "AAPL" ? ADDR.aapl : ADDR.nvda), `✓ Payouts now delivered in ${k}`)}>
+                          {busy === "pref" ? "…" : k}
+                        </button>
+                      ))}
+                      <span className="live-note pp-note">basket by default · stock lands in your Vault · USDG if the market's closed</span>
+                    </div>
+                  )}
+
                   <div className="live-row">
                     <button className="btn btn-gold" disabled={!!busy || state.pending === 0n}
                       onClick={() => act("claim", () => flows.claimPayout(a!, sel!), `✓ Payout claimed into Seat #${sel}'s Vault`)}>
-                      {busy === "claim" ? "claiming…" : state.pending === 0n ? "nothing to claim yet" : `Claim ${fmt(state.pending, 4)} USDG → Vault`}
+                      {busy === "claim" ? "claiming…" : state.pending === 0n ? "nothing to claim yet"
+                        : CONVERTER_LIVE ? `Claim ${fmt(state.pending, 4)} → ${prefKey(pref)} in Vault`
+                        : `Claim ${fmt(state.pending, 4)} USDG → Vault`}
                     </button>
                     <a className="btn btn-ghost" href={`${NET.explorer}/address/${state.vault}`} target="_blank" rel="noreferrer">view the Vault ↗</a>
                   </div>
-                  <div className="live-note">Stake a Tier, then Buy on the Market a few times (each trade fee grows the pot) → ring → claim. The
-                    Payout is real testnet USDG landing in your Seat's Vault.</div>
+                  <div className="live-note">Stake a Tier, then Buy on the Market a few times (each trade fee grows the pot) → ring → claim.{" "}
+                    {CONVERTER_LIVE
+                      ? "Your Payout lands as real stock — the basket by default, or the ticker you pick above (USDG if the market's closed)."
+                      : "The Payout is real testnet USDG landing in your Seat's Vault."}</div>
                 </div>
               )}
             </>

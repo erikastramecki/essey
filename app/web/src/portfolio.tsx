@@ -87,7 +87,11 @@ export function PortfolioPage() {
                       </div>
                       <div className="pf-seat-row num">
                         <span>claimable <b>{fmt(s.pending, 4)}</b> USDG</span>
-                        <span>Vault holds <b>{fmt(s.vaultUsdg, 4)}</b> USDG</span>
+                        <span>Vault holds <b>{fmt(s.vaultUsdg, 4)}</b> USDG
+                          {(s.vaultAapl > 0n || s.vaultNvda > 0n) && (
+                            <> · <b>{s.vaultAapl > 0n && `${fmt(s.vaultAapl, 2)} AAPL`}{s.vaultAapl > 0n && s.vaultNvda > 0n ? " · " : ""}{s.vaultNvda > 0n && `${fmt(s.vaultNvda, 2)} NVDA`}</b> in stock</>
+                          )}
+                        </span>
                       </div>
                       <div className="pf-seat-actions">
                         <a className="pf-link" href={`${NET.explorer}/token/${ADDR.seat}?a=${s.id}`} target="_blank" rel="noreferrer">Seat ↗</a>
@@ -123,7 +127,7 @@ export function PortfolioPage() {
                 <div className="pf-wins num">
                   {p.wins.aapl > 0n && <span className="pf-win">AAPL <b>{fmt(p.wins.aapl, 2)}</b></span>}
                   {p.wins.nvda > 0n && <span className="pf-win">NVDA <b>{fmt(p.wins.nvda, 2)}</b></span>}
-                  <span className="pf-note">real testnet stock tokens — held in your wallet, borrowable once the pool is wired.</span>
+                  <span className="pf-note">real testnet stock tokens — held in your wallet; borrow against them on <Link to="/lend">Lend</Link>.</span>
                 </div>
               )}
             </div>

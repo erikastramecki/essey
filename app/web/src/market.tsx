@@ -97,14 +97,16 @@ export function WarningModal() {
 // Left: the claim. Right: the Bell + Tape peek — both explicitly labeled PREVIEW because the
 // contracts are audited but undeployed; no fake "live" state, per the design doc's honesty rule.
 const SAMPLE_TAPE: [string, string, string][] = [
-  ["🔔", "BELL RUNG · 0.44 ETH → 1,662 Vaults", "proof ✓"],
+  ["🔔", "BELL RUNG · 96 USDG → 1,662 Vaults", "proof ✓"],
   ["✓", "LOAN PROVEN SOLVENT · Note #418 · HF 1.72", "verify"],
   ["◆", "SEAT #1204 MINTED · Vault created", "6551"],
   ["⬡", "EXCHANGE · Seat #0197 sniped · fee → the Bell", "verify"],
 ];
 
 export function ExchangeHero() {
-  const [pot, setPot] = useState(0.63);
+  // The pot accrues in USDG (fees); at claim each Seat's share converts to stock at the edge.
+  const POT0 = 128.40;
+  const [pot, setPot] = useState(POT0);
   const [rung, setRung] = useState(false);
   // Generation counter: rAF pauses while the tab is hidden, so a drain loop can outlive the 3.2s
   // reset and overwrite the refilled pot with 0. Bumping the generation on reset orphans any
@@ -120,14 +122,14 @@ export function ExchangeHero() {
     const step = (t: number) => {
       if (g !== gen.current) return; // reset happened while we were paused — stand down
       const k = Math.min(1, (t - t0) / 700);
-      setPot(0.63 * (1 - k));
+      setPot(POT0 * (1 - k));
       if (k < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   };
   useEffect(() => {
     if (!rung) return;
-    const id = setTimeout(() => { gen.current++; setPot(0.63); setRung(false); }, 3200);
+    const id = setTimeout(() => { gen.current++; setPot(POT0); setRung(false); }, 3200);
     return () => clearTimeout(id);
   }, [rung]);
 
@@ -153,11 +155,11 @@ export function ExchangeHero() {
           <div className="bell-pot">
             <span className="bell-emoji" aria-hidden>🔔</span>
             <div className="bell-nums">
-              <div className="bell-amt num">{pot.toFixed(2)} ETH</div>
-              <div className="bell-sub">the pot — trade fees, royalties, loan interest</div>
+              <div className="bell-amt num">{pot.toFixed(2)} USDG</div>
+              <div className="bell-sub">the pot — trade fees, royalties, loan interest → paid out as stock</div>
             </div>
           </div>
-          <div className="bell-gauge"><div className="bell-fill" style={{ width: `${(pot / 0.63) * 100}%` }} /></div>
+          <div className="bell-gauge"><div className="bell-fill" style={{ width: `${(pot / POT0) * 100}%` }} /></div>
           <button className="btn btn-gold bell-ring" onClick={ring} disabled={rung}>
             {rung ? "✓ rung — payout split by Tier" : "RING THE BELL"}
           </button>
@@ -375,7 +377,7 @@ function CasesToy() {
       <div className="case-teaser">🎁 → <span className="num">1× NVDA</span> sealed in a Vault-NFT</div>
       <div className="toy-note">Open a Case, get real stock sealed in a Vault — keep it, borrow against it, or sell it
         back. The twist: <b>the prize is reserved in real inventory before you open</b>, provably. The fair-value
-        "401k pack" ships first; anything spicier waits on legal review. <i>In design — not built.</i></div>
+        <b> 401(k) pack</b> is live on testnet — anything spicier waits on legal review.</div>
     </div>
   );
 }
@@ -411,11 +413,11 @@ const CARDS: CardDef[] = [
     oneLiner: "A second stream — royalties and loan interest keep paying after the launch buzz fades.", toy: AfterHoursToy },
   { id: "note", icon: "📜", name: "Note", sub: "loans as bearer NFTs", status: "audited",
     oneLiner: "Your loan is a certificate you can sell. Debt, collateral, and its proof travel with it.", toy: NoteToy },
-  { id: "cases", icon: "🎁", name: "Cases", sub: "stock gacha — scoped", status: "scoped",
+  { id: "cases", icon: "🎁", name: "Cases", sub: "stock gacha", status: "audited",
     oneLiner: "Open a Case, get real stock sealed in a Vault. Keep it, borrow against it, or sell it back.", toy: CasesToy },
   { id: "essey", icon: "◈", name: "$ESSEY", sub: "the access token", status: "audited",
     oneLiner: "The chip you spend to get in. You never earn $ESSEY — you earn stock.", toy: EsseyToy },
-  { id: "tape", icon: "📈", name: "the Tape", sub: "the live proof feed", status: "scoped",
+  { id: "tape", icon: "📈", name: "the Tape", sub: "the live proof feed", status: "audited",
     oneLiner: "Everything the Exchange does, printed live — and every line is a real receipt.", toy: TapeToy },
 ];
 

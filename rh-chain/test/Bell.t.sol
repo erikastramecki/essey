@@ -30,7 +30,7 @@ contract BellTest is Test {
         seat = new Seat("Essey Seat", "SEAT", 4444, address(this));
         essey = new ERC20Mock();
         usdg = new ERC20Mock();
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0))); // minRing 100, tip 1%
+        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0)); // minRing 100, tip 1%
         seat.setHook(address(bell));
 
         for (uint256 i = 0; i < 3; i++) {

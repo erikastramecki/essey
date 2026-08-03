@@ -38,7 +38,7 @@ contract SeatArtTest is Test, IERC721Receiver {
         weights[0] = 160;
         weights[1] = 200;
         weights[2] = 333;
-        bell = new Bell(seat, essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)));
+        bell = new Bell(seat, essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
         seat.setHook(address(bell));
         art = new SeatArt(seat, bell);
         seat.setArt(address(art));
