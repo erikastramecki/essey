@@ -179,100 +179,100 @@ export function LiveBell() {
     <section className="band" id="bell">
       <div className="wrap">
         <div className="band-head"><div>
-          <span className="eyebrow">The Bell — live</span>
-          <h2>Stake, ring, get paid</h2>
-          <p>The full loop, live on testnet: raise a Seat's Tier to earn a bigger slice, ring the Bell when
-            the pot is worth it (anyone can, and the ringer earns a tip), then claim your Payout — it lands
-            in the Seat's own Vault.</p>
+          <span className="eyebrow">The Bell</span>
+          <h2>How you get paid</h2>
+          <p>Three steps: <b>1.</b> stake your Seat to join the payout · <b>2.</b> when the pot fills, anyone
+            rings the Bell and it splits across staked Seats · <b>3.</b> claim your share — it lands in your
+            Seat's Vault as real stock.</p>
         </div>
           <span className="preview-chip live">testnet</span>
         </div>
 
-        <div className="live-card">
-          <div className="bell-live-top">
-            <div>
-              <div className="live-h">THE POT</div>
-              <div className="bell-live-pot num">{pot !== null ? fmt(pot, 2) : "…"} <span>USDG</span></div>
-            </div>
-            {ready && (
-              <button className="btn btn-gold" disabled={!!busy || (pot ?? 0n) === 0n}
-                onClick={() => act("ring", () => flows.ringBell(a!), "✓ rung — the pot split across active Seats, and your tip is in")}>
-                {busy === "ring" ? "ringing…" : "RING THE BELL"}
-              </button>
-            )}
-          </div>
-
-          {!ready ? (
-            <div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to stake and ring.</span><ConnectButton /></div>
-          ) : seats.length === 0 ? (
-            <div className="live-note">You don't own a Seat yet — buy one on <a href="/market">the Market</a> first, then come back to stake it.</div>
-          ) : (
-            <>
+        {!ready ? (
+          <div className="live-card"><div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to stake and get paid.</span><ConnectButton /></div></div>
+        ) : seats.length === 0 ? (
+          <div className="live-card"><div className="live-note">You need a Seat first. <a href="/market">Buy one on the Exchange →</a> then come back to stake it and start earning.</div></div>
+        ) : (
+          <>
+            {seats.length > 1 && (
               <div className="bell-seat-pick">
-                <span className="live-note">your Seat:</span>
+                <span className="live-note">Choose your Seat:</span>
                 {seats.map((id) => (
                   <button key={id.toString()} className={"seat-pill num" + (sel === id ? " on" : "")} onClick={() => setSel(id)}>#{id.toString()}</button>
                 ))}
               </div>
+            )}
 
-              {state && (
-                <div className="bell-seat-state">
-                  <div className="live-bal num">
-                    Seat #{sel?.toString()} · {state.tier === 0 ? "Base (inactive)" : (TIERS[state.tier - 1]?.name ?? `Tier ${state.tier}`)} ·
-                    claimable {fmt(state.pending, 4)} USDG · Vault holds {vaultBal !== null ? fmt(vaultBal, 4) : "…"} USDG
-                    {vaultStock && (vaultStock.aapl > 0n || vaultStock.nvda > 0n) && (
-                      <> · <b>{vaultStock.aapl > 0n && `${fmt(vaultStock.aapl, 2)} AAPL`}{vaultStock.aapl > 0n && vaultStock.nvda > 0n ? " · " : ""}{vaultStock.nvda > 0n && `${fmt(vaultStock.nvda, 2)} NVDA`}</b> in stock</>
-                    )}
-                  </div>
-
+            {state && (
+              <>
+                {/* Step 1 — stake */}
+                <div className="live-card bell-step">
+                  <div className="bell-step-h"><span className="bell-step-n">1</span> Stake your Seat
+                    <span className="bell-step-cur">{state.tier === 0 ? "not staked yet" : `staked · ${TIERS[state.tier - 1]?.name ?? `Tier ${state.tier}`}`}</span></div>
+                  <div className="live-note">Stake $ESSEY on Seat #{sel?.toString()} to start earning from every payout. Higher tier = a bigger share. Pick a level:</div>
                   <div className="tier-buttons">
                     {TIERS.map((t) => {
                       const owned = state.tier;
                       const disabled = !!busy || t.tier <= owned;
-                      const label = t.tier === owned ? "current" : t.tier < owned ? "—" : owned === 0 ? "stake" : "upgrade";
+                      const label = t.tier === owned ? "current" : t.tier < owned ? "—" : owned === 0 ? "Stake" : "Upgrade";
                       return (
                         <button key={t.tier} className={"tier-btn" + (t.tier === owned ? " on" : "")} disabled={disabled}
                           onClick={() => act("tier", () => flows.setTier(a!, sel!, t.tier), `✓ Seat #${sel} is now ${t.name}`)}>
                           <b>{t.name}</b>
-                          <i className="num">×{(t.weight / 100).toFixed(2)} · {fmt(t.fee)} $ESSEY</i>
+                          <i className="num">{(t.weight / 100).toFixed(2)}× share · {fmt(t.fee)} $ESSEY</i>
                           <span>{busy === "tier" ? "…" : label}</span>
                         </button>
                       );
                     })}
                   </div>
+                </div>
 
+                {/* Step 2 — ring */}
+                <div className="live-card bell-step">
+                  <div className="bell-step-h"><span className="bell-step-n">2</span> Ring the Bell
+                    <span className="bell-step-cur num">pot: {pot !== null ? fmt(pot, 2) : "…"} USDG</span></div>
+                  <div className="live-note">When the pot's worth it, <b>anyone</b> can ring it — the pot splits across all staked Seats (by tier), and whoever rings earns a small tip. The pot grows from trades, Cases, and loan interest, so buy a few Seats on the Exchange to fill it.</div>
+                  <button className="btn btn-gold" disabled={!!busy || (pot ?? 0n) === 0n}
+                    onClick={() => act("ring", () => flows.ringBell(a!), "✓ rung — the pot split across staked Seats, and your tip is in")}>
+                    {busy === "ring" ? "ringing…" : (pot ?? 0n) === 0n ? "Pot is empty — grow it first" : "Ring the Bell"}
+                  </button>
+                </div>
+
+                {/* Step 3 — claim */}
+                <div className="live-card bell-step">
+                  <div className="bell-step-h"><span className="bell-step-n">3</span> Claim your payout
+                    <span className="bell-step-cur num">yours: {fmt(state.pending, 4)} {CONVERTER_LIVE ? "→ stock" : "USDG"}</span></div>
                   {CONVERTER_LIVE && (
                     <div className="payout-pref">
-                      <span className="pp-label">Paid in</span>
+                      <span className="pp-label">Get paid in</span>
                       {(["Bundle", "AAPL", "NVDA"] as const).map((k) => (
                         <button key={k} className={"pp-btn" + (prefKey(pref) === k ? " on" : "")} disabled={!!busy}
                           onClick={() => act("pref", () => flows.setPayoutToken(a!, sel!, k === "Bundle" ? BUNDLE : k === "AAPL" ? ADDR.aapl : ADDR.nvda), `✓ Payouts now delivered in ${k}`)}>
                           {busy === "pref" ? "…" : k}
                         </button>
                       ))}
-                      <span className="live-note pp-note">basket by default · stock lands in your Vault · USDG if the market's closed</span>
+                      <span className="live-note pp-note">the AAPL+NVDA basket by default · lands as real stock in your Vault · USDG if the market's closed</span>
                     </div>
                   )}
-
                   <div className="live-row">
                     <button className="btn btn-gold" disabled={!!busy || state.pending === 0n}
                       onClick={() => act("claim", () => flows.claimPayout(a!, sel!), `✓ Payout claimed into Seat #${sel}'s Vault`)}>
                       {busy === "claim" ? "claiming…" : state.pending === 0n ? "nothing to claim yet"
-                        : CONVERTER_LIVE ? `Claim ${fmt(state.pending, 4)} → ${prefKey(pref)} in Vault`
-                        : `Claim ${fmt(state.pending, 4)} USDG → Vault`}
+                        : CONVERTER_LIVE ? `Claim ${fmt(state.pending, 4)} as ${prefKey(pref)}`
+                        : `Claim ${fmt(state.pending, 4)} USDG`}
                     </button>
-                    <a className="btn btn-ghost" href={`${NET.explorer}/address/${state.vault}`} target="_blank" rel="noreferrer">view the Vault ↗</a>
+                    <a className="btn btn-ghost" href={`${NET.explorer}/address/${state.vault}`} target="_blank" rel="noreferrer">view your Vault ↗</a>
                   </div>
-                  <div className="live-note">Stake a Tier, then Buy on the Market a few times (each trade fee grows the pot) → ring → claim.{" "}
-                    {CONVERTER_LIVE
-                      ? "Your Payout lands as real stock — the basket by default, or the ticker you pick above (USDG if the market's closed)."
-                      : "The Payout is real testnet USDG landing in your Seat's Vault."}</div>
+                  <div className="live-note num">Your Vault holds {vaultBal !== null ? fmt(vaultBal, 2) : "…"} USDG
+                    {vaultStock && (vaultStock.aapl > 0n || vaultStock.nvda > 0n) && (
+                      <> · <b>{vaultStock.aapl > 0n && `${fmt(vaultStock.aapl, 2)} AAPL`}{vaultStock.aapl > 0n && vaultStock.nvda > 0n ? " · " : ""}{vaultStock.nvda > 0n && `${fmt(vaultStock.nvda, 2)} NVDA`}</b></>
+                    )} — it travels with the Seat if you ever sell it.</div>
                 </div>
-              )}
-            </>
-          )}
-          {msg && <div className="live-msg">{msg}</div>}
-        </div>
+              </>
+            )}
+            {msg && <div className="live-msg">{msg}</div>}
+          </>
+        )}
       </div>
     </section>
   );

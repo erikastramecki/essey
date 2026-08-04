@@ -35,10 +35,10 @@ export function LendPage() {
         </div>
 
         <div className="lend-stats num">
-          <span>pool TVL <b>{pool ? fmt(pool.tvl) : "…"}</b> USDG</span>
-          <span>supply APY <b className="good">{pool ? pool.supplyApy.toFixed(2) : "…"}%</b></span>
-          <span>borrow APR <b>{pool ? pool.borrowApr.toFixed(2) : "…"}%</b></span>
-          <span>utilization <b>{pool ? pool.utilPct.toFixed(0) : "…"}%</b></span>
+          <span title="total USDG lenders have supplied to the pool">in the pool <b>{pool ? fmt(pool.tvl) : "…"}</b> USDG</span>
+          <span title="what lenders earn per year">lenders earn <b className="good">{pool ? pool.supplyApy.toFixed(2) : "…"}%</b>/yr</span>
+          <span title="what borrowers pay per year">borrowers pay <b>{pool ? pool.borrowApr.toFixed(2) : "…"}%</b>/yr</span>
+          <span title="how much of the pool is currently lent out">lent out <b>{pool ? pool.utilPct.toFixed(0) : "…"}%</b></span>
         </div>
 
         {!ready ? (
@@ -169,21 +169,24 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
         <div className="live-note">You don't hold any stock to borrow against yet. <Link to="/cases">Open a Case →</Link> to draw some AAPL or NVDA, then come back.</div>
       ) : (
         <>
+          <div className="live-note">Lock stock you won as collateral, borrow USDG against it, and repay anytime to get the stock back.</div>
           <div className="live-bal num">you hold: {wins!.aapl > 0n && <>AAPL {fmt(wins!.aapl, 2)} </>}{wins!.nvda > 0n && <>NVDA {fmt(wins!.nvda, 2)}</>}</div>
           <div className="seg" role="tablist" style={{ width: "fit-content" }}>
             <button aria-selected={token === ADDR.aapl} onClick={() => setToken(ADDR.aapl)}>AAPL</button>
             <button aria-selected={token === ADDR.nvda} onClick={() => setToken(ADDR.nvda)}>NVDA</button>
           </div>
+          <label className="lend-field-h">Stock to lock as collateral</label>
           <div className="lend-input">
-            <input className="num" type="number" min={0} placeholder="collateral" value={coll} onChange={(e) => setColl(e.target.value)} aria-label="collateral amount" />
+            <input className="num" type="number" min={0} placeholder="0" value={coll} onChange={(e) => setColl(e.target.value)} aria-label="collateral amount" />
             <span className="lend-unit">{token === ADDR.aapl ? "AAPL" : "NVDA"}</span>
           </div>
+          <label className="lend-field-h">USDG to borrow</label>
           <div className="lend-input">
-            <input className="num" type="number" min={0} placeholder="borrow" value={debt} onChange={(e) => setDebt(e.target.value)} aria-label="borrow amount" />
+            <input className="num" type="number" min={0} placeholder="0" value={debt} onChange={(e) => setDebt(e.target.value)} aria-label="borrow amount" />
             <span className="lend-unit">USDG</span>
             <button className="btn btn-gold" disabled={!!busy || !(parseFloat(debt) > 0)} onClick={doBorrow}>{busy === "borrow" ? "borrowing…" : "Borrow"}</button>
           </div>
-          {maxDebt !== null && <div className="live-note num">max borrow at 35% LTV: {fmt(maxDebt, 2)} USDG</div>}
+          {maxDebt !== null && <div className="live-note num">You can borrow up to <b>{fmt(maxDebt, 2)} USDG</b> against this — we lend 35% of the stock's value, so a price dip can't put you underwater.</div>}
         </>
       )}
       <div className="live-note">Your loan is a Note — a transferable position that carries its debt, its collateral, and

@@ -46,9 +46,9 @@ export const STEPS: Step[] = [
     done: (p) => !!p && p.quest.registered },
   { id: "seat", n: 4, title: "Buy a Seat", what: "Trade $ESSEY for a Seat on the Exchange — the fee feeds the Bell's pot.", to: "/market", cta: "Go to the Exchange",
     done: (p) => !!p && p.seats.length > 0 },
-  { id: "stake", n: 5, title: "Stake a Tier", what: "Stake $ESSEY on your Seat to earn a bigger slice of every Payout.", to: "/bell", cta: "Go to the Bell",
+  { id: "stake", n: 5, title: "Stake a Tier", what: "Boost a Seat you own — stake $ESSEY so it earns a bigger share of every payout.", to: "/bell", cta: "Go to the Bell",
     done: (p) => !!p && p.seats.some((s) => s.tier > 0) },
-  { id: "payout", n: 6, title: "Ring & claim", what: "Ring the Bell, then claim your Payout — it lands in your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
+  { id: "payout", n: 6, title: "Ring & claim", what: "When the fee pot is full, ring the Bell — then claim your payout as stock into your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
     done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n) },
   { id: "case", n: 7, title: "Open a Case", what: "Open a Case for a real stock draw — AAPL or NVDA, fair value either way.", to: "/cases", cta: "Go to Cases",
     done: (p) => !!p && (p.wins.aapl > 0n || p.wins.nvda > 0n) },
@@ -138,10 +138,11 @@ export function StartPage() {
       <div className="wrap">
         <div className="band-head"><div>
           <span className="eyebrow">The Quest</span>
-          <h2>Earn a whitelist spot for the mint</h2>
-          <p>Test the whole club on testnet — real contracts, play money — and you're in the raffle for one of
-            <b> {WHITELIST_SPOTS.toLocaleString()}</b> mainnet mint spots. Every task is a real on-chain action;
-            it's your activity, recorded on-chain, that qualifies you.</p>
+          <h2>Earn an early-access pass</h2>
+          <p>Play through the whole club on testnet — real contracts, play money — and you're entered to win one of
+            <b> {WHITELIST_SPOTS.toLocaleString()}</b> early-access passes for the real (mainnet) launch. Every task is
+            a real on-chain action; your activity is what qualifies you. <i>("Mint" just means minting your Seat NFT
+            at launch.)</i></p>
         </div>
         </div>
 
@@ -232,6 +233,8 @@ function FundsPanel({ connected, address, portfolio, onFund }: { connected: bool
   return (
     <div className="live-card" id="funds" style={{ marginBottom: 22 }}>
       <div className="live-h">PLAY MONEY <span className="preview-chip live">testnet</span></div>
+      <div className="live-note" style={{ marginBottom: 8 }}><b>$ESSEY</b> is the token you spend to play (buy Seats, open Cases).
+        <b> USDG</b> is a play-money stablecoin for fees and payouts. Both are free here — no real value.</div>
       {!connected ? (
         <div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to get funds.</span><ConnectButton /></div>
       ) : (

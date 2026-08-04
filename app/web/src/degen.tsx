@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { EMonogram } from "./market";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, reads, flows, fmt, niceError } from "./live";
+import { ADDR, PRICE, reads, flows, fmt, niceError } from "./live";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const DEGEN_LIVE = ADDR.degenCases.toLowerCase() !== ZERO;
@@ -154,13 +154,13 @@ export function DegenCase() {
                   {phase === "idle" ? (
                     <div className="spin-idle">
                       <EMonogram size={40} />
-                      <p>{acct ? `${fmt(acct.free, 0)} shares in the vault · RTP ${rtp.toFixed(1)}%` : "…"}</p>
+                      <p>{acct ? `${fmt(PRICE.casePrice)} $ESSEY per roll · ~${rtp.toFixed(0)}% avg payback · ${fmt(acct.free, 0)} AAPL in the prize vault` : "…"}</p>
                       {ready ? (
                         <>
                           <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>
-                            {busy ? "opening…" : "OPEN A DEGEN CASE"}
+                            {busy ? "opening…" : `OPEN A CASE · ${fmt(PRICE.casePrice)} $ESSEY`}
                           </button>
-                          <i>real roll on testnet · pays the tiny entropy fee in ETH</i>
+                          <i>a real on-chain roll · costs {fmt(PRICE.casePrice)} $ESSEY + a tiny gas fee in ETH</i>
                         </>
                       ) : (
                         <><span className="live-note">Connect on Robinhood Chain testnet to roll.</span><ConnectButton /></>
@@ -192,12 +192,12 @@ export function DegenCase() {
                     {rWon.jackpot && <div className="dg-bell">🔔</div>}
                     <span className="reveal-rarity" style={{ color: rWon.color }}>{rWon.jackpot ? "GOLD BELL" : won >= 20000 ? "GREEN" : won >= 10000 ? "EVEN" : "ROLL"}</span>
                     <div className="reveal-sym num dg-big" style={{ color: rWon.color }}>{rWon.label}</div>
-                    <div className="reveal-unit num">won <b>{fmt(payout, 3)}</b> shares</div>
+                    <div className="reveal-unit num">won <b>{fmt(payout, 3)} AAPL</b></div>
                     <div className="reveal-stamp"><EMonogram size={30} /><span>roll verifiable ✓ · backed before you opened</span></div>
                   </div>
                   <div className="reveal-actions">
                     <button className="btn btn-gold" disabled={busy} onClick={open}>Roll again</button>
-                    {acct && acct.owed > 0n && <button className="btn btn-ghost" disabled={busy} onClick={claim}>{busy ? "…" : `Withdraw ${fmt(acct.owed, 3)} shares`}</button>}
+                    {acct && acct.owed > 0n && <button className="btn btn-ghost" disabled={busy} onClick={claim}>{busy ? "…" : `Withdraw ${fmt(acct.owed, 3)} AAPL`}</button>}
                     <button className="linklike" onClick={again}>done</button>
                   </div>
                 </div>
@@ -208,7 +208,7 @@ export function DegenCase() {
             {/* owed banner (outside a roll) */}
             {phase !== "revealed" && acct && acct.owed > 0n && (
               <div className="live-card" style={{ marginTop: 14 }}>
-                <div className="live-row"><span className="live-note">You have <b>{fmt(acct.owed, 3)}</b> shares in winnings.</span>
+                <div className="live-row"><span className="live-note">You have <b>{fmt(acct.owed, 3)} AAPL</b> in winnings to collect.</span>
                   <button className="btn btn-gold" disabled={busy} onClick={claim}>Withdraw</button></div>
               </div>
             )}

@@ -160,7 +160,9 @@ export function CasesArcade() {
 
   const pickCase = (i: number) => {
     if (phase === "spinning") return;
-    setCaseIdx(i); setPhase("idle"); setWon(null); setSold(false);
+    // On testnet only the 401(k) Pack opens for real — keep the selection matched to what actually opens.
+    const idx = live && i !== 0 ? 0 : i;
+    setCaseIdx(idx); setPhase("idle"); setWon(null); setSold(false);
   };
 
   // Build the reel strip around a (possibly not-yet-known) winner. In live mode the winner arrives
@@ -258,8 +260,8 @@ export function CasesArcade() {
           <span className="eyebrow">Cases</span>
           <h2>Open a Case. Get real stock.</h2>
           <p>Every pull lands ~the case's value in real stock — <b>the draw only ever decides which name</b>,
-            never how much. Rarity is scarcity, not size: chasing the gold leaf costs you nothing but the
-            spin. Keep it, borrow against it, or sell it back at a 5% spread.</p>
+            never how much. Rarity is how rare the name is, not how much it's worth: chasing the gold leaf costs you
+            nothing but the spin. Keep it, borrow against it, or sell it back for ~95% of its value.</p>
         </div>
           {live
             ? <span className="preview-chip live" title="Connected to Robinhood Chain testnet — this opens a real Case on-chain with play money.">LIVE · testnet draw</span>
@@ -270,6 +272,7 @@ export function CasesArcade() {
         <div className="case-row">
           {CASES.map((cd, i) => <CaseBox key={cd.id} c={cd} active={i === caseIdx} onPick={() => pickCase(i)} />)}
         </div>
+        {live && <div className="live-note" style={{ marginTop: 6 }}>On testnet, only the <b>401(k) Pack</b> opens for real — the others preview what's coming at mainnet.</div>}
 
         {/* spin stage */}
         <div className="spin-shell">

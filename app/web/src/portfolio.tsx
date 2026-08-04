@@ -86,7 +86,7 @@ export function PortfolioPage() {
                         <span className={"pf-tier" + (s.tier > 0 ? " on" : "")}>{s.tier === 0 ? "Base" : (TIERS[s.tier - 1]?.name ?? `Tier ${s.tier}`)}</span>
                       </div>
                       <div className="pf-seat-row num">
-                        <span>claimable <b>{fmt(s.pending, 4)}</b> USDG</span>
+                        <span>ready to claim: <b>{fmt(s.pending, 4)}</b> USDG</span>
                         <span>Vault holds <b>{fmt(s.vaultUsdg, 4)}</b> USDG
                           {(s.vaultAapl > 0n || s.vaultNvda > 0n) && (
                             <> · <b>{s.vaultAapl > 0n && `${fmt(s.vaultAapl, 2)} AAPL`}{s.vaultAapl > 0n && s.vaultNvda > 0n ? " · " : ""}{s.vaultNvda > 0n && `${fmt(s.vaultNvda, 2)} NVDA`}</b> in stock</>
