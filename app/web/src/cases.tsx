@@ -148,7 +148,6 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const [stage, setStage] = useState<string | null>(null); // live-draw narration
   const railRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const gen = useRef(0);
   // Refs so the reel's finish() closure reads current draw state without re-subscribing.
   const stagePendingRef = useRef(false);
   const wonRef = useRef<Item | null>(null);
@@ -218,20 +217,18 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   // spin() itself races React's commit and silently skips the whole reel (found in self-audit: the
   // ref was always null in that tick, so every open jumped straight to the reveal).
   useEffect(() => {
-    if (phase !== "spinning" || !won) return;
+    if (phase !== "spinning") return; // gate on phase only — `won` may arrive a tick later (live race)
+    let cancelled = false; // per-run flag — robust to re-invocation (no shared counter to desync)
     // In live mode the reel is done spinning but must WAIT for the real draw before revealing — the
-    // reveal is authoritative from chain, never the provisional item. `stageRef` tracks pending state.
+    // reveal is authoritative from chain, never the provisional item. `stagePendingRef` tracks pending.
     const finish = () => {
-      if (live && stagePendingRef.current) {
-        setTimeout(finish, 500); // draw still sealing on chain — hold the reel at rest, poll
-        return;
-      }
+      if (cancelled) return;
+      if (live && stagePendingRef.current) { setTimeout(finish, 500); return; } // draw still sealing — hold at rest
       setPhase("revealed");
       setPulls((p) => (wonRef.current ? [wonRef.current, ...p].slice(0, 8) : p));
     };
-    const g = ++gen.current;
     const rail = railRef.current, stage = stageRef.current;
-    if (!rail || !stage || reducedMotion()) { finish(); return; } // reduced motion: no reel
+    if (!rail || !stage || reducedMotion()) { finish(); return () => { cancelled = true; }; } // reduced motion: no reel
     const stageW = stage.clientWidth;
     // Land the marker inside the winner card, deliberately off-center (CS:GO realism), never on the edge.
     const jitter = (Math.random() - 0.5) * (CARD_W * 0.55);
@@ -240,7 +237,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
     const t0 = performance.now();
     rail.style.transform = "translateX(0px)";
     const step = (t: number) => {
-      if (g !== gen.current) return;
+      if (cancelled) return;
       const k = Math.min(1, (t - t0) / D);
       const eased = 1 - Math.pow(1 - k, 5); // quintic ease-out: fast blur -> aching crawl
       rail.style.transform = `translateX(${(-finalX * eased).toFixed(2)}px)`;
@@ -248,11 +245,9 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
       finish();
     };
     requestAnimationFrame(step);
-    // Watchdog: rAF is throttled to zero in hidden/occluded tabs, which would strand the spin
-    // forever. If the reel hasn't finished shortly after its duration, resolve it — a user who tabs
-    // away mid-spin gets their reveal the moment they're back.
-    const dog = setTimeout(() => { if (g === gen.current) { gen.current++; finish(); } }, D + 600);
-    return () => { gen.current++; clearTimeout(dog); }; // orphan the loop if we unmount mid-spin
+    // Watchdog: rAF is throttled to zero in hidden/occluded tabs, which would strand the spin forever.
+    const dog = setTimeout(finish, D + 600);
+    return () => { cancelled = true; clearTimeout(dog); }; // orphan the loop if we unmount mid-spin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 

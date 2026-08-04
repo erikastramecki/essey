@@ -56,7 +56,6 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const [busy, setBusy] = useState(false);
   const railRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const gen = useRef(0);
   // Refs so the reel's finish() closure reads current state without re-subscribing (mirrors CasesArcade).
   const stagePendingRef = useRef(false);
   const resultRef = useRef<{ multBps: number; payoutShares: bigint } | null>(null);
@@ -130,22 +129,23 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   // winner, then finish() HOLDS the reel at rest while the on-chain roll is still settling, and reveals
   // only when the true multiplier has arrived (or surfaces the error and returns to idle).
   useEffect(() => {
-    if (phase !== "spinning" || won === null) return;
+    if (phase !== "spinning") return;
+    let cancelled = false; // per-run flag — robust to re-invocation (no shared counter to desync)
     const finish = () => {
+      if (cancelled) return;
       if (stagePendingRef.current) { setTimeout(finish, 400); return; } // roll still settling — hold at rest
       if (resultRef.current) { setPhase("revealed"); setBusy(false); load(); }
       else { setPhase("idle"); setBusy(false); setMsg(errRef.current ?? "the roll didn't settle — try again"); load(); }
     };
-    const g = ++gen.current;
     const rail = railRef.current, stage = stageRef.current;
-    if (!rail || !stage || reducedMotion()) { finish(); return; }
+    if (!rail || !stage || reducedMotion()) { finish(); return () => { cancelled = true; }; }
     const stageW = stage.clientWidth;
     const jitter = (Math.random() - 0.5) * (CHIP_W * 0.55);
     const finalX = WIN * CHIP_W + CHIP_W / 2 + jitter - stageW / 2;
     const D = 6400, t0 = performance.now();
     rail.style.transform = "translateX(0px)";
     const step = (t: number) => {
-      if (g !== gen.current) return;
+      if (cancelled) return;
       const k = Math.min(1, (t - t0) / D);
       const eased = 1 - Math.pow(1 - k, 5);
       rail.style.transform = `translateX(${(-finalX * eased).toFixed(2)}px)`;
@@ -153,8 +153,8 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
       finish();
     };
     requestAnimationFrame(step);
-    const dog = setTimeout(() => { if (g === gen.current) { gen.current++; finish(); } }, D + 600);
-    return () => { gen.current++; clearTimeout(dog); };
+    const dog = setTimeout(finish, D + 600); // watchdog: rAF is throttled in hidden tabs
+    return () => { cancelled = true; clearTimeout(dog); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
