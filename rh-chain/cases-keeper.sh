@@ -17,7 +17,10 @@ WINDOW=60
 INTERVAL="${CASES_KEEPER_INTERVAL:-3}"
 
 echo "cases-keeper: watching $CASES every ${INTERVAL}s"
-declare -A handled   # ids we've already opened/attempted — avoids re-sending during state-propagation lag
+# `handled` tracks ids we've already opened/attempted (avoids re-sending during state-propagation lag).
+# A plain indexed array — case ids are non-negative integers — so this works on macOS bash 3.2 too
+# (no `declare -A`, which 3.2 lacks).
+handled=()
 while true; do
   next=$(cast call "$CASES" 'nextCaseId()(uint256)' --rpc-url "$RPC" 2>/dev/null)
   if [[ "$next" =~ ^[0-9]+$ ]] && [ "$next" -gt 0 ]; then
