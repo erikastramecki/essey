@@ -79,17 +79,14 @@ The CS:GO reel + rarity glow in `cases.tsx` was made for variance. Additions: a 
 the card, escalating tension for high tiers, a full-screen **Gold Bell** moment on the 50×, and the
 "Gold Bell unlocks at $X" reserve meter on the case picker. Minimal lift over the existing reel.
 
-## 7. THE TWO GATES (the reason it isn't live — from your own docs)
-**7a. Entropy (technical, hard blocker).** Blockhash is fine for fair-value (manipulation wins nothing)
-but exploitable for multipliers (a sequencer could bias toward the 50×). `EsseyCases.sol` + the audit
-gate hold it *"insufficient for the degen variant — requires a hardened VRF."* And `DESIGN-seats-
-market-layer.md`: *"no Chainlink VRF on the production path."* So we need an unmanipulable, verifiable
-source. **Options one-pager below (§8).** This is the long pole.
+## 7. Entropy — the one real gate (DECIDED)
+Blockhash is fine for fair-value (manipulation wins nothing) but exploitable for multipliers (a
+sequencer could bias toward the 50×). `EsseyCases.sol` + the audit gate hold it *"insufficient for the
+degen variant — requires a hardened VRF."* No Chainlink VRF on RH Chain; no BLS precompile (EIP-2537)
+on Orbit's ArbOS, so direct on-chain drand verification is out. **Decision: Dice Protocol** (§8).
 
-**7b. Legal (jurisdiction).** A win-more/less-than-paid roll is a **game of chance**. `TOKENOMICS-
-essey.md`: *"higher reg risk — StonkBrokers US-restricts their Degen Mode for exactly this. Gated,
-jurisdiction-aware, separately legal-reviewed."* Requires **geo-gating (US + restricted regions) from
-day one + a separate legal review** before production. Founder's call; the docs assume yes.
+*(Legal/jurisdiction is handled out-of-band by the founder and is explicitly out of scope for this
+spec — no geo-gating hook is required in the contract.)*
 
 ## 8. Entropy options one-pager (pick the randomness path)
 Requirement: at open, a random word that (i) the RH sequencer/buyer/house cannot bias, and (ii) anyone
@@ -102,18 +99,26 @@ Chain — no Chainlink VRF is (per the docs); the others need on-chain verificat
 | **B — External VRF oracle** | Request randomness from a VRF service (Gelato VRF, API3 QRNG, Randamu/drand-VRF); callback delivers a proof-verified word | Battle-tested, simple, provable via the VRF proof | **Must confirm a provider is live on RH Chain** (Chainlink VRF is not); external dep + fees + callback liveness | Fastest IF a provider exists |
 | **C — drand beacon + relayer** | Commit at buy; resolve against a future **drand** round (League of Entropy public beacon) posted on-chain by a permissionless relayer | Unmanipulable by the RH sequencer; simpler than ZK; the round+signature are publicly verifiable | Needs a relayer to post rounds (liveness); a light trust assumption on the beacon | Pragmatic middle — real unmanipulable randomness without full ZK |
 
-**Recommendation:** design against the `IEntropySource` interface now (so the ladder/solvency/UX are
-built and audited independent of this choice). For the source: **if a VRF provider is verified live on
-RH Chain → Option B** (ship fastest). **If not → Option C (drand + relayer)** for time-to-market with
-genuine unmanipulable randomness, and slot in **Option A (ZK draw)** as the v2 moat once the IVC work
-can absorb it — no game changes required, just a new `IEntropySource` implementation.
+**DECISION (2026-08-04, after research): Dice Protocol** — the only randomness actually deployed on RH
+Chain, and it's Option B *and* C's best traits combined: a Pyth-Entropy-compatible **two-party
+commit-reveal** (user randomness + a keeper hash-chain reveal), **verifiable on-chain via Keccak256**
+(on-brand — anyone can check), neither party can bias. Oracle `0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c`
+on RH Chain 4663; fee 0.000025 ETH (or $0.05 USDG via x402); `IEntropyConsumer` /
+`entropyCallback(uint64 seq, address provider, bytes32 random)` — ~50 lines.
+- **Async open (better UX):** buy → the keeper callback (~1–3s) *is* the reveal; no manual open step.
+- **Only residual risk:** a keeper can *withhold* (not bias) → handle with a per-case timeout +
+  re-request/refund path in the contract.
+- **Swappable:** the Dice/Pyth interface is standard, so a later move to Pyth Entropy or Gelato VRF (or
+  the ZK draw, Option A, as the eventual moat) is a thin adapter — the game never changes.
+- **Testnet:** Dice confirmed on mainnet 4663; if absent on 46630, a `MockEntropy` (immediate reveal)
+  drives tests + the testnet demo. Same `IEntropyConsumer` interface.
 
-## 9. Open decisions for the founder
-1. **Entropy path** (A / B / C) — gated on verifying what's live on RH Chain (I can research this next).
-2. **Jurisdiction gating + legal review** — geo-gate US day one? Getting sign-off?
-3. **Ladder + RTP** — the §2 numbers, or tune the floor/jackpot.
+## 9. Status
+- **Entropy: DECIDED — Dice Protocol** (§8).
+- **Legal: handled out-of-band** (founder), out of scope here.
+- **Ladder: tunable** (§2 is the starting set; on-chain + disclosed).
 
-## 10. What I can build now (no gates)
-`EsseyCasesDegen` with the ladder, the worst-case backing invariant, fee routing, sell-back, and the
-`IEntropySource` seam stubbed — plus the reveal UX and the full test suite + audit. Only the live
-entropy wiring and the geo-gate policy wait on §9.
+## 10. Build (in progress)
+`EsseyCasesDegen` against the `IEntropyConsumer` interface: ladder, worst-case-backed provably-solvent
+bankroll, fee routing, sell-back, a keeper-withhold timeout/refund path, and a `MockEntropy` for
+tests/testnet. Then the standing 3-round adversarial audit before any push/deploy.
