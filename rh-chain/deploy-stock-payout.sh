@@ -13,9 +13,10 @@ cd "$(dirname "$0")"
 export PATH="$HOME/.foundry/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 # --- deployer key (gitignored .env) ---
-[ -f .env ] || { echo "!! rh-chain/.env missing (needs PK=...)"; exit 1; }
+[ -f .env ] || { echo "!! rh-chain/.env missing (needs TESTNET_DEPLOYER_PK=...)"; exit 1; }
 set -a; . ./.env; set +a
-: "${PK:?PK not set in .env}"
+PK="${PK:-${TESTNET_DEPLOYER_PK:-}}" # .env names it TESTNET_DEPLOYER_PK
+: "${PK:?TESTNET_DEPLOYER_PK not set in rh-chain/.env}"
 
 export FOUNDRY_PROFILE=script
 RPC=rh_testnet
