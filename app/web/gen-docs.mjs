@@ -13,7 +13,7 @@ const DOCS = join(HERE, "..", "..", "docs");
 // `file` is relative to /docs and doubles as the GitHub source link, so every card in the site can
 // point at the exact file it renders — no separately-maintained list to drift out of sync.
 const PICK = [
-  ["The Market", "THE-MARKET.md", "The Market layer — design", "Seats, Vaults, Tiers, the Bell, the Exchange, Notes, Cases — every mechanic, why it's shaped that way, and what's enforced vs designed."],
+  ["The Market", "THE-MARKET.md", "The Market layer — design", "Seats, Vaults, Tiers, the Bell paid in real stock, the Exchange, Notes, and Cases — fair-value and the Degen multiplier. Every mechanic, why it's shaped that way, and what's live vs designed."],
   ["The Market", "TOKENOMICS.md", "$ESSEY tokenomics", "Three assets, three jobs, never crossed. Fixed supply, no emissions, free mint, three fee engines ranked by durability — and how it fails, stated plainly."],
   ["The Market", "DESIGN-whitelist-onboarding.md", "Earning a Seat — the whitelist", "The testnet trading-day quest: earn a free mint by using the protocol, committed on-chain as a timelocked Merkle root anyone can recompute."],
   ["The engine", "SCOPE-robinhood-chain.md", "Robinhood Chain scope", "The lending engine underneath: real Stock Tokens, Chainlink feeds, and what the chain does and doesn't give us."],

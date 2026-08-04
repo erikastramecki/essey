@@ -1,6 +1,6 @@
-# Interest rate model — how to price USDC deposits
+# Interest rate model — how to price USDG deposits
 
-**The question:** what interest rate do we offer to get people to deposit USDC, so there's
+**The question:** what interest rate do we offer to get people to deposit USDG, so there's
 liquidity sitting in the pool for borrowers to draw? And how is that rate decided?
 
 **The short answer:** you don't pick a fixed rate. In lending protocols the rate is a **function
@@ -12,7 +12,7 @@ right one for Essey.
 
 ## 1. The mechanic: utilization drives the rate
 
-Define **utilization** = how much of the supplied USDC is currently lent out:
+Define **utilization** = how much of the supplied USDG is currently lent out:
 
 ```
 U = totalBorrows / (idleCash + totalBorrows)
@@ -23,7 +23,7 @@ U = totalBorrows / (idleCash + totalBorrows)
   (Suppliers only earn on the portion actually borrowed — that's the `× U` — minus the protocol's cut.)
 
 Why tie it to utilization? It's self-balancing:
-- **Low U** (lots of idle USDC) → low rates → cheap to borrow → attracts borrowing, and suppliers
+- **Low U** (lots of idle USDG) → low rates → cheap to borrow → attracts borrowing, and suppliers
   earn little so they don't over-supply.
 - **High U** (pool nearly drained) → high rates → expensive to borrow (borrowers repay) and
   lucrative to supply (new deposits arrive). This automatically pulls the pool back to a healthy level
@@ -48,8 +48,8 @@ if U > U*:   borrowAPR = base + slope1 + slope2 · ((U − U*) / (1 − U*))
 
 ## 3. How to actually pick the numbers (worked example)
 
-Start from the answer you want and work backwards. Suppliers won't deposit USDC unless the yield
-beats their alternatives — roughly **~4–5% (T-bills / just holding USDC)** on the low end, and
+Start from the answer you want and work backwards. Suppliers won't deposit USDG unless the yield
+beats their alternatives — roughly **~4–5% (T-bills / just holding USDG)** on the low end, and
 **~5–10%** in competing DeFi lending. So to attract liquidity, target a supply APY that's clearly
 competitive at the utilization you expect to run.
 
@@ -76,11 +76,12 @@ The IRM sets the *equilibrium*, but early on there's a cold-start problem: **no 
 utilization → low supply APY → no reason to supply.** The dynamic rate alone won't bootstrap you.
 The standard fixes:
 
-1. **Seed the pool yourself** (protocol-owned liquidity). You/treasury supply the initial USDC so
-   borrowers have something to draw from day one. (This is literally what `dev-up-sui.sh` does now —
-   it seeds the pool.)
+1. **Seed the pool yourself** (protocol-owned liquidity). You/treasury supply the initial USDG so
+   borrowers have something to draw from day one. (This is exactly the testnet seed path on
+   Robinhood Chain — treasury deposits USDG into `EsseyPool` so there's lendable liquidity before
+   the first borrower arrives.)
 2. **Liquidity incentives** — emit a token / points to supplement organic supply APY early
-   ("supply USDC, earn 10% interest **+** X in rewards"). This is how essentially every new lending
+   ("supply USDG, earn 10% interest **+** X in rewards"). This is how essentially every new lending
    protocol got its first liquidity. Sunset it as organic utilization grows.
 3. **Promotional fixed APY** early, then transition to the dynamic curve once there's real demand.
 4. **Reserve factor → insurance fund** — a slice of interest builds a backstop that makes suppliers
@@ -89,24 +90,26 @@ The standard fixes:
 The honest sequencing: **seed + incentivize to get initial liquidity and borrowers → real
 utilization builds → the dynamic curve takes over and you dial incentives down.**
 
-## 5. What Essey needs to implement (current state → target)
+## 5. How Essey implements it (done — live in `EsseyPool`)
 
-**Today:** the pool stores a single fixed `rate_bps` (set to 0 in the demo, so there's no interest —
-that's why the demo shows ~0% APY). The accrual math (`accrue`) already compounds a rate over time;
-it just uses a constant.
+The dynamic kinked curve above is **already implemented** in the deployed Solidity `EsseyPool` on
+Robinhood Chain testnet. There is no fixed `rate_bps`; the rate is a function of utilization,
+evaluated on every accrual:
+- The curve params live in the pool: `baseBps, slope1Bps, slope2Bps, kinkBps, reserveBps`, with
+  `kinkBps = 8000` (the 80% target) and the sum of the legs bounded by `MAX_RATE_BPS`.
+- `borrowRateBps()` evaluates the kink: `base + slope1 * (U / kink)` up to the kink, then
+  `+ slope2 * ((U − kink) / (1 − kink))` on the excess above it.
+- `utilizationBps()` measures `U` over **lendable** supply — cash plus outstanding borrows, minus
+  the skimmable protocol reserves — so accrued reserves that were never lendable don't distort the
+  rate borrowers pay.
+- `accrue()` compounds `borrowRateBps()` over the elapsed time (instead of a constant) and routes
+  `reserveBps` of the interest to `totalReserves`.
+- Supply APY is **emergent** — the UI derives it as `rate × utilization` (see `usePool` / the Earn
+  panel), so it displays correctly straight off the live rate.
 
-**Target:** make the rate a **function of utilization** instead of a constant. Concretely, in the
-Move contract:
-- Store the curve params in the pool: `base_bps, slope1_bps, slope2_bps, kink_bps, reserve_bps`.
-- In `accrue`, compute `U` from `liquidity` vs `total_borrows`, evaluate the kinked borrow APR, and
-  compound *that* over the elapsed time (instead of the fixed `rate_bps`).
-- Route `reserve_bps` of the interest to a protocol reserve balance.
-- Supply APY is then **emergent** — the UI already derives it as `rate × utilization` (see
-  `usePool` / the Earn panel), so it will display correctly once the rate is dynamic.
-
-That's a contained contract change (no new external dependencies, no oracle changes). It converts
-the pool from "fixed demo rate" to a real, self-balancing money market — and it's the piece that
-makes "deposit USDC and earn yield" actually mean something.
+No new external dependencies and no oracle changes: it's a self-balancing money market where
+"deposit USDG and earn yield" means something. Open borrowing switches on around Aug 5 2026, at
+which point real utilization begins driving the curve.
 
 ---
 
@@ -116,5 +119,6 @@ makes "deposit USDC and earn yield" actually mean something.
   to the borrow curve (example: ~14% borrow at 80% util → ~10% supply).
 - The rate model doesn't solve cold-start — **seed the pool + incentivize early supply**, then let the
   curve take over.
-- Implementation is a **contained contract change**: make `accrue` compute the rate from utilization
-  (kinked curve) instead of a constant, add a reserve factor. The UI already shows the emergent APY.
+- Implementation is **done**: `EsseyPool.accrue` computes the rate from utilization (kinked curve,
+  `kinkBps = 8000`) instead of a constant and routes a reserve factor, live on Robinhood Chain
+  testnet. The UI already shows the emergent APY.

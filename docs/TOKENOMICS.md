@@ -9,7 +9,7 @@ to the club, and everything the club pays out is real stock.
 |---|---|---|
 | **$ESSEY** | Access. Buys Seats, raises Tiers, opens Cases. | Rewards are **never** paid in $ESSEY. An access token that also pays rewards has to inflate to keep paying, and inflation eats the people it's paying. Ours can't — there is no emission schedule because there are no emissions. |
 | **The fee stable (USDG/ETH)** | Denominates every fee and fills the Bell's pot. | Fees priced in a stable are legible: you always know what a trade, a royalty, or a loan actually paid the club. |
-| **Tokenized stocks** | The payout. What lands in your Vault when the Bell rings, what a Case seals to your wallet. | The reward being an asset people *want to hold* is the whole point — the club pays you in something with a life outside the club. |
+| **Tokenized stocks** | The payout. What lands in your Vault when the Bell rings, what a Case seals to your wallet. The default Bell payout is a **diversified stock bundle via a BundleConverter** (opt-in single-stock per Seat), converted at the claim edge, oracle-checked and session-gated, and it **fails open to USDG** if it can't settle safely. | The reward being an asset people *want to hold* is the whole point — the club pays you in something with a life outside the club. |
 
 This separation is the anti-death-spiral rule. Sell pressure on $ESSEY can't touch the payout engine,
 because the payout engine never held $ESSEY in the first place.
@@ -53,8 +53,10 @@ is the sybil resistance *and* the marketing.
 
 ## Cases: the honest fine print
 
-Cases are fair-value by construction — every prize unit is ~the case's value in stock; the draw only
-decides *which* name. Two exposures are accepted and managed rather than hidden:
+Two case modes share the same /cases page via a Safe/Degen toggle.
+
+**Safe (fair-value) Cases** are fair-value by construction — every prize unit is ~the case's value in
+stock; the draw only decides *which* name. Two exposures are accepted and managed rather than hidden:
 
 - **The buyback reserve is $ESSEY-drift exposed.** Cases cost fixed $ESSEY; sell-backs pay oracle USD.
   If $ESSEY falls far enough, cases become cheap claims on the reserve — bounded by the reserve's balance
@@ -63,6 +65,12 @@ decides *which* name. Two exposures are accepted and managed rather than hidden:
   pool drifts below par unless the bankroll re-seeds fresh units. The *solvency* guarantee (every unopened
   case backed by a real unit) always holds; par value is maintained operationally, and we say "backed,"
   never "guaranteed par."
+
+**Degen Case** is the honest opposite: a 0.65x-50x multiplier gacha, ~90% average payback (RTP) — so the
+house edge is real and the expected value is below your stake. It is provably-fair (a Keccak256-verifiable
+commit-reveal via the Dice Protocol entropy oracle, mapped onto odds disclosed on-chain) and
+provably-solvent (every open reserves its worst-case 50x payout in real stock before you roll). No prize
+is minted from thin air, and no roll can pay what the reserve hasn't already set aside.
 
 ## How this fails (read before buying anything)
 

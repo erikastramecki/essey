@@ -2,7 +2,8 @@
 
 How Essey sets loan-to-value (LTV) and liquidation thresholds safely — the methodology,
 how the big lenders do it, and the concrete schema for our assets (esp. the RWA gap-risk
-that makes equities different from crypto).
+that makes tokenized equities special: a market-closed gap that an always-priced asset
+never has).
 
 ## The one question LTV answers
 > If the collateral price falls, can a liquidation still fully cover the debt before the
@@ -44,8 +45,9 @@ cascades to pick the caps and thresholds. Smaller/newer protocols start with a
 2. **Liquidity / market depth** — how much can you liquidate without moving the price? Thin
    liquidity → high slippage → **lower LTV AND a supply cap** (never let one market's
    liquidation exceed what the market can absorb).
-3. **Oracle quality** — Pyth confidence width, update frequency, manipulation resistance.
-   Wide/slow oracle → more conservative. (We already value collateral at `price − k·conf`.)
+3. **Oracle quality** — Chainlink feed update frequency (heartbeat), staleness, and
+   manipulation resistance. A slow/stale feed → more conservative. (We value collateral at
+   `collateral balance x Chainlink price` under a staleness/session guard; see StaleFeedGuard.)
 4. **Liquidation feasibility** — how fast can our keeper act? Slower → bigger buffer.
 5. **Gap risk (THE RWA-specific one — see below).**
 
@@ -66,41 +68,49 @@ Example (a large-cap equity): plausible stress drop incl. an overnight gap `D≈
 **maxLTV ~45%**. (Then tighten for single-name / volatile names.)
 
 ## THE RWA DIFFERENCE — gap risk (our defining constraint)
-A tokenized stock (xStock) trades **24/7 on-chain, but the underlying share only trades
-9:30–16:00 ET**. Overnight / weekend / on a trading halt, the oracle price is a **stale
-last-print** while the real value can gap on news (earnings, a halt, a macro shock). An
-attacker can borrow at Friday's price right before a Monday gap-down.
+A tokenized stock (AAPL / NVDA "Robinhood Token") can be held and moved on-chain around the
+clock, **but the underlying share only trades 9:30–16:00 ET**. Overnight / weekend / on a
+trading halt, the feed price is a **stale last-print** while the real value can gap on news
+(earnings, a halt, a macro shock). An attacker can borrow at Friday's price right before a
+Monday gap-down.
 
-This is why **equities get much lower LTV than crypto even at similar volatility** — the LTV
-must survive a *discontinuous* overnight move, not just intraday drift:
-- **Single-name stock** overnight gaps can be 10–30% on bad news → LTV **40%** (a 60% cushion).
-- **Index (SPYx)** is diversified → gaps far less → LTV **55%**.
-- **Crypto (BTC/ETH)** trades 24/7 — **no gap** (the token *is* the asset, always priced) → LTV **70%**.
+This is why **tokenized equities need conservative LTV** — the LTV must survive a
+*discontinuous* overnight move, not just intraday drift:
+- **Single-name stock** overnight gaps can be 10–30% on bad news → a large cushion (a
+  correspondingly low LTV).
+- A **diversified index** would gap far less and could carry a higher LTV — but the deployed
+  collateral universe is single-name stock only (AAPL / NVDA), so single-name gap risk is the
+  binding case.
 
-Our oracle policy already enforces the freshness side of this: **tighter max-staleness
-off-hours** (15s vs 60s) so a stale equity price is *refused*, and the `assetClass` branch
-keeps crypto (always-fresh) from being wrongly refused. LTV handles the *magnitude* of the
-gap; the oracle handles *not lending on a stale print*.
+Note: unlike an always-priced asset, tokenized stock has **real market-closed gaps** — the
+underlying simply is not trading off-hours — which is exactly why the session guard exists.
+
+Our oracle policy enforces the freshness side of this with **StaleFeedGuard**: a conservative
+US-session window (14:30–20:00 UTC), a ~25h staleness bound (Chainlink heartbeat 86400s +
+3600s grace), and a sequencer-uptime check so we never lend on a print from a down sequencer.
+LTV handles the *magnitude* of the gap; the guard handles *not lending on a stale print*.
 
 ## Essey's schema (the per-asset table + how a new asset is parameterized)
 
 **To onboard a market, classify it and set params from this table (conservative to start):**
 
+The deployed collateral universe is tokenized **single-name stock (AAPL / NVDA "Robinhood
+Token")**, borrowing **USDG** from the pool. Those are the in-scope rows; the remaining rows
+are methodology sketches for classes we do not currently list (out of scope on Robinhood
+Chain today).
+
 | Class | Example | Max LTV | Liq threshold | Rationale |
 |-------|---------|--------:|-------------:|-----------|
-| Crypto major | cbBTC, ETH | 70% | 80% | 24/7, deep liquidity, robust oracle, no gap |
-| Crypto (volatile) | SOL | 60% | 72% | 24/7 but higher vol |
-| Index equity | SPYx | 55% | 65% | diversified → small gap |
-| Large-cap single equity | AAPLx, NVDAx | 40–45% | 55–58% | gap risk + single-name vol |
-| Volatile single equity | MSTRx, COINx | 30–35% | 45–48% | high vol + gap |
-| Yield-stable | USDY | 85% | 95% | near-peg, but accrues + issuer restrictions (not 100%) |
-| Tokenized treasury | OUSG | 90% | 96% | low vol — BUT permissioned transfers gate it (later) |
+| Large-cap single equity (in scope) | AAPL, NVDA (Robinhood Token) | conservative | LT > maxLTV | gap risk + single-name vol; set from the stress formula |
+| Index equity (out of scope) | — | higher | — | diversified → smaller gap, if ever listed |
+| Volatile single equity (out of scope) | — | lower | — | high vol + gap |
 
 **The onboarding checklist for a new asset's LTV:**
-1. **Classify** (crypto / index / single-equity / stable / treasury) → start from the row above.
+1. **Classify** (single-name equity / index equity, and — if ever listed — stable / treasury)
+   → start from the row above. Single-name equity is the deployed case.
 2. **Adjust for the specifics:** vol percentile, on-chain liquidity/depth (→ maybe lower + a
-   supply cap), oracle confidence width, and — for equities — the plausible **overnight gap**
-   for that name (single-stock > index).
+   supply cap), feed heartbeat/staleness behavior, and — for equities — the plausible
+   **overnight gap** for that name (single-stock > index).
 3. **Set LT from the stress formula**, then **maxLTV = LT − ~10% margin**.
 4. **Set a supply/borrow cap** sized to liquidatable depth (don't let a liquidation exceed
    market depth in one window).
@@ -108,17 +118,19 @@ gap; the oracle handles *not lending on a stale print*.
 6. **Review + monitor:** re-evaluate as vol/liquidity move; tighten fast, loosen slowly.
 
 ## Who enforces it (the Essey-specific safety)
-The LTV *value* is our risk decision (the table + process above). But unlike a normal
-protocol that just trusts its off-chain risk team, **dregg enforces it provably**: the borrow
-turn is admitted only if `debt ≤ collateral · conservative_price · LTV` **in-kernel**, with
-`conservative_price = Pyth_price − k·confidence`, plus freshness + confidence caveats. So the
-risk parameters are machine-checked at authorization, not asserted in a config. Liquidation
-uses the liquidation threshold the same way (`dregg_liquidate`).
+The LTV *value* is our risk decision (the table + process above). The enforcement is
+**on-chain in Solidity**: the borrow is admitted only if `debt <= collateral balance x
+Chainlink price x LTV`, checked in `EsseyMarkets` / `EsseyBorrow` at authorization time,
+after the StaleFeedGuard has cleared the feed (session window + staleness bound + sequencer
+uptime). So the risk parameters are checked by the contract on every borrow, not asserted in
+a config. Liquidation applies the liquidation threshold the same way (`EsseyLiquidate`).
+There is no in-kernel ZK proof in the deployed lending path — enforcement is the Solidity
+market code against the Chainlink feed.
 
 ## v1 vs. later
 - **v1 (now):** the conservative rules table above + the stress-formula onboarding checklist +
-  the oracle discipline. Deliberately conservative LTVs (esp. equities) so we're safe while
-  small. TSLAx 40% / cbBTC 70% are already set this way.
+  the oracle discipline. Deliberately conservative LTVs on the listed single-name stock (AAPL /
+  NVDA) so we're safe while small.
 - **Later (scale):** commission a Gauntlet/Chaos-style **simulation** of price paths +
   liquidation cascades to calibrate caps and thresholds precisely; add per-market isolation
   (Morpho-style) so a bad market can't contaminate the shared pool; a funded reserve.

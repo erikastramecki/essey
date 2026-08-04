@@ -1,8 +1,11 @@
 # DESIGN — "Earn Your Mint": the Essey whitelist + onboarding quest
 
-**Status:** design + scope only. No contract or app code changes here — the market-layer
-contracts are under the 3-agent audit gate. This document specs task **#17 (the mint distributor)**
-and the off-chain + UI system around it.
+**Status:** SHIPPED. The market-layer contracts are **deployed and adversarially audited on Robinhood
+Chain testnet** (chainId **46630**), and the quest is **LIVE on essey.xyz** — you can run the full
+"trading day" today. This document, written as pre-build design, now doubles as the record of what
+shipped: the one piece still purely forward-looking is task **#17 (the mainnet mint distributor)**,
+needed only at mainnet-mint time. Everything else below — the testnet stack, the quest, the Case
+station — is live.
 
 **Grounded in:**
 - `docs/TOKENOMICS-essey.md` — free mint, **usage-earned** (borrow/supply on `EsseyPool` earns a Seat
@@ -50,20 +53,20 @@ the on-chain prerequisites gate them (you can't ring a Bell with an empty pot; y
 without a Seat).
 
 Stations 1–7 are the **core quest** (required for any whitelist spot). Station 8 (Case) is a **bonus**
-because the Case system is Phase 5 / not yet built (`DESIGN-seats-market-layer.md` §Phase 5) — it ships
-as a bonus station only once a testnet Case contract exists. Station 9 (Verify) is a required *click*,
-not a tx — it teaches the brand.
+station and is **live** — the Case system shipped: Cases plus the **Degen multiplier Case** are deployed
+on testnet and running on `/cases`, so station 8 is a real, optional testnet tx (with a Safe/Degen
+toggle). Station 9 (Verify) is a required *click*, not a tx — it teaches the brand.
 
 | # | Station name | The action (testnet tx) | What you learn | Why it's a good quest step |
 |---|---|---|---|---|
-| 1 | **Get Seated** | Claim testnet **gas ETH** + testnet **USDG** from the Essey faucet | wallet, chain, gas, the stable unit of account | The faucet is the sybil chokepoint (§3). Teaches the chain before any risk. |
+| 1 | **Get Seated** | Get **gas ETH** from the chain faucet, then a drip of **5,000 $ESSEY + 1,000 USDG**, then an on-chain **register** step | wallet, chain, gas, the stable unit of account, registering on Essey | The faucet + drip is the sybil chokepoint (§3). Teaches the chain, funds one quest run, and records you on-chain before any risk. |
 | 2 | **Take a Position** | **Supply** USDG to `EsseyPool` (≥ a meaningful minimum) | the lender side; where yield/TVL comes from | Supplying, not borrowing, is the safest first real action — no liquidation risk, teaches the pool. |
 | 3 | **Post a Note** | Deposit stock collateral, **borrow** USDG → this **mints a Note** (`Note.sol`, minted by the pool on borrow) | Notes, collateral, LTV, the portable bearer deed | The single richest teaching moment: collateral, health, and "your loan is an NFT you could sell." |
 | 4 | **Buy a Seat** | On **the Exchange** (`EsseyExchange.sol`), swap testnet $ESSEY → the next **Seat** (`buy`) | the Exchange AMM, Seats, the Vault (ERC-6551) that travels with it | Gets the user their membership object — the thing the whole club is about. |
 | 5 | **Raise your Tier** | **Stake** $ESSEY on your Seat to activate a **Tier** (`Bell.sol` tier staking, 50% burn) | Tiers, the $ESSEY sink, payout weight | Teaches the access-demand loop and sets up a non-zero payout weight for stations 6–7. |
 | 6 | **Ring the Bell** | Call `ring()` on the **Bell** when the fee pot is full — permissionless, earns the tipper's cut | the Bell, permissionless payouts, O(1) accumulator | "Anyone can ring, and you get paid to" is the flow's most electric moment — a real reward for a real tx. |
 | 7 | **Claim your Payout** | **Claim** the Tier-weighted Payout into your Seat's **Vault** | Payouts (never "dividend"), Vaults as the wallet | Closes the flywheel loop the user just powered: fees → Bell → Payout into *your* Vault. |
-| 8 | **Crack a Case** *(bonus)* | Buy + open a **Case**, receive stock sealed in a Vault-NFT | the gacha/stock-acquisition path, sell-back spread | Bonus until Phase 5 testnet contract exists. High-delight, so it's the natural "extra credit." |
+| 8 | **Crack a Case** *(bonus, live)* | Buy + open a **Case** — flip the **Safe/Degen** toggle: Safe draws stock sealed in a Vault-NFT; **Degen** rolls a provably-fair, provably-solvent multiplier (0.65x–50x, ~90% RTP) | the gacha/stock-acquisition path, sell-back spread, and the multiplier mode | Live on `/cases`. High-delight, so it's the natural "extra credit." |
 | 9 | **Verify it yourself** | Click **Verify** on a Tape row (a proof, solvency, or a fair draw) | the moat: *provably fair AND provably solvent* | Not a tx — a click. Teaches that "verify it yourself" is a button, not a slogan. The brand payoff. |
 
 **Design notes on the ordering**
@@ -299,9 +302,11 @@ station shows **Do this → Why → You'll learn** and a live "waiting for your 
 > borrow, buy a Seat, ring the Bell, get paid. Finish the day, earn your mint. This is testnet: fake
 > money, real mechanics, real proof. Let's ring the opening bell.
 >
-> **Station 1 — Get Seated.** Tap *Claim* to get testnet gas + testnet USDG.
-> *Why:* you can't trade with an empty pocket. *You'll learn:* your wallet, the chain, and USDG, the unit
-> everything's priced in. (One claim per person — this is how we keep the farmers out.)
+> **Station 1 — Get Seated.** First grab **gas ETH** from the chain faucet, then tap *Claim* for your
+> drip — **5,000 $ESSEY + 1,000 USDG** — and hit *Register* to record yourself on-chain.
+> *Why:* you can't trade with an empty pocket, and registering is your on-chain start line. *You'll
+> learn:* your wallet, the chain, and USDG, the unit everything's priced in. (One drip per person — this
+> is how we keep the farmers out.)
 >
 > **Station 2 — Take a Position.** *Supply* your USDG to the pool.
 > *Why:* every loan is funded by someone who supplied first. Today that's you. *You'll learn:* the lender
@@ -330,10 +335,11 @@ station shows **Do this → Why → You'll learn** and a live "waiting for your 
 > *Why:* the loop just closed — fees became a reward, and it landed in *your* Seat. *You'll learn:* what a
 > Payout is (a share of real fees — never a "dividend") and that your Vault is your wallet.
 >
-> **Station 8 — Crack a Case.** *(Bonus.)* Buy a **Case**, open it, and see what stock you drew — sealed
-> in its own tradeable Vault.
-> *Why:* it's the fun one. *You'll learn:* the gacha path, and that you can borrow against or sell back
-> what you draw. (Extra credit — bumps you up the leaderboard.)
+> **Station 8 — Crack a Case.** *(Bonus, live on /cases.)* Buy a **Case** and open it. Keep it **Safe**
+> to draw stock sealed in its own tradeable Vault, or flip to **Degen** to roll the multiplier
+> (0.65x–50x, ~90% RTP) — provably fair *and* provably solvent.
+> *Why:* it's the fun one. *You'll learn:* the gacha path, the multiplier mode, and that you can borrow
+> against or sell back what you draw. (Extra credit — bumps you up the leaderboard.)
 >
 > **Station 9 — Verify it yourself.** On the Tape, hit **Verify** on any row — a Payout, a solvent Note,
 > a fair draw.
@@ -351,7 +357,10 @@ station shows **Do this → Why → You'll learn** and a live "waiting for your 
 ## 7. Build scope
 
 Priority order, with trust/security flags. **Nothing here modifies audited contracts;** the pool-auth
-Note change already landed (`DESIGN-seats-market-layer.md` §Phase 3).
+Note change already landed (`DESIGN-seats-market-layer.md` §Phase 3). **Status note:** P2 (testnet
+deployment of the full stack) and P5 (the quest UI) are **delivered and live on essey.xyz** — the
+Case station included; P1 (the mainnet MintDistributor) remains the one forward-looking, mint-time
+artifact.
 
 ### P1 — MintDistributor contract (task #17) — **SECURITY-CRITICAL: it is the Seat minter**
 
@@ -400,18 +409,21 @@ interface IMintDistributor {
 derivation + review window + finalize (§4). This is the highest-risk new artifact in the whole system —
 gate it hardest.
 
-### P2 — Testnet deployment of the full stack — **needed before any quest can run**
+### P2 — Testnet deployment of the full stack — **DELIVERED (questing is live)**
 
-- Run `script/Deploy.s.sol` against `rh_testnet` (chainId 46630, per `foundry.toml`), with env overrides
-  for testnet USDG/stock/feed addresses (the script already reads decimals from chain, `Deploy.s.sol:39`).
-- Deploy the market layer: testnet `EsseyToken`, `Seat` (testnet minter can be a simple testnet
-  distributor or EOA — testnet Seats are throwaway), `SeatVault` impl, `Bell`, `EsseyExchange`
-  (**seed it with Seat inventory + $ESSEY reserve** so station 4 works), `StockConverter`, `Note`
-  wiring. Fund a testnet feed or point at a testnet oracle.
-- **Faucet-fund the Exchange and pool** enough that early questers aren't blocked by an empty pool/empty
-  Exchange inventory before organic supply arrives.
-- Stand up a **testnet Tape** indexer for the live feed.
-- *(When Phase 5 lands)* deploy a testnet Case contract to light up bonus station 8.
+Shipped on Robinhood Chain testnet (chainId 46630) and driving the live quest on essey.xyz. What went out:
+
+- Ran `script/Deploy.s.sol` against `rh_testnet` (chainId 46630, per `foundry.toml`), with env overrides
+  for testnet USDG/stock/feed addresses (the script reads decimals from chain, `Deploy.s.sol:39`).
+- Deployed the market layer: testnet `EsseyToken`, `Seat` (testnet minter is a throwaway testnet
+  distributor/EOA — testnet Seats are disposable), `SeatVault` impl, `Bell`, `EsseyExchange`
+  (**seeded with Seat inventory + $ESSEY reserve** so station 4 works), `StockConverter`, `Note`
+  wiring, pointed at a testnet feed/oracle.
+- **Faucet-funded the Exchange and pool** so early questers aren't blocked by empty inventory before
+  organic supply arrives.
+- Stood up the **testnet Tape** indexer for the live feed.
+- Deployed the testnet **Case** contract (plus the **Degen multiplier Case**) — bonus station 8 is
+  lit and running on `/cases`.
 
 **Flag:** testnet economic params (min supply/borrow, Exchange price/fees, tier costs) are quest-tuning
 knobs, not the mainnet economics memo — set them for *learnability*, not yield.
@@ -434,30 +446,31 @@ funding for the attestor's clustering. Keep the personhood check swappable.
 **Flag:** discretion lives here (clustering, Founding review). Keep inputs public, publish before set,
 constrain the key.
 
-### P5 — Quest UI — **the funnel + the fun**
+### P5 — Quest UI — **DELIVERED (live on essey.xyz)**
 
 The Trading Desk board, the seven-cell Ticker progress, station-gated flow with the copy in §6, badges,
-the live leaderboard with the Founding counter, the testnet Tape embed with Verify buttons, and the
-"You've earned your Seat" Ticket + mainnet-mint countdown. Reuses mainnet app components/vocabulary so
-onboarding transfers 1:1 (`app/web/`).
+the live leaderboard with the Founding counter, the testnet Tape embed with Verify buttons, the live
+Case station (Safe/Degen toggle), and the "You've earned your Seat" Ticket + mainnet-mint countdown.
+Reuses mainnet app components/vocabulary so onboarding transfers 1:1 (`app/web/`).
 
 ### Sequencing
 
-**P2 (testnet stack) → P3 (faucet) → P5 (UI) can run the live quest and start collecting completions
-immediately.** P4 (attestor) is needed before *attesting* but not before *questing* — questers can
-accumulate on-chain history while it's built. **P1 (MintDistributor) is only needed at mainnet-mint
-time**, but it's the highest-risk artifact, so **start its design + audit early and in parallel** — it
-must not be rushed at the end. Locked deploy-order dependency: MintDistributor deployed before/with the
-mainnet Seat (§0).
+**P2 (testnet stack) → P3 (faucet) → P5 (UI) are live and running the quest now — collecting completions
+today.** P4 (attestor) is needed before *attesting* but not before *questing* — questers accumulate
+on-chain history while it's built. **P1 (MintDistributor) is only needed at mainnet-mint time**, but
+it's the highest-risk artifact, so **start its design + audit early and in parallel** — it must not be
+rushed at the end. Locked deploy-order dependency: MintDistributor deployed before/with the mainnet
+Seat (§0).
 
 ---
 
 ## Summary (the recommendation, tight)
 
 - **Quest:** one ordered "trading day" of **seven required real testnet actions** — faucet → supply →
-  borrow (mint a Note) → buy a Seat → raise a Tier → ring the Bell → claim a Payout — plus a **bonus
-  Case** (when Phase 5 lands) and a required **Verify** click. Each station teaches the mechanic the next
-  depends on, and the early stations literally generate the fee pot the later ones distribute.
+  borrow (mint a Note) → buy a Seat → raise a Tier → ring the Bell → claim a Payout — plus a **live bonus
+  Case** (Safe stock draw or the Degen 0.65x–50x multiplier) and a required **Verify** click. Each station
+  teaches the mechanic the next depends on, and the early stations literally generate the fee pot the
+  later ones distribute.
 - **Allocation:** **binary floor, graded ceiling** — completing all seven = a guaranteed earned Seat (1
   per address); **earliness (first ~222 = Founding), capped depth/streak/referral bonuses** decide *stage
   and order*, never *whether*. ~2,222 supply split Founding / General-earned / Partner / float.
@@ -474,5 +487,6 @@ mainnet Seat (§0).
 - **Top build items, in priority:** (1) **MintDistributor** — task #17, security-critical because it's
   the Seat minter, audit-gated, deploy-order-locked; (2) **testnet deployment** of the full stack + Tape;
   (3) **the faucet** — the anti-sybil chokepoint; (4) **indexer/attestor** — the one trusted, public,
-  reproducible component; (5) **quest UI** — the Trading Desk. P2→P3→P5 can run the live quest now; P1
-  is needed only at mint time but must start early because it carries the most risk.
+  reproducible component; (5) **quest UI** — the Trading Desk. P2, P3, and P5 are **live on essey.xyz**
+  and running the quest now (Case station included); P1 is needed only at mint time but must start early
+  because it carries the most risk.

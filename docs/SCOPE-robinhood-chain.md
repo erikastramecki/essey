@@ -7,6 +7,12 @@ All contract facts below were read from the **deployed, verified source** on
 `robinhoodchain.blockscout.com`, not from documentation — the docs contradicted themselves and
 several widely-cited third-party write-ups are wrong about transfer restrictions.
 
+> **Scope note.** This document is the **lending-engine** scope: the port of the Sui pool/borrow/
+> liquidate core to Robinhood Chain. It does **not** cover the **market layer** — Seats, Vaults,
+> Tiers, Bell, the Exchange, Cases and Degen — which is now the primary deployed product and is
+> specified in [THE-MARKET.md](THE-MARKET.md). Read that document for the live product; read this
+> one for the lending engine underneath it.
+
 ---
 
 ## 0. The finding that reframes the port
@@ -89,6 +95,11 @@ Options:
 
 Recommendation: **ship v1 without it, keep the hook.** The circuit work is upstream-blocked and
 should not gate a working product.
+
+*Where provable-solvency actually lives now:* in the deployed product the "provably safe" claim is
+carried by the **Cases/Degen worst-case-reserve** mechanism — a bounded, on-chain reserve sized to
+cover the worst payout — not by a lending circuit. The lending path here enforces LTV directly in
+Solidity; the ZK hook stays optional.
 
 ---
 
@@ -235,13 +246,19 @@ token in wallet.
 
 ## 5. Phasing
 
-| Phase | Work | Gate |
+Status as of this revision: Phases 1–2 are **largely delivered on testnet** — the lending core
+(EsseyPool / EsseyMarkets / Borrow / Liquidate) is deployed on Robinhood Chain **testnet** and has
+been through adversarial audit rounds, with **open borrowing switching on ~Aug 5 2026**. What
+remains gated is **mainnet**: the Solidity has not been deployed to chainId 4663, and Phase 4's
+all-clean audit round plus the sequencer-feed blocker (Section 6) stand between testnet and mainnet.
+
+| Phase | Work | Status |
 |---|---|---|
-| **0 — Spike** ✅ **DONE** | All assumptions verified against live mainnet with zero gas and no keys: deny-list default-open, sequencer uptime feed exists, testnet exists, and 67 contracts already hold Stock Tokens in production. `rh-chain/phase0-verify.mjs`, 7/7. | ✅ passed |
-| **1 — Core** (2–3 wks) | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | Full test suite incl. **mutation tests on every guard** *(note: we have claimed this twice and been wrong twice — an independent sweep of 139 mutations found 50 survivors. Treat as an aspiration, not a status.)* |
-| **2 — RH hazards** (1 wk) | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | Fork tests against real Stock Tokens |
-| **3 — Agent** (1–2 wks) | Essey MCP server, dApp borrow flow, Robinhood Wallet integration | End-to-end on testnet |
-| **4 — Audit** | Fresh adversarial rounds on the Solidity | All-clean round before mainnet |
+| **0 — Spike** | All assumptions verified against live mainnet with zero gas and no keys: deny-list default-open, sequencer uptime feed exists, testnet exists, and 67 contracts already hold Stock Tokens in production. `rh-chain/phase0-verify.mjs`, 7/7. | ✅ **DONE** — passed |
+| **1 — Core** | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | ✅ **DELIVERED on testnet** — deployed and adversarially audited; open borrowing switches on ~Aug 5 2026. Guard mutation-testing remains the standing discipline *(claimed-and-wrong twice before — an independent sweep of 139 mutations found 50 survivors — so treat coverage as continuously earned, not a checkbox).* |
+| **2 — RH hazards** | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | ✅ **Largely delivered on testnet** — fork tests against real Stock Tokens. |
+| **3 — Agent** | Essey MCP server, dApp borrow flow, Robinhood Wallet integration | In progress — end-to-end on testnet. |
+| **4 — Audit** | Fresh adversarial rounds on the Solidity | ⏳ **Gates mainnet** — all-clean round required before mainnet (chainId 4663). |
 | **5 — Hybrid** (optional) | Sui pools for non-Robinhood RWA; shared markets/risk config. **CCIP** already moves Stock Tokens cross-chain — evaluate, do not assume Sui is a supported lane. | — |
 
 ---

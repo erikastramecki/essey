@@ -1,47 +1,57 @@
 # Outstanding
 
-Everything known-open, as of 2026-07-20. Written down so none of it lives only in someone's head.
+Everything known-open, as of 2026-08-04. Written down so none of it lives only in someone's head.
+This doc's whole point is the list of what is not finished; a "clean" line here means "not yet
+disproven," not "done."
+
+## Where the stack actually is
+
+The full market layer is **deployed and live on Robinhood Chain testnet** (chainId 46630), fronted
+by essey.xyz. See `DEPLOYMENT-testnet.md` for addresses. Deployed and exercised on-chain:
+
+- **Seats / Bell / Exchange / Cases / Notes** — the market layer, adversarially audited clean in the
+  published market-layer rounds.
+- **Bell pays real stock** — a default AAPL/NVDA bundle via `BundleConverter`, proven on-chain
+  (AAPL+NVDA delivered into a Seat's Vault by a Bell claim). Fails open to USDG when the converter
+  cannot price.
+- **Fair-value Cases** and the **Degen Case** — the multiplier gacha (0.65x-50x, ~90% RTP), audited
+  clean; entropy is `MockEntropy` on testnet, `Dice` on mainnet.
+- **Quest / whitelist** referral graph and leaderboard scoring.
+- **Lending pool (EsseyPool)** — supply/withdraw live; borrowing is timelock-gated open (see below).
+
+What is **not** done: none of this is on **mainnet**, and the deployed lending path enforces LTV
+**on-chain in Solidity**, not with a ZK circuit. The dregg/ZK design is a retired pivot (Archived
+section at the bottom); it does not gate the shipped product.
 
 ---
 
 ## Blockers before any mainnet deployment
 
-**1. No round has ever come back clean.** The stated gate is three auditors clean in the same
-round. Six Move rounds and one Solidity round; none met it. Severity is falling and the remaining
-items are mediums, but the gate is unmet and the code is unpushed-to-production for that reason.
+**1. Testnet only; mainnet is unproven.** The market layer and Degen Case are audited clean in the
+published market-layer rounds and running on testnet, but the gate for mainnet is three auditors
+clean in the same round on the **mainnet-bound** configuration, and mainnet uses real USDG
+(6-decimal), the `Dice` entropy source, and the operator multisig instead of the throwaway deployer.
+None of that has had a clean round yet.
 
-**2. The ZK layer has never been audited, and cannot be.** `circuit/` contains a Poseidon gadget
-and **no constraint system**. There is no `.zkey`, `.r1cs`, `.ptau` or `.wasm` anywhere. Audit
-findings F1 and F4 both turn on what the batch proof binds, so the most load-bearing component in
-the "provably safe" claim is the one nobody has been able to check.
+**2. Open borrowing is not switched on.** The AAPL/NVDA collateral markets are PROPOSED behind the
+2-day parameter timelock; borrowing opens **2026-08-05 ~18:55 UTC**, at which point someone must call
+`markets.commitMarket(aapl)` / `commitMarket(nvda)`. Supply/withdraw work now; borrow/liquidate do
+not until commit. The Solidity findings below are against the code on the borrowing path, so they
+are reconciled below rather than closed.
 
-**3. Both circuits must be re-proven upstream.** `dregg_lending` cannot originate and
-`settle_batch` cannot succeed until they are. This is deliberate — a lending function that can be
-drained must not originate loans — but it is blocked outside this repo.
-`perloan-prep/RUNBOOK-terms-binding.md` still specifies the **pre-fix 8-term preimage**; it needs
-the collateral-type term or the on-chain binding will never match.
+**3. Republish caveats.** Any layout change to `EsseyPool` / positions still forces a fresh package
+and a new `VITE_POOL`; treat redeploys as new addresses, not in-place upgrades.
 
-**4. ~~`README.md` claims "provably safe."~~ FIXED.** The README now leads with a "What is
-actually proven today" table separating the design's goal from what the deployment enforces, and
-the strongest claims in `WHY-ESSEY-IS-DIFFERENT.md` and `ARCHITECTURE.md` were softened to match.
-Re-tighten the language as the circuits land and are audited — the table is meant to change.
-
-**5. Republish required.** `Pool`, `Position` and `OperatorCap` all changed layout, so Sui cannot
-upgrade in place. Needs a fresh package, a fresh pool, and a new `VITE_POOL`.
+**4. ~~`README.md` claims "provably safe."~~ FIXED.** The README leads with a "What is actually
+proven today" table separating the design's goal from what the deployment enforces. With the ZK path
+retired, "proven" today means the on-chain Solidity LTV enforcement and the published audits — not a
+batch proof. Keep the table honest as scope changes.
 
 ---
 
 ## Open findings
 
-### Move (`move/`)
-
-| Severity | Item |
-|---|---|
-| high | `disburse_entry` hands a cap holder the whole `pool.cap` against zero collateral — no signature, no delay, no pause check. **A trust-model decision, not a patch:** is the cap holder trusted with the full pool, or does that path need an attestation too? |
-| medium | `repay` demands exact equality against a debt that grows every second, with no on-chain debt view to size it from. Fixed by construction in the Solidity port; not backported. |
-| low | Faucet rate limit keyed on the raw request string, bypassable by address casing/padding. Devnet only. |
-
-### Solidity (`rh-chain/`)
+### Solidity (`rh-chain/`) — the deployed path
 
 | Severity | Item |
 |---|---|
@@ -55,21 +65,35 @@ upgrade in place. Needs a fresh package, a fresh pool, and a new `VITE_POOL`.
 | medium | `resumeGrace` at 6× `gapThreshold` turns routine keeper jitter into a permanent liquidation DoS. |
 | medium | ~50 mutations survive a green suite, including `MIN_RISK_GAP_BPS` and `PARAM_TIMELOCK`. |
 
-**Round 2 was not clean.** This is the fourth consecutive round in which a shipped fix either did
-not work or introduced a new defect, and the third in which a claim I made in a commit message or
-document was disproven by the next round.
-
-Nothing in `rh-chain/` is deployed to any network.
+**Status.** The market layer around this code (Seats/Bell/Exchange/Cases/Notes and the Degen Case)
+is deployed on testnet and audited clean in the published market-layer rounds. The findings above are
+against the **borrowing path**, which is deployed but not yet switched on (open borrowing is
+timelock-gated to ~2026-08-05, Blocker 2). They must be closed with a clean round before that path is
+trusted on mainnet. The track record still says caution: multiple prior rounds saw a shipped fix
+either not work or introduce a new defect, or a commit-message claim disproven by the next round.
 
 ---
 
-## Operational, before mainnet
+## Operational
 
-- **Deploy the `LivenessOracle` keeper** under a supervisor with alerting. It exists and is tested;
-  it is not running. A silently dead keeper degrades to "liquidations off" — safe, but an outage.
-- **Split the keys.** The keeper's hot key must not be the cold guardian key, and the Sui keeper
-  currently co-locates the `OperatorCap` and the operator signing key in one process, which
-  collapses a two-party control into one.
+**Open now, on testnet:**
+
+- **Feed keeper is not running.** The testnet mock Chainlink feeds go stale after ~25h
+  (`FEED_HEARTBEAT + GRACE`). When stale, `BundleConverter` reverts, the Bell fails open to USDG, and
+  Degen `buy` reverts (fails open). A cron must refresh the USDG/USD feed plus the converter's
+  AAPL/NVDA feeds (and the Cases/degen feeds) — `cast send <feed> "set(int256,uint256)" <answer>
+  <now>`. The USDG feed was refreshed at deploy; nothing beats it on a schedule yet. **The borrowing
+  pool's feeds are not in this keeper** and must be added before open borrowing (Blocker 2) is
+  trusted.
+
+**Before mainnet:**
+
+- **Deploy the `LivenessOracle` keeper** under a supervisor with alerting. It exists, is tested, and
+  is deployed on testnet, but no supervised keeper is beating it. A silently dead keeper degrades to
+  "liquidations off" — safe, but an outage.
+- **Split the keys.** On testnet, admin/treasury/seeder/bankroll are all the one throwaway deployer,
+  and the keeper's hot key must not be the cold guardian key. Mainnet moves control to the operator
+  multisig; that separation is unbuilt.
 - **Sequencer uptime feed.** Robinhood's docs say Chainlink provides one for Robinhood Chain; it is
   not on Chainlink's canonical list, not in the feed directory, and every contract from Chainlink's
   deployer on that chain resolves to a price feed. Either locate it (ask
@@ -88,3 +112,27 @@ Nothing in `rh-chain/` is deployed to any network.
    if that changes — but nothing runs it on a schedule yet.
 3. Has `adminBurn` ever actually been used? Recoverable from `Transfer`-to-zero logs; frequency
    decides whether it is theoretical or operational.
+
+---
+
+## Archived (retired Sui/ZK pivot)
+
+These were live blockers under the earlier Sui + ZK design. **v1 lending ships without the dregg
+circuit** — LTV is enforced on-chain in Solidity — so none of the below gates the deployed product.
+Kept for the audit trail, not as current work.
+
+- **No round ever came back clean on the Move/ZK code.** Six Move rounds and one Solidity round
+  against that design; none met the three-clean gate.
+- **The ZK layer was never audited, and could not be.** `circuit/` held a Poseidon gadget and no
+  constraint system — no `.zkey`, `.r1cs`, `.ptau` or `.wasm` anywhere. The most load-bearing part of
+  the old "provably safe" claim was the one nobody could check. Retired with the pivot to on-chain
+  Solidity LTV.
+- **Both circuits needed re-proving upstream.** `dregg_lending` could not originate and `settle_batch`
+  could not succeed until then; `perloan-prep/RUNBOOK-terms-binding.md` still specified the pre-fix
+  8-term preimage. Moot without the circuit in the deployed path.
+- **Move findings (`move/`):** `disburse_entry` handing a cap holder the whole `pool.cap` against zero
+  collateral (a trust-model question); `repay` demanding exact equality against a growing debt with no
+  on-chain debt view (fixed by construction in the Solidity port); faucet rate limit bypassable by
+  address casing/padding (devnet only). None apply to the Solidity deployment.
+- **Sui republish / key co-location:** the Sui `Pool`/`Position`/`OperatorCap` layout churn and the
+  Sui keeper co-locating `OperatorCap` with the signing key were Sui-specific and no longer relevant.
