@@ -67,6 +67,7 @@ export const casesAbi = parseAbi([
   "function buy() returns (uint256)",
   "function open(uint256) returns (address, uint256)",
   "function inventoryCount() view returns (uint256)",
+  "function cases(uint256) view returns (address buyer, uint64 drawBlock, uint64 boughtAt, bool opened)",
   "event CaseBought(uint256 indexed caseId, address indexed buyer, uint64 drawBlock)",
   "event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)",
 ]);
@@ -167,7 +168,7 @@ export const degenAbi = parseAbi([
   "event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)",
 ]);
 // Testnet MockEntropy keeper — anyone can settle a pending request.
-export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)"]);
+export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)", "function fulfilled(uint64) view returns (bool)"]);
 const caseOpenedItem = parseAbiItem("event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)");
 const fairCaseOpenedItem = parseAbiItem("event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)");
 
@@ -498,24 +499,35 @@ export const flows = {
     const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.degenCases.toLowerCase());
     const seq = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n; // CaseBought: topic[1] = seq
 
-    // Read the settlement event once it lands (whoever settles it — keeper or the fallback below).
+    // Reliable "did the keeper settle it" signal: a cheap boolean eth_call (never throws the flow).
+    const isSettled = async (): Promise<boolean> => {
+      try { return (await pub.readContract({ address: ADDR.degenEntropy, abi: mockEntropyAbi, functionName: "fulfilled", args: [seq] })) as boolean; }
+      catch { return false; }
+    };
+    // The result (multiplier + payout) lives in the CaseOpened event; read it only once settled.
     const readOpened = async (): Promise<{ multBps: number; payoutShares: bigint; seq: bigint } | null> => {
-      const logs = await pub.getLogs({ address: ADDR.degenCases, event: caseOpenedItem, args: { seq }, fromBlock: buyRcpt.blockNumber });
-      if (!logs.length) return null;
-      const { multiplierBps, payoutShares } = logs[0].args as { multiplierBps: bigint; payoutShares: bigint };
-      return { multBps: Number(multiplierBps), payoutShares, seq };
+      try {
+        const logs = await pub.getLogs({ address: ADDR.degenCases, event: caseOpenedItem, args: { seq }, fromBlock: buyRcpt.blockNumber });
+        if (!logs.length) return null;
+        const { multiplierBps, payoutShares } = logs[0].args as { multiplierBps: bigint; payoutShares: bigint };
+        return { multBps: Number(multiplierBps), payoutShares, seq };
+      } catch { return null; }
     };
 
-    // Wait for the keeper to settle (the reel keeps spinning meanwhile). ~24s budget.
+    // Wait for the keeper to settle (poll the cheap bool; the reel keeps spinning meanwhile). ~30s.
     onStage?.("sealing");
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 2_000));
-      const r = await readOpened();
-      if (r) return r;
+      if (await isSettled()) { const r = await readOpened(); if (r) return r; break; }
     }
-    // No keeper answered — settle it ourselves so the roll always finishes (a rare extra signature).
+    // No keeper answered in time — settle it ourselves so the roll always finishes (a rare extra sig).
     onStage?.("revealing");
-    await send(a, ADDR.degenEntropy, mockEntropyAbi, "fulfill", [seq]);
+    try {
+      await send(a, ADDR.degenEntropy, mockEntropyAbi, "fulfill", [seq]);
+    } catch (e) {
+      if (await isSettled()) { const r = await readOpened(); if (r) return r; } // keeper beat us — recover
+      throw e;
+    }
     const r = await readOpened();
     if (r) return r;
     throw new Error("settled but no CaseOpened event found");
@@ -536,25 +548,33 @@ export const flows = {
     const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.cases.toLowerCase());
     const caseId = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n;
 
+    // Reliable "did the keeper open it" signal: the case's `opened` flag (cheap eth_call, never throws).
+    const isOpened = async (): Promise<boolean> => {
+      try { const c = await pub.readContract({ address: ADDR.cases, abi: casesAbi, functionName: "cases", args: [caseId] }) as readonly [Address, bigint, bigint, boolean]; return c[3]; }
+      catch { return false; }
+    };
+    // The drawn stock + amount live in the CaseOpened event; read it only once opened.
     const readOpened = async (): Promise<{ token: Address; amount: bigint; tx: Hex } | null> => {
-      const logs = await pub.getLogs({ address: ADDR.cases, event: fairCaseOpenedItem, args: { caseId }, fromBlock: buyRcpt.blockNumber });
-      if (!logs.length) return null;
-      const { token, amount } = logs[0].args as { token: Address; amount: bigint };
-      return { token, amount, tx: logs[0].transactionHash as Hex };
+      try {
+        const logs = await pub.getLogs({ address: ADDR.cases, event: fairCaseOpenedItem, args: { caseId }, fromBlock: buyRcpt.blockNumber });
+        if (!logs.length) return null;
+        const { token, amount } = logs[0].args as { token: Address; amount: bigint };
+        return { token, amount, tx: logs[0].transactionHash as Hex };
+      } catch { return null; }
     };
 
-    // Wait for the keeper to reveal (this also waits out the one-block draw commit). ~24s budget.
+    // Wait for the keeper to reveal (poll the cheap bool; also waits out the one-block draw commit). ~30s.
     onStage("sealing");
-    for (let i = 0; i < 12; i++) {
+    let opened = false;
+    for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 2_000));
-      const r = await readOpened();
-      if (r) return r;
+      if (await isOpened()) { const r = await readOpened(); if (r) return r; opened = true; break; }
     }
-    // No keeper answered — open it ourselves (a rare extra signature). If it reverts AlreadyOpened, the
-    // keeper beat us to it, so re-read rather than surfacing an error.
-    onStage("opening");
+    // No keeper answered in time — open it ourselves (a rare extra sig). If it reverts AlreadyOpened the
+    // keeper beat us, so re-read rather than surfacing an error.
+    if (!opened) onStage("opening");
     try {
-      await send(a, ADDR.cases, casesAbi, "open", [caseId]);
+      if (!opened) await send(a, ADDR.cases, casesAbi, "open", [caseId]);
     } catch (e) {
       const r = await readOpened();
       if (r) return r;

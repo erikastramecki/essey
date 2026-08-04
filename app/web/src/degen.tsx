@@ -30,7 +30,7 @@ type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: big
 type Phase = "idle" | "spinning" | "revealed";
 
 const CHIP_W = 132; // .cs-card width (120) + .spin-rail gap (12)
-const WIN = 40; // winner index in the strip
+const WIN = 46; // winner index in the strip (matches CasesArcade)
 
 export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const w = useWallet();
@@ -45,8 +45,12 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const railRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const gen = useRef(0);
-  const offsetRef = useRef(0); // current translateX magnitude (px shifted left), shared across the two spin phases
+  // Refs so the reel's finish() closure reads current state without re-subscribing (mirrors CasesArcade).
+  const stagePendingRef = useRef(false);
+  const resultRef = useRef<{ multBps: number; payoutShares: bigint } | null>(null);
+  const errRef = useRef<string | null>(null);
 
   useEffect(() => { document.title = "Degen Case · Essey"; }, []);
   const load = useCallback(() => {
@@ -69,72 +73,59 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
     return acct.ladder.reduce((s, t) => s + (t.multBps / 10000) * (t.pct / 100), 0) * 100;
   }, [acct]);
 
-  const open = async () => {
+  const open = () => {
     if (!a || !acct || busy) return;
-    setBusy(true); setMsg(null); setStage("buying"); setWon(null);
-    const winnerSeed = drawFill();
+    setBusy(true); setMsg(null); setPayout(0n);
+    resultRef.current = null; errRef.current = null;
+    // Seed the reel with a provisional roll so it spins immediately; the true roll arrives from chain
+    // mid-spin and becomes the reveal. Same fire-and-update flow as the Safe case (CasesArcade.spinLive).
+    const provisional = drawFill();
     const s = Array.from({ length: 54 }, drawFill);
-    s[WIN] = winnerSeed; // corrected to the real roll on reveal
-    setStrip(s); setPhase("spinning");
-    try {
-      const { multBps, payoutShares } = await flows.degenOpen(a, setStage);
-      // land the reel on the true rolled multiplier
-      setStrip((prev) => { const c = [...prev]; c[WIN] = multBps; return c; });
-      setWon(multBps); setPayout(payoutShares); setStage(null);
-    } catch (e) {
-      setMsg(niceError(e)); setPhase("idle"); setStage(null); setBusy(false); return;
-    }
+    s[WIN] = provisional;
+    setStrip(s); setWon(provisional); setStage("approving"); setPhase("spinning");
+    flows.degenOpen(a, setStage)
+      .then(({ multBps, payoutShares }) => {
+        resultRef.current = { multBps, payoutShares };
+        setStrip((prev) => { const c = [...prev]; c[WIN] = multBps; return c; }); // land on the true roll
+        setWon(multBps); setPayout(payoutShares); setStage(null);
+      })
+      .catch((e) => { errRef.current = niceError(e); setStage("err:" + errRef.current); });
   };
 
-  const period = strip.length * CHIP_W; // width of one strip copy (rail renders two copies for a seamless loop)
-
-  // Phase 1 — free spin: a constant-velocity blur that runs the instant we start buying, so the reel is
-  // visibly spinning while the buy + settle transactions confirm (not frozen waiting on the chain).
-  useEffect(() => {
-    if (phase !== "spinning" || won !== null) return;
-    const rail = railRef.current;
-    if (!rail || reducedMotion() || period === 0) return;
-    const g = ++gen.current;
-    const V = 2600; // px/s
-    const t0 = performance.now();
-    const step = (t: number) => {
-      if (g !== gen.current) return;
-      offsetRef.current = (V * (t - t0)) / 1000 % period;
-      rail.style.transform = `translateX(${(-offsetRef.current).toFixed(2)}px)`;
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    return () => { gen.current++; };
-  }, [phase, won, period]);
-
-  // Phase 2 — settle: once the true multiplier is known, decelerate from wherever the free spin is to
-  // land the winner (index WIN, one loop forward so it always travels) under the marker.
+  // The reel animation — identical to CasesArcade (same 6.4s span, quintic ease-out). It spins to the
+  // winner, then finish() HOLDS the reel at rest while the on-chain roll is still settling, and reveals
+  // only when the true multiplier has arrived (or surfaces the error and returns to idle).
   useEffect(() => {
     if (phase !== "spinning" || won === null) return;
-    const finish = () => { setPhase("revealed"); setBusy(false); load(); };
+    const finish = () => {
+      if (stagePendingRef.current) { setTimeout(finish, 400); return; } // roll still settling — hold at rest
+      if (resultRef.current) { setPhase("revealed"); setBusy(false); load(); }
+      else { setPhase("idle"); setBusy(false); setMsg(errRef.current ?? "the roll didn't settle — try again"); load(); }
+    };
     const g = ++gen.current;
-    const rail = railRef.current;
-    if (!rail || reducedMotion() || period === 0) { finish(); return; }
-    const stageW = rail.parentElement?.clientWidth ?? 600;
-    const jitter = (Math.random() - 0.5) * (CHIP_W * 0.4);
-    const start = offsetRef.current % period; // snap into the first copy (invisible mid-blur)
-    rail.style.transform = `translateX(${(-start).toFixed(2)}px)`;
-    const target = WIN * CHIP_W + CHIP_W / 2 + jitter - stageW / 2 + period; // winner in the second copy → forward
-    const D = 2600, t0 = performance.now();
+    const rail = railRef.current, stage = stageRef.current;
+    if (!rail || !stage || reducedMotion()) { finish(); return; }
+    const stageW = stage.clientWidth;
+    const jitter = (Math.random() - 0.5) * (CHIP_W * 0.55);
+    const finalX = WIN * CHIP_W + CHIP_W / 2 + jitter - stageW / 2;
+    const D = 6400, t0 = performance.now();
+    rail.style.transform = "translateX(0px)";
     const step = (t: number) => {
       if (g !== gen.current) return;
       const k = Math.min(1, (t - t0) / D);
-      const eased = 1 - Math.pow(1 - k, 4);
-      offsetRef.current = start + (target - start) * eased;
-      rail.style.transform = `translateX(${(-offsetRef.current).toFixed(2)}px)`;
+      const eased = 1 - Math.pow(1 - k, 5);
+      rail.style.transform = `translateX(${(-finalX * eased).toFixed(2)}px)`;
       if (k < 1) { requestAnimationFrame(step); return; }
       finish();
     };
     requestAnimationFrame(step);
-    const dog = setTimeout(() => { if (g === gen.current) { gen.current++; finish(); } }, D + 700);
+    const dog = setTimeout(() => { if (g === gen.current) { gen.current++; finish(); } }, D + 600);
     return () => { gen.current++; clearTimeout(dog); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, won, period]);
+  }, [phase]);
+
+  // Keep finish()'s pending flag current: true while a non-error stage is set (chain still settling).
+  useEffect(() => { stagePendingRef.current = stage !== null && !stage.startsWith("err:"); }, [stage]);
 
   const claim = async () => {
     if (!a) return;
@@ -177,7 +168,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
             {/* spin stage */}
             <div className="spin-shell">
               {phase !== "revealed" && (
-                <div className="spin-stage" aria-label="multiplier reel">
+                <div className="spin-stage" ref={stageRef} aria-label="multiplier reel">
                   {phase === "idle" ? (
                     <div className="spin-idle">
                       <EMonogram size={40} />
@@ -197,7 +188,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                     <>
                       <div className="spin-marker" />
                       <div className="spin-rail" ref={railRef}>
-                        {[...strip, ...strip].map((m, i) => {
+                        {strip.map((m, i) => {
                           const s = mstyle(m);
                           return (
                             <div key={i} className="cs-card cs-reel dg-chip" style={{ "--rar": s.color, "--rarGlow": s.glow } as React.CSSProperties}>
@@ -207,7 +198,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                         })}
                       </div>
                       <div className="spin-fade left" /><div className="spin-fade right" />
-                      {stage && <div className="spin-stage-label num">{stageLabel[stage] ?? stage}</div>}
+                      {stage && <div className={"spin-stage-label num" + (stage.startsWith("err:") ? " err" : "")}>{stage.startsWith("err:") ? stage.slice(4) : (stageLabel[stage] ?? stage)}</div>}
                     </>
                   )}
                 </div>
