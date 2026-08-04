@@ -100,6 +100,22 @@ header.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: saturate(1.
 .dg-row-bar { height: 8px; border-radius: 5px; background: var(--s3); overflow: hidden; }
 .dg-row-bar span { display: block; height: 100%; border-radius: 5px; opacity: .85; }
 .dg-row-pct { font-family: var(--mono); font-size: 12px; color: var(--tx-mut); text-align: right; }
+/* Exchange — beginner-friendly "Buy a Seat" layout: one clear action, advanced tucked away. */
+.ex-intro { color: var(--tx-mut); max-width: 62ch; margin: 8px 0 14px; }
+.ex-intro b { color: var(--tx); }
+.ex-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 16px; font-size: 14px; color: var(--tx-mut); }
+.ex-stats b { color: var(--tx); }
+.ex-price i { color: var(--tx-mut); font-style: normal; }
+.ex-buy { width: 100%; font-size: 16px; padding: 15px 20px; }
+.ex-help { margin-top: 10px; max-width: 64ch; }
+.ex-help a { color: var(--gold); }
+.ex-more { display: inline-block; margin-top: 16px; background: none; border: 0; color: var(--tx-mut); font-family: var(--sans); font-size: 13px; cursor: pointer; padding: 4px 0; }
+.ex-more:hover { color: var(--gold); }
+.ex-adv { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); }
+.ex-adv-h { font-size: 13px; font-weight: 600; color: var(--tx); margin-bottom: 8px; }
+.ex-adv-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.ex-input { width: 96px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--s2); color: var(--tx); font-family: var(--mono); }
+@media (max-width: 620px) { .ex-adv { grid-template-columns: 1fr; } .ex-adv-row { flex-wrap: wrap; } }
 code { font-family: var(--mono); font-size: 11px; color: var(--gold); }
 
 .flow { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--s1); box-shadow: var(--shadow); }

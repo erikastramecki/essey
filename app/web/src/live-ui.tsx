@@ -41,18 +41,17 @@ function useBalances() {
 /// The live Exchange: real float, real fees feeding the real pot.
 export function LiveExchange() {
   const w = useWallet();
-  const { refresh } = useBalances();
+  const { bal, refresh } = useBalances();
   const [float_, setFloat] = useState<bigint | null>(null);
-  const [pot, setPot] = useState<bigint | null>(null);
   const [ids, setIds] = useState<bigint[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [snipeId, setSnipeId] = useState("");
   const [sellId, setSellId] = useState("");
+  const [adv, setAdv] = useState(false); // "More options" (snipe / sell) collapsed by default
 
   const load = useCallback(() => {
     reads.floatCount().then(setFloat).catch(() => {});
-    reads.pot().then(setPot).catch(() => {});
     reads.floatIds().then(setIds).catch(() => {});
   }, []);
   useEffect(() => { load(); const t = setInterval(load, 15_000); return () => clearInterval(t); }, [load]);
@@ -71,41 +70,62 @@ export function LiveExchange() {
     <section className="band" style={{ paddingTop: 0 }}>
       <div className="wrap">
         <div className="live-card">
-          <div className="live-h">THE EXCHANGE — LIVE <span className="preview-chip">testnet</span></div>
-          <div className="live-bal num">
-            float: {float_ !== null ? float_.toString() : "…"} Seats · price {fmt(PRICE.seat)} $ESSEY ·
-            the pot: {pot !== null ? fmt(pot) : "…"} USDG
+          <div className="live-h">BUY A SEAT <span className="preview-chip">testnet</span></div>
+          <p className="ex-intro">A <b>Seat</b> is your membership pass. Own one and you earn a cut of every fee the
+            club collects — trades, Cases, loan interest. There are only 2,222.</p>
+          <div className="ex-stats num">
+            <span><b>{float_ !== null ? float_.toString() : "…"}</b> Seats available</span>
+            <span className="ex-price"><b>{fmt(PRICE.seat)}</b> $ESSEY <i>+ {fmt(PRICE.swapFee)} USDG fee</i></span>
+            {bal && <span>you own <b>{bal.seats.toString()}</b></span>}
           </div>
-          {ids.length > 0 && (
-            <div className="live-note num">on the floor: {ids.map((i) => `#${i}`).join(" · ")}{float_ !== null && float_ > 12n ? " · …" : ""}</div>
-          )}
-          {ready ? (
+
+          {!ready ? (
+            <div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to buy a Seat.</span><ConnectButton /></div>
+          ) : (
             <>
-              <div className="live-row">
-                <button className="btn btn-gold" disabled={!!busy}
-                  onClick={() => act("buy", () => flows.buySeat(a!).then(({ id }) => setMsg(`✓ Seat #${id} is yours — fee just fed the pot`)), "✓ bought")}>
-                  {busy === "buy" ? "buying…" : `Buy next · ${fmt(PRICE.swapFee)} USDG fee`}
-                </button>
-                <span className="ex-snipe">
-                  <input className="num" placeholder="#" value={snipeId} onChange={(e) => setSnipeId(e.target.value.replace(/\D/g, ""))} aria-label="Seat number to snipe" />
-                  <button className="btn btn-ghost" disabled={!!busy || !snipeId}
-                    onClick={() => act("snipe", () => flows.snipeSeat(a!, BigInt(snipeId)), `✓ sniped #${snipeId}`)}>
-                    {busy === "snipe" ? "sniping…" : `Snipe · ${fmt(PRICE.snipeFee)} fee`}
-                  </button>
-                </span>
-                <span className="ex-snipe">
-                  <input className="num" placeholder="#" value={sellId} onChange={(e) => setSellId(e.target.value.replace(/\D/g, ""))} aria-label="Seat number to sell" />
-                  <button className="btn btn-ghost" disabled={!!busy || !sellId}
-                    onClick={() => act("sell", () => flows.sellSeat(a!, BigInt(sellId)), `✓ sold #${sellId} back for ${fmt(PRICE.seat)} $ESSEY`)}>
-                    {busy === "sell" ? "selling…" : "Sell back"}
-                  </button>
-                </span>
-              </div>
-              {busy && <div className="live-note">Approvals may add a transaction or two the first time — your wallet will walk you through.</div>}
+              {/* the one obvious action */}
+              <button className="btn btn-gold ex-buy" disabled={!!busy}
+                onClick={() => act("buy", () => flows.buySeat(a!).then(({ id }) => setMsg(`✓ Seat #${id} is yours! Your fee just fed the Bell's pot.`)), "✓ Seat purchased")}>
+                {busy === "buy" ? "buying your Seat…" : `Buy a Seat  ·  ${fmt(PRICE.seat)} $ESSEY + ${fmt(PRICE.swapFee)} USDG`}
+              </button>
+              <div className="live-note ex-help">You'll get the next available Seat. The first time, your wallet asks to approve
+                $ESSEY and USDG — that's normal; just confirm each popup. Need funds? Grab them on the <a href="/start">Quest</a> page.</div>
+
+              {/* advanced, hidden by default */}
+              <button className="ex-more" onClick={() => setAdv((v) => !v)}>
+                {adv ? "▾  Hide options" : "▸  More options — pick an exact Seat, or sell one"}
+              </button>
+              {adv && (
+                <div className="ex-adv">
+                  <div className="ex-adv-block">
+                    <div className="ex-adv-h">Pick an exact Seat number</div>
+                    <div className="ex-adv-row">
+                      <input className="num ex-input" type="text" inputMode="numeric" placeholder="Seat #" value={snipeId}
+                        onChange={(e) => setSnipeId(e.target.value.replace(/\D/g, ""))} aria-label="Seat number to buy" />
+                      <button className="btn btn-ghost" disabled={!!busy || !snipeId}
+                        onClick={() => act("snipe", () => flows.snipeSeat(a!, BigInt(snipeId)), `✓ Seat #${snipeId} is yours`)}>
+                        {busy === "snipe" ? "buying…" : `Buy #${snipeId || "?"} · ${fmt(PRICE.snipeFee)} USDG fee`}
+                      </button>
+                    </div>
+                    {ids.length > 0 && <div className="live-note num">available now: {ids.map((i) => `#${i}`).join(", ")}{float_ !== null && float_ > 12n ? ", …" : ""}</div>}
+                  </div>
+                  <div className="ex-adv-block">
+                    <div className="ex-adv-h">Sell a Seat you own</div>
+                    <div className="ex-adv-row">
+                      <input className="num ex-input" type="text" inputMode="numeric" placeholder="your Seat #" value={sellId}
+                        onChange={(e) => setSellId(e.target.value.replace(/\D/g, ""))} aria-label="Seat number to sell" />
+                      <button className="btn btn-ghost" disabled={!!busy || !sellId}
+                        onClick={() => act("sell", () => flows.sellSeat(a!, BigInt(sellId)), `✓ sold #${sellId} back for ${fmt(PRICE.seat)} $ESSEY`)}>
+                        {busy === "sell" ? "selling…" : `Sell back · get ${fmt(PRICE.seat)} $ESSEY`}
+                      </button>
+                    </div>
+                    <div className="live-note">Returns a Seat to the Exchange for {fmt(PRICE.seat)} $ESSEY back. Your Seat numbers are on the Portfolio tab.</div>
+                  </div>
+                </div>
+              )}
+              {busy && <div className="live-note ex-help">This can take a couple of wallet confirmations — your wallet will walk you through each one.</div>}
               {msg && <div className="live-msg">{msg}</div>}
             </>
-          ) : (
-            <div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to trade the float for real.</span><ConnectButton /></div>
           )}
         </div>
       </div>
