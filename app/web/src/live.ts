@@ -13,25 +13,26 @@ export const NET = {
 };
 
 export const ADDR = {
-  seat: "0x0Fd7889F09B1846388240B08Acc60723b17022d6" as Address,
-  essey: "0xC253674DA4347BFa2E6A14d6a6F78166803D14B5" as Address,
+  // Stock-payout stack — redeployed 2026-08-04 (converter-wired Bell; stock payouts proven on-chain).
+  seat: "0x7bcc821cdf7e3ad9e43188d0f0b24049db0b1bee" as Address,
+  essey: "0x0659eca47665da545e1157ede11fcb4c8222879f" as Address,
   usdg: "0x7461E670d44FF4397A3E48030C5b06f6163a5De2" as Address,
-  bell: "0x9E760482877C6139C32Da745aa2a8116d86a14D0" as Address,
-  exchange: "0x6C4b1EcC2903f12796c3909547Def413353ac43f" as Address,
-  cases: "0xf8B6D4a83c5afe6c1339390947cb8dbf9AF2D8bd" as Address,
-  faucet: "0xFF9866C43BbaeDD143AF7224c49ba7681beD0eAA" as Address,
+  bell: "0x31115d449f359a05298295415665af18fd708d0d" as Address,
+  exchange: "0x57864a956a13d42837f121790715713cbaa7df09" as Address,
+  cases: "0x151696d171443cfb7e69422e0dc456c0dca13972" as Address,
+  faucet: "0x11c696cf869c1caace32e7ea6d1d2074c452ded2" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
   nvda: "0x8393cc99FAC1CF79E3bEceA56f344159ddFd91E9" as Address,
-  // Lending stack
+  // Lending stack (unchanged)
   pool: "0x283a4891458180f502E82E40470d3e06321ba748" as Address,
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
   quest: "0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427" as Address,
-  lens: "0x307d0E17e0c7412E61657f6BA6dE96f0c29294eB" as Address,
-  // Stock-payout converter — set at the stock-payout redeploy (address(0) = base-only payouts).
-  converter: "0x0000000000000000000000000000000000000000" as Address,
-  // Degen (multiplier) case + its entropy — set at the degen deploy (MockEntropy on testnet).
-  degenCases: "0x0000000000000000000000000000000000000000" as Address,
-  degenEntropy: "0x0000000000000000000000000000000000000000" as Address,
+  lens: "0xaAC27dBbDF85096fe0481F8E194ac2ffef146df3" as Address,
+  // Stock-payout converter (Bell claim-edge → real stock into the Vault).
+  converter: "0x3c6a57b21c000caecc61655568eabb6cfbb67fb0" as Address,
+  // Degen (multiplier) case + its testnet entropy keeper.
+  degenCases: "0x96d5CE89fB10044882F144430EDeC2Eb412Af42d" as Address,
+  degenEntropy: "0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F" as Address,
 };
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
