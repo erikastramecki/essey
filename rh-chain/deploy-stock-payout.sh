@@ -61,9 +61,15 @@ echo "== 4/5 Seed market (float, cases, faucet) =="
 $FORGE script/SeedStockMarket.s.sol >/dev/null
 export FAUCET=$(addr SeedStockMarket TestnetFaucet); req "$FAUCET" FAUCET
 
-echo "== 5/5 Redeploy QuestLens with the new Seat =="
+echo "== 5/6 Redeploy QuestLens with the new Seat =="
 $FORGE script/DeployLens.s.sol >/dev/null
 export LENS=$(addr DeployLens QuestLens); req "$LENS" LENS
+
+echo "== 6/6 Degen case (MockEntropy keeper + AAPL reserve, against the new Bell) =="
+BELL=$BELL ESSEY=$ESSEY STOCK=$AAPL $FORGE script/DeployDegenCase.s.sol >/dev/null
+export DEGEN=$(addr DeployDegenCase EsseyCasesDegen);   req "$DEGEN" DEGEN
+export DEGEN_ENTROPY=$(addr DeployDegenCase MockEntropy); req "$DEGEN_ENTROPY" DEGEN_ENTROPY
+echo "   DEGEN=$DEGEN"
 
 echo
 echo "==================== NEW ADDRESSES -> app/web/src/live.ts ADDR ===================="
@@ -74,8 +80,10 @@ cat <<EOF
   exchange:  "$EXCHANGE"
   cases:     "$CASES"
   faucet:    "$FAUCET"
-  converter: "$CONVERTER"
-  lens:      "$LENS"
+  converter:    "$CONVERTER"
+  lens:         "$LENS"
+  degenCases:   "$DEGEN"
+  degenEntropy: "$DEGEN_ENTROPY"
   // unchanged: usdg, aapl, nvda, pool, quest, markets
 EOF
 echo "===================================================================================="
