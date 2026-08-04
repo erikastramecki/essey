@@ -29,7 +29,7 @@ type Ladder = { multBps: number; pct: number }[];
 type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: bigint; fee: bigint; owed: bigint };
 type Phase = "idle" | "spinning" | "revealed";
 
-const CHIP_W = 116; // chip width + gap
+const CHIP_W = 132; // .cs-card width (120) + .spin-rail gap (12)
 const WIN = 40; // winner index in the strip
 
 export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
@@ -46,6 +46,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const [busy, setBusy] = useState(false);
   const railRef = useRef<HTMLDivElement>(null);
   const gen = useRef(0);
+  const offsetRef = useRef(0); // current translateX magnitude (px shifted left), shared across the two spin phases
 
   useEffect(() => { document.title = "Degen Case · Essey"; }, []);
   const load = useCallback(() => {
@@ -85,23 +86,47 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
     }
   };
 
-  // Spin animation → settle on the winner (runs once the true multiplier is known).
+  const period = strip.length * CHIP_W; // width of one strip copy (rail renders two copies for a seamless loop)
+
+  // Phase 1 — free spin: a constant-velocity blur that runs the instant we start buying, so the reel is
+  // visibly spinning while the buy + settle transactions confirm (not frozen waiting on the chain).
+  useEffect(() => {
+    if (phase !== "spinning" || won !== null) return;
+    const rail = railRef.current;
+    if (!rail || reducedMotion() || period === 0) return;
+    const g = ++gen.current;
+    const V = 2600; // px/s
+    const t0 = performance.now();
+    const step = (t: number) => {
+      if (g !== gen.current) return;
+      offsetRef.current = (V * (t - t0)) / 1000 % period;
+      rail.style.transform = `translateX(${(-offsetRef.current).toFixed(2)}px)`;
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return () => { gen.current++; };
+  }, [phase, won, period]);
+
+  // Phase 2 — settle: once the true multiplier is known, decelerate from wherever the free spin is to
+  // land the winner (index WIN, one loop forward so it always travels) under the marker.
   useEffect(() => {
     if (phase !== "spinning" || won === null) return;
     const finish = () => { setPhase("revealed"); setBusy(false); load(); };
     const g = ++gen.current;
     const rail = railRef.current;
-    if (!rail || reducedMotion()) { finish(); return; }
+    if (!rail || reducedMotion() || period === 0) { finish(); return; }
     const stageW = rail.parentElement?.clientWidth ?? 600;
-    const jitter = (Math.random() - 0.5) * (CHIP_W * 0.5);
-    const finalX = WIN * CHIP_W + CHIP_W / 2 + jitter - stageW / 2;
-    const D = 5200, t0 = performance.now();
-    rail.style.transform = "translateX(0px)";
+    const jitter = (Math.random() - 0.5) * (CHIP_W * 0.4);
+    const start = offsetRef.current % period; // snap into the first copy (invisible mid-blur)
+    rail.style.transform = `translateX(${(-start).toFixed(2)}px)`;
+    const target = WIN * CHIP_W + CHIP_W / 2 + jitter - stageW / 2 + period; // winner in the second copy → forward
+    const D = 2600, t0 = performance.now();
     const step = (t: number) => {
       if (g !== gen.current) return;
       const k = Math.min(1, (t - t0) / D);
-      const eased = 1 - Math.pow(1 - k, 5);
-      rail.style.transform = `translateX(${(-finalX * eased).toFixed(2)}px)`;
+      const eased = 1 - Math.pow(1 - k, 4);
+      offsetRef.current = start + (target - start) * eased;
+      rail.style.transform = `translateX(${(-offsetRef.current).toFixed(2)}px)`;
       if (k < 1) { requestAnimationFrame(step); return; }
       finish();
     };
@@ -109,7 +134,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
     const dog = setTimeout(() => { if (g === gen.current) { gen.current++; finish(); } }, D + 700);
     return () => { gen.current++; clearTimeout(dog); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, won]);
+  }, [phase, won, period]);
 
   const claim = async () => {
     if (!a) return;
@@ -121,7 +146,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
 
   const again = () => { setPhase("idle"); setWon(null); setStage(null); };
   const rWon = won !== null ? mstyle(won) : null;
-  const stageLabel: Record<string, string> = { buying: "buying the case…", sealing: "sealing the roll on-chain…" };
+  const stageLabel: Record<string, string> = { approving: "approving $ESSEY + USDG…", buying: "buying the case…", sealing: "sealing the roll on-chain…" };
 
   // Gold-Bell unlock: the 50x tier is only offered when the reserve can back one worst-case payout.
   const unlockPct = acct && acct.reserved + acct.free > 0n
@@ -172,7 +197,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                     <>
                       <div className="spin-marker" />
                       <div className="spin-rail" ref={railRef}>
-                        {strip.map((m, i) => {
+                        {[...strip, ...strip].map((m, i) => {
                           const s = mstyle(m);
                           return (
                             <div key={i} className="cs-card cs-reel dg-chip" style={{ "--rar": s.color, "--rarGlow": s.glow } as React.CSSProperties}>

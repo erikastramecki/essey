@@ -484,6 +484,9 @@ export const flows = {
   /// real Dice keeper settles automatically (this would just poll instead of calling fulfill).
   degenOpen: async (a: Address, onStage?: (s: string) => void): Promise<{ multBps: number; payoutShares: bigint; seq: bigint }> => {
     const fee = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as bigint;
+    onStage?.("approving");
+    await ensureAllowance(a, ADDR.essey, ADDR.degenCases, PRICE.casePrice); // case price, sunk to treasury
+    await ensureAllowance(a, ADDR.usdg, ADDR.degenCases, PRICE.caseFee); // buy fee, feeds the Bell pot
     onStage?.("buying");
     const buyTx = await send(a, ADDR.degenCases, degenAbi, "buy", [], fee);
     const buyRcpt = await pub.getTransactionReceipt({ hash: buyTx });

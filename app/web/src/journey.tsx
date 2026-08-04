@@ -49,7 +49,8 @@ export const STEPS: Step[] = [
   { id: "stake", n: 5, title: "Stake a Tier", what: "Boost a Seat you own — stake $ESSEY so it earns a bigger share of every payout.", to: "/bell", cta: "Go to the Bell",
     done: (p) => !!p && p.seats.some((s) => s.tier > 0) },
   { id: "payout", n: 6, title: "Ring & claim", what: "When the fee pot is full, ring the Bell — then claim your payout as stock into your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
-    done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n) },
+    // The Bell now pays real stock into the Vault (AAPL/NVDA); it fails open to USDG only if conversion can't settle.
+    done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n || s.vaultAapl > 0n || s.vaultNvda > 0n) },
   { id: "case", n: 7, title: "Open a Case", what: "Open a Case for a real stock draw — AAPL or NVDA, fair value either way.", to: "/cases", cta: "Go to Cases",
     done: (p) => !!p && (p.wins.aapl > 0n || p.wins.nvda > 0n) },
   { id: "supply", n: 8, title: "Supply liquidity", what: "Supply USDG to the lending pool and earn the interest borrowers pay.", to: "/lend", cta: "Go to Lend",
