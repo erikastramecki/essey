@@ -1,5 +1,37 @@
 # Robinhood Chain testnet deployment (chainId 46630)
 
+## STOCK-PAYOUT + DEGEN REDEPLOY — 2026-08-04 (CURRENT / live on essey.xyz)
+
+Fresh converter-wired market (Bell pays out real STOCK — a default AAPL/NVDA bundle — via the claim-edge
+converter) + the degen multiplier gacha. **Stock payouts proven on-chain** (AAPL+NVDA delivered into a
+Seat's Vault by a Bell claim). Reuses the existing USDG/AAPL/NVDA/pool/quest/markets.
+
+| Contract | Address |
+|---|---|
+| Seat | `0x7bcc821cdf7e3ad9e43188d0f0b24049db0b1bee` |
+| EsseyToken ($ESSEY) | `0x0659eca47665da545e1157ede11fcb4c8222879f` |
+| Bell (converter-wired, DEFAULT_PAYOUT=BUNDLE) | `0x31115d449f359a05298295415665af18fd708d0d` |
+| EsseyExchange | `0x57864a956a13d42837f121790715713cbaa7df09` |
+| EsseyCases | `0x151696d171443cfb7e69422e0dc456c0dca13972` |
+| SeatArt | `0xdf4c763ead237d80f817036dca070e0a97030383` |
+| MintDistributor | `0xa9c8953dcd72dd5cbe03fcbe60e13c3ef91a38cd` |
+| BundleConverter (stock payouts) | `0x3c6a57b21c000caecc61655568eabb6cfbb67fb0` |
+| QuestLens | `0xaAC27dBbDF85096fe0481F8E194ac2ffef146df3` |
+| TestnetFaucet | `0x11c696cf869c1caace32e7ea6d1d2074c452ded2` |
+| EsseyCasesDegen (multiplier gacha) | `0x96d5CE89fB10044882F144430EDeC2Eb412Af42d` |
+| MockEntropy (degen keeper) | `0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F` |
+| USDG / AAPL / NVDA / pool / quest / markets | *unchanged (see below)* |
+
+**⚠️ FEED KEEPER REQUIRED:** the mock Chainlink feeds go stale after ~25h (`FEED_HEARTBEAT+GRACE`). When
+stale, the converter reverts and the Bell fails open to USDG (degen `buy` reverts). Refresh with
+`cast send <feed> "set(int256,uint256)" <answer> <now> --private-key $PK --rpc-url rh_testnet`. The
+USDG/USD feed `0x6ac94CAb7302415A9a29d9746Fb6051523592E3b` was refreshed at deploy; a periodic keeper
+(cron) should refresh USDG + the converter's AAPL/NVDA feeds to keep stock payouts + degen live.
+
+---
+
+## Original stack — 2026-08-03 (superseded by the 2026-08-04 redeploy above)
+
 **Deployed 2026-08-03** via `rh-chain/script/DeployMarket.s.sol` · RPC `https://rpc.testnet.chain.robinhood.com`
 
 | Contract | Address |
