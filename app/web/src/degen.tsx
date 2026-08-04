@@ -146,7 +146,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
 
   const again = () => { setPhase("idle"); setWon(null); setStage(null); };
   const rWon = won !== null ? mstyle(won) : null;
-  const stageLabel: Record<string, string> = { approving: "approving $ESSEY + USDG…", buying: "buying the case…", sealing: "sealing the roll on-chain…" };
+  const stageLabel: Record<string, string> = { approving: "one-time approval…", buying: "rolling…", sealing: "settling your roll…", revealing: "revealing…" };
 
   // Gold-Bell unlock: the 50x tier is only offered when the reserve can back one worst-case payout.
   const unlockPct = acct && acct.reserved + acct.free > 0n

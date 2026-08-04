@@ -1,7 +1,7 @@
 // Live-chain layer: the deployed TESTNET contracts and the transaction flows the app pages run.
 // Everything here is testnet (46630) until mainnet ships; the addresses come from
 // docs/DEPLOYMENT-testnet.md and the UI wears a TESTNET banner the whole time.
-import { createPublicClient, createWalletClient, custom, http, parseAbi, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, custom, http, parseAbi, parseAbiItem, maxUint256, type Address, type Hex } from "viem";
 
 export const NET = {
   chainIdHex: "0xb626", // 46630
@@ -168,6 +168,7 @@ export const degenAbi = parseAbi([
 ]);
 // Testnet MockEntropy keeper — anyone can settle a pending request.
 export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)"]);
+const caseOpenedItem = parseAbiItem("event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)");
 
 export const pub = createPublicClient({ transport: http(NET.rpc) });
 
@@ -192,11 +193,12 @@ async function send(account: Address, to: Address, abi: readonly unknown[], func
   return hash;
 }
 
-/// Approve `spender` for `token` if the current allowance is below `need`.
+/// Approve `spender` for `token` if the current allowance is below `need`. Approves the max so it is a
+/// genuine one-time step — repeat plays never re-prompt for the same token/spender.
 async function ensureAllowance(account: Address, token: Address, spender: Address, need: bigint) {
   const have = await pub.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [account, spender] });
   if (have >= need) return;
-  await send(account, token, erc20Abi, "approve", [spender, need * 100n]); // headroom: fewer approvals
+  await send(account, token, erc20Abi, "approve", [spender, maxUint256]);
 }
 
 // ---------------------------------------------------------------- reads
@@ -485,22 +487,37 @@ export const flows = {
   degenOpen: async (a: Address, onStage?: (s: string) => void): Promise<{ multBps: number; payoutShares: bigint; seq: bigint }> => {
     const fee = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as bigint;
     onStage?.("approving");
-    await ensureAllowance(a, ADDR.essey, ADDR.degenCases, PRICE.casePrice); // case price, sunk to treasury
-    await ensureAllowance(a, ADDR.usdg, ADDR.degenCases, PRICE.caseFee); // buy fee, feeds the Bell pot
+    await ensureAllowance(a, ADDR.essey, ADDR.degenCases, PRICE.casePrice); // case price, sunk to treasury (one-time)
+    await ensureAllowance(a, ADDR.usdg, ADDR.degenCases, PRICE.caseFee); // buy fee, feeds the Bell pot (one-time)
     onStage?.("buying");
+    // The ONLY per-roll signature: buy requests the roll. Settlement is permissionless — a keeper (or,
+    // on mainnet, the real Dice oracle) calls fulfill and the roll credits the stored buyer, not the caller.
     const buyTx = await send(a, ADDR.degenCases, degenAbi, "buy", [], fee);
     const buyRcpt = await pub.getTransactionReceipt({ hash: buyTx });
     const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.degenCases.toLowerCase());
     const seq = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n; // CaseBought: topic[1] = seq
+
+    // Read the settlement event once it lands (whoever settles it — keeper or the fallback below).
+    const readOpened = async (): Promise<{ multBps: number; payoutShares: bigint; seq: bigint } | null> => {
+      const logs = await pub.getLogs({ address: ADDR.degenCases, event: caseOpenedItem, args: { seq }, fromBlock: buyRcpt.blockNumber });
+      if (!logs.length) return null;
+      const { multiplierBps, payoutShares } = logs[0].args as { multiplierBps: bigint; payoutShares: bigint };
+      return { multBps: Number(multiplierBps), payoutShares, seq };
+    };
+
+    // Wait for the keeper to settle (the reel keeps spinning meanwhile). ~24s budget.
     onStage?.("sealing");
-    const fulfillTx = await send(a, ADDR.degenEntropy, mockEntropyAbi, "fulfill", [seq]);
-    const rcpt = await pub.getTransactionReceipt({ hash: fulfillTx });
-    // CaseOpened(seq, buyer, multiplierBps, payoutShares): data = multBps(32) + payoutShares(32).
-    const opened = rcpt.logs.find((l) => l.address.toLowerCase() === ADDR.degenCases.toLowerCase() && l.data.length >= 130);
-    if (!opened) throw new Error("settled but no CaseOpened event found");
-    const multBps = Number(BigInt("0x" + opened.data.slice(2, 66)));
-    const payoutShares = BigInt("0x" + opened.data.slice(66, 130));
-    return { multBps, payoutShares, seq };
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 2_000));
+      const r = await readOpened();
+      if (r) return r;
+    }
+    // No keeper answered — settle it ourselves so the roll always finishes (a rare extra signature).
+    onStage?.("revealing");
+    await send(a, ADDR.degenEntropy, mockEntropyAbi, "fulfill", [seq]);
+    const r = await readOpened();
+    if (r) return r;
+    throw new Error("settled but no CaseOpened event found");
   },
   degenWithdraw: (a: Address): Promise<Hex> => send(a, ADDR.degenCases, degenAbi, "withdraw"),
 
