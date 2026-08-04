@@ -9,6 +9,8 @@
 # Requires PK (deployer key) in rh-chain/.env, RPC alias rh_testnet, jq installed. Aborts on any error.
 set -euo pipefail
 cd "$(dirname "$0")"
+# Make forge/jq/git/cast resolvable under a scheduler's minimal PATH (cron/launchd).
+export PATH="$HOME/.foundry/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 # --- deployer key (gitignored .env) ---
 [ -f .env ] || { echo "!! rh-chain/.env missing (needs PK=...)"; exit 1; }
