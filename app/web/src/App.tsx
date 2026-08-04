@@ -5,8 +5,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
-import { CasesArcade } from "./cases";
-import { DegenCase } from "./degen";
+import { CasesPage } from "./cases";
 import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
 import { StartPage, JourneyStrip, captureRef, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
@@ -25,7 +24,6 @@ const NAV = [
   ["/market", "Exchange"],
   ["/bell", "Bell"],
   ["/cases", "Cases"],
-  ["/degen", "Degen"],
   ["/lend", "Lend"],
   ["/tape", "Tape"],
   ["/leaderboard", "Leaders"],
@@ -58,8 +56,9 @@ export default function App() {
             <Route path="/start" element={<StartPage />} />
             <Route path="/market" element={<AppPage title="The Exchange" here="seat"><LiveExchange /><Mechanics /></AppPage>} />
             <Route path="/bell" element={<AppPage title="The Bell" here="stake"><LiveBell /></AppPage>} />
-            <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesArcade /></AppPage>} />
-            <Route path="/degen" element={<AppPage title="Degen Case" here="case"><DegenCase /></AppPage>} />
+            <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesPage /></AppPage>} />
+            {/* /degen kept as a redirect for old links — the degen mode now lives inside /cases */}
+            <Route path="/degen" element={<AppPage title="Cases" here="case"><CasesPage /></AppPage>} />
             <Route path="/lend" element={<AppPage title="Lend" here="supply"><LendPage /></AppPage>} />
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
             <Route path="/leaderboard" element={<AppPage title="Leaderboard"><LeaderboardPage /></AppPage>} />

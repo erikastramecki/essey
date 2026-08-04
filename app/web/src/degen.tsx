@@ -32,7 +32,7 @@ type Phase = "idle" | "spinning" | "revealed";
 const CHIP_W = 116; // chip width + gap
 const WIN = 40; // winner index in the strip
 
-export function DegenCase() {
+export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const w = useWallet();
   const a = w.address as Address | null;
   const ready = !!a && w.chainOk;
@@ -129,8 +129,9 @@ export function DegenCase() {
     : 0;
 
   return (
-    <section className="band cases-arcade" id="degen" style={{ paddingTop: 34 }}>
+    <section className="band cases-arcade" id="degen" style={{ paddingTop: embedded ? 0 : 34 }}>
       <div className="wrap">
+        {!embedded && (
         <div className="band-head"><div>
           <span className="eyebrow">Degen Case</span>
           <h2>Roll the multiplier. Up to 50×.</h2>
@@ -142,6 +143,7 @@ export function DegenCase() {
             ? <span className="preview-chip live" title="Live on Robinhood Chain testnet — a real on-chain roll with play money.">LIVE · testnet</span>
             : <span className="preview-chip">deploys soon</span>}
         </div>
+        )}
 
         {!DEGEN_LIVE ? (
           <div className="live-card"><div className="live-note">The degen case goes live at its deploy — the reveal, the odds, and the reserve meter light up here. Meanwhile the fair-value <Link to="/cases">Cases</Link> are live.</div></div>

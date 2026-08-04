@@ -122,6 +122,9 @@ header.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: saturate(1.
 .bell-step-n { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); color: #14100A; font-family: var(--mono); font-size: 13px; font-weight: 700; flex: none; }
 .bell-step-cur { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--tx-mut); font-weight: 400; }
 .lend-field-h { display: block; font-size: 12px; color: var(--tx-mut); margin: 10px 0 4px; }
+/* Cases Safe/Degen mode toggle — a prominent segment control. */
+.cases-mode { margin-top: 8px; width: fit-content; }
+.cases-mode button { font-size: 14px; padding: 9px 18px; }
 code { font-family: var(--mono); font-size: 11px; color: var(--gold); }
 
 .flow { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--s1); box-shadow: var(--shadow); }

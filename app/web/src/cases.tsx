@@ -11,6 +11,7 @@ import type { Address } from "viem";
 import { EMonogram } from "./market";
 import { useWallet, ConnectButton } from "./wallet";
 import { ADDR, flows, fmt, niceError } from "./live";
+import { DegenCase } from "./degen";
 
 // On-chain testnet inventory → a reveal Item. The live Cases hold AAPL (0.5 share) and NVDA (0.8),
 // both fair-value at ~$100; rarity here is cosmetic tiering for the reveal, not a payout signal.
@@ -134,7 +135,7 @@ type Phase = "idle" | "spinning" | "revealed";
 const CARD_W = 132; // card width + gap, must match CSS
 const WIN = 46; // winner index in the reel strip
 
-export function CasesArcade() {
+export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const [caseIdx, setCaseIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [strip, setStrip] = useState<Item[]>([]);
@@ -254,8 +255,9 @@ export function CasesArcade() {
   const stageLabel: Record<string, string> = { approving: "approving spend…", buying: "buying the case…", sealing: "sealing the draw on-chain…", opening: "opening…" };
 
   return (
-    <section className="band cases-arcade" id="cases">
+    <section className="band cases-arcade" id="cases" style={embedded ? { paddingTop: 0 } : undefined}>
       <div className="wrap">
+        {!embedded && (
         <div className="band-head"><div>
           <span className="eyebrow">Cases</span>
           <h2>Open a Case. Get real stock.</h2>
@@ -267,6 +269,7 @@ export function CasesArcade() {
             ? <span className="preview-chip live" title="Connected to Robinhood Chain testnet — this opens a real Case on-chain with play money.">LIVE · testnet draw</span>
             : <span className="preview-chip" title="Connect a wallet on testnet to open a real Case; otherwise the draw is simulated.">simulated — connect to go live</span>}
         </div>
+        )}
 
         {/* case picker */}
         <div className="case-row">
@@ -362,5 +365,35 @@ export function CasesArcade() {
         )}
       </div>
     </section>
+  );
+}
+
+/// The unified Cases page — pick your risk with a Safe / Degen toggle. Both are provably fair and
+/// provably solvent; the toggle swaps the board below a shared header. (Merged the two case types
+/// into one flow so the nav isn't cluttered and the risk choice is explicit in one place.)
+export function CasesPage() {
+  const [mode, setMode] = useState<"safe" | "degen">("safe");
+  useEffect(() => { document.title = "Cases · Essey"; }, []);
+  return (
+    <>
+      <section className="band" style={{ paddingTop: 34, paddingBottom: 0 }}>
+        <div className="wrap">
+          <div className="band-head"><div>
+            <span className="eyebrow">Cases</span>
+            <h2>Open a Case. Get real stock.</h2>
+            <p>Pick your style — both are <b>provably fair</b> and backed by real stock <b>before</b> you open.
+              <b> Safe</b> always pays ~the case's value (the draw just picks which stock). <b>Degen</b> is a
+              multiplier roll — win more or less than you paid.</p>
+          </div>
+            <span className="preview-chip live">testnet</span>
+          </div>
+          <div className="seg cases-mode" role="tablist">
+            <button aria-selected={mode === "safe"} onClick={() => setMode("safe")}>🎁 Safe · always ~fair value</button>
+            <button aria-selected={mode === "degen"} onClick={() => setMode("degen")}>🎰 Degen · 0.65×–50× multiplier</button>
+          </div>
+        </div>
+      </section>
+      {mode === "safe" ? <CasesArcade embedded /> : <DegenCase embedded />}
+    </>
   );
 }
