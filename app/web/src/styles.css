@@ -84,6 +84,22 @@ header.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: saturate(1.
 .pp-btn.on { background: var(--gold); color: #14100A; border-color: var(--gold-hi); }
 .pp-btn:disabled { opacity: .55; cursor: default; }
 .pp-note { flex-basis: 100%; }
+/* Degen case: multiplier reel chips, jackpot reveal, on-chain odds ladder. */
+.dg-chip { display: flex; align-items: center; justify-content: center; min-width: 100px; }
+.dg-mult { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--rar, var(--tx)); text-shadow: 0 0 16px var(--rarGlow, transparent); }
+.dg-big { font-size: 68px; line-height: 1; text-shadow: 0 0 30px var(--rarGlow); }
+.dg-jackpot { animation: dg-flash .7s ease-out; }
+.dg-jackpot .reveal-card { box-shadow: 0 0 60px var(--rarGlow), 0 0 120px var(--rarGlow); }
+@keyframes dg-flash { 0% { transform: scale(.7); opacity: 0; } 40% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
+.dg-bell { font-size: 46px; animation: dg-swing 1s ease-in-out infinite; }
+@keyframes dg-swing { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@media (prefers-reduced-motion: reduce) { .dg-jackpot, .dg-bell { animation: none; } }
+.dg-ladder { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.dg-row { display: grid; grid-template-columns: 64px 1fr 56px; align-items: center; gap: 12px; }
+.dg-row-mult { font-family: var(--mono); font-weight: 700; }
+.dg-row-bar { height: 8px; border-radius: 5px; background: var(--s3); overflow: hidden; }
+.dg-row-bar span { display: block; height: 100%; border-radius: 5px; opacity: .85; }
+.dg-row-pct { font-family: var(--mono); font-size: 12px; color: var(--tx-mut); text-align: right; }
 code { font-family: var(--mono); font-size: 11px; color: var(--gold); }
 
 .flow { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--s1); box-shadow: var(--shadow); }

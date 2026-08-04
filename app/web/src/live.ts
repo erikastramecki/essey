@@ -29,6 +29,9 @@ export const ADDR = {
   lens: "0x307d0E17e0c7412E61657f6BA6dE96f0c29294eB" as Address,
   // Stock-payout converter — set at the stock-payout redeploy (address(0) = base-only payouts).
   converter: "0x0000000000000000000000000000000000000000" as Address,
+  // Degen (multiplier) case + its entropy — set at the degen deploy (MockEntropy on testnet).
+  degenCases: "0x0000000000000000000000000000000000000000" as Address,
+  degenEntropy: "0x0000000000000000000000000000000000000000" as Address,
 };
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
@@ -144,6 +147,27 @@ export const casesSellAbi = parseAbi([
   "function stocks(address) view returns (uint256 unitAmount, uint8 tokenDecimals, bool listed)",
 ]);
 
+// Degen (multiplier) case — a provably-fair+solvent gacha: buy (payable, entropy fee), a keeper
+// settles the roll, then withdraw the won stock. Ladder odds are on-chain (multiplierBps/cumPpm).
+export const degenAbi = parseAbi([
+  "function buy() payable returns (uint64)",
+  "function withdraw() returns (uint256)",
+  "function reclaim(uint64 seq)",
+  "function owed(address) view returns (uint256)",
+  "function freeReserve() view returns (uint256)",
+  "function reservedShares() view returns (uint256)",
+  "function maxMultiplierBps() view returns (uint256)",
+  "function referenceUsd() view returns (uint256)",
+  "function tierCount() view returns (uint256)",
+  "function multiplierBps(uint256) view returns (uint256)",
+  "function cumPpm(uint256) view returns (uint256)",
+  "function entropyFee() view returns (uint256)",
+  "event CaseBought(uint64 indexed seq, address indexed buyer, uint256 worstShares)",
+  "event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)",
+]);
+// Testnet MockEntropy keeper — anyone can settle a pending request.
+export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)"]);
+
 export const pub = createPublicClient({ transport: http(NET.rpc) });
 
 type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
@@ -156,11 +180,11 @@ function wallet(account: Address) {
 }
 
 /// Send + wait, with the Orbit gas cushion (estimation under-shoots intrinsic gas on this stack).
-async function send(account: Address, to: Address, abi: readonly unknown[], functionName: string, args: unknown[] = []): Promise<Hex> {
+async function send(account: Address, to: Address, abi: readonly unknown[], functionName: string, args: unknown[] = [], value?: bigint): Promise<Hex> {
   const w = wallet(account);
   const hash = await w.writeContract({
     address: to, abi: abi as never, functionName: functionName as never, args: args as never,
-    account, chain: null, gas: 3_000_000n,
+    account, chain: null, gas: 3_000_000n, ...(value !== undefined ? { value } : {}),
   });
   const rcpt = await pub.waitForTransactionReceipt({ hash, timeout: 120_000 });
   if (rcpt.status !== "success") throw new Error("Transaction reverted");
@@ -323,6 +347,24 @@ export const reads = {
     return { board, totalQuesters: questers.size };
   },
 
+  /// Degen case: the disclosed ladder + the caller's account (owed winnings, reserve, entropy fee).
+  degen: async (a: Address | null) => {
+    const n = Number(await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "tierCount" }));
+    const [mults, cums] = await Promise.all([
+      Promise.all(Array.from({ length: n }, (_, i) => pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "multiplierBps", args: [BigInt(i)] }) as Promise<bigint>)),
+      Promise.all(Array.from({ length: n }, (_, i) => pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "cumPpm", args: [BigInt(i)] }) as Promise<bigint>)),
+    ]);
+    const [maxMult, free, reserved, fee, owed] = await Promise.all([
+      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "maxMultiplierBps" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "freeReserve" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "reservedShares" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as Promise<bigint>,
+      a ? pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "owed", args: [a] }) as Promise<bigint> : Promise.resolve(0n),
+    ]);
+    const ladder = mults.map((m, i) => ({ multBps: Number(m), pct: (Number(cums[i]) - (i > 0 ? Number(cums[i - 1]) : 0)) / 10_000 }));
+    return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed };
+  },
+
   quest: async (a: Address | null) => {
     const total = await pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "totalRegistered" }) as bigint;
     if (!a) return { registered: false, referrals: 0n, total };
@@ -435,6 +477,28 @@ export const flows = {
     await ensureAllowance(a, ADDR.usdg, ADDR.pool, owed + owed / 100n); // headroom for a second of interest
     return send(a, ADDR.pool, poolAbi, "repay", [id, (owed * 1001n) / 1000n]); // repay accepts >= owed, refunds change
   },
+
+  /// The degen (multiplier) case: buy (pays the entropy fee), settle the roll via the keeper, decode
+  /// the multiplier + payout. On testnet the frontend triggers the MockEntropy keeper; on mainnet the
+  /// real Dice keeper settles automatically (this would just poll instead of calling fulfill).
+  degenOpen: async (a: Address, onStage?: (s: string) => void): Promise<{ multBps: number; payoutShares: bigint; seq: bigint }> => {
+    const fee = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as bigint;
+    onStage?.("buying");
+    const buyTx = await send(a, ADDR.degenCases, degenAbi, "buy", [], fee);
+    const buyRcpt = await pub.getTransactionReceipt({ hash: buyTx });
+    const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.degenCases.toLowerCase());
+    const seq = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n; // CaseBought: topic[1] = seq
+    onStage?.("sealing");
+    const fulfillTx = await send(a, ADDR.degenEntropy, mockEntropyAbi, "fulfill", [seq]);
+    const rcpt = await pub.getTransactionReceipt({ hash: fulfillTx });
+    // CaseOpened(seq, buyer, multiplierBps, payoutShares): data = multBps(32) + payoutShares(32).
+    const opened = rcpt.logs.find((l) => l.address.toLowerCase() === ADDR.degenCases.toLowerCase() && l.data.length >= 130);
+    if (!opened) throw new Error("settled but no CaseOpened event found");
+    const multBps = Number(BigInt("0x" + opened.data.slice(2, 66)));
+    const payoutShares = BigInt("0x" + opened.data.slice(66, 130));
+    return { multBps, payoutShares, seq };
+  },
+  degenWithdraw: (a: Address): Promise<Hex> => send(a, ADDR.degenCases, degenAbi, "withdraw"),
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.
