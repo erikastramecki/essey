@@ -19,7 +19,7 @@ export const ADDR = {
   usdg: "0x7461E670d44FF4397A3E48030C5b06f6163a5De2" as Address,
   bell: "0x31115d449f359a05298295415665af18fd708d0d" as Address,
   exchange: "0x57864a956a13d42837f121790715713cbaa7df09" as Address,
-  cases: "0x151696d171443cfb7e69422e0dc456c0dca13972" as Address,
+  cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
   faucet: "0x11c696cf869c1caace32e7ea6d1d2074c452ded2" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
   nvda: "0x8393cc99FAC1CF79E3bEceA56f344159ddFd91E9" as Address,
@@ -169,6 +169,7 @@ export const degenAbi = parseAbi([
 // Testnet MockEntropy keeper — anyone can settle a pending request.
 export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)"]);
 const caseOpenedItem = parseAbiItem("event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)");
+const fairCaseOpenedItem = parseAbiItem("event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)");
 
 export const pub = createPublicClient({ transport: http(NET.rpc) });
 
@@ -525,31 +526,43 @@ export const flows = {
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.
   openCase: async (a: Address, onStage: (s: string) => void): Promise<{ token: Address; amount: bigint; tx: Hex }> => {
     onStage("approving");
-    await ensureAllowance(a, ADDR.essey, ADDR.cases, PRICE.casePrice);
-    await ensureAllowance(a, ADDR.usdg, ADDR.cases, PRICE.caseFee);
+    await ensureAllowance(a, ADDR.essey, ADDR.cases, PRICE.casePrice); // one-time
+    await ensureAllowance(a, ADDR.usdg, ADDR.cases, PRICE.caseFee); // one-time
     onStage("buying");
+    // The buy is the only signature the buyer needs. The keeper reveals (open delivers to the buyer);
+    // a self-open fallback keeps it working — well within the 256-block window — if no keeper answers.
     const buyTx = await send(a, ADDR.cases, casesAbi, "buy");
     const buyRcpt = await pub.getTransactionReceipt({ hash: buyTx });
     const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.cases.toLowerCase());
     const caseId = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n;
-    onStage("sealing"); // the draw block must pass on the parent chain — the suspense is real
-    // Poll by simulating open until it stops reverting (~15-40s), then send for real.
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 5_000));
-      try {
-        await pub.simulateContract({ address: ADDR.cases, abi: casesAbi, functionName: "open", args: [caseId], account: a });
-        break;
-      } catch { /* draw not ready yet */ }
+
+    const readOpened = async (): Promise<{ token: Address; amount: bigint; tx: Hex } | null> => {
+      const logs = await pub.getLogs({ address: ADDR.cases, event: fairCaseOpenedItem, args: { caseId }, fromBlock: buyRcpt.blockNumber });
+      if (!logs.length) return null;
+      const { token, amount } = logs[0].args as { token: Address; amount: bigint };
+      return { token, amount, tx: logs[0].transactionHash as Hex };
+    };
+
+    // Wait for the keeper to reveal (this also waits out the one-block draw commit). ~24s budget.
+    onStage("sealing");
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 2_000));
+      const r = await readOpened();
+      if (r) return r;
     }
+    // No keeper answered — open it ourselves (a rare extra signature). If it reverts AlreadyOpened, the
+    // keeper beat us to it, so re-read rather than surfacing an error.
     onStage("opening");
-    const openTx = await send(a, ADDR.cases, casesAbi, "open", [caseId]);
-    const rcpt = await pub.getTransactionReceipt({ hash: openTx });
-    // CaseOpened: topics = [sig, caseId, buyer, token]; amount in data.
-    const opened = rcpt.logs.find((l) => l.address.toLowerCase() === ADDR.cases.toLowerCase() && l.topics.length === 4);
-    if (!opened) throw new Error("open succeeded but no CaseOpened event found");
-    const token = ("0x" + (opened.topics[3] as string).slice(26)) as Address;
-    const amount = BigInt(opened.data);
-    return { token, amount, tx: openTx };
+    try {
+      await send(a, ADDR.cases, casesAbi, "open", [caseId]);
+    } catch (e) {
+      const r = await readOpened();
+      if (r) return r;
+      throw e;
+    }
+    const r = await readOpened();
+    if (r) return r;
+    throw new Error("open succeeded but no CaseOpened event found");
   },
 };
 

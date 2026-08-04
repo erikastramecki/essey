@@ -33,6 +33,7 @@ contract EsseyCasesTest is Test {
     address treasury = address(0x7EA);
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
+    address keeper = address(0xCA5E); // convenience settler: may open a Case, prize goes to the buyer
 
     uint256 constant CASE_PRICE = 100e18; // $ESSEY
     uint256 constant BUY_FEE = 5e18; // USDG
@@ -66,7 +67,7 @@ contract EsseyCasesTest is Test {
 
         cases_ = new EsseyCases(
             essey, bell, AggregatorV3Interface(address(baseFeed)), AggregatorV3Interface(address(0)),
-            treasury, address(this), CASE_PRICE, BUY_FEE, SPREAD_BPS, BOOSTER_BPS
+            treasury, address(this), CASE_PRICE, BUY_FEE, SPREAD_BPS, BOOSTER_BPS, keeper
         );
 
         cases_.listStock(address(aapl), AggregatorV3Interface(address(aaplFeed)), UNIT_AAPL);
@@ -177,9 +178,21 @@ contract EsseyCasesTest is Test {
         vm.prank(alice);
         uint256 id = cases_.buy();
         vm.roll(block.number + 2);
-        vm.prank(bob);
+        vm.prank(bob); // neither the buyer nor the keeper
         vm.expectRevert(EsseyCases.NotYourCase.selector);
         cases_.open(id);
+    }
+
+    function test_KeeperOpensDeliversToBuyer() public {
+        vm.prank(alice);
+        uint256 id = cases_.buy();
+        vm.roll(block.number + 2);
+        // The keeper opens on the buyer's behalf; the prize lands in the BUYER's wallet, not the keeper's.
+        vm.prank(keeper);
+        (address token, uint256 amount) = cases_.open(id);
+        assertEq(ERC20Mock(token).balanceOf(alice), amount, "prize delivered to the buyer");
+        assertEq(ERC20Mock(token).balanceOf(keeper), 0, "keeper receives nothing");
+        assertEq(cases_.unopened(), 0, "backing released");
     }
 
     function test_DoubleOpenReverts() public {
@@ -487,19 +500,19 @@ contract EsseyCasesTest is Test {
         vm.expectRevert(EsseyCases.BadConfig.selector);
         new EsseyCases(
             essey, esseyRewardBell, AggregatorV3Interface(address(baseFeed)), AggregatorV3Interface(address(0)),
-            treasury, address(this), CASE_PRICE, BUY_FEE, SPREAD_BPS, BOOSTER_BPS
+            treasury, address(this), CASE_PRICE, BUY_FEE, SPREAD_BPS, BOOSTER_BPS, keeper
         );
         // Spread below the floor (must clear BOTH legs' 0.5% oracle deviation bands) and > 20% both
         // rejected.
         vm.expectRevert(EsseyCases.BadConfig.selector);
         new EsseyCases(
             essey, bell, AggregatorV3Interface(address(baseFeed)), AggregatorV3Interface(address(0)),
-            treasury, address(this), CASE_PRICE, BUY_FEE, 149, BOOSTER_BPS
+            treasury, address(this), CASE_PRICE, BUY_FEE, 149, BOOSTER_BPS, keeper
         );
         vm.expectRevert(EsseyCases.BadConfig.selector);
         new EsseyCases(
             essey, bell, AggregatorV3Interface(address(baseFeed)), AggregatorV3Interface(address(0)),
-            treasury, address(this), CASE_PRICE, BUY_FEE, 2001, BOOSTER_BPS
+            treasury, address(this), CASE_PRICE, BUY_FEE, 2001, BOOSTER_BPS, keeper
         );
     }
 

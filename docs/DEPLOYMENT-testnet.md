@@ -12,7 +12,8 @@ Seat's Vault by a Bell claim). Reuses the existing USDG/AAPL/NVDA/pool/quest/mar
 | EsseyToken ($ESSEY) | `0x0659eca47665da545e1157ede11fcb4c8222879f` |
 | Bell (converter-wired, DEFAULT_PAYOUT=BUNDLE) | `0x31115d449f359a05298295415665af18fd708d0d` |
 | EsseyExchange | `0x57864a956a13d42837f121790715713cbaa7df09` |
-| EsseyCases | `0x151696d171443cfb7e69422e0dc456c0dca13972` |
+| EsseyCases (keeper-enabled: 1-sign reveal) | `0x97ad3b44d0B362F70460c90993E9eF79b9D2D749` |
+| EsseyCases (old, buyer-only reveal — retired) | `0x151696d171443cfb7e69422e0dc456c0dca13972` |
 | SeatArt | `0xdf4c763ead237d80f817036dca070e0a97030383` |
 | MintDistributor | `0xa9c8953dcd72dd5cbe03fcbe60e13c3ef91a38cd` |
 | BundleConverter (stock payouts) | `0x3c6a57b21c000caecc61655568eabb6cfbb67fb0` |

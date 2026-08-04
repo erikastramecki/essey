@@ -120,7 +120,7 @@ contract DeployMarket is Script {
         );
         d.cases_ = new EsseyCases(
             d.essey, d.bell, c.usdgFeed, c.sequencerFeed, c.treasury, c.bankroll,
-            c.casePrice, c.caseBuyFee, CASE_SPREAD_BPS, BOOSTER_SHARE_BPS
+            c.casePrice, c.caseBuyFee, CASE_SPREAD_BPS, BOOSTER_SHARE_BPS, c.seeder // seeder = the convenience open-keeper
         );
     }
 

@@ -88,6 +88,15 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
     Bell public immutable bell;
     address public immutable treasury;
     address public immutable bankroll;
+    /// Optional convenience settler: may open a Case on the buyer's behalf, with the prize ALWAYS
+    /// delivered to the stored buyer (never the caller), so the buyer signs only the buy. It cannot
+    /// withdraw, reprice, or touch funds, and the buyer can always open (or claimExpired) themselves,
+    /// so the keeper is purely additive. It is EXPECTED to open promptly once the draw is live (the
+    /// intended flow); the contract does not force a specific block, and the only thing an open-timing
+    /// choice can shift is bounded by inventory dispersion (see the header). Keeper uptime within the
+    /// 256-block window is therefore operationally load-bearing: past it the buyer falls back to the
+    /// floor via claimExpired. Zero => buyer-only.
+    address public immutable keeper;
 
     uint256 public immutable casePrice; // flat $ESSEY price of one Case
     uint256 public immutable buyFee; // base-token fee on buy
@@ -149,7 +158,8 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
         uint256 casePrice_,
         uint256 buyFee_,
         uint256 spreadBps_,
-        uint256 boosterShareBps_
+        uint256 boosterShareBps_,
+        address keeper_
     ) StaleFeedGuard(sequencerUptimeFeed_) {
         if (
             address(essey_) == address(0) || address(bell_) == address(0) || address(baseFeed_) == address(0)
@@ -171,6 +181,7 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
         buyFee = buyFee_;
         spreadBps = spreadBps_;
         boosterShareBps = boosterShareBps_;
+        keeper = keeper_; // zero is allowed: buyer-only opens, as before
 
         uint8 bfd = baseFeed_.decimals();
         if (bfd > 18) revert BadConfig(); // normalization assumes <= 18 (Chainlink uses 8)
@@ -249,11 +260,14 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
         emit CaseBought(caseId, msg.sender, drawBlock);
     }
 
-    /// Open a Case: the committed blockhash seeds a uniform draw over the inventory; the drawn
-    /// stock unit is delivered straight to the buyer.
+    /// Open a Case: the committed blockhash seeds a uniform draw over the inventory; the drawn stock
+    /// unit is delivered to the BUYER. Callable by the buyer or the keeper (a convenience settler) — the
+    /// prize always goes to the stored buyer, so a keeper can reveal on their behalf without the buyer
+    /// signing a second transaction. Only these two callers, so no third party can grief the buyer's
+    /// draw timing (the drawn index depends on inventory state at open, bounded by dispersion).
     function open(uint256 caseId) external nonReentrant returns (address token, uint256 amount) {
         Case storage c = cases[caseId];
-        if (c.buyer != msg.sender) revert NotYourCase();
+        if (c.buyer == address(0) || (msg.sender != c.buyer && msg.sender != keeper)) revert NotYourCase();
         if (c.opened) revert AlreadyOpened();
         if (block.number <= c.drawBlock) revert DrawNotReady();
         bytes32 bh = blockhash(c.drawBlock);
@@ -267,8 +281,8 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
         _units[idx] = _units[_units.length - 1];
         _units.pop();
 
-        IERC20(u.token).safeTransfer(msg.sender, u.amount);
-        emit CaseOpened(caseId, msg.sender, u.token, u.amount);
+        IERC20(u.token).safeTransfer(c.buyer, u.amount);
+        emit CaseOpened(caseId, c.buyer, u.token, u.amount);
         return (u.token, u.amount);
     }
 
