@@ -131,7 +131,7 @@ function CaseBox({ c, active, onPick }: { c: CaseDef; active: boolean; onPick: (
 }
 
 // ---------------------------------------------------------------- the arcade
-type Phase = "idle" | "spinning" | "revealed";
+type Phase = "idle" | "confirming" | "spinning" | "revealed";
 const CARD_W = 132; // card width + gap, must match CSS
 const WIN = 46; // winner index in the reel strip
 
@@ -152,6 +152,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   // Refs so the reel's finish() closure reads current draw state without re-subscribing.
   const stagePendingRef = useRef(false);
   const wonRef = useRef<Item | null>(null);
+  const startedSpinRef = useRef(false); // true once the reel has started (buy confirmed) — gates errors
   const w = useWallet();
   const live = !!w.address && w.chainOk;
   const c = CASES[caseIdx];
@@ -179,20 +180,30 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   };
 
   const spin = () => {
-    if (phase === "spinning") return;
+    if (phase === "spinning" || phase === "confirming") return;
     if (live) return spinLive();
     const winner = weightedDraw(c.items);
     setStrip(buildStrip(winner)); setWon(winner); setSold(false); setStage(null); setPhase("spinning");
   };
 
-  // Live: fire the real on-chain draw AND start the reel; the reel's ~6.4s tension overlaps the
-  // real draw-commit wait honestly. When the chain resolves, the true stock becomes the reveal.
+  // Live: SIGN FIRST (approve + buy), then spin. The reel starts only once the buy is confirmed
+  // (onStage "sealing"); its ~6.4s tension overlaps the keeper revealing the draw, then it reveals the
+  // true stock. Identical shape to the Degen case (DegenCase.open).
   const spinLive = () => {
-    const provisional = weightedDraw(LIVE_ITEMS);
-    setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setStage("approving"); setPhase("spinning");
-    flows.openCase(w.address as Address, setStage)
+    setSold(false); setStage("approving"); startedSpinRef.current = false; setPhase("confirming");
+    flows.openCase(w.address as Address, (s) => {
+      setStage(s);
+      if (s === "sealing" && !startedSpinRef.current) { // buy confirmed → start the reel now
+        startedSpinRef.current = true;
+        const provisional = weightedDraw(LIVE_ITEMS);
+        setStrip(buildStrip(provisional)); setWon(provisional); setPhase("spinning");
+      }
+    })
       .then(({ token, amount }) => { setWon(liveItem(token, amount)); setWonToken(token); setStage(null); })
-      .catch((e) => { setStage("err:" + niceError(e)); });
+      .catch((e) => {
+        setStage("err:" + niceError(e));
+        if (!startedSpinRef.current) setPhase("idle"); // failed before the reel
+      });
   };
 
   const sellBack = async () => {
@@ -293,6 +304,12 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                           <i>simulated draw — <span className="live-connect"><ConnectButton /></span> to open a real one</i></>
                       : <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
                           <i>simulated — <span className="live-connect"><ConnectButton /></span> to go live</i></>}
+                </div>
+              ) : phase === "confirming" ? (
+                <div className="spin-idle">
+                  <EMonogram size={40} />
+                  <p>Confirm the purchase in your wallet…</p>
+                  {stage && <i className={"num" + (stage.startsWith("err:") ? " err" : "")}>{stage.startsWith("err:") ? stage.slice(4) : (stageLabel[stage] ?? stage)}</i>}
                 </div>
               ) : (
                 <>

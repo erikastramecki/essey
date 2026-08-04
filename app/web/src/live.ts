@@ -515,10 +515,14 @@ export const flows = {
     };
 
     // Wait for the keeper to settle (poll the cheap bool; the reel keeps spinning meanwhile). ~30s.
+    // Once settled, retry the event read a few times — getLogs can lag a block or two behind state.
     onStage?.("sealing");
     for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 2_000));
-      if (await isSettled()) { const r = await readOpened(); if (r) return r; break; }
+      if (await isSettled()) {
+        for (let j = 0; j < 6; j++) { const r = await readOpened(); if (r) return r; await new Promise((res) => setTimeout(res, 1_200)); }
+        break;
+      }
     }
     // No keeper answered in time — settle it ourselves so the roll always finishes (a rare extra sig).
     onStage?.("revealing");
@@ -564,11 +568,15 @@ export const flows = {
     };
 
     // Wait for the keeper to reveal (poll the cheap bool; also waits out the one-block draw commit). ~30s.
+    // Once opened, retry the event read a few times — getLogs can lag a block or two behind state.
     onStage("sealing");
     let opened = false;
     for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 2_000));
-      if (await isOpened()) { const r = await readOpened(); if (r) return r; opened = true; break; }
+      if (await isOpened()) {
+        for (let j = 0; j < 6; j++) { const r = await readOpened(); if (r) return r; await new Promise((res) => setTimeout(res, 1_200)); }
+        opened = true; break;
+      }
     }
     // No keeper answered in time — open it ourselves (a rare extra sig). If it reverts AlreadyOpened the
     // keeper beat us, so re-read rather than surfacing an error.

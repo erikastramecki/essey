@@ -25,9 +25,19 @@ function mstyle(bps: number): { color: string; glow: string; label: string; jack
   return { color: "var(--r-ticker)", glow: "rgba(143,160,184,.4)", label, jackpot: false };
 }
 
+// Tier name for a multiplier — the "name" line on each reel card + the reveal rarity label.
+function mtier(bps: number): string {
+  if (bps >= 500000) return "Gold Bell";
+  if (bps >= 20000) return "Green";
+  if (bps >= 10000) return "Even";
+  return "Roll";
+}
+// Implied payout in USD on a 100-$ESSEY ($100) roll — the card's value column (mirrors the Safe card).
+const impliedUsd = (bps: number) => Math.round((bps / 10000) * 100);
+
 type Ladder = { multBps: number; pct: number }[];
 type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: bigint; fee: bigint; owed: bigint };
-type Phase = "idle" | "spinning" | "revealed";
+type Phase = "idle" | "confirming" | "spinning" | "revealed";
 
 const CHIP_W = 132; // .cs-card width (120) + .spin-rail gap (12)
 const WIN = 46; // winner index in the strip (matches CasesArcade)
@@ -51,6 +61,7 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const stagePendingRef = useRef(false);
   const resultRef = useRef<{ multBps: number; payoutShares: bigint } | null>(null);
   const errRef = useRef<string | null>(null);
+  const startedSpinRef = useRef(false); // true once the reel has started (buy confirmed) — gates error handling
 
   useEffect(() => { document.title = "Degen Case · Essey"; }, []);
   const load = useCallback(() => {
@@ -59,9 +70,10 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   }, [a]);
   useEffect(() => { load(); const t = setInterval(load, 20_000); return () => clearInterval(t); }, [load]);
 
-  // A weighted-by-odds pool of multipliers for the reel's decorative fill.
+  // A weighted-by-odds pool of multipliers for the reel's decorative fill. Disconnected, use a varied
+  // sample so the preview reel still looks like the real ladder.
   const pool = useMemo(() => {
-    if (!acct) return [6500];
+    if (!acct) return [6500, 8000, 10000, 12000, 15000, 20000, 30000, 50000, 100000, 250000, 500000];
     const out: number[] = [];
     acct.ladder.forEach((t) => { for (let i = 0; i < Math.max(1, Math.round(t.pct)); i++) out.push(t.multBps); });
     return out.length ? out : [6500];
@@ -73,23 +85,45 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
     return acct.ladder.reduce((s, t) => s + (t.multBps / 10000) * (t.pct / 100), 0) * 100;
   }, [acct]);
 
+  // A reel strip landing a provisional roll at WIN (corrected to the true roll on reveal).
+  const buildStrip = (winner: number) => { const s = Array.from({ length: 54 }, drawFill); s[WIN] = winner; return s; };
+
+  // Live roll — SIGN FIRST, then spin. The reel starts only once the buy is confirmed (onStage
+  // "sealing"); its ~6.4s tension overlaps the keeper settling the roll, then it reveals the true
+  // multiplier. Same shape as the Safe case (CasesArcade.spinLive).
   const open = () => {
-    if (!a || !acct || busy) return;
+    if (busy) return;
+    if (!ready) return spinSim(); // disconnected → simulated preview, no signing
+    if (!a || !acct) return;
     setBusy(true); setMsg(null); setPayout(0n);
-    resultRef.current = null; errRef.current = null;
-    // Seed the reel with a provisional roll so it spins immediately; the true roll arrives from chain
-    // mid-spin and becomes the reveal. Same fire-and-update flow as the Safe case (CasesArcade.spinLive).
-    const provisional = drawFill();
-    const s = Array.from({ length: 54 }, drawFill);
-    s[WIN] = provisional;
-    setStrip(s); setWon(provisional); setStage("approving"); setPhase("spinning");
-    flows.degenOpen(a, setStage)
+    resultRef.current = null; errRef.current = null; startedSpinRef.current = false;
+    setStage("approving"); setPhase("confirming"); // signing in the wallet — no reel yet
+    flows.degenOpen(a, (s) => {
+      setStage(s);
+      if (s === "sealing" && !startedSpinRef.current) { // buy confirmed → start the reel now
+        startedSpinRef.current = true;
+        const provisional = drawFill();
+        setStrip(buildStrip(provisional)); setWon(provisional); setPhase("spinning");
+      }
+    })
       .then(({ multBps, payoutShares }) => {
         resultRef.current = { multBps, payoutShares };
         setStrip((prev) => { const c = [...prev]; c[WIN] = multBps; return c; }); // land on the true roll
         setWon(multBps); setPayout(payoutShares); setStage(null);
       })
-      .catch((e) => { errRef.current = niceError(e); setStage("err:" + errRef.current); });
+      .catch((e) => {
+        errRef.current = niceError(e); setStage("err:" + errRef.current);
+        if (!startedSpinRef.current) { setPhase("idle"); setBusy(false); setMsg(errRef.current); } // failed before the reel
+      });
+  };
+
+  // Disconnected preview: a client-side simulated roll over the disclosed odds — no chain, no signing.
+  // Mirrors the Safe case's simulated spin so the flow is identical whether or not you're connected.
+  const spinSim = () => {
+    setBusy(true); setMsg(null); setStage(null); errRef.current = null; startedSpinRef.current = true;
+    const winner = drawFill();
+    resultRef.current = { multBps: winner, payoutShares: BigInt(Math.round((winner / 10000) * 0.5 * 1e18)) };
+    setStrip(buildStrip(winner)); setWon(winner); setPayout(resultRef.current.payoutShares); setPhase("spinning");
   };
 
   // The reel animation — identical to CasesArcade (same 6.4s span, quintic ease-out). It spins to the
@@ -172,17 +206,26 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                   {phase === "idle" ? (
                     <div className="spin-idle">
                       <EMonogram size={40} />
-                      <p>{acct ? `${fmt(PRICE.casePrice)} $ESSEY per roll · ~${rtp.toFixed(0)}% avg payback · ${fmt(acct.free, 0)} AAPL in the prize vault` : "…"}</p>
+                      <p>{acct ? `${fmt(PRICE.casePrice)} $ESSEY per roll · ~${rtp.toFixed(0)}% avg payback · ${fmt(acct.free, 0)} AAPL in the prize vault` : `${fmt(PRICE.casePrice)} $ESSEY per roll · 0.65×–50× multiplier`}</p>
                       {ready ? (
                         <>
                           <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>
                             {busy ? "opening…" : `OPEN A CASE · ${fmt(PRICE.casePrice)} $ESSEY`}
                           </button>
-                          <i>a real on-chain roll · costs {fmt(PRICE.casePrice)} $ESSEY + a tiny gas fee in ETH</i>
+                          <i>a real on-chain roll · one signature, then it spins</i>
                         </>
                       ) : (
-                        <><span className="live-note">Connect on Robinhood Chain testnet to roll.</span><ConnectButton /></>
+                        <>
+                          <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>PREVIEW A ROLL</button>
+                          <i>simulated — <span className="live-connect"><ConnectButton /></span> to roll for real</i>
+                        </>
                       )}
+                    </div>
+                  ) : phase === "confirming" ? (
+                    <div className="spin-idle">
+                      <EMonogram size={40} />
+                      <p>Confirm the roll in your wallet…</p>
+                      {stage && <i className={"num" + (stage.startsWith("err:") ? " err" : "")}>{stage.startsWith("err:") ? stage.slice(4) : (stageLabel[stage] ?? stage)}</i>}
                     </div>
                   ) : (
                     <>
@@ -191,8 +234,12 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                         {strip.map((m, i) => {
                           const s = mstyle(m);
                           return (
-                            <div key={i} className="cs-card cs-reel dg-chip" style={{ "--rar": s.color, "--rarGlow": s.glow } as React.CSSProperties}>
-                              <div className="dg-mult num">{s.label}</div>
+                            <div key={i} className="cs-card cs-reel" style={{ "--rar": s.color, "--rarGlow": s.glow } as React.CSSProperties}>
+                              <div className="cs-card-sym num" style={{ color: s.color }}>{s.label}</div>
+                              <div className="cs-card-name">{mtier(m)}</div>
+                              <div className="cs-card-unit num">pays</div>
+                              <div className="cs-card-val num">${impliedUsd(m)}</div>
+                              <div className="cs-card-rail" />
                             </div>
                           );
                         })}
