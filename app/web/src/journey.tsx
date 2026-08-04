@@ -201,7 +201,7 @@ export function StartPage() {
 
 /// Your referral link + how many friends have joined. The link carries ?ref=<you>; when a friend
 /// registers, the on-chain graph credits you.
-function ReferralCard({ address, quest }: { address: Address; quest?: { referrals: bigint; total: bigint } }) {
+export function ReferralCard({ address, quest }: { address: Address; quest?: { referrals: bigint; total: bigint } }) {
   const [copied, setCopied] = useState(false);
   const link = `${location.origin}/start?ref=${address}`;
   const copy = async () => {

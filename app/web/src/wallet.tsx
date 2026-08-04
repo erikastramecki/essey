@@ -21,17 +21,19 @@ type WalletState = {
   address: string | null;
   chainOk: boolean;
   hasProvider: boolean;
+  ready: boolean; // the silent reconnect probe has finished — safe to route on address
   connect: () => Promise<void>;
   switchChain: () => Promise<void>;
   error: string | null;
 };
 
-const Ctx = createContext<WalletState>({ address: null, chainOk: false, hasProvider: false, connect: async () => {}, switchChain: async () => {}, error: null });
+const Ctx = createContext<WalletState>({ address: null, chainOk: false, hasProvider: false, ready: false, connect: async () => {}, switchChain: async () => {}, error: null });
 export const useWallet = () => useContext(Ctx);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [chainOk, setChainOk] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const eth = injected();
 
@@ -43,6 +45,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     eth.on("chainChanged", onChain);
     return () => { eth.removeListener?.("accountsChanged", onAccounts); eth.removeListener?.("chainChanged", onChain); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Silent reconnect: eth_accounts returns already-authorized accounts WITHOUT prompting, so a user who
+  // connected before stays signed in across refreshes. `ready` gates route decisions until this settles.
+  useEffect(() => {
+    const p = injected();
+    if (!p) { setReady(true); return; }
+    (async () => {
+      try {
+        const accts = (await p.request({ method: "eth_accounts" })) as string[];
+        if (accts?.[0]) {
+          setAddress(accts[0]);
+          const chain = (await p.request({ method: "eth_chainId" })) as string;
+          setChainOk(chain.toLowerCase() === RH_CHAIN.chainId);
+        }
+      } catch { /* ignore — user simply isn't connected */ }
+      finally { setReady(true); }
+    })();
   }, []);
 
   // Switch (or add) to Robinhood Chain testnet. Extracted so a wrong-chain user can re-trigger it
@@ -78,7 +98,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  return <Ctx.Provider value={{ address, chainOk, hasProvider: !!eth, connect, switchChain: async () => { await switchChain(); }, error }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ address, chainOk, hasProvider: !!eth, ready, connect, switchChain: async () => { await switchChain(); }, error }}>{children}</Ctx.Provider>;
 }
 
 const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);

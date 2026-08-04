@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { useJourney } from "./journey";
+import { useJourney, ReferralCard } from "./journey";
 import { NET, ADDR, TIERS, flows, fmt, niceError } from "./live";
 
 export function PortfolioPage() {
@@ -71,6 +71,9 @@ export function PortfolioPage() {
               )
               : <div className="pf-next"><span>✓ You've tested every flow. Play freely — everything above is live.</span></div>}
             {msg && <div className="live-msg" style={{ marginBottom: 14 }}>{msg}</div>}
+
+            {/* Invites — your referral link + who you've brought in (boosts whitelist odds). */}
+            <ReferralCard address={a!} quest={p.quest} />
 
             {/* Seats */}
             <div className="pf-block">

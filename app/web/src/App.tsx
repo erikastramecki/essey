@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { BrowserRouter, Routes, Route, NavLink, Link, Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { DOCS, type Doc } from "./docs.generated";
@@ -12,7 +12,7 @@ import { PortfolioPage } from "./portfolio";
 import { LendPage } from "./lend-ui";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { LeaderboardPage } from "./leaderboard";
-import { WalletProvider, ConnectButton } from "./wallet";
+import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
 const GROUPS = ["The Market", "The engine", "Audits"];
@@ -123,7 +123,12 @@ function PageShell({ title, children }: { title: string; children: ReactNode }) 
 }
 
 function Landing() {
+  const w = useWallet();
   useEffect(() => { document.title = "Essey — the stock-market club where the odds and the books are both provable"; }, []);
+  // Signed-in testers land on their dashboard, not the pitch. Wait for the reconnect probe so we don't
+  // flash the marketing page before redirecting.
+  if (!w.ready) return null;
+  if (w.address) return <Navigate to="/portfolio" replace />;
   return (
     <>
       <ExchangeHero />
