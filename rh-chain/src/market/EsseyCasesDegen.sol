@@ -2,11 +2,8 @@
 pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {StaleFeedGuard} from "../StaleFeedGuard.sol";
-import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
 import {Bell} from "./Bell.sol";
 
 /// Dice Protocol / Pyth-Entropy request-side surface (commit-reveal). Live on Robinhood Chain
@@ -52,15 +49,18 @@ abstract contract IEntropyConsumer {
 /// prize. We do not claim "neither party can bias"; we claim the roll is verifiable and the bankroll
 /// is provably solvent.
 ///
-/// PROVABLY SOLVENT, and it's the progression mechanic. Every buy LOCKS the stock price and reserves
-/// the WORST CASE (maxMultiplier x reference, in shares); `buy` reverts unless the free reserve covers
-/// it. So the 50x is always backed before you pull. Because the price is locked at buy, settlement
-/// needs no oracle. Payouts are PULL-BASED: settlement credits `owed[buyer]` (it cannot revert, so a
-/// paused/blocklisted stock token can never strand a case), and the winner `withdraw`s when able.
+/// PROVABLY SOLVENT, and it's the progression mechanic. The reference payout is denominated in SHARES
+/// (a fixed unit of the payout stock), so every buy reserves the WORST CASE (maxMultiplier x reference,
+/// in shares) with NO oracle at all; `buy` reverts unless the free reserve covers it. So the 50x is
+/// always backed before you pull, and the case is OPEN 24/7 (no market-session gate — the reserve is a
+/// share count, not a dollar value). You roll for a multiple of a stock unit; its dollar value floats
+/// with the stock, exactly as the fair-value Cases hand you stock units. Payouts are PULL-BASED:
+/// settlement credits `owed[buyer]` (it cannot revert, so a paused/blocklisted stock token can never
+/// strand a case), and the winner `withdraw`s when able.
 ///
 /// ROLES. `bankroll` can only ADD (seed the stock reserve). `treasury` is immutable. No owner/pause/
 /// upgrade. The ladder is immutable once set (disclosed odds can't be swapped under holders).
-contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
+contract EsseyCasesDegen is ReentrancyGuard, IEntropyConsumer {
     using SafeERC20 for IERC20;
 
     struct Case {
@@ -79,8 +79,7 @@ contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
     address public immutable entropyProvider;
 
     IERC20 public immutable payoutStock; // winnings paid in this; the reserve is held in it
-    uint8 public immutable stockDecimals;
-    uint256 public immutable referenceUsd; // 1x payout in USD, 1e18-scaled (e.g. 100e18 = $100)
+    uint256 public immutable referenceShares; // 1x payout, in payoutStock token units (no oracle needed)
     uint256 public immutable casePrice; // flat $ESSEY price
     uint256 public immutable buyFee; // base-token fee on buy
     uint256 public immutable boosterShareBps; // share of the fee routed to the Bell
@@ -110,7 +109,6 @@ contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
 
     error BadConfig();
     error NotBankroll();
-    error NotInSession();
     error InsufficientBankroll();
     error InsufficientFee();
     error AlreadySettled();
@@ -122,14 +120,12 @@ contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
     struct Config {
         IERC20 essey;
         Bell bell;
-        AggregatorV3Interface stockFeed;
-        AggregatorV3Interface sequencerFeed;
         address treasury;
         address bankroll;
         IEntropy entropy;
         address entropyProvider;
         IERC20 payoutStock;
-        uint256 referenceUsd;
+        uint256 referenceShares;
         uint256 casePrice;
         uint256 buyFee;
         uint256 boosterShareBps;
@@ -138,11 +134,11 @@ contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
         uint256[] cumPpm;
     }
 
-    constructor(Config memory c) StaleFeedGuard(c.sequencerFeed) {
+    constructor(Config memory c) {
         if (
-            address(c.essey) == address(0) || address(c.bell) == address(0) || address(c.stockFeed) == address(0)
+            address(c.essey) == address(0) || address(c.bell) == address(0)
                 || c.treasury == address(0) || c.bankroll == address(0) || address(c.entropy) == address(0)
-                || address(c.payoutStock) == address(0) || c.referenceUsd == 0 || c.casePrice == 0
+                || address(c.payoutStock) == address(0) || c.referenceShares == 0 || c.casePrice == 0
                 || c.boosterShareBps > BPS || c.callbackGasLimit == 0 || c.multiplierBps.length == 0
                 || c.multiplierBps.length != c.cumPpm.length
         ) revert BadConfig();
@@ -160,20 +156,13 @@ contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
         entropy = c.entropy;
         entropyProvider = c.entropyProvider;
         payoutStock = c.payoutStock;
-        referenceUsd = c.referenceUsd;
+        referenceShares = c.referenceShares;
         casePrice = c.casePrice;
         buyFee = c.buyFee;
         boosterShareBps = c.boosterShareBps;
         callbackGasLimit = c.callbackGasLimit;
         multiplierBps = c.multiplierBps;
         cumPpm = c.cumPpm;
-
-        // Only the payout stock is priced (referenceUsd is USD-denominated; the base is a flat-fee token).
-        uint8 sfd = c.stockFeed.decimals();
-        uint8 sd = IERC20Metadata(address(c.payoutStock)).decimals();
-        if (sfd > 18 || sd > 18) revert BadConfig();
-        stockDecimals = sd;
-        _setFeed(address(c.payoutStock), c.stockFeed, FEED_HEARTBEAT + STALENESS_GRACE, sfd);
     }
 
     /// Validate the ladder (cumPpm strictly increasing to exactly PPM, positive multipliers) and return
@@ -222,15 +211,12 @@ contract EsseyCasesDegen is StaleFeedGuard, ReentrancyGuard, IEntropyConsumer {
 
     // ---------------------------------------------------------------- buy / settle / withdraw
 
-    /// Buy a degen case. Locks the stock price, reserves the worst-case (50x) payout in shares, sinks
-    /// the $ESSEY price, routes the fee to the Bell, and requests randomness. The keeper's callback
-    /// settles the roll ~1-3s later (credited to `owed`; `withdraw` to collect). Send the entropy fee
-    /// as msg.value (see `entropyFee()`); excess is refunded.
+    /// Buy a degen case. Reserves the worst-case (50x) payout in shares — a fixed share count, no oracle,
+    /// so it works 24/7 — sinks the $ESSEY price, routes the fee to the Bell, and requests randomness.
+    /// The keeper's callback settles the roll ~1-3s later (credited to `owed`; `withdraw` to collect).
+    /// Send the entropy fee as msg.value (see `entropyFee()`); excess is refunded.
     function buy() external payable nonReentrant returns (uint64 seq) {
-        (uint256 stockPx, uint8 sfd, bool inSession) = priceOf(address(payoutStock));
-        if (!inSession) revert NotInSession();
-        uint256 worstUsd18 = (referenceUsd * maxMultiplierBps) / BPS;
-        uint256 worstShares = (worstUsd18 * 10 ** stockDecimals) / (stockPx * 10 ** (18 - sfd));
+        uint256 worstShares = (referenceShares * maxMultiplierBps) / BPS;
         if (worstShares == 0 || freeReserve() < worstShares) revert InsufficientBankroll();
         reservedShares += worstShares;
 

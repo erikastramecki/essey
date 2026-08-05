@@ -31,7 +31,7 @@ export const ADDR = {
   // Stock-payout converter (Bell claim-edge → real stock into the Vault).
   converter: "0x3c6a57b21c000caecc61655568eabb6cfbb67fb0" as Address,
   // Degen (multiplier) case + its testnet entropy keeper.
-  degenCases: "0x96d5CE89fB10044882F144430EDeC2Eb412Af42d" as Address,
+  degenCases: "0xA0B438Da1b489748D863C9529D19A29C36309599" as Address, // 24/7, share-denominated (no session gate)
   degenEntropy: "0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F" as Address,
 };
 
@@ -159,12 +159,11 @@ export const degenAbi = parseAbi([
   "function freeReserve() view returns (uint256)",
   "function reservedShares() view returns (uint256)",
   "function maxMultiplierBps() view returns (uint256)",
-  "function referenceUsd() view returns (uint256)",
+  "function referenceShares() view returns (uint256)",
   "function tierCount() view returns (uint256)",
   "function multiplierBps(uint256) view returns (uint256)",
   "function cumPpm(uint256) view returns (uint256)",
   "function entropyFee() view returns (uint256)",
-  "function priceOf(address) view returns (uint256, uint8, bool)",
   "event CaseBought(uint64 indexed seq, address indexed buyer, uint256 worstShares)",
   "event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)",
 ]);
@@ -368,14 +367,7 @@ export const reads = {
       a ? pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "owed", args: [a] }) as Promise<bigint> : Promise.resolve(0n),
     ]);
     const ladder = mults.map((m, i) => ({ multBps: Number(m), pct: (Number(cums[i]) - (i > 0 ? Number(cums[i - 1]) : 0)) / 10_000 }));
-    // Degen buy() is session-gated (it locks a live market price). Read it so the UI can say "market
-    // closed" instead of letting the buy revert. priceOf reverts on a stale feed → treat as closed.
-    let inSession = false;
-    try {
-      const px = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "priceOf", args: [ADDR.aapl] }) as readonly [bigint, number, boolean];
-      inSession = px[2];
-    } catch { inSession = false; }
-    return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed, inSession };
+    return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed };
   },
 
   quest: async (a: Address | null) => {

@@ -36,7 +36,7 @@ function mtier(bps: number): string {
 const impliedUsd = (bps: number) => Math.round((bps / 10000) * 100);
 
 type Ladder = { multBps: number; pct: number }[];
-type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: bigint; fee: bigint; owed: bigint; inSession: boolean };
+type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: bigint; fee: bigint; owed: bigint };
 type Phase = "idle" | "spinning" | "revealed";
 
 const CHIP_W = 132; // .cs-card width (120) + .spin-rail gap (12)
@@ -198,21 +198,12 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                       <EMonogram size={40} />
                       <p>{acct ? `${fmt(PRICE.casePrice)} $ESSEY per roll · ~${rtp.toFixed(0)}% avg payback · ${fmt(acct.free, 0)} AAPL in the prize vault` : `${fmt(PRICE.casePrice)} $ESSEY per roll · 0.65×–50× multiplier`}</p>
                       {ready ? (
-                        acct && !acct.inSession ? (
-                          <>
-                            <button className="btn btn-gold spin-cta" disabled>MARKET CLOSED</button>
-                            <i>Degen rolls run during <b>US market hours (14:30–20:00 UTC)</b> — a roll locks a live
-                              stock price to reserve your worst case. Come back then, or preview a roll below.</i>
-                            <button className="linklike" style={{ marginTop: 8 }} onClick={spinSim}>Preview a roll →</button>
-                          </>
-                        ) : (
-                          <>
-                            <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>
-                              {busy ? "opening…" : `OPEN A CASE · ${fmt(PRICE.casePrice)} $ESSEY`}
-                            </button>
-                            <i>a real on-chain roll · costs {fmt(PRICE.casePrice)} $ESSEY + a tiny gas fee in ETH</i>
-                          </>
-                        )
+                        <>
+                          <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>
+                            {busy ? "opening…" : `OPEN A CASE · ${fmt(PRICE.casePrice)} $ESSEY`}
+                          </button>
+                          <i>a real on-chain roll · open 24/7 · costs {fmt(PRICE.casePrice)} $ESSEY + a tiny gas fee</i>
+                        </>
                       ) : (
                         <>
                           <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>PREVIEW A ROLL</button>

@@ -6,8 +6,6 @@ import {Seat} from "../src/market/Seat.sol";
 import {Bell} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {EsseyCasesDegen, IEntropy, IEntropyConsumer} from "../src/market/EsseyCasesDegen.sol";
-import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
-import {MockFeed} from "./RiskModules.t.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
 /// Dice/Pyth-compatible entropy mock. `fulfill` invokes the consumer's EXTERNAL `_entropyCallback`
@@ -57,7 +55,6 @@ contract EsseyCasesDegenTest is Test {
     ERC20Mock usdg;
     ERC20Mock stock; // $200/share
     ERC20Mock essey;
-    MockFeed stockFeed;
 
     address treasury = address(0x7EA);
     address alice = address(0xA11CE);
@@ -75,7 +72,6 @@ contract EsseyCasesDegenTest is Test {
         usdg = new ERC20Mock();
         stock = new ERC20Mock();
         essey = new ERC20Mock();
-        stockFeed = new MockFeed(200e8, 8); // $200
         oracle = new MockEntropy(ENTROPY_FEE);
 
         seat = new Seat("Essey Seat", "SEAT", 4444, address(this));
@@ -100,14 +96,12 @@ contract EsseyCasesDegenTest is Test {
         return EsseyCasesDegen.Config({
             essey: essey,
             bell: bell,
-            stockFeed: AggregatorV3Interface(address(stockFeed)),
-            sequencerFeed: AggregatorV3Interface(address(0)),
             treasury: treasury,
             bankroll: address(this),
             entropy: IEntropy(address(oracle)),
             entropyProvider: address(0xDACE),
             payoutStock: stock,
-            referenceUsd: 100e18,
+            referenceShares: 5e17, // 0.5 AAPL at 1x (== the old $100 @ $200/share worst case: 25 shares at 50x)
             casePrice: 100e18,
             buyFee: 5e18,
             boosterShareBps: 7000,
@@ -182,11 +176,16 @@ contract EsseyCasesDegenTest is Test {
         oracle.fulfill(seq, bytes32(uint256(999_999)));
     }
 
-    function test_OffSessionBuyReverts() public {
-        vm.warp(MON_IN_SESSION + 8 hours);
-        vm.prank(alice);
-        vm.expectRevert(EsseyCasesDegen.NotInSession.selector);
-        degen.buy{value: ENTROPY_FEE}();
+    function test_BuyWorksOffSession() public {
+        // Reference is share-denominated (no oracle), so the roll is open 24/7 — a buy outside US market
+        // hours succeeds and reserves the same fixed worst-case share count.
+        vm.warp(MON_IN_SESSION + 12 hours); // ~3am UTC, market closed
+        uint256 before = degen.reservedShares();
+        uint64 seq = _buy();
+        (address buyer, uint256 worstShares,,) = degen.cases(seq);
+        assertEq(buyer, alice, "case recorded");
+        assertEq(degen.reservedShares() - before, worstShares, "worst case reserved off-session");
+        assertGt(worstShares, 0, "reserved a positive share count");
     }
 
     function test_InsufficientFeeReverts() public {

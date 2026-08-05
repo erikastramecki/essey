@@ -19,7 +19,8 @@ Seat's Vault by a Bell claim). Reuses the existing USDG/AAPL/NVDA/pool/quest/mar
 | BundleConverter (stock payouts) | `0x3c6a57b21c000caecc61655568eabb6cfbb67fb0` |
 | QuestLens | `0xaAC27dBbDF85096fe0481F8E194ac2ffef146df3` |
 | TestnetFaucet | `0x11c696cf869c1caace32e7ea6d1d2074c452ded2` |
-| EsseyCasesDegen (multiplier gacha) | `0x96d5CE89fB10044882F144430EDeC2Eb412Af42d` |
+| EsseyCasesDegen (multiplier gacha, 24/7 share-denominated) | `0xA0B438Da1b489748D863C9529D19A29C36309599` |
+| EsseyCasesDegen (old, USD-priced/session-gated — retired) | `0x96d5CE89fB10044882F144430EDeC2Eb412Af42d` |
 | MockEntropy (degen keeper) | `0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F` |
 | USDG / AAPL / NVDA / pool / quest / markets | *unchanged (see below)* |
 
