@@ -57,8 +57,6 @@ export default function App() {
             <Route path="/market" element={<AppPage title="The Exchange" here="seat"><LiveExchange /><Mechanics /></AppPage>} />
             <Route path="/bell" element={<AppPage title="The Bell" here="stake"><LiveBell /></AppPage>} />
             <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesPage /></AppPage>} />
-            {/* /degen kept as a redirect for old links — the degen mode now lives inside /cases */}
-            <Route path="/degen" element={<AppPage title="Cases" here="case"><CasesPage /></AppPage>} />
             <Route path="/lend" element={<AppPage title="Lend" here="supply"><LendPage /></AppPage>} />
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
             <Route path="/leaderboard" element={<AppPage title="Leaderboard"><LeaderboardPage /></AppPage>} />

@@ -11,16 +11,8 @@ import type { Address } from "viem";
 import { EMonogram } from "./market";
 import { useWallet, ConnectButton } from "./wallet";
 import { ADDR, flows, fmt, niceError } from "./live";
-import { DegenCase } from "./degen";
 
-// On-chain testnet inventory → a reveal Item. The live Cases hold AAPL (0.5 share) and NVDA (0.8),
-// both fair-value at ~$100; rarity here is cosmetic tiering for the reveal, not a payout signal.
-function liveItem(token: Address, amount: bigint): Item {
-  const t = token.toLowerCase();
-  if (t === ADDR.aapl.toLowerCase()) return { sym: "AAPL", name: "Apple", unit: `${fmt(amount, 2)} shares`, value: 100, rarity: "preferred", odds: 0 };
-  if (t === ADDR.nvda.toLowerCase()) return { sym: "NVDA", name: "NVIDIA", unit: `${fmt(amount, 2)} shares`, value: 100, rarity: "alpha", odds: 0 };
-  return { sym: "STOCK", name: token.slice(0, 10), unit: `${fmt(amount, 2)}`, value: 100, rarity: "bluechip", odds: 0 };
-}
+// The reel's live-mode flavor items (the strip spins over these; the reveal shows the actual roll).
 const LIVE_ITEMS: Item[] = [
   { sym: "AAPL", name: "Apple", unit: "0.5 shares", value: 100, rarity: "preferred", odds: 60 },
   { sym: "NVDA", name: "NVIDIA", unit: "0.8 shares", value: 100, rarity: "alpha", odds: 40 },
@@ -135,6 +127,21 @@ type Phase = "idle" | "spinning" | "revealed";
 const CARD_W = 132; // card width + gap, must match CSS
 const WIN = 46; // winner index in the reel strip
 
+// Degen multiplier win -> a reveal Item, so the exact Safe reveal layout is reused unchanged; only the
+// win's AMOUNT and its rarity color reflect the roll (0.65x-50x). The reel/reveal UX is untouched.
+function degenRarity(multBps: number): RarityKey {
+  if (multBps >= 500000) return "goldleaf";
+  if (multBps >= 50000) return "alpha";
+  if (multBps >= 20000) return "preferred";
+  if (multBps >= 10000) return "bluechip";
+  return "ticker";
+}
+function degenWinItem(multBps: number, payoutShares: bigint): Item {
+  const x = multBps / 10000;
+  const label = (Number.isInteger(x) ? x.toString() : x.toFixed(2)) + "×";
+  return { sym: "AAPL", name: `Apple · ${label} roll`, unit: `${fmt(payoutShares, 3)} shares`, value: Math.round(x * 100), rarity: degenRarity(multBps), odds: 0 };
+}
+
 export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const [caseIdx, setCaseIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -142,7 +149,6 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const [won, setWon] = useState<Item | null>(null);
   const [pulls, setPulls] = useState<Item[]>([]);
   const [sold, setSold] = useState(false);
-  const [wonToken, setWonToken] = useState<Address | null>(null); // on-chain token of a live win (for sell-back)
   const [sellBusy, setSellBusy] = useState(false);
   const [sellMsg, setSellMsg] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null); // live-draw narration
@@ -184,21 +190,22 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
     setStrip(buildStrip(winner)); setWon(winner); setSold(false); setStage(null); setPhase("spinning");
   };
 
-  // Live: start the reel immediately, then fire the on-chain draw. The reel's ~6.4s tension overlaps
-  // the signing + the keeper revealing the draw; finish() HOLDS the reel at rest until the true stock
-  // arrives, then reveals. Reel-during-signing — the behavior this flow has always used.
+  // Live: start the reel immediately, then fire the on-chain roll (the Degen multiplier mechanic). The
+  // reel's ~6.4s tension overlaps the signing + the keeper settling the roll; finish() HOLDS the reel at
+  // rest until the true multiplier arrives, then reveals. Reel-during-signing — unchanged UX.
   const spinLive = () => {
     const provisional = weightedDraw(LIVE_ITEMS);
     setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setStage("approving"); setPhase("spinning");
-    flows.openCase(w.address as Address, setStage)
-      .then(({ token, amount }) => { setWon(liveItem(token, amount)); setWonToken(token); setStage(null); })
+    flows.degenOpen(w.address as Address, setStage)
+      .then(({ multBps, payoutShares }) => { setWon(degenWinItem(multBps, payoutShares)); setStage(null); })
       .catch((e) => { setStage("err:" + niceError(e)); });
   };
 
-  const sellBack = async () => {
-    if (!live || !wonToken) { setSold(true); return; } // simulated
+  // Collect winnings (pull-based) to the wallet. Degen winnings are credited to owed[]; withdraw claims them.
+  const collect = async () => {
+    if (!live) { setSold(true); return; } // simulated
     setSellBusy(true); setSellMsg(null);
-    try { await flows.sellCaseStock(w.address as Address, wonToken); setSold(true); setSellMsg("✓ sold back for USDG — the spread fed the Bell"); }
+    try { await flows.degenWithdraw(w.address as Address); setSold(true); setSellMsg("✓ withdrawn to your wallet"); }
     catch (e) { setSellMsg(niceError(e)); }
     finally { setSellBusy(false); }
   };
@@ -225,6 +232,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
     const finalX = WIN * CARD_W + CARD_W / 2 + jitter - stageW / 2;
     const D = 6400; // ms — long enough to build tension, short enough to not bore
     const t0 = performance.now();
+
     rail.style.transform = "translateX(0px)";
     const step = (t: number) => {
       if (cancelled) return;
@@ -315,15 +323,15 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
               </div>
               <div className="reveal-actions">
                 {sold
-                  ? <div className="reveal-sold num">{sellMsg ?? `sold back · ${usd(Math.round(won.value * 0.95))} · 5% spread → the Bell`}</div>
+                  ? <div className="reveal-sold num">{sellMsg ?? "withdrawn to your wallet"}</div>
                   : <>
-                    <button className="btn btn-gold" onClick={again}>Keep it · open another</button>
-                    <button className="btn btn-ghost" disabled={sellBusy} onClick={sellBack}>{sellBusy ? "selling…" : `Sell back · ${usd(Math.round(won.value * 0.95))}`}</button>
+                    <button className="btn btn-gold" onClick={again}>Roll again</button>
+                    <button className="btn btn-ghost" disabled={sellBusy} onClick={collect}>{sellBusy ? "withdrawing…" : "Withdraw to wallet"}</button>
                   </>}
-                {sold && <button className="linklike" onClick={again}>open another →</button>}
+                {sold && <button className="linklike" onClick={again}>roll again →</button>}
               </div>
               {sellMsg && !sold && <div className="reveal-verify num" style={{ color: "var(--crit)" }}>{sellMsg}</div>}
-              <div className="reveal-verify num">{live ? "keep it, borrow against it on Lend, or sell it back — real testnet stock" : "draw = keccak(blockhash(commit), caseId) % inventory · live when you connect"}</div>
+              <div className="reveal-verify num">{live ? "your winnings are stock — withdraw to your wallet, then borrow against it on Lend" : "a multiplier roll — win more or less than you paid · live when you connect"}</div>
             </div>
           )}
         </div>
@@ -364,11 +372,9 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   );
 }
 
-/// The unified Cases page — pick your risk with a Safe / Degen toggle. Both are provably fair and
-/// provably solvent; the toggle swaps the board below a shared header. (Merged the two case types
-/// into one flow so the nav isn't cluttered and the risk choice is explicit in one place.)
+/// The Cases page — one flow: the CS:GO reel UX with the multiplier (Degen) mechanic under it. Roll a
+/// case, win a multiple of stock (0.65x-50x), backed before you open. Open 24/7.
 export function CasesPage() {
-  const [mode, setMode] = useState<"safe" | "degen">("safe");
   useEffect(() => { document.title = "Cases · Essey"; }, []);
   return (
     <>
@@ -376,20 +382,15 @@ export function CasesPage() {
         <div className="wrap">
           <div className="band-head"><div>
             <span className="eyebrow">Cases</span>
-            <h2>Open a Case. Get real stock.</h2>
-            <p>Pick your style — both are <b>provably fair</b> and backed by real stock <b>before</b> you open.
-              <b> Safe</b> always pays ~the case's value (the draw just picks which stock). <b>Degen</b> is a
-              multiplier roll — win more or less than you paid.</p>
+            <h2>Open a Case. Roll for stock.</h2>
+            <p>A <b>provably-fair</b> multiplier roll, backed by real stock <b>before</b> you open — win
+              <b> more or less</b> than you paid, from 0.65× to a 50× Gold Bell. Open 24/7.</p>
           </div>
             <span className="preview-chip live">testnet</span>
           </div>
-          <div className="seg cases-mode" role="tablist">
-            <button aria-selected={mode === "safe"} onClick={() => setMode("safe")}>🎁 Safe · always ~fair value</button>
-            <button aria-selected={mode === "degen"} onClick={() => setMode("degen")}>🎰 Degen · 0.65×–50× multiplier</button>
-          </div>
         </div>
       </section>
-      {mode === "safe" ? <CasesArcade embedded /> : <DegenCase embedded />}
+      <CasesArcade embedded />
     </>
   );
 }
