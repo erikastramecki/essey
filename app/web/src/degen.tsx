@@ -36,8 +36,8 @@ function mtier(bps: number): string {
 const impliedUsd = (bps: number) => Math.round((bps / 10000) * 100);
 
 type Ladder = { multBps: number; pct: number }[];
-type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: bigint; fee: bigint; owed: bigint };
-type Phase = "idle" | "confirming" | "spinning" | "revealed";
+type Account = { ladder: Ladder; maxMultBps: number; free: bigint; reserved: bigint; fee: bigint; owed: bigint; inSession: boolean };
+type Phase = "idle" | "spinning" | "revealed";
 
 const CHIP_W = 132; // .cs-card width (120) + .spin-rail gap (12)
 const WIN = 46; // winner index in the strip (matches CasesArcade)
@@ -60,7 +60,6 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   const stagePendingRef = useRef(false);
   const resultRef = useRef<{ multBps: number; payoutShares: bigint } | null>(null);
   const errRef = useRef<string | null>(null);
-  const startedSpinRef = useRef(false); // true once the reel has started (buy confirmed) — gates error handling
 
   useEffect(() => { document.title = "Degen Case · Essey"; }, []);
   const load = useCallback(() => {
@@ -87,58 +86,33 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
   // A reel strip landing a provisional roll at WIN (corrected to the true roll on reveal).
   const buildStrip = (winner: number) => { const s = Array.from({ length: 54 }, drawFill); s[WIN] = winner; return s; };
 
-  // Live roll — SIGN FIRST, then spin. The reel starts only once the buy is confirmed (onStage
-  // "sealing"); its ~6.4s tension overlaps the keeper settling the roll, then it reveals the true
-  // multiplier. Same shape as the Safe case (CasesArcade.spinLive).
+  // Live roll: start the reel immediately, then fire the on-chain roll. The reel's ~6.4s tension
+  // overlaps the signing + the keeper settling the roll (finish() HOLDS the reel at rest until the true
+  // multiplier arrives), then it reveals. Reel-during-signing is the behavior the Safe case has always
+  // used. Identical shape to CasesArcade.spinLive.
   const open = () => {
     if (busy) return;
     if (!ready) return spinSim(); // disconnected → simulated preview, no signing
     if (!a || !acct) return;
     setBusy(true); setMsg(null); setPayout(0n);
-    resultRef.current = null; errRef.current = null; startedSpinRef.current = false;
-    setStage("approving"); setPhase("confirming"); // signing in the wallet — no reel yet
-    flows.degenOpen(a, (s) => {
-      setStage(s);
-      if (s === "sealing" && !startedSpinRef.current) { // buy confirmed → start the reel now
-        startedSpinRef.current = true;
-        const provisional = drawFill();
-        setStrip(buildStrip(provisional)); setWon(provisional); setPhase("spinning");
-      }
-    })
+    resultRef.current = null; errRef.current = null;
+    const provisional = drawFill();
+    setStrip(buildStrip(provisional)); setWon(provisional); setStage("approving"); setPhase("spinning");
+    flows.degenOpen(a, setStage)
       .then(({ multBps, payoutShares }) => {
         resultRef.current = { multBps, payoutShares };
         setStrip((prev) => { const c = [...prev]; c[WIN] = multBps; return c; }); // land on the true roll
         setWon(multBps); setPayout(payoutShares); setStage(null);
       })
-      .catch((e) => {
-        errRef.current = niceError(e); setStage("err:" + errRef.current);
-        if (!startedSpinRef.current) { setPhase("idle"); setBusy(false); setMsg(errRef.current); } // failed before the reel
-      });
+      .catch((e) => { errRef.current = niceError(e); setStage("err:" + errRef.current); });
   };
 
-  // Disconnected preview: a client-side simulated roll that walks the SAME phases as the live flow
-  // (confirming -> sealing -> spinning -> reveal), so the preview matches reality and exercises the
-  // exact code path — no chain, no signing.
+  // Disconnected preview: a client-side simulated roll over the disclosed odds — no chain, no signing.
   const spinSim = () => {
-    setBusy(true); setMsg(null); setPayout(0n);
-    resultRef.current = null; errRef.current = null; startedSpinRef.current = false;
-    setStage("approving"); setPhase("confirming");
-    const onStage = (s: string) => {
-      setStage(s);
-      if (s === "sealing" && !startedSpinRef.current) {
-        startedSpinRef.current = true;
-        const provisional = drawFill();
-        setStrip(buildStrip(provisional)); setWon(provisional); setPhase("spinning");
-      }
-    };
-    setTimeout(() => onStage("buying"), 150);
-    setTimeout(() => onStage("sealing"), 450);
-    setTimeout(() => {
-      const winner = drawFill();
-      resultRef.current = { multBps: winner, payoutShares: BigInt(Math.round((winner / 10000) * 0.5 * 1e18)) };
-      setStrip((prev) => { const c = [...prev]; c[WIN] = winner; return c; });
-      setWon(winner); setPayout(resultRef.current.payoutShares); setStage(null);
-    }, 1300);
+    setBusy(true); setMsg(null); setStage(null); resultRef.current = null; errRef.current = null;
+    const winner = drawFill();
+    resultRef.current = { multBps: winner, payoutShares: BigInt(Math.round((winner / 10000) * 0.5 * 1e18)) };
+    setStrip(buildStrip(winner)); setWon(winner); setPayout(resultRef.current.payoutShares); setPhase("spinning");
   };
 
   // The reel animation — identical to CasesArcade (same 6.4s span, quintic ease-out). It spins to the
@@ -224,24 +198,27 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
                       <EMonogram size={40} />
                       <p>{acct ? `${fmt(PRICE.casePrice)} $ESSEY per roll · ~${rtp.toFixed(0)}% avg payback · ${fmt(acct.free, 0)} AAPL in the prize vault` : `${fmt(PRICE.casePrice)} $ESSEY per roll · 0.65×–50× multiplier`}</p>
                       {ready ? (
-                        <>
-                          <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>
-                            {busy ? "opening…" : `OPEN A CASE · ${fmt(PRICE.casePrice)} $ESSEY`}
-                          </button>
-                          <i>a real on-chain roll · one signature, then it spins</i>
-                        </>
+                        acct && !acct.inSession ? (
+                          <>
+                            <button className="btn btn-gold spin-cta" disabled>MARKET CLOSED</button>
+                            <i>Degen rolls run during <b>US market hours (14:30–20:00 UTC)</b> — a roll locks a live
+                              stock price to reserve your worst case. Come back then, or preview a roll below.</i>
+                            <button className="linklike" style={{ marginTop: 8 }} onClick={spinSim}>Preview a roll →</button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>
+                              {busy ? "opening…" : `OPEN A CASE · ${fmt(PRICE.casePrice)} $ESSEY`}
+                            </button>
+                            <i>a real on-chain roll · costs {fmt(PRICE.casePrice)} $ESSEY + a tiny gas fee in ETH</i>
+                          </>
+                        )
                       ) : (
                         <>
                           <button className="btn btn-gold spin-cta" disabled={busy} onClick={open}>PREVIEW A ROLL</button>
                           <i>simulated — <span className="live-connect"><ConnectButton /></span> to roll for real</i>
                         </>
                       )}
-                    </div>
-                  ) : phase === "confirming" ? (
-                    <div className="spin-idle">
-                      <EMonogram size={40} />
-                      <p>Confirm the roll in your wallet…</p>
-                      {stage && <i className={"num" + (stage.startsWith("err:") ? " err" : "")}>{stage.startsWith("err:") ? stage.slice(4) : (stageLabel[stage] ?? stage)}</i>}
                     </div>
                   ) : (
                     <>

@@ -164,6 +164,7 @@ export const degenAbi = parseAbi([
   "function multiplierBps(uint256) view returns (uint256)",
   "function cumPpm(uint256) view returns (uint256)",
   "function entropyFee() view returns (uint256)",
+  "function priceOf(address) view returns (uint256, uint8, bool)",
   "event CaseBought(uint64 indexed seq, address indexed buyer, uint256 worstShares)",
   "event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)",
 ]);
@@ -367,7 +368,14 @@ export const reads = {
       a ? pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "owed", args: [a] }) as Promise<bigint> : Promise.resolve(0n),
     ]);
     const ladder = mults.map((m, i) => ({ multBps: Number(m), pct: (Number(cums[i]) - (i > 0 ? Number(cums[i - 1]) : 0)) / 10_000 }));
-    return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed };
+    // Degen buy() is session-gated (it locks a live market price). Read it so the UI can say "market
+    // closed" instead of letting the buy revert. priceOf reverts on a stale feed → treat as closed.
+    let inSession = false;
+    try {
+      const px = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "priceOf", args: [ADDR.aapl] }) as readonly [bigint, number, boolean];
+      inSession = px[2];
+    } catch { inSession = false; }
+    return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed, inSession };
   },
 
   quest: async (a: Address | null) => {
