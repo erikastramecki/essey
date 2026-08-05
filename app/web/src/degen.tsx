@@ -116,13 +116,29 @@ export function DegenCase({ embedded }: { embedded?: boolean } = {}) {
       });
   };
 
-  // Disconnected preview: a client-side simulated roll over the disclosed odds — no chain, no signing.
-  // Mirrors the Safe case's simulated spin so the flow is identical whether or not you're connected.
+  // Disconnected preview: a client-side simulated roll that walks the SAME phases as the live flow
+  // (confirming -> sealing -> spinning -> reveal), so the preview matches reality and exercises the
+  // exact code path — no chain, no signing.
   const spinSim = () => {
-    setBusy(true); setMsg(null); setStage(null); errRef.current = null; startedSpinRef.current = true;
-    const winner = drawFill();
-    resultRef.current = { multBps: winner, payoutShares: BigInt(Math.round((winner / 10000) * 0.5 * 1e18)) };
-    setStrip(buildStrip(winner)); setWon(winner); setPayout(resultRef.current.payoutShares); setPhase("spinning");
+    setBusy(true); setMsg(null); setPayout(0n);
+    resultRef.current = null; errRef.current = null; startedSpinRef.current = false;
+    setStage("approving"); setPhase("confirming");
+    const onStage = (s: string) => {
+      setStage(s);
+      if (s === "sealing" && !startedSpinRef.current) {
+        startedSpinRef.current = true;
+        const provisional = drawFill();
+        setStrip(buildStrip(provisional)); setWon(provisional); setPhase("spinning");
+      }
+    };
+    setTimeout(() => onStage("buying"), 150);
+    setTimeout(() => onStage("sealing"), 450);
+    setTimeout(() => {
+      const winner = drawFill();
+      resultRef.current = { multBps: winner, payoutShares: BigInt(Math.round((winner / 10000) * 0.5 * 1e18)) };
+      setStrip((prev) => { const c = [...prev]; c[WIN] = winner; return c; });
+      setWon(winner); setPayout(resultRef.current.payoutShares); setStage(null);
+    }, 1300);
   };
 
   // The reel animation — identical to CasesArcade (same 6.4s span, quintic ease-out). It spins to the
