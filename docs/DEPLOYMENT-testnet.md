@@ -71,9 +71,19 @@ deployer — mainnet uses the multisig. The launch tier ladder + prices in the s
 pending founder review.
 
 **Lending (deployed 2026-08-03):** EsseyPool wired with `BELL_SINK` = the Bell, 100k USDG liquidity
-seeded, 10% base APR, 50% of skimmed loan-interest → the pot. AAPL/NVDA collateral markets are
-PROPOSED; the 2-day parameter timelock (a safety feature) means **borrowing opens 2026-08-05 18:55
-UTC** — supply/withdraw works now. After the timelock, call `markets.commitMarket(aapl)` and
-`commitMarket(nvda)` to open borrowing (and keep a keeper beating the LivenessOracle for liquidations).
+seeded, 10% base APR, 50% of skimmed loan-interest → the pot. AAPL/NVDA collateral markets were
+**committed 2026-08-05 18:55 UTC** (timelock elapsed) and are `enabled` with correct risk params +
+live feeds; supply/withdraw works.
+
+⚠️ **`canBorrow` is still `false` on testnet — a fixture gap, not a contract bug.** `collateralValue`
+hard-requires the collateral token to implement `IScaledUI.uiMultiplier()` (share/split normalisation).
+The testnet AAPL/NVDA are plain OZ `ERC20Mock`s (also used by Cases/Bell/converter), which lack that
+function, so `collateralValue` reverts and `canBorrow` catches → `false`. On MAINNET the real Robinhood
+Stock Tokens implement ScaledUI, so borrowing works there. To exercise borrowing ON TESTNET, deploy
+ScaledUI-compatible mock stock tokens (`uiMultiplier() = 1e18`) and re-propose the markets against them
+(fresh 2-day timelock) — note this forks the collateral token identity away from the live Cases/Bell
+AAPL/NVDA, so ideally the whole testnet stock stack moves to the ScaledUI mock together. (The other
+gate, the session flag, is satisfied once the market feed is refreshed after the day's 14:30 UTC open —
+same keeper that keeps the converter/degen feeds fresh.)
 
 **Not yet on testnet:** StockConverter (stock-denominated payouts), whitelist roots, CoinVoyage onramp.
