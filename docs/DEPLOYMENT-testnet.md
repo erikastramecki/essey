@@ -21,6 +21,10 @@ Seat's Vault by a Bell claim). Reuses the existing USDG/AAPL/NVDA/pool/quest/mar
 | TestnetFaucet | `0x11c696cf869c1caace32e7ea6d1d2074c452ded2` |
 | EsseyCasesDegen (multiplier gacha, 24/7 share-denominated) | `0xA0B438Da1b489748D863C9529D19A29C36309599` |
 | EsseyCasesDegen (old, USD-priced/session-gated — retired) | `0x96d5CE89fB10044882F144430EDeC2Eb412Af42d` |
+| **Essey Private — Phase 0 (stealth addresses, ERC-5564/6538)** | |
+| EsseyStealthAnnouncer (ERC-5564) | `0xe386345BB307166F59A191130230bA445F05F402` |
+| EsseyStealthRegistry (canonical ERC-6538) | `0x7f28EbFfC1310849f4Cb5612e1Ff892fd892880f` |
+| EsseyStealthPay (private pay — zero custody) | `0x36B750Ac415DC1f05E39C6D13A05FDbC29567403` |
 | MockEntropy (degen keeper) | `0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F` |
 | USDG / AAPL / NVDA / pool / quest / markets | *unchanged (see below)* |
 
