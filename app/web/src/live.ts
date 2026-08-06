@@ -47,6 +47,8 @@ export const ADDR = {
   // Essey Private — Phase 1 (shielded USDG pool, hides amounts). Depth-20, gate openMode on testnet.
   shieldedPool: "0xcD7953960bbc1276F0856Dad5E502fc01cE629aB" as Address,
   shieldedPoolGate: "0xcBdA12dF938d665fF5752b9C49740A7D47ff5562" as Address,
+  // The relayer that submits withdrawals/transfers on the user's behalf (hides tx-origin, gasless).
+  poolRelayer: "0x1Ed246983ca4E022f31CEb2b1280FDD46362C23c" as Address,
 };
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
@@ -699,27 +701,31 @@ export const flows = {
     return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
-  /// Withdraw `amount` from a shielded note out to `recipient`. The note's `index` is its real on-chain index
-  /// (from the scan), so no guessing. Change is re-encrypted to you and stored on-chain.
-  shieldWithdraw: async (a: Address, note: PoolNote, amount: bigint, recipient: Address, keys: PoolKeys, onStage?: (s: string) => void): Promise<Hex> => {
+  /// Withdraw `amount` from a shielded note out to `recipient`. When `viaRelayer`, the tx is submitted by the
+  /// relayer (hides the user's tx-origin, gasless for the user); otherwise the user self-submits. `amount` is
+  /// what the recipient receives; the relayer fee (if any) is taken from the change.
+  shieldWithdraw: async (a: Address, note: PoolNote, amount: bigint, recipient: Address, keys: PoolKeys, viaRelayer: boolean, onStage?: (s: string) => void): Promise<Hex> => {
     onStage?.("proving");
     const leaves = await poolLeaves();
-    const { proof, ext } = await buildWithdrawProof(keys.spendKp, keys.encKp, note, amount, recipient, leaves);
-    onStage?.("withdrawing");
-    return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
+    const { proof, ext } = await buildWithdrawProof(keys.spendKp, keys.encKp, note, amount, recipient, leaves, relayOpts);
+    onStage?.(viaRelayer ? "relaying" : "withdrawing");
+    return viaRelayer ? await relaySubmit(proof, ext) : await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
   /// Send `amount` of shielded USDG to another registered user IN-POOL — never unshielded. The sent note is
-  /// encrypted to THEM (they recover it by scanning); the change to you. Recipient must have registered.
-  shieldTransfer: async (a: Address, recipientAddr: Address, amount: bigint, note: PoolNote, keys: PoolKeys, onStage?: (s: string) => void): Promise<Hex> => {
+  /// encrypted to THEM (they recover it by scanning); the change to you. When `viaRelayer`, the relayer submits
+  /// (hides the sender's tx-origin). Recipient must have registered.
+  shieldTransfer: async (a: Address, recipientAddr: Address, amount: bigint, note: PoolNote, keys: PoolKeys, viaRelayer: boolean, onStage?: (s: string) => void): Promise<Hex> => {
     onStage?.("looking up");
     const acct = await lookupPoolAccount(recipientAddr);
     if (!acct) throw new Error("That address hasn't set up a shielded account yet — they need to unlock + register first.");
     onStage?.("proving");
     const leaves = await poolLeaves();
-    const { proof, ext } = await buildTransferProof(keys.spendKp, keys.encKp, note, amount, acct.spendPub, acct.encPub, leaves);
-    onStage?.("sending");
-    return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
+    const { proof, ext } = await buildTransferProof(keys.spendKp, keys.encKp, note, amount, acct.spendPub, acct.encPub, leaves, relayOpts);
+    onStage?.(viaRelayer ? "relaying" : "sending");
+    return viaRelayer ? await relaySubmit(proof, ext) : await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
@@ -920,6 +926,34 @@ function extToTuple(e: PoolExtData) {
     encryptedOutput1: e.encryptedOutput1,
     encryptedOutput2: e.encryptedOutput2,
   };
+}
+
+/// The relayer testnet fee (base units). 0 = the funded relayer wallet subsidizes gas for the demo; production
+/// sets a gas-covering fee. The fee is bound into the proof, so the relayer can only take exactly this.
+export const RELAYER_FEE = 0n;
+
+/// Submit a pre-built proof through the relayer (POST /api/relay) instead of the user's own wallet — so the tx
+/// originates from the relayer, hiding the user's tx-origin, and needs no gas from the user. Bigints go over
+/// JSON as decimal strings. Returns the relayer's tx hash.
+async function relaySubmit(proof: ProofCalldata, ext: PoolExtData): Promise<Hex> {
+  const body = {
+    proof: {
+      a: [proof.a[0].toString(), proof.a[1].toString()],
+      b: [[proof.b[0][0].toString(), proof.b[0][1].toString()], [proof.b[1][0].toString(), proof.b[1][1].toString()]],
+      c: [proof.c[0].toString(), proof.c[1].toString()],
+      root: numberToHex(proof.root, { size: 32 }),
+      inputNullifiers: [numberToHex(proof.inputNullifiers[0], { size: 32 }), numberToHex(proof.inputNullifiers[1], { size: 32 })],
+      outputCommitments: [numberToHex(proof.outputCommitments[0], { size: 32 }), numberToHex(proof.outputCommitments[1], { size: 32 })],
+      publicAmount: proof.publicAmount.toString(),
+      extDataHash: numberToHex(proof.extDataHash, { size: 32 }),
+    },
+    extData: { recipient: ext.recipient, extAmount: ext.extAmount.toString(), relayer: ext.relayer, fee: ext.fee.toString(), encryptedOutput1: ext.encryptedOutput1, encryptedOutput2: ext.encryptedOutput2 },
+  };
+  const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = (await r.json()) as { hash?: Hex; error?: string };
+  if (!r.ok || !j.hash) throw new Error(j.error ? `Relayer: ${j.error}` : "The relayer couldn't submit — try again, or turn off 'via relayer' to submit yourself.");
+  await pub.waitForTransactionReceipt({ hash: j.hash, timeout: 120_000 });
+  return j.hash;
 }
 
 

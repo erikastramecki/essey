@@ -50,6 +50,7 @@ export function PrivatePage() {
   const [unshieldTo, setUnshieldTo] = useState("");
   const [xferTo, setXferTo] = useState("");
   const [xferAmt, setXferAmt] = useState("");
+  const [viaRelayer, setViaRelayer] = useState(true); // withdraw/transfer through the relayer by default (private, gasless)
   const [stage, setStage] = useState<string | null>(null);
   useEffect(() => { if (a && !unshieldTo) setUnshieldTo(a); }, [a, unshieldTo]);
   useEffect(() => { setPoolKeys(null); setPool({ notes: [], balance: 0n }); setPoolReg(null); }, [a]); // re-lock on wallet change
@@ -103,7 +104,7 @@ export function PrivatePage() {
     if (amt <= 0n) throw new Error("Enter an amount to unshield.");
     const dest = (unshieldTo.trim() || a) as Address;
     if (!isAddress(dest)) throw new Error("Enter a valid destination address.");
-    await flows.shieldWithdraw(a, pickNote(amt), amt, dest, poolKeys, setStage);
+    await flows.shieldWithdraw(a, pickNote(amt), amt, dest, poolKeys, viaRelayer, setStage);
     setUnshieldAmt(""); await rescan(poolKeys);
   }, "✓ Unshielded to your chosen address.");
 
@@ -112,7 +113,7 @@ export function PrivatePage() {
     if (amt <= 0n) throw new Error("Enter an amount to send.");
     const dest = xferTo.trim();
     if (!isAddress(dest)) throw new Error("Enter the recipient's wallet address.");
-    await flows.shieldTransfer(a, dest as Address, amt, pickNote(amt), poolKeys, setStage);
+    await flows.shieldTransfer(a, dest as Address, amt, pickNote(amt), poolKeys, viaRelayer, setStage);
     setXferAmt(""); await rescan(poolKeys);
   }, "✓ Sent privately — it will appear in the recipient's shielded balance.");
 
@@ -218,6 +219,11 @@ export function PrivatePage() {
                       </div>
                     </div>
                   )}
+
+                  <label className="pf-note" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+                    <input type="checkbox" checked={viaRelayer} onChange={(e) => setViaRelayer(e.target.checked)} />
+                    <span>Withdraw / send <b>via relayer</b> — the relayer submits for you, so the tx doesn't come from your wallet (hides your tx-origin) and costs you no gas. Uncheck to submit yourself.</span>
+                  </label>
 
                   {/* Shield (deposit) */}
                   <div className="live-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 14 }}>

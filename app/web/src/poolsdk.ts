@@ -389,11 +389,18 @@ export async function buildWithdrawProof(
   withdrawAmount: bigint,
   recipient: `0x${string}`,
   allLeaves: bigint[],
-  opts?: { wasmUrl?: string; zkeyUrl?: string },
+  opts?: { wasmUrl?: string; zkeyUrl?: string; relayer?: `0x${string}`; fee?: bigint },
 ): Promise<{ proof: ProofCalldata; ext: PoolExtData; changeNote: PoolNote | null }> {
   const noteAmount = BigInt(note.amount);
+  // The relayer (if any) is paid `fee` from the pool; the extDataHash binds both into the proof, so a relayer
+  // can only submit the exact tx or refuse — it can't alter the fee or redirect funds. recipient gets
+  // withdrawAmount, relayer gets fee, change = note − withdrawAmount − fee.
+  const relayer = (opts?.relayer ?? "0x0000000000000000000000000000000000000000") as `0x${string}`;
+  const fee = opts?.fee ?? 0n;
   if (withdrawAmount <= 0n) throw new Error("withdraw amount must be positive");
-  if (withdrawAmount > noteAmount) throw new Error("withdraw amount exceeds note balance");
+  if (fee < 0n) throw new Error("fee must be non-negative");
+  if (fee > 0n && relayer === "0x0000000000000000000000000000000000000000") throw new Error("a relayer fee requires a relayer address");
+  if (withdrawAmount + fee > noteAmount) throw new Error("withdraw amount + relayer fee exceeds note balance");
 
   const tree = new MerkleTree(LEVELS);
   for (const leaf of allLeaves) tree.insert(leaf);
@@ -417,7 +424,7 @@ export async function buildWithdrawProof(
   const inPathElements = [pathElements, new Array(LEVELS).fill("0")];
   const inPathIndices = [pathIndices, 0];
 
-  const change = noteAmount - withdrawAmount;
+  const change = noteAmount - withdrawAmount - fee;
   const changeIndex = allLeaves.length;
   const out0 =
     change > 0n
@@ -429,8 +436,8 @@ export async function buildWithdrawProof(
   const ext: PoolExtData = {
     recipient,
     extAmount: -withdrawAmount,
-    relayer: "0x0000000000000000000000000000000000000000",
-    fee: 0n,
+    relayer,
+    fee,
     // Encrypt the change note (out0) to self so it survives a device wipe. If there
     // is no change (full withdraw), out0 is the zero note => no ciphertext.
     encryptedOutput1:
@@ -438,7 +445,7 @@ export async function buildWithdrawProof(
     encryptedOutput2: "0x",
   };
   const extDataHash = getExtDataHash(ext);
-  const publicAmount = calculatePublicAmount(-withdrawAmount, 0n);
+  const publicAmount = calculatePublicAmount(-withdrawAmount, fee);
 
   const input = buildCircuitInput(
     root,
@@ -605,11 +612,17 @@ export async function buildTransferProof(
   recipientSpendPub: bigint,
   recipientEncPub: Uint8Array,
   allLeaves: bigint[],
-  opts?: { wasmUrl?: string; zkeyUrl?: string },
+  opts?: { wasmUrl?: string; zkeyUrl?: string; relayer?: `0x${string}`; fee?: bigint },
 ): Promise<{ proof: ProofCalldata; ext: PoolExtData; sentNote: PoolNote; changeNote: PoolNote | null }> {
   const inAmount = BigInt(inputNote.amount);
+  // A relayer (if any) is paid `fee` from the pool for submitting on the sender's behalf (hiding their
+  // tx-origin). recipient (in-pool) gets `amount`, relayer gets `fee`, change = note − amount − fee.
+  const relayer = (opts?.relayer ?? "0x0000000000000000000000000000000000000000") as `0x${string}`;
+  const fee = opts?.fee ?? 0n;
   if (amount <= 0n) throw new Error("transfer amount must be positive");
-  if (amount > inAmount) throw new Error("transfer amount exceeds note balance");
+  if (fee < 0n) throw new Error("fee must be non-negative");
+  if (fee > 0n && relayer === "0x0000000000000000000000000000000000000000") throw new Error("a relayer fee requires a relayer address");
+  if (amount + fee > inAmount) throw new Error("transfer amount + relayer fee exceeds note balance");
 
   const tree = new MerkleTree(LEVELS);
   for (const leaf of allLeaves) tree.insert(leaf);
@@ -633,7 +646,7 @@ export async function buildTransferProof(
   const inPathElements = [pathElements, new Array(LEVELS).fill("0")];
   const inPathIndices = [pathIndices, 0];
 
-  const change = inAmount - amount;
+  const change = inAmount - amount - fee;
   const sentIndex = allLeaves.length;
   const changeIndex = allLeaves.length + 1;
 
@@ -653,13 +666,13 @@ export async function buildTransferProof(
   const ext: PoolExtData = {
     recipient: "0x0000000000000000000000000000000000000000",
     extAmount: 0n,
-    relayer: "0x0000000000000000000000000000000000000000",
-    fee: 0n,
+    relayer,
+    fee,
     encryptedOutput1: encryptNote(out0.amount, out0.blinding, recipientEncPub),
     encryptedOutput2: change > 0n ? encryptNote(out1.amount, out1.blinding, encKp.encPub) : "0x",
   };
   const extDataHash = getExtDataHash(ext);
-  const publicAmount = calculatePublicAmount(0n, 0n); // == 0
+  const publicAmount = calculatePublicAmount(0n, fee); // -fee (mod field): the relayer's cut leaves the pool
 
   const input = buildCircuitInput(
     root,
