@@ -13,13 +13,13 @@ import {EsseyPoolGate} from "../src/private/pool/EsseyPoolGate.sol";
 import {Groth16Verifier} from "../src/private/pool/PoolVerifier2.sol";
 
 contract DeployShieldedPool is Script {
-  // ⚠️ DEMO DEPTH — NOT PRODUCTION. LEVELS is bound to the compiled circuit (transaction2.circom
-  // Transaction(5,...)). A depth-5 tree holds 2^5 = 32 leaves = only 16 transactions over the pool's
-  // ENTIRE life (every deposit/withdraw/transfer inserts 2 leaves), after which ALL funds lock —
-  // withdrawals insert too. For real use, recompile the circuit at production depth (e.g. 20 → ~1M txs),
-  // regenerate the zkey + PoolVerifier2.sol, and set LEVELS to match. Contract side (zeros() to 23) is
-  // already forward-ready; the binding constraint is the fixed-depth circuit. See audit finding (MEDIUM).
-  uint32 internal constant LEVELS = 5;
+  // Production depth. LEVELS is bound to the compiled circuit (transaction2.circom Transaction(20,...)):
+  // a depth-20 tree holds 2^20 = 1,048,576 leaves = ~524k transactions over the pool's life (every
+  // deposit/withdraw/transfer inserts 2 leaves). To change depth, recompile the circuit + regenerate the
+  // zkey + PoolVerifier2.sol and set LEVELS to match (contract zeros() supports up to 23).
+  // NOTE: the deployed zkey still uses a single-contributor setup — a real multi-party trusted-setup
+  // ceremony remains a pre-mainnet gate (see src/private/pool/README.md).
+  uint32 internal constant LEVELS = 20;
 
   /// Deploy the circomlib-generated Poseidon(2) hasher from its raw creation bytecode.
   function deployHasher() internal returns (address hasher) {

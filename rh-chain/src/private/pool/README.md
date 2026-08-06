@@ -29,18 +29,21 @@ outputCommitment1]`.
 
 ## Status (2026-08-06)
 
+- Circuit at **production depth 20** (`Transaction(20,...)`, 27,022 constraints) → 2^20 = ~1M leaves ≈ **524k
+  transactions** of capacity.
 - 3-agent adversarial audit (circuit + contract + tree/hasher): **clean on security** — no forge / mint / steal /
-  double-spend / drain / gate-bypass / tree-corruption.
-- **Proven on Robinhood Chain testnet**: a hidden-amount USDG deposit → withdrawal (see `script/ProveShieldedPool.s.sol`).
+  double-spend / drain / gate-bypass / tree-corruption. (The circuit logic is depth-parametric; audited generically.)
+- **Proven on Robinhood Chain testnet** at depth 20: a hidden-amount USDG deposit → withdrawal (see
+  `script/ProveShieldedPool.s.sol`).
 
-## ⚠️ NOT production-ready — before any real value
+## ⚠️ Before any real (mainnet) value
 
-1. **Tree depth.** The demo circuit is `Transaction(5,...)` → 32 leaves = **16 total transactions**, then funds
-   lock. Recompile at production depth (e.g. 20 → ~1M txs), regenerate the zkey + `PoolVerifier2.sol`, deploy with
-   matching `LEVELS`. (`zeros()` already extends to 23.)
-2. **Trusted setup.** The demo zkey used throwaway ceremony entropy. Production needs a real multi-party ceremony.
-3. **Formal zk audit** of the circuit by a specialist firm.
-4. **Production ASP** (the screening engine behind the gate) + the operator's MSB/AML counsel track.
+1. **Trusted setup.** The current zkey used a single-contributor setup — production needs a real MULTI-PARTY
+   ceremony (multiple independent contributors so no one knows the toxic waste). This is a coordination step with
+   external parties, not a solo build. **Pre-mainnet gate.**
+2. **Formal zk audit** of the circuit by a specialist firm.
+3. **Production ASP** (the screening engine behind the gate) + the operator's MSB/AML counsel track.
+4. (Depth is now production-grade; bump `LEVELS` + recompile only if >524k-tx capacity is needed. `zeros()` → 23.)
 
 ## Regenerating artifacts
 
