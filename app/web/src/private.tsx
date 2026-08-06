@@ -8,13 +8,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { parseUnits, isAddress, type Address, type Hex } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, type StealthKeys, type PrivateHolding } from "./live";
+import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, shieldedNotes, type StealthKeys, type PrivateHolding, type ShieldedNote } from "./live";
 
 // Decimals are carried per-token, NOT hardcoded — testnet mocks are all 18-dec, but mainnet USDG is 6-dec,
 // and a hardcoded 18 there would over-send by 1e12x. Update these when the mainnet addresses land.
 const TOKENS: { key: string; addr: Address; decimals: number }[] = [
   { key: "USDG", addr: ADDR.usdg, decimals: 18 }, { key: "AAPL", addr: ADDR.aapl, decimals: 18 }, { key: "NVDA", addr: ADDR.nvda, decimals: 18 },
 ];
+const USDG_DECIMALS = TOKENS.find((t) => t.addr === ADDR.usdg)?.decimals ?? 18; // shielded pool is USDG-only
 const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 
 export function PrivatePage() {
@@ -40,6 +41,15 @@ export function PrivatePage() {
   // inbox
   const [inbox, setInbox] = useState<PrivateHolding[] | null>(null);
 
+  // shielded pool (Phase 1 — hides amounts)
+  const [shieldAmt, setShieldAmt] = useState("");
+  const [unshieldAmt, setUnshieldAmt] = useState("");
+  const [unshieldTo, setUnshieldTo] = useState("");
+  const [pool, setPool] = useState<{ notes: ShieldedNote[]; balance: bigint }>({ notes: [], balance: 0n });
+  const [stage, setStage] = useState<string | null>(null);
+  useEffect(() => { if (a) shieldedNotes(a).then(setPool).catch(() => {}); }, [a]);
+  useEffect(() => { if (a && !unshieldTo) setUnshieldTo(a); }, [a, unshieldTo]);
+
   // Am I already registered? (cheap read, no signature.)
   useEffect(() => {
     let live = true;
@@ -52,8 +62,30 @@ export function PrivatePage() {
     setBusy(label); setMsg(null);
     try { await fn(); setMsg(ok); }
     catch (e) { setMsg(niceError(e)); }
-    finally { setBusy(null); }
+    finally { setBusy(null); setStage(null); }
   };
+
+  const refreshPool = () => { if (a) shieldedNotes(a).then(setPool).catch(() => {}); };
+
+  const shield = () => a && run("shield", async () => {
+    const amt = parseUnits(shieldAmt || "0", USDG_DECIMALS);
+    if (amt <= 0n) throw new Error("Enter an amount to shield.");
+    await flows.shieldDeposit(a, amt, setStage);
+    setShieldAmt(""); refreshPool();
+  }, "✓ Shielded — your balance is now private.");
+
+  const unshield = () => a && run("unshield", async () => {
+    const amt = parseUnits(unshieldAmt || "0", USDG_DECIMALS);
+    if (amt <= 0n) throw new Error("Enter an amount to unshield.");
+    const dest = (unshieldTo.trim() || a) as Address;
+    if (!isAddress(dest)) throw new Error("Enter a valid destination address.");
+    // The 2-input circuit spends ONE note per tx — pick the largest unspent note that covers the amount.
+    const note = [...pool.notes].sort((x, y) => (BigInt(y.amount) > BigInt(x.amount) ? 1 : -1))[0];
+    if (!note) throw new Error("Nothing shielded yet.");
+    if (amt > BigInt(note.amount)) throw new Error(`Amount exceeds your largest single shielded note (${fmt(BigInt(note.amount), 2)} USDG). Unshield less, or in steps.`);
+    await flows.shieldWithdraw(a, note, amt, dest, setStage);
+    setUnshieldAmt(""); refreshPool();
+  }, "✓ Unshielded to your chosen address.");
 
   const register = () => a && run("register", async () => {
     const k = await flows.registerStealth(a);
@@ -103,18 +135,19 @@ export function PrivatePage() {
       <div className="wrap">
         <div className="band-head"><div>
           <span className="eyebrow">Essey Private</span>
-          <h2>Get paid without being watched.</h2>
-          <p>Publish one reusable address. Every payment lands at a fresh, unlinkable one-time address that
-            only you can detect and spend. Your public wallet never appears on the receiving side.</p>
+          <h2>Private balances. Private payments.</h2>
+          <p>Two ways to move without being watched: a <b>shielded pool</b> that hides your balance and amounts,
+            and <b>stealth addresses</b> that hide who you're paid as. Both on Robinhood Chain, both testnet.</p>
         </div>
           <span className="preview-chip">Experimental · P0</span>
         </div>
 
         <div className="live-card" style={{ marginBottom: 16 }}>
           <div className="live-note" style={{ lineHeight: 1.5 }}>
-            <b>What this is (and isn't).</b> This is a <b>stealth-address</b> layer — it breaks the link between
-            your identity and where you're paid. Amounts are still public on-chain; it is not yet a shielded
-            pool (that's a later phase). The privacy you get grows with how many people use it. Testnet only.
+            <b>What this is.</b> Two privacy tools. The <b>shielded pool</b> (below) hides amounts — your balance and
+            in-pool transfers are private, and deposits can't be linked to withdrawals. <b>Stealth addresses</b> hide
+            the link between your identity and where you're paid (amounts there stay public). Both grow stronger the
+            more people use them. Experimental, testnet only.
           </div>
         </div>
 
@@ -124,6 +157,52 @@ export function PrivatePage() {
           </div></div>
         ) : (
           <>
+            {/* 0 — shielded pool (hides amounts) — the flagship */}
+            <div className="pf-block">
+              <div className="pf-block-h">Shielded balance <span className="preview-chip live">hides amounts</span></div>
+              <div className="live-card">
+                <div className="num" style={{ fontSize: 30, fontWeight: 700, marginBottom: 4 }}>
+                  {fmt(pool.balance, 2)} <span style={{ fontSize: 15, opacity: 0.6, fontWeight: 400 }}>USDG shielded</span>
+                </div>
+                <div className="pf-note" style={{ marginBottom: 16 }}>
+                  Deposits and withdrawals move through a zk pool — your balance and any in-pool transfer are hidden, and
+                  the pool breaks the deposit↔withdrawal link. Deposit and withdrawal <b>amounts</b> are still public, so
+                  on a new, small pool, matching amounts can re-link them — unshield to a fresh address for real
+                  unlinkability. Proving happens in <b>your browser</b> (a few seconds).
+                </div>
+
+                {/* Shield (deposit) */}
+                <div className="live-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                  <input className="live-input" placeholder="amount to shield" inputMode="decimal"
+                    value={shieldAmt} onChange={(e) => setShieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
+                  <button className="btn btn-gold" disabled={!!busy} onClick={shield}>
+                    {busy === "shield" ? (stage ? stage + "…" : "shielding…") : "Shield USDG →"}
+                  </button>
+                </div>
+
+                {/* Unshield (withdraw) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--line, #333)", paddingTop: 14 }}>
+                  <div className="live-note">Unshield to:</div>
+                  <input className="live-input" placeholder="destination address (0x…)" value={unshieldTo} onChange={(e) => setUnshieldTo(e.target.value)} style={inputStyle} />
+                  <div className="pf-note">⚠ Unshielding to your own main wallet — or in an amount that matches your deposit — can re-link you on a small pool. Use a <b>fresh</b> address for stronger privacy.</div>
+                  <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
+                    <input className="live-input" placeholder="amount to unshield" inputMode="decimal"
+                      value={unshieldAmt} onChange={(e) => setUnshieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
+                    <button className="btn" disabled={!!busy || pool.balance === 0n} onClick={unshield}>
+                      {busy === "unshield" ? (stage ? stage + "…" : "unshielding…") : "Unshield →"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pf-note" style={{ marginTop: 12 }}>
+                  ⚠ Your shielded notes are stored <b>unencrypted in this browser only</b> — don't use a shared or public
+                  machine, and note that clearing site data loses access to un-withdrawn funds. Cross-device recovery +
+                  receiving private payments from others come in a later phase. The first shield downloads a ~12 MB
+                  proving key. Testnet USDG only.
+                </div>
+              </div>
+            </div>
+
             {/* 1 — set up / unlock */}
             <div className="pf-block">
               <div className="pf-block-h">Your private address</div>

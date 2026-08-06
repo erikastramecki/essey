@@ -25,6 +25,11 @@ Seat's Vault by a Bell claim). Reuses the existing USDG/AAPL/NVDA/pool/quest/mar
 | EsseyStealthAnnouncer (ERC-5564) | `0xe386345BB307166F59A191130230bA445F05F402` |
 | EsseyStealthRegistry (canonical ERC-6538) | `0x7f28EbFfC1310849f4Cb5612e1Ff892fd892880f` |
 | EsseyStealthPay (private pay — zero custody) | `0x36B750Ac415DC1f05E39C6D13A05FDbC29567403` |
+| **Essey Private — Phase 1 (shielded USDG pool, HIDES AMOUNTS, Nova-derived, depth 20)** | |
+| EsseyShieldedPool (app pool, gate openMode) | `0xcD7953960bbc1276F0856Dad5E502fc01cE629aB` |
+| EsseyPoolGate (operator front door) | `0xcBdA12dF938d665fF5752b9C49740A7D47ff5562` |
+| PoolVerifier (Groth16, depth-20) | `0x46a8121ea850AA5F6497a20642e11cFd964E14C9` |
+| Poseidon(2) hasher | `0xF9A2D0b462221c017c74bACB26d43bd2165C98a1` |
 | MockEntropy (degen keeper) | `0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F` |
 | USDG / AAPL / NVDA / pool / quest / markets | *unchanged (see below)* |
 

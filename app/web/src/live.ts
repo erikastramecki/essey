@@ -5,6 +5,9 @@ import { createPublicClient, createWalletClient, custom, defineChain, http, pars
 import { privateKeyToAccount } from "viem/accounts";
 import { deriveStealthKeys, generateStealthAddress, checkAnnouncement, computeStealthPrivKey, STEALTH_DERIVE_MESSAGE, type StealthKeys } from "./stealth";
 export type { StealthKeys } from "./stealth";
+import { numberToHex } from "viem";
+import { initPool, deriveKeypair, buildDepositProof, buildWithdrawProof, type ProofCalldata, type PoolExtData, type PoolNote } from "./poolsdk";
+export type { PoolNote } from "./poolsdk";
 
 export const NET = {
   chainIdHex: "0xb626", // 46630
@@ -40,6 +43,9 @@ export const ADDR = {
   stealthAnnouncer: "0xe386345BB307166F59A191130230bA445F05F402" as Address,
   stealthRegistry: "0x7f28EbFfC1310849f4Cb5612e1Ff892fd892880f" as Address,
   stealthPay: "0x36B750Ac415DC1f05E39C6D13A05FDbC29567403" as Address,
+  // Essey Private — Phase 1 (shielded USDG pool, hides amounts). Depth-20, gate openMode on testnet.
+  shieldedPool: "0xcD7953960bbc1276F0856Dad5E502fc01cE629aB" as Address,
+  shieldedPoolGate: "0xcBdA12dF938d665fF5752b9C49740A7D47ff5562" as Address,
 };
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
@@ -195,6 +201,16 @@ const SECP256K1 = 1n; // ERC-5564 schemeId
 // The announcer's deploy block — scan floor. Robinhood Chain block numbers are ~97M, so scanning from 0
 // would blow past every RPC getLogs range cap and strand the inbox; start from where the announcer exists.
 const STEALTH_DEPLOY_BLOCK = 97_690_338n;
+
+// Essey Private — Phase 1 shielded pool ABI (hides amounts). Nested tuples: the Groth16 proof + the extData.
+export const shieldedPoolAbi = parseAbi([
+  "function transact((uint256[2] a, uint256[2][2] b, uint256[2] c, bytes32 root, bytes32[2] inputNullifiers, bytes32[2] outputCommitments, uint256 publicAmount, bytes32 extDataHash) args, (address recipient, int256 extAmount, address relayer, uint256 fee, bytes encryptedOutput1, bytes encryptedOutput2) extData)",
+  "function isSpent(bytes32) view returns (bool)",
+  "event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput)",
+  "event NewNullifier(bytes32 nullifier)",
+]);
+const newCommitmentItem = parseAbiItem("event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput)");
+const POOL_DEPLOY_BLOCK = 97_728_346n;
 // The known ERC-20s a received stealth address could hold — we read balances directly rather than trust
 // event amounts, so the inbox shows what is actually spendable right now.
 const KNOWN_TOKENS: { key: string; addr: Address }[] = [
@@ -648,6 +664,53 @@ export const flows = {
     return tx;
   },
 
+  // ---- Essey Private (Phase 1): shielded pool — HIDES AMOUNTS ----
+
+  /// Shield `amount` USDG into the pool. Derives the pool keypair from ONE wallet signature, builds a deposit
+  /// proof IN THE BROWSER (client-side — private inputs never leave the device), approves + submits, and stores
+  /// the resulting note locally (keyed to the wallet). The deposited amount is only visible as the transfer IN;
+  /// the shielded balance and any later transfer are hidden.
+  shieldDeposit: async (a: Address, amount: bigint, onStage?: (s: string) => void): Promise<Hex> => {
+    await assertDeterministicSigner(a); // keys derive from a signature → EOA only, same as the stealth layer
+    onStage?.("unlocking");
+    await initPool();
+    const kp = deriveKeypair(await signMsg(a, POOL_DERIVE_MESSAGE));
+    onStage?.("proving"); // a few seconds of client-side Groth16
+    const leaves = await poolLeaves();
+    const { proof, ext, note } = await buildDepositProof(kp, amount, leaves);
+    // Persist the note (with its commitment) BEFORE any funds move: the random blinding lives only here, so an
+    // interrupted confirmation wait after the deposit lands would otherwise make the funds unspendable forever.
+    // A reverted deposit just leaves a phantom note that shieldedNotes filters out (its commitment isn't on-chain).
+    addNote(a, { ...note, commitment: proof.outputCommitments[0].toString() });
+    onStage?.("approving");
+    await ensureAllowance(a, ADDR.usdg, ADDR.shieldedPool, amount);
+    onStage?.("shielding");
+    return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+  },
+
+  /// Withdraw `amount` from a shielded note out to `recipient`. Builds a withdraw proof client-side (spends the
+  /// note through a real merkle path, mints a change note for the remainder), submits, and updates local notes.
+  shieldWithdraw: async (a: Address, note: ShieldedNote, amount: bigint, recipient: Address, onStage?: (s: string) => void): Promise<Hex> => {
+    await assertDeterministicSigner(a);
+    onStage?.("unlocking");
+    await initPool();
+    const kp = deriveKeypair(await signMsg(a, POOL_DERIVE_MESSAGE));
+    onStage?.("proving");
+    const leaves = await poolLeaves();
+    // Recover the note's REAL leaf index by matching its commitment on-chain — the stored index is a pre-tx
+    // guess a concurrent depositor can invalidate. A commitment is index-independent, so this is always safe.
+    const realIndex = leaves.findIndex((l) => l === BigInt(note.commitment));
+    if (realIndex < 0) throw new Error("This shielded note isn't on-chain yet — wait a few seconds and retry.");
+    const { proof, ext, changeNote } = await buildWithdrawProof(kp, { ...note, index: realIndex }, amount, recipient, leaves);
+    // Persist the change note (fresh random blinding) BEFORE sending, same reasoning as a deposit.
+    if (changeNote) addNote(a, { ...changeNote, commitment: proof.outputCommitments[0].toString() });
+    onStage?.("withdrawing");
+    const tx = await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    // Mark the input note spent (safe direction: if this is missed, a re-spend just reverts on the nullifier).
+    markSpent(a, note.commitment);
+    return tx;
+  },
+
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.
   openCase: async (a: Address, onStage: (s: string) => void): Promise<{ token: Address; amount: bigint; tx: Hex }> => {
@@ -746,6 +809,97 @@ export async function scanPrivateInbox(viewPriv: bigint, spendPub: Uint8Array, f
   return owned;
 }
 
+// ---- Essey Private (Phase 1): shielded pool helpers ----
+
+/// One signature derives the pool spend key (deterministic → the same notes recover on re-sign). Distinct from
+/// the stealth message so the two key systems never collide.
+const POOL_DERIVE_MESSAGE =
+  "Essey Private — unlock my shielded balance.\n\n" +
+  "Signing this derives the private keys for your shielded USDG. It costs no gas and grants no approvals. " +
+  "Only sign this on essey.xyz.\n\nVersion: 1";
+
+/// All commitment leaves in the pool tree, ordered by insertion index — what the prover needs to rebuild the
+/// merkle tree and compute paths. Young testnet chain; scan from the pool's deploy block (block-0 would exceed
+/// RPC range caps at ~97M blocks).
+async function poolLeaves(): Promise<bigint[]> {
+  const head = await pub.getBlockNumber();
+  const CHUNK = 45_000n; // stay under RPC getLogs range caps; the merkle path depends on the FULL leaf set,
+  // so a silent truncation would produce a wrong root/path — never scan an unbounded range.
+  const entries: { index: number; value: bigint }[] = [];
+  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += CHUNK + 1n) {
+    const to = from + CHUNK > head ? head : from + CHUNK;
+    const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: newCommitmentItem, fromBlock: from, toBlock: to });
+    for (const l of logs) {
+      const { commitment, index } = l.args as { commitment?: Hex; index?: bigint };
+      if (commitment !== undefined && index !== undefined) entries.push({ index: Number(index), value: BigInt(commitment) });
+    }
+  }
+  entries.sort((x, y) => x.index - y.index);
+  return entries.map((e) => e.value);
+}
+
+/// Notes live in THIS browser only (localStorage), keyed to wallet + pool. Enough for shield→balance→unshield;
+/// receiving private payments from others / cross-device recovery needs on-chain encrypted-note scanning (Phase 2).
+/// A shielded note as the app tracks it: the SDK note (amount/blinding/index) plus its commitment, which is
+/// index-independent and how we relocate the note on-chain (the stored index is only a pre-tx guess).
+export type ShieldedNote = PoolNote & { commitment: string };
+type StoredNote = ShieldedNote & { spent?: boolean };
+function noteKey(a: Address): string {
+  return `essey.pool.notes.${ADDR.shieldedPool}.${a.toLowerCase()}`;
+}
+function loadNotes(a: Address): StoredNote[] {
+  try { return JSON.parse(localStorage.getItem(noteKey(a)) || "[]") as StoredNote[]; } catch { return []; }
+}
+/// Throws LOUDLY if storage is unavailable (private mode / quota) — callers persist a note BEFORE moving funds,
+/// so a silent failure here would strand the deposit. Aborting before the transfer is the safe outcome.
+function saveNotes(a: Address, notes: StoredNote[]): void {
+  try { localStorage.setItem(noteKey(a), JSON.stringify(notes)); }
+  catch { throw new Error("Couldn't save your shielded note to this browser (private/incognito mode or storage full?). Enable storage and retry — do NOT proceed, or the funds can't be recovered."); }
+}
+function addNote(a: Address, n: ShieldedNote): void {
+  const ns = loadNotes(a);
+  if (!ns.some((x) => x.commitment === n.commitment)) ns.push({ ...n }); // dedup by commitment
+  saveNotes(a, ns);
+}
+function markSpent(a: Address, commitment: string): void {
+  saveNotes(a, loadNotes(a).map((n) => (n.commitment === commitment ? { ...n, spent: true } : n)));
+}
+
+/// Map the SDK's ProofCalldata / ExtData to the on-chain tuple shapes (bytes32 fields as 32-byte hex).
+function proofToTuple(p: ProofCalldata) {
+  return {
+    a: [p.a[0], p.a[1]],
+    b: [[p.b[0][0], p.b[0][1]], [p.b[1][0], p.b[1][1]]],
+    c: [p.c[0], p.c[1]],
+    root: numberToHex(p.root, { size: 32 }),
+    inputNullifiers: [numberToHex(p.inputNullifiers[0], { size: 32 }), numberToHex(p.inputNullifiers[1], { size: 32 })],
+    outputCommitments: [numberToHex(p.outputCommitments[0], { size: 32 }), numberToHex(p.outputCommitments[1], { size: 32 })],
+    publicAmount: p.publicAmount,
+    extDataHash: numberToHex(p.extDataHash, { size: 32 }),
+  };
+}
+function extToTuple(e: PoolExtData) {
+  return {
+    recipient: e.recipient,
+    extAmount: e.extAmount,
+    relayer: e.relayer,
+    fee: e.fee,
+    encryptedOutput1: e.encryptedOutput1,
+    encryptedOutput2: e.encryptedOutput2,
+  };
+}
+
+/// The caller's spendable shielded notes + total shielded USDG (base units). Reconciled against the chain:
+/// only locally-stored, unspent notes whose commitment is actually in the pool tree count — so a phantom
+/// note from a reverted deposit, or one whose tx hasn't landed yet, never inflates the displayed balance.
+export async function shieldedNotes(a: Address): Promise<{ notes: ShieldedNote[]; balance: bigint }> {
+  const local = loadNotes(a).filter((n) => !n.spent);
+  const onChain = new Set((await poolLeaves()).map((l) => l.toString()));
+  const notes = local.filter((n) => onChain.has(BigInt(n.commitment).toString()));
+  const balance = notes.reduce((s, n) => s + BigInt(n.amount), 0n);
+  return { notes, balance };
+}
+
 /// Turn a raw wallet/RPC error into something a first-timer can act on. Falls back to a trimmed
 /// message rather than a bare revert selector.
 export function niceError(e: unknown): string {
@@ -761,6 +915,8 @@ export function niceError(e: unknown): string {
   if (s.includes("notseatowner") || s.includes("notborrower")) return "That isn't yours to act on.";
   if (s.includes("alreadyactive")) return "That Seat is already staked — use upgrade instead.";
   if (s.includes("potbelowminimum") || s.includes("noactiveseats")) return "The pot isn't ringable yet — trade a bit to grow it, or wait for an active Seat.";
+  if (s.includes("already spent") || s.includes("input 0 is already spent") || s.includes("input 1 is already spent")) return "That shielded note was already spent — your local balance was stale. Refresh and try again.";
+  if (s.includes("invalid merkle root")) return "The pool changed while proving — refresh so your balance is current, then retry.";
   // Otherwise: strip the noisy viem wrapper, keep the first human line.
   return m.split("\n")[0].replace(/^(Error|ContractFunctionExecutionError):?\s*/i, "").slice(0, 150);
 }
