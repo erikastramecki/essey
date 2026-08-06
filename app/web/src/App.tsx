@@ -9,6 +9,7 @@ import { CasesPage } from "./cases";
 import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
 import { StartPage, JourneyStrip, captureRef, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
+import { PrivatePage } from "./private";
 import { LendPage } from "./lend-ui";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { LeaderboardPage } from "./leaderboard";
@@ -28,6 +29,7 @@ const NAV = [
   ["/tape", "Tape"],
   ["/leaderboard", "Leaders"],
   ["/portfolio", "Portfolio"],
+  ["/private", "Private"],
   ["/docs", "Docs"],
 ] as const;
 
@@ -61,6 +63,7 @@ export default function App() {
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
             <Route path="/leaderboard" element={<AppPage title="Leaderboard"><LeaderboardPage /></AppPage>} />
             <Route path="/portfolio" element={<AppPage title="Portfolio"><PortfolioPage /></AppPage>} />
+            <Route path="/private" element={<AppPage title="Private"><PrivatePage /></AppPage>} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
             <Route path="/docs" element={<DocsPage />} />

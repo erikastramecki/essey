@@ -1,7 +1,10 @@
 // Live-chain layer: the deployed TESTNET contracts and the transaction flows the app pages run.
 // Everything here is testnet (46630) until mainnet ships; the addresses come from
 // docs/DEPLOYMENT-testnet.md and the UI wears a TESTNET banner the whole time.
-import { createPublicClient, createWalletClient, custom, http, parseAbi, parseAbiItem, maxUint256, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, custom, defineChain, http, parseAbi, parseAbiItem, maxUint256, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { deriveStealthKeys, generateStealthAddress, checkAnnouncement, computeStealthPrivKey, STEALTH_DERIVE_MESSAGE, type StealthKeys } from "./stealth";
+export type { StealthKeys } from "./stealth";
 
 export const NET = {
   chainIdHex: "0xb626", // 46630
@@ -33,6 +36,10 @@ export const ADDR = {
   // Degen (multiplier) case + its testnet entropy keeper.
   degenCases: "0xA0B438Da1b489748D863C9529D19A29C36309599" as Address, // 24/7, share-denominated (no session gate)
   degenEntropy: "0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F" as Address,
+  // Essey Private — Phase 0 (stealth-address payments, ERC-5564/6538). Zero custody.
+  stealthAnnouncer: "0xe386345BB307166F59A191130230bA445F05F402" as Address,
+  stealthRegistry: "0x7f28EbFfC1310849f4Cb5612e1Ff892fd892880f" as Address,
+  stealthPay: "0x36B750Ac415DC1f05E39C6D13A05FDbC29567403" as Address,
 };
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
@@ -52,6 +59,7 @@ export const erc20Abi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address,address) view returns (uint256)",
   "function approve(address,uint256) returns (bool)",
+  "function transfer(address,uint256) returns (bool)",
 ]);
 export const exchangeAbi = parseAbi([
   "function inventoryCount() view returns (uint256)",
@@ -172,7 +180,36 @@ export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)", "functio
 const caseOpenedItem = parseAbiItem("event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)");
 const fairCaseOpenedItem = parseAbiItem("event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)");
 
+// Essey Private — Phase 0 ABIs (ERC-6538 registry + ERC-5564 announcer + private-pay).
+export const stealthRegistryAbi = parseAbi([
+  "function registerKeys(uint256 schemeId, bytes stealthMetaAddress)",
+  "function stealthMetaAddressOf(address,uint256) view returns (bytes)",
+]);
+export const stealthPayAbi = parseAbi([
+  "function pay(address token, address stealthAddress, uint256 amount, bytes ephemeralPubKey, bytes metadata)",
+]);
+const announcementItem = parseAbiItem(
+  "event Announcement(uint256 indexed schemeId, address indexed stealthAddress, address indexed caller, bytes ephemeralPubKey, bytes metadata)",
+);
+const SECP256K1 = 1n; // ERC-5564 schemeId
+// The announcer's deploy block — scan floor. Robinhood Chain block numbers are ~97M, so scanning from 0
+// would blow past every RPC getLogs range cap and strand the inbox; start from where the announcer exists.
+const STEALTH_DEPLOY_BLOCK = 97_690_338n;
+// The known ERC-20s a received stealth address could hold — we read balances directly rather than trust
+// event amounts, so the inbox shows what is actually spendable right now.
+const KNOWN_TOKENS: { key: string; addr: Address }[] = [
+  { key: "USDG", addr: ADDR.usdg }, { key: "AAPL", addr: ADDR.aapl }, { key: "NVDA", addr: ADDR.nvda },
+];
+
 export const pub = createPublicClient({ transport: http(NET.rpc) });
+
+// Minimal viem chain for signing sweep txs with a locally-held stealth key (the injected provider only
+// knows the user's main account, so the stealth account uses an http transport instead).
+const RH_VIEM_CHAIN = defineChain({
+  id: NET.chainId, name: NET.name,
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: [NET.rpc] } },
+});
 
 type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
 const eth = () => (window as { ethereum?: Eip1193 }).ethereum;
@@ -181,6 +218,23 @@ function wallet(account: Address) {
   const provider = eth();
   if (!provider) throw new Error("No wallet");
   return createWalletClient({ account, chain: undefined, transport: custom(provider) });
+}
+
+/// Ask the wallet to sign a message (maps to personal_sign). Deterministic per signer+message on every
+/// mainstream EOA wallet, which is what lets us re-derive the same stealth keys on any device.
+async function signMsg(account: Address, message: string): Promise<Hex> {
+  return wallet(account).signMessage({ account, message });
+}
+
+/// Essey Private derives keys from a wallet signature, so recovering already-received funds depends on the
+/// wallet reproducing a byte-identical signature. That holds for standard EOAs (MetaMask, Ledger, ...) but
+/// NOT for smart-contract wallets (ERC-1271/4337), which have bytecode and may sign differently each time —
+/// their already-received funds would become permanently unspendable. Refuse before any can be received.
+async function assertDeterministicSigner(a: Address): Promise<void> {
+  const code = await pub.getBytecode({ address: a });
+  if (code && code !== "0x") {
+    throw new Error("Essey Private needs a standard wallet (an EOA like MetaMask or a hardware wallet). Smart-contract wallets can't reliably reproduce the keys, which could make received funds unrecoverable.");
+  }
 }
 
 /// Send + wait, with the Orbit gas cushion (estimation under-shoots intrinsic gas on this stack).
@@ -538,6 +592,62 @@ export const flows = {
   },
   degenWithdraw: (a: Address): Promise<Hex> => send(a, ADDR.degenCases, degenAbi, "withdraw"),
 
+  // ---- Essey Private (Phase 0): stealth-address payments ----
+
+  /// Register the caller's stealth meta-address so others can pay them privately. Derives the spend/view
+  /// keypair from ONE wallet signature and writes the meta-address to the ERC-6538 registry. Returns the
+  /// keys so the page can scan/sweep. Gated to EOAs — see assertDeterministicSigner.
+  registerStealth: async (a: Address): Promise<StealthKeys> => {
+    await assertDeterministicSigner(a);
+    const keys = deriveStealthKeys(await signMsg(a, STEALTH_DERIVE_MESSAGE));
+    await send(a, ADDR.stealthRegistry, stealthRegistryAbi, "registerKeys", [SECP256K1, keys.metaAddress]);
+    return keys;
+  },
+
+  /// Re-derive the caller's stealth keys locally (one signature, no on-chain write) — for an already
+  /// registered user who just wants to scan their inbox or sweep on a fresh session.
+  unlockStealth: async (a: Address): Promise<StealthKeys> => {
+    await assertDeterministicSigner(a);
+    return deriveStealthKeys(await signMsg(a, STEALTH_DERIVE_MESSAGE));
+  },
+
+  /// Pay `amount` of `token` to a fresh one-time stealth address derived from `metaAddress`. One (max,
+  /// one-time) approval + the pay tx, which moves funds sender->stealth directly and announces atomically.
+  payPrivate: async (a: Address, token: Address, metaAddress: Hex, amount: bigint): Promise<{ tx: Hex; stealthAddress: Address }> => {
+    const p = generateStealthAddress(metaAddress);
+    await ensureAllowance(a, token, ADDR.stealthPay, amount);
+    const tx = await send(a, ADDR.stealthPay, stealthPayAbi, "pay", [token, p.stealthAddress, amount, p.ephemeralPubKey, p.metadata]);
+    return { tx, stealthAddress: p.stealthAddress };
+  },
+
+  /// Sweep the FULL balance of `token` at an owned stealth address out to `to`. The stealth address holds
+  /// no gas, so fund it from the main wallet (1 sig), then sign the ERC-20 transfer locally with the
+  /// derived stealth key (no wallet prompt). PRIVACY: funding from the main wallet, and sweeping to `to`,
+  /// both write an on-chain edge — pass a FRESH `to` (and accept the gas-funding link) if unlinkability
+  /// matters; a relayer/paymaster removes the funding link in a later phase.
+  ///
+  /// Fees are pinned to LEGACY gasPrice with a realistic gas limit (an ERC-20 transfer is ~50k, not the 3M
+  /// blanket the rest of the app uses): a 3M limit under EIP-1559 makes viem reserve 3M×maxFeePerGas for
+  /// the balance check and reverts "insufficient funds" on an address funded for the actual ~50k cost.
+  sweepStealth: async (a: Address, spendPriv: bigint, sScalar: bigint, token: Address, to: Address): Promise<Hex> => {
+    const acct = privateKeyToAccount(computeStealthPrivKey(spendPriv, sScalar));
+    const bal = await pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [acct.address] }) as bigint;
+    if (bal === 0n) throw new Error("nothing to sweep");
+    const gasPrice = await pub.getGasPrice();
+    const SWEEP_GAS = 200_000n; // ample for one ERC-20 transfer on Orbit
+    const need = gasPrice * SWEEP_GAS * 2n; // legacy pricing; 2× covers a gasPrice bump between the two txs
+    const have = await pub.getBalance({ address: acct.address });
+    if (have < need) {
+      const fundHash = await wallet(a).sendTransaction({ account: a, chain: null, to: acct.address, value: need - have, gas: 100_000n });
+      await pub.waitForTransactionReceipt({ hash: fundHash, timeout: 120_000 });
+    }
+    const swc = createWalletClient({ account: acct, chain: RH_VIEM_CHAIN, transport: http(NET.rpc) });
+    const tx = await swc.writeContract({ address: token, abi: erc20Abi, functionName: "transfer", args: [to, bal], account: acct, gas: SWEEP_GAS, gasPrice, type: "legacy" });
+    const rcpt = await pub.waitForTransactionReceipt({ hash: tx, timeout: 120_000 });
+    if (rcpt.status !== "success") throw new Error("sweep reverted");
+    return tx;
+  },
+
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.
   openCase: async (a: Address, onStage: (s: string) => void): Promise<{ token: Address; amount: bigint; tx: Hex }> => {
@@ -593,6 +703,48 @@ export const flows = {
     throw new Error("open succeeded but no CaseOpened event found");
   },
 };
+
+// ---- Essey Private (Phase 0): read helpers ----
+
+/// A user's registered stealth meta-address (empty `0x` if they have never registered).
+export async function lookupStealthMeta(user: Address): Promise<Hex> {
+  return await pub.readContract({ address: ADDR.stealthRegistry, abi: stealthRegistryAbi, functionName: "stealthMetaAddressOf", args: [user, SECP256K1] }) as Hex;
+}
+
+export interface PrivateHolding {
+  stealthAddress: Address;
+  sScalar: bigint; // with the spend key, yields the private key that sweeps this address
+  balances: { key: string; addr: Address; amount: bigint }[]; // non-zero known-token balances actually present
+}
+
+/// Scan the announcer for payments the caller owns (view-key detection is entirely client-side — the view
+/// key never leaves the browser and nothing is sent anywhere), then read each owned stealth address's live
+/// token balances so the inbox reflects exactly what is spendable now. Dedupes repeat announcements.
+export async function scanPrivateInbox(viewPriv: bigint, spendPub: Uint8Array, fromBlock: bigint = STEALTH_DEPLOY_BLOCK): Promise<PrivateHolding[]> {
+  const logs = await pub.getLogs({ address: ADDR.stealthAnnouncer, event: announcementItem, args: { schemeId: SECP256K1 }, fromBlock });
+  const owned: PrivateHolding[] = [];
+  const seen = new Set<string>();
+  for (const l of logs) {
+    const { stealthAddress, ephemeralPubKey, metadata } = l.args as { stealthAddress?: Address; ephemeralPubKey?: Hex; metadata?: Hex };
+    if (!stealthAddress || !ephemeralPubKey || !metadata) continue;
+    // The announcer is permissionless — a crafted announcement must never abort the whole scan and hide a
+    // user's real funds. Detection is guarded per-entry; a throw just skips that (not-ours) announcement.
+    let hit: { owned: boolean; sScalar?: bigint };
+    try { hit = checkAnnouncement({ stealthAddress, ephemeralPubKey, metadata }, viewPriv, spendPub); }
+    catch { continue; }
+    if (!hit.owned || hit.sScalar === undefined) continue;
+    const low = stealthAddress.toLowerCase();
+    if (seen.has(low)) continue;
+    seen.add(low);
+    const balances: { key: string; addr: Address; amount: bigint }[] = [];
+    for (const t of KNOWN_TOKENS) {
+      const bal = await pub.readContract({ address: t.addr, abi: erc20Abi, functionName: "balanceOf", args: [stealthAddress] }) as bigint;
+      if (bal > 0n) balances.push({ key: t.key, addr: t.addr, amount: bal });
+    }
+    owned.push({ stealthAddress, sScalar: hit.sScalar, balances });
+  }
+  return owned;
+}
 
 /// Turn a raw wallet/RPC error into something a first-timer can act on. Falls back to a trimmed
 /// message rather than a bare revert selector.
