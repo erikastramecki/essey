@@ -1,0 +1,9 @@
+# Large / regenerable zk artifacts — regenerate from the circuits via the prover (see README).
+build/*.zkey
+build/*.wasm
+build/*.r1cs
+build/*.ptau
+build/proof.json
+build/public.json
+build/vkey.json
+build/transaction2_js/
