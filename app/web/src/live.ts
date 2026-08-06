@@ -6,8 +6,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import { deriveStealthKeys, generateStealthAddress, checkAnnouncement, computeStealthPrivKey, STEALTH_DERIVE_MESSAGE, type StealthKeys } from "./stealth";
 export type { StealthKeys } from "./stealth";
 import { numberToHex } from "viem";
-import { initPool, deriveKeypair, buildDepositProof, buildWithdrawProof, type ProofCalldata, type PoolExtData, type PoolNote } from "./poolsdk";
+import { initPool, deriveKeypair, deriveEncKeypair, buildDepositProof, buildWithdrawProof, buildTransferProof, recoverNotes, noteNullifier, packAccountKey, unpackAccountKey, type ProofCalldata, type PoolExtData, type PoolNote, type PoolKeypair, type PoolEncKeypair, type ChainCommitment } from "./poolsdk";
 export type { PoolNote } from "./poolsdk";
+export type PoolKeys = { spendKp: PoolKeypair; encKp: PoolEncKeypair };
 
 export const NET = {
   chainIdHex: "0xb626", // 46630
@@ -202,14 +203,19 @@ const SECP256K1 = 1n; // ERC-5564 schemeId
 // would blow past every RPC getLogs range cap and strand the inbox; start from where the announcer exists.
 const STEALTH_DEPLOY_BLOCK = 97_690_338n;
 
-// Essey Private — Phase 1 shielded pool ABI (hides amounts). Nested tuples: the Groth16 proof + the extData.
+// Essey Private — shielded pool ABI (hides amounts). Nested tuples: the Groth16 proof + the extData.
+// register() publishes a user's spend+encryption public keys so others can send them shielded funds.
 export const shieldedPoolAbi = parseAbi([
   "function transact((uint256[2] a, uint256[2][2] b, uint256[2] c, bytes32 root, bytes32[2] inputNullifiers, bytes32[2] outputCommitments, uint256 publicAmount, bytes32 extDataHash) args, (address recipient, int256 extAmount, address relayer, uint256 fee, bytes encryptedOutput1, bytes encryptedOutput2) extData)",
+  "function register((address owner, bytes publicKey) account)",
   "function isSpent(bytes32) view returns (bool)",
   "event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput)",
   "event NewNullifier(bytes32 nullifier)",
+  "event PublicKey(address indexed owner, bytes key)",
 ]);
 const newCommitmentItem = parseAbiItem("event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput)");
+const newNullifierItem = parseAbiItem("event NewNullifier(bytes32 nullifier)");
+const publicKeyItem = parseAbiItem("event PublicKey(address indexed owner, bytes key)");
 const POOL_DEPLOY_BLOCK = 97_728_346n;
 // The known ERC-20s a received stealth address could hold — we read balances directly rather than trust
 // event amounts, so the inbox shows what is actually spendable right now.
@@ -664,51 +670,56 @@ export const flows = {
     return tx;
   },
 
-  // ---- Essey Private (Phase 1): shielded pool — HIDES AMOUNTS ----
+  // ---- Essey Private — shielded pool (HIDES AMOUNTS; cross-device recovery + receive-from-others) ----
 
-  /// Shield `amount` USDG into the pool. Derives the pool keypair from ONE wallet signature, builds a deposit
-  /// proof IN THE BROWSER (client-side — private inputs never leave the device), approves + submits, and stores
-  /// the resulting note locally (keyed to the wallet). The deposited amount is only visible as the transfer IN;
-  /// the shielded balance and any later transfer are hidden.
-  shieldDeposit: async (a: Address, amount: bigint, onStage?: (s: string) => void): Promise<Hex> => {
-    await assertDeterministicSigner(a); // keys derive from a signature → EOA only, same as the stealth layer
-    onStage?.("unlocking");
+  /// Unlock the shielded balance: ONE signature derives both the spend key (commitments/nullifiers) and the
+  /// encryption key (decrypting notes sent to you). Keys stay in memory for the session — never persisted.
+  /// EOA-gated: keys derive from a deterministic signature, which smart-contract wallets can't reproduce.
+  unlockPool: async (a: Address): Promise<PoolKeys> => {
+    await assertDeterministicSigner(a);
     await initPool();
-    const kp = deriveKeypair(await signMsg(a, POOL_DERIVE_MESSAGE));
-    onStage?.("proving"); // a few seconds of client-side Groth16
+    const sig = await signMsg(a, POOL_DERIVE_MESSAGE);
+    return { spendKp: deriveKeypair(sig), encKp: deriveEncKeypair(sig) };
+  },
+
+  /// Publish your spend + encryption public keys on-chain so others can send you shielded funds (needed only
+  /// to RECEIVE in-pool transfers; depositing/withdrawing your own funds doesn't require it).
+  registerPool: (a: Address, keys: PoolKeys): Promise<Hex> =>
+    send(a, ADDR.shieldedPool, shieldedPoolAbi, "register", [{ owner: a, publicKey: packAccountKey(keys.spendKp.pubkey, keys.encKp.encPub) }]),
+
+  /// Shield `amount` USDG. The output note is encrypted to YOUR key and stored on-chain, so the balance
+  /// recovers from any device by scanning — no browser-local note to lose.
+  shieldDeposit: async (a: Address, amount: bigint, keys: PoolKeys, onStage?: (s: string) => void): Promise<Hex> => {
+    onStage?.("proving");
     const leaves = await poolLeaves();
-    const { proof, ext, note } = await buildDepositProof(kp, amount, leaves);
-    // Persist the note (with its commitment) BEFORE any funds move: the random blinding lives only here, so an
-    // interrupted confirmation wait after the deposit lands would otherwise make the funds unspendable forever.
-    // A reverted deposit just leaves a phantom note that shieldedNotes filters out (its commitment isn't on-chain).
-    addNote(a, { ...note, commitment: proof.outputCommitments[0].toString() });
+    const { proof, ext } = await buildDepositProof(keys.spendKp, keys.encKp, amount, leaves);
     onStage?.("approving");
     await ensureAllowance(a, ADDR.usdg, ADDR.shieldedPool, amount);
     onStage?.("shielding");
     return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
-  /// Withdraw `amount` from a shielded note out to `recipient`. Builds a withdraw proof client-side (spends the
-  /// note through a real merkle path, mints a change note for the remainder), submits, and updates local notes.
-  shieldWithdraw: async (a: Address, note: ShieldedNote, amount: bigint, recipient: Address, onStage?: (s: string) => void): Promise<Hex> => {
-    await assertDeterministicSigner(a);
-    onStage?.("unlocking");
-    await initPool();
-    const kp = deriveKeypair(await signMsg(a, POOL_DERIVE_MESSAGE));
+  /// Withdraw `amount` from a shielded note out to `recipient`. The note's `index` is its real on-chain index
+  /// (from the scan), so no guessing. Change is re-encrypted to you and stored on-chain.
+  shieldWithdraw: async (a: Address, note: PoolNote, amount: bigint, recipient: Address, keys: PoolKeys, onStage?: (s: string) => void): Promise<Hex> => {
     onStage?.("proving");
     const leaves = await poolLeaves();
-    // Recover the note's REAL leaf index by matching its commitment on-chain — the stored index is a pre-tx
-    // guess a concurrent depositor can invalidate. A commitment is index-independent, so this is always safe.
-    const realIndex = leaves.findIndex((l) => l === BigInt(note.commitment));
-    if (realIndex < 0) throw new Error("This shielded note isn't on-chain yet — wait a few seconds and retry.");
-    const { proof, ext, changeNote } = await buildWithdrawProof(kp, { ...note, index: realIndex }, amount, recipient, leaves);
-    // Persist the change note (fresh random blinding) BEFORE sending, same reasoning as a deposit.
-    if (changeNote) addNote(a, { ...changeNote, commitment: proof.outputCommitments[0].toString() });
+    const { proof, ext } = await buildWithdrawProof(keys.spendKp, keys.encKp, note, amount, recipient, leaves);
     onStage?.("withdrawing");
-    const tx = await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
-    // Mark the input note spent (safe direction: if this is missed, a re-spend just reverts on the nullifier).
-    markSpent(a, note.commitment);
-    return tx;
+    return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+  },
+
+  /// Send `amount` of shielded USDG to another registered user IN-POOL — never unshielded. The sent note is
+  /// encrypted to THEM (they recover it by scanning); the change to you. Recipient must have registered.
+  shieldTransfer: async (a: Address, recipientAddr: Address, amount: bigint, note: PoolNote, keys: PoolKeys, onStage?: (s: string) => void): Promise<Hex> => {
+    onStage?.("looking up");
+    const acct = await lookupPoolAccount(recipientAddr);
+    if (!acct) throw new Error("That address hasn't set up a shielded account yet — they need to unlock + register first.");
+    onStage?.("proving");
+    const leaves = await poolLeaves();
+    const { proof, ext } = await buildTransferProof(keys.spendKp, keys.encKp, note, amount, acct.spendPub, acct.encPub, leaves);
+    onStage?.("sending");
+    return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
@@ -809,60 +820,82 @@ export async function scanPrivateInbox(viewPriv: bigint, spendPub: Uint8Array, f
   return owned;
 }
 
-// ---- Essey Private (Phase 1): shielded pool helpers ----
+// ---- Essey Private — shielded pool helpers (SCAN-BASED: the chain is the source of truth, not localStorage) ----
 
-/// One signature derives the pool spend key (deterministic → the same notes recover on re-sign). Distinct from
-/// the stealth message so the two key systems never collide.
+/// One signature derives the pool spend + encryption keys (deterministic → the same notes recover on re-sign,
+/// on any device). Distinct from the stealth message so the two key systems never collide.
 const POOL_DERIVE_MESSAGE =
   "Essey Private — unlock my shielded balance.\n\n" +
   "Signing this derives the private keys for your shielded USDG. It costs no gas and grants no approvals. " +
   "Only sign this on essey.xyz.\n\nVersion: 1";
 
-/// All commitment leaves in the pool tree, ordered by insertion index — what the prover needs to rebuild the
-/// merkle tree and compute paths. Young testnet chain; scan from the pool's deploy block (block-0 would exceed
-/// RPC range caps at ~97M blocks).
-async function poolLeaves(): Promise<bigint[]> {
+const POOL_LOG_CHUNK = 45_000n; // stay under RPC getLogs range caps (RH block numbers are ~97M).
+
+/// Every commitment in the pool tree with its index + on-chain encrypted note, ordered by index. This is the
+/// source for BOTH the merkle tree (values) and note recovery (encryptedOutput). Paginated — the merkle path
+/// depends on the FULL leaf set, so a silent truncation would corrupt roots/paths.
+async function poolCommitments(): Promise<ChainCommitment[]> {
   const head = await pub.getBlockNumber();
-  const CHUNK = 45_000n; // stay under RPC getLogs range caps; the merkle path depends on the FULL leaf set,
-  // so a silent truncation would produce a wrong root/path — never scan an unbounded range.
-  const entries: { index: number; value: bigint }[] = [];
-  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += CHUNK + 1n) {
-    const to = from + CHUNK > head ? head : from + CHUNK;
+  const out: ChainCommitment[] = [];
+  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += POOL_LOG_CHUNK + 1n) {
+    const to = from + POOL_LOG_CHUNK > head ? head : from + POOL_LOG_CHUNK;
     const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: newCommitmentItem, fromBlock: from, toBlock: to });
     for (const l of logs) {
-      const { commitment, index } = l.args as { commitment?: Hex; index?: bigint };
-      if (commitment !== undefined && index !== undefined) entries.push({ index: Number(index), value: BigInt(commitment) });
+      const { commitment, index, encryptedOutput } = l.args as { commitment?: Hex; index?: bigint; encryptedOutput?: Hex };
+      if (commitment !== undefined && index !== undefined) {
+        out.push({ commitment: BigInt(commitment), index: Number(index), encryptedOutput: (encryptedOutput ?? "0x") as `0x${string}` });
+      }
     }
   }
-  entries.sort((x, y) => x.index - y.index);
-  return entries.map((e) => e.value);
+  out.sort((x, y) => x.index - y.index);
+  return out;
 }
 
-/// Notes live in THIS browser only (localStorage), keyed to wallet + pool. Enough for shield→balance→unshield;
-/// receiving private payments from others / cross-device recovery needs on-chain encrypted-note scanning (Phase 2).
-/// A shielded note as the app tracks it: the SDK note (amount/blinding/index) plus its commitment, which is
-/// index-independent and how we relocate the note on-chain (the stored index is only a pre-tx guess).
-export type ShieldedNote = PoolNote & { commitment: string };
-type StoredNote = ShieldedNote & { spent?: boolean };
-function noteKey(a: Address): string {
-  return `essey.pool.notes.${ADDR.shieldedPool}.${a.toLowerCase()}`;
+/// The ordered commitment values — what the prover needs to rebuild the merkle tree and compute paths.
+async function poolLeaves(): Promise<bigint[]> {
+  return (await poolCommitments()).map((c) => c.commitment);
 }
-function loadNotes(a: Address): StoredNote[] {
-  try { return JSON.parse(localStorage.getItem(noteKey(a)) || "[]") as StoredNote[]; } catch { return []; }
+
+/// The set of spent nullifiers (decimal strings), for filtering already-spent notes. Paginated.
+async function spentNullifiers(): Promise<Set<string>> {
+  const head = await pub.getBlockNumber();
+  const spent = new Set<string>();
+  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += POOL_LOG_CHUNK + 1n) {
+    const to = from + POOL_LOG_CHUNK > head ? head : from + POOL_LOG_CHUNK;
+    const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: newNullifierItem, fromBlock: from, toBlock: to });
+    for (const l of logs) {
+      const { nullifier } = l.args as { nullifier?: Hex };
+      if (nullifier !== undefined) spent.add(BigInt(nullifier).toString());
+    }
+  }
+  return spent;
 }
-/// Throws LOUDLY if storage is unavailable (private mode / quota) — callers persist a note BEFORE moving funds,
-/// so a silent failure here would strand the deposit. Aborting before the transfer is the safe outcome.
-function saveNotes(a: Address, notes: StoredNote[]): void {
-  try { localStorage.setItem(noteKey(a), JSON.stringify(notes)); }
-  catch { throw new Error("Couldn't save your shielded note to this browser (private/incognito mode or storage full?). Enable storage and retry — do NOT proceed, or the funds can't be recovered."); }
+
+/// A registered account's spend + encryption public keys (latest PublicKey event for `owner`), or null if
+/// they haven't registered. Senders need this to build an in-pool transfer to them.
+export async function lookupPoolAccount(owner: Address): Promise<{ spendPub: bigint; encPub: Uint8Array } | null> {
+  const head = await pub.getBlockNumber();
+  let latest: Hex | null = null;
+  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += POOL_LOG_CHUNK + 1n) {
+    const to = from + POOL_LOG_CHUNK > head ? head : from + POOL_LOG_CHUNK;
+    const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: publicKeyItem, args: { owner }, fromBlock: from, toBlock: to });
+    for (const l of logs) {
+      const { key } = l.args as { key?: Hex };
+      if (key !== undefined) latest = key; // later events win
+    }
+  }
+  if (!latest) return null;
+  try { return unpackAccountKey(latest); } catch { return null; }
 }
-function addNote(a: Address, n: ShieldedNote): void {
-  const ns = loadNotes(a);
-  if (!ns.some((x) => x.commitment === n.commitment)) ns.push({ ...n }); // dedup by commitment
-  saveNotes(a, ns);
-}
-function markSpent(a: Address, commitment: string): void {
-  saveNotes(a, loadNotes(a).map((n) => (n.commitment === commitment ? { ...n, spent: true } : n)));
+
+/// The caller's spendable shielded notes + balance, recovered by SCANNING + DECRYPTING the chain — works on any
+/// device, and includes notes others have sent you. No localStorage: the chain is the source of truth.
+export async function scanPool(keys: PoolKeys): Promise<{ notes: PoolNote[]; balance: bigint }> {
+  const [chain, spent] = await Promise.all([poolCommitments(), spentNullifiers()]);
+  const owned = recoverNotes(chain, keys.spendKp, keys.encKp);
+  const unspent = owned.filter((n) => !spent.has(noteNullifier(keys.spendKp, n).toString()));
+  const balance = unspent.reduce((s, n) => s + BigInt(n.amount), 0n);
+  return { notes: unspent, balance };
 }
 
 /// Map the SDK's ProofCalldata / ExtData to the on-chain tuple shapes (bytes32 fields as 32-byte hex).
@@ -889,16 +922,6 @@ function extToTuple(e: PoolExtData) {
   };
 }
 
-/// The caller's spendable shielded notes + total shielded USDG (base units). Reconciled against the chain:
-/// only locally-stored, unspent notes whose commitment is actually in the pool tree count — so a phantom
-/// note from a reverted deposit, or one whose tx hasn't landed yet, never inflates the displayed balance.
-export async function shieldedNotes(a: Address): Promise<{ notes: ShieldedNote[]; balance: bigint }> {
-  const local = loadNotes(a).filter((n) => !n.spent);
-  const onChain = new Set((await poolLeaves()).map((l) => l.toString()));
-  const notes = local.filter((n) => onChain.has(BigInt(n.commitment).toString()));
-  const balance = notes.reduce((s, n) => s + BigInt(n.amount), 0n);
-  return { notes, balance };
-}
 
 /// Turn a raw wallet/RPC error into something a first-timer can act on. Falls back to a trimmed
 /// message rather than a bare revert selector.
