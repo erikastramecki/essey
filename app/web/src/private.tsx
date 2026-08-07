@@ -118,7 +118,7 @@ export function PrivatePage() {
   const pickNote = (raw: bigint): PoolNote => {
     const note = [...pool.notes].sort((x, y) => (BigInt(y.amount) > BigInt(x.amount) ? 1 : -1))[0];
     if (!note) throw new Error("Nothing shielded yet.");
-    if (raw > BigInt(note.amount)) throw new Error(`That's more than your largest single note (${maxHint}). The circuit spends one note per transaction — withdraw/send in steps.`);
+    if (raw > BigInt(note.amount)) throw new Error(`That's more than your largest single note (${maxHint}). Each transaction spends one note at a time — withdraw/send in steps.`);
     return note;
   };
 
@@ -254,6 +254,7 @@ export function PrivatePage() {
               <div className="pf-block-h">Shielded balance <span className="preview-chip live">hides amounts</span></div>
 
               {/* Pool selector — one section over four pools. Keys are shared, so switching just rescans. */}
+              <div className="pf-note" style={{ marginBottom: 6 }}>Choose what to make private:</div>
               <div className="live-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                 {SHIELDED_POOLS.map((p) => (
                   <button key={p.key} className="btn" disabled={!!busy} onClick={() => selectPool(p.key)}
@@ -266,8 +267,9 @@ export function PrivatePage() {
               {!poolKeys ? (
                 <div className="live-card"><div className="live-row" style={{ flexWrap: "wrap", gap: 12 }}>
                   <span className="live-note" style={{ flex: "1 1 320px" }}>
-                    {selPool.blurb} Sign once to unlock — the same keys work across every pool, and your notes are recovered by
-                    scanning the chain, so they follow you across devices (and include anything others have sent you).
+                    {selPool.blurb} Sign once to unlock — <b>no gas, no approvals, nothing spent, just a signature</b>. The
+                    same keys work across every pool, and your notes are recovered by scanning the chain, so they follow you
+                    across devices (and include anything others have sent you).
                   </span>
                   <button className="btn btn-gold" disabled={busy === "unlockPool"} onClick={unlockPool}>{busy === "unlockPool" ? (stage ? stage + "…" : "unlocking…") : "Unlock shielded balance"}</button>
                 </div></div>
@@ -293,7 +295,7 @@ export function PrivatePage() {
                   </div>
 
                   {pool.notes.length > 1 && (
-                    <div className="pf-note" style={{ marginBottom: 14 }}>Largest single withdrawal or transfer: <b>{maxHint}</b> — the circuit spends one note per transaction, so larger amounts go in steps.</div>
+                    <div className="pf-note" style={{ marginBottom: 14 }}>Your balance is made of separate deposits ("notes"); each transaction spends one at a time. Largest single withdrawal or transfer: <b>{maxHint}</b> — larger amounts go in steps.</div>
                   )}
 
                   {selPool.stock && impaired && (
@@ -317,6 +319,7 @@ export function PrivatePage() {
                   </label>
 
                   {/* Shield (deposit) */}
+                  <div className="pf-note" style={{ marginBottom: 6 }}>Heads-up: your <b>first</b> shield downloads a one-time ~12 MB proving key, so it takes ~30s (quick after that). The proof runs entirely in your browser — nothing is sent anywhere.</div>
                   <div className="live-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                     <input className="live-input" placeholder={`amount to ${isSupply ? "supply" : "shield"} (${inputUnit})`} inputMode="decimal"
                       value={shieldAmt} onChange={(e) => setShieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
@@ -331,7 +334,7 @@ export function PrivatePage() {
                     <input className="live-input" placeholder="recipient wallet address (0x…)" value={xferTo} onChange={(e) => setXferTo(e.target.value)} style={inputStyle} />
                     <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
                       <input className="live-input" placeholder={`amount to send (${inputUnit})`} inputMode="decimal" value={xferAmt} onChange={(e) => setXferAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
-                      <button className="btn" disabled={!!busy || pool.balance === 0n} onClick={transfer}>{busy === "xfer" ? (stage ? stage + "…" : "sending…") : "Send privately →"}</button>
+                      <button className="btn" disabled={!!busy || pool.balance === 0n} onClick={transfer}>{busy === "xfer" ? (stage ? stage + "…" : "sending…") : "Send in-pool →"}</button>
                     </div>
                     <div className="pf-note">The recipient must have unlocked + registered <b>in this pool</b>. It appears in their shielded balance — no amount leaves the pool, so it's fully private.</div>
                   </div>
@@ -353,8 +356,7 @@ export function PrivatePage() {
 
                   <div className="pf-note" style={{ marginTop: 12 }}>
                     Notes are encrypted to your key and stored on-chain, so they recover from any device by scanning —
-                    nothing is tied to this browser. The first shield downloads a ~12 MB proving key; proving runs in your
-                    browser. Experimental, testnet only.
+                    nothing is tied to this browser. Experimental, testnet only.
                   </div>
                 </div>
               )}
@@ -400,9 +402,9 @@ export function PrivatePage() {
                     </select>
                     <input className="live-input" placeholder="amount" inputMode="decimal"
                       value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...inputStyle, flex: "1 1 140px" }} />
-                    <button className="btn btn-gold" disabled={busy === "send"} onClick={send}>{busy === "send" ? "sending…" : "Send privately →"}</button>
+                    <button className="btn btn-gold" disabled={busy === "send"} onClick={send}>{busy === "send" ? "sending…" : "Pay privately →"}</button>
                   </div>
-                  <button className="pf-link" style={{ alignSelf: "flex-start" }} onClick={() => a && setTo(a)}>↳ shield to myself (pay my own private address)</button>
+                  <button className="pf-link" style={{ alignSelf: "flex-start" }} onClick={() => a && setTo(a)}>↳ pay my own private address</button>
                 </div>
               </div>
             </div>
@@ -414,7 +416,7 @@ export function PrivatePage() {
                 <div className="live-card" style={{ marginBottom: 12 }}>
                   <div className="live-note" style={{ marginBottom: 8 }}>Sweep received funds to:</div>
                   <input className="live-input" placeholder="destination address (0x…)" value={sweepTo} onChange={(e) => setSweepTo(e.target.value)} style={inputStyle} />
-                  <div className="pf-note" style={{ marginTop: 8 }}>⚠ Sweeping funds gas from your <b>main wallet</b> and moves the funds to the address above — both write an on-chain link between the one-time address and those wallets. For stronger unlinkability, sweep to a <b>fresh</b> address; relayer-funded gas (no main-wallet link) comes in a later phase.</div>
+                  <div className="pf-note" style={{ marginTop: 8 }}>⚠ Sweeping spends gas from your <b>main wallet</b> and moves the funds to the address above — both write an on-chain link between the one-time address and those wallets. For stronger unlinkability, sweep to a <b>fresh</b> address; relayer-funded gas (no main-wallet link) comes in a later phase.</div>
                 </div>
               )}
               {!keys ? (
