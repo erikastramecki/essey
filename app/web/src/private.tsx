@@ -4,11 +4,11 @@
 // EXPERIMENTAL. This is a stealth-address primitive (ERC-5564/6538), not a shielded pool — amounts are
 // public on-chain; what it hides is the *link* between a recipient's public identity and where they were
 // paid. The anonymity it gives grows with how many people use it. Testnet only.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { parseUnits, isAddress, type Address, type Hex } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, scanPool, lookupPoolAccount, type StealthKeys, type PrivateHolding, type PoolNote, type PoolKeys } from "./live";
+import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, scanPool, lookupPoolAccount, sharesToUsdg, usdgToShares, stockImpaired, SHIELDED_POOLS, type ShieldedPoolCfg, type StealthKeys, type PrivateHolding, type PoolNote, type PoolKeys } from "./live";
 
 // Decimals are carried per-token, NOT hardcoded — testnet mocks are all 18-dec, but mainnet USDG is 6-dec,
 // and a hardcoded 18 there would over-send by 1e12x. Update these when the mainnet addresses land.
@@ -41,10 +41,16 @@ export function PrivatePage() {
   // inbox
   const [inbox, setInbox] = useState<PrivateHolding[] | null>(null);
 
-  // shielded pool — HIDES AMOUNTS; cross-device recovery + receive-from-others (scan-based)
+  // shielded pools — HIDES AMOUNTS; cross-device recovery + receive-from-others (scan-based). One flagship
+  // section, parametrized over USDG / AAPL / NVDA / private-yield supply. Keys are shared across all pools
+  // (same circuit) — one unlock; balance + registration are per-selected-pool.
   const [poolKeys, setPoolKeys] = useState<PoolKeys | null>(null);
+  const [selPoolKey, setSelPoolKey] = useState<string>("usdg");
+  const selPool = SHIELDED_POOLS.find((p) => p.key === selPoolKey)!;
   const [pool, setPool] = useState<{ notes: PoolNote[]; balance: bigint }>({ notes: [], balance: 0n });
-  const [poolReg, setPoolReg] = useState<boolean | null>(null); // registered to receive?
+  const [usdgValue, setUsdgValue] = useState<bigint | null>(null); // supply: balance's USDG worth (incl. yield)
+  const [impaired, setImpaired] = useState(false); // stock: issuer burned backing -> withdrawals take a haircut
+  const [poolReg, setPoolReg] = useState<boolean | null>(null); // registered to receive in the selected pool?
   const [shieldAmt, setShieldAmt] = useState("");
   const [unshieldAmt, setUnshieldAmt] = useState("");
   const [unshieldTo, setUnshieldTo] = useState("");
@@ -52,8 +58,16 @@ export function PrivatePage() {
   const [xferAmt, setXferAmt] = useState("");
   const [viaRelayer, setViaRelayer] = useState(true); // withdraw/transfer through the relayer by default (private, gasless)
   const [stage, setStage] = useState<string | null>(null);
+  const isSupply = selPool.kind === "supply";
+  // the unit users type in: supply talks USDG (notes are shares under the hood); everything else is native.
+  const inputUnit = isSupply ? "USDG" : selPool.unit;
+  const maxNote = pool.notes.reduce((m, n) => (BigInt(n.amount) > m ? BigInt(n.amount) : m), 0n); // largest single note (1 note/tx)
+  const [maxNoteUsdg, setMaxNoteUsdg] = useState<bigint | null>(null); // supply: the largest note's USDG worth
+  // A generation counter that bumps whenever the connected account changes; async pool ops capture it and skip
+  // their trailing state writes if the account has since switched (so account A's balance can't paint under B).
+  const scanGen = useRef(0);
   useEffect(() => { if (a && !unshieldTo) setUnshieldTo(a); }, [a, unshieldTo]);
-  useEffect(() => { setPoolKeys(null); setPool({ notes: [], balance: 0n }); setPoolReg(null); }, [a]); // re-lock on wallet change
+  useEffect(() => { scanGen.current++; setPoolKeys(null); setPool({ notes: [], balance: 0n }); setUsdgValue(null); setImpaired(false); setMaxNoteUsdg(null); setPoolReg(null); }, [a]); // re-lock on wallet change
 
   // Am I already registered? (cheap read, no signature.)
   useEffect(() => {
@@ -70,51 +84,95 @@ export function PrivatePage() {
     finally { setBusy(null); setStage(null); }
   };
 
-  const rescan = async (keys: PoolKeys) => { setPool(await scanPool(keys)); };
+  // Rescan `p`. Captures the generation at entry and drops its state writes if the account switched mid-scan.
+  const rescan = async (keys: PoolKeys, p: ShieldedPoolCfg) => {
+    const g = scanGen.current;
+    const b = await scanPool(p, keys);
+    const largest = b.notes.reduce((m, n) => (BigInt(n.amount) > m ? BigInt(n.amount) : m), 0n);
+    const usdg = p.kind === "supply" ? await sharesToUsdg(p, b.balance) : null;
+    const largestUsdg = p.kind === "supply" ? await sharesToUsdg(p, largest) : null;
+    const imp = await stockImpaired(p);
+    if (scanGen.current !== g) return; // account changed while scanning — don't paint stale data
+    setPool(b); setUsdgValue(usdg); setMaxNoteUsdg(largestUsdg); setImpaired(imp);
+  };
 
-  // The 2-input circuit spends ONE note per tx — pick the largest note that covers `amt`.
-  const pickNote = (amt: bigint): PoolNote => {
+  // Switch the active pool: reset the per-pool view, then (if unlocked) rescan the newly-selected pool.
+  const selectPool = (key: string) => {
+    if (key === selPoolKey) return;
+    const p = SHIELDED_POOLS.find((x) => x.key === key)!;
+    setSelPoolKey(key);
+    setPool({ notes: [], balance: 0n }); setUsdgValue(null); setMaxNoteUsdg(null); setImpaired(false); setPoolReg(null);
+    setShieldAmt(""); setUnshieldAmt(""); setXferAmt(""); setXferTo("");
+    if (poolKeys && a) run("switch", async () => {
+      const g = scanGen.current;
+      await rescan(poolKeys, p);
+      const reg = !!(await lookupPoolAccount(p, a));
+      if (scanGen.current === g) setPoolReg(reg);
+    }, "");
+  };
+
+  // The largest single note, formatted in the unit the user sees — the per-transaction ceiling (1 note/tx).
+  const maxHint = isSupply ? `≈ ${fmt(maxNoteUsdg ?? 0n, 2)} USDG` : `${fmt(maxNote, selPool.unit === "USDG" ? 2 : 4)} ${selPool.unit}`;
+
+  // The 2-input circuit spends ONE note per tx — pick the largest note that covers `raw` (in the pool's raw unit).
+  const pickNote = (raw: bigint): PoolNote => {
     const note = [...pool.notes].sort((x, y) => (BigInt(y.amount) > BigInt(x.amount) ? 1 : -1))[0];
     if (!note) throw new Error("Nothing shielded yet.");
-    if (amt > BigInt(note.amount)) throw new Error(`Amount exceeds your largest single shielded note (${fmt(BigInt(note.amount), 2)} USDG). Use less, or in steps.`);
+    if (raw > BigInt(note.amount)) throw new Error(`That's more than your largest single note (${maxHint}). The circuit spends one note per transaction — withdraw/send in steps.`);
     return note;
   };
 
+  // Turn what the user typed into the pool's RAW note unit. Plain pools: native units. Supply: the input is
+  // USDG, converted to shares. If the user asked for MORE USDG than the largest single note is worth, return
+  // the raw shares so pickNote surfaces the honest one-note-per-tx error; otherwise cap to that note so the
+  // USDG→share rounding can't overshoot it (single-note "withdraw all" then works cleanly).
+  const toRaw = async (input: string): Promise<bigint> => {
+    if (!isSupply) return parseUnits(input || "0", selPool.decimals);
+    const typedUsdg = parseUnits(input || "0", USDG_DECIMALS);
+    const shares = await usdgToShares(selPool, typedUsdg);
+    const largestUsdg = await sharesToUsdg(selPool, maxNote);
+    if (typedUsdg > largestUsdg) return shares; // genuinely exceeds one note -> pickNote throws the honest error
+    return shares > maxNote ? maxNote : shares;
+  };
+
   const unlockPool = () => a && run("unlockPool", async () => {
+    const g = scanGen.current;
     const keys = await flows.unlockPool(a);
+    if (scanGen.current !== g) return; // account switched during the signature
     setPoolKeys(keys);
-    await rescan(keys);
-    setPoolReg(!!(await lookupPoolAccount(a)));
+    await rescan(keys, selPool);
+    const reg = !!(await lookupPoolAccount(selPool, a));
+    if (scanGen.current === g) setPoolReg(reg);
   }, "✓ Unlocked — scanning your shielded balance.");
 
   const registerPool = () => a && poolKeys && run("registerPool", async () => {
-    await flows.registerPool(a, poolKeys);
+    await flows.registerPool(a, poolKeys, selPool);
     setPoolReg(true);
-  }, "✓ Registered — others can now send you shielded USDG in-pool.");
+  }, `✓ Registered — others can now send you shielded ${selPool.label} in-pool.`);
 
   const shield = () => a && poolKeys && run("shield", async () => {
-    const amt = parseUnits(shieldAmt || "0", USDG_DECIMALS);
+    const amt = parseUnits(shieldAmt || "0", isSupply ? USDG_DECIMALS : selPool.decimals);
     if (amt <= 0n) throw new Error("Enter an amount to shield.");
-    await flows.shieldDeposit(a, amt, poolKeys, setStage);
-    setShieldAmt(""); await rescan(poolKeys);
-  }, "✓ Shielded — your balance is now private.");
+    await flows.shieldDeposit(a, amt, poolKeys, selPool, setStage);
+    setShieldAmt(""); await rescan(poolKeys, selPool);
+  }, isSupply ? "✓ Supplied privately — your position and its yield are now hidden." : "✓ Shielded — your balance is now private.");
 
   const unshield = () => a && poolKeys && run("unshield", async () => {
-    const amt = parseUnits(unshieldAmt || "0", USDG_DECIMALS);
-    if (amt <= 0n) throw new Error("Enter an amount to unshield.");
+    const raw = await toRaw(unshieldAmt);
+    if (raw <= 0n) throw new Error("Enter an amount to unshield.");
     const dest = (unshieldTo.trim() || a) as Address;
     if (!isAddress(dest)) throw new Error("Enter a valid destination address.");
-    await flows.shieldWithdraw(a, pickNote(amt), amt, dest, poolKeys, viaRelayer, setStage);
-    setUnshieldAmt(""); await rescan(poolKeys);
-  }, "✓ Unshielded to your chosen address.");
+    await flows.shieldWithdraw(a, pickNote(raw), raw, dest, poolKeys, viaRelayer, selPool, setStage);
+    setUnshieldAmt(""); await rescan(poolKeys, selPool);
+  }, isSupply ? "✓ Withdrawn — USDG plus accrued yield sent to your address." : "✓ Unshielded to your chosen address.");
 
   const transfer = () => a && poolKeys && run("xfer", async () => {
-    const amt = parseUnits(xferAmt || "0", USDG_DECIMALS);
-    if (amt <= 0n) throw new Error("Enter an amount to send.");
+    const raw = await toRaw(xferAmt);
+    if (raw <= 0n) throw new Error("Enter an amount to send.");
     const dest = xferTo.trim();
     if (!isAddress(dest)) throw new Error("Enter the recipient's wallet address.");
-    await flows.shieldTransfer(a, dest as Address, amt, pickNote(amt), poolKeys, viaRelayer, setStage);
-    setXferAmt(""); await rescan(poolKeys);
+    await flows.shieldTransfer(a, dest as Address, raw, pickNote(raw), poolKeys, viaRelayer, selPool, setStage);
+    setXferAmt(""); await rescan(poolKeys, selPool);
   }, "✓ Sent privately — it will appear in the recipient's shielded balance.");
 
   const register = () => a && run("register", async () => {
@@ -166,18 +224,19 @@ export function PrivatePage() {
         <div className="band-head"><div>
           <span className="eyebrow">Essey Private</span>
           <h2>Private balances. Private payments.</h2>
-          <p>Two ways to move without being watched: a <b>shielded pool</b> that hides your balance and amounts,
-            and <b>stealth addresses</b> that hide who you're paid as. Both on Robinhood Chain, both testnet.</p>
+          <p>Two ways to move without being watched: <b>shielded pools</b> that hide your balance and amounts —
+            for USDG, AAPL/NVDA stock, and yield-bearing supply — and <b>stealth addresses</b> that hide who
+            you're paid as. Both on Robinhood Chain, both testnet.</p>
         </div>
           <span className="preview-chip">Experimental · P0</span>
         </div>
 
         <div className="live-card" style={{ marginBottom: 16 }}>
           <div className="live-note" style={{ lineHeight: 1.5 }}>
-            <b>What this is.</b> Two privacy tools. The <b>shielded pool</b> (below) hides amounts — your balance and
-            in-pool transfers are private, and deposits can't be linked to withdrawals. <b>Stealth addresses</b> hide
-            the link between your identity and where you're paid (amounts there stay public). Both grow stronger the
-            more people use them. Experimental, testnet only.
+            <b>What this is.</b> Two privacy tools. The <b>shielded pools</b> (below) hide amounts — your balance and
+            in-pool transfers are private, and deposits can't be linked to withdrawals; pick USDG, a stock (AAPL/NVDA),
+            or private yield-bearing supply. <b>Stealth addresses</b> hide the link between your identity and where
+            you're paid (amounts there stay public). Both grow stronger the more people use them. Experimental, testnet only.
           </div>
         </div>
 
@@ -187,34 +246,63 @@ export function PrivatePage() {
           </div></div>
         ) : (
           <>
-            {/* 0 — shielded pool (hides amounts) — the flagship */}
+            {/* 0 — shielded pools (hide amounts) — the flagship. Parametrized: USDG / AAPL / NVDA / private-yield. */}
             <div className="pf-block">
               <div className="pf-block-h">Shielded balance <span className="preview-chip live">hides amounts</span></div>
+
+              {/* Pool selector — one section over four pools. Keys are shared, so switching just rescans. */}
+              <div className="live-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {SHIELDED_POOLS.map((p) => (
+                  <button key={p.key} className="btn" disabled={!!busy} onClick={() => selectPool(p.key)}
+                    style={{ padding: "6px 12px", fontSize: 13, opacity: p.key === selPoolKey ? 1 : 0.5, borderColor: p.key === selPoolKey ? "var(--gold, #c9a227)" : undefined }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
               {!poolKeys ? (
                 <div className="live-card"><div className="live-row" style={{ flexWrap: "wrap", gap: 12 }}>
                   <span className="live-note" style={{ flex: "1 1 320px" }}>
-                    Sign once to unlock your shielded balance. Your keys derive from the signature and your notes are
-                    recovered by scanning the chain — so they follow you across devices, and include anything others have
-                    sent you.
+                    {selPool.blurb} Sign once to unlock — the same keys work across every pool, and your notes are recovered by
+                    scanning the chain, so they follow you across devices (and include anything others have sent you).
                   </span>
                   <button className="btn btn-gold" disabled={busy === "unlockPool"} onClick={unlockPool}>{busy === "unlockPool" ? (stage ? stage + "…" : "unlocking…") : "Unlock shielded balance"}</button>
                 </div></div>
               ) : (
                 <div className="live-card">
-                  <div className="num" style={{ fontSize: 30, fontWeight: 700, marginBottom: 4 }}>
-                    {fmt(pool.balance, 2)} <span style={{ fontSize: 15, opacity: 0.6, fontWeight: 400 }}>USDG shielded</span>
-                  </div>
+                  {isSupply ? (
+                    <div style={{ marginBottom: 4 }}>
+                      <div className="num" style={{ fontSize: 30, fontWeight: 700 }}>
+                        ≈ {fmt(usdgValue ?? 0n, 2)} <span style={{ fontSize: 15, opacity: 0.6, fontWeight: 400 }}>USDG supplied</span>
+                      </div>
+                      <div className="pf-note">Private supply · earning yield · {fmt(pool.balance, 2)} shares held</div>
+                    </div>
+                  ) : (
+                    <div className="num" style={{ fontSize: 30, fontWeight: 700, marginBottom: 4 }}>
+                      {fmt(pool.balance, selPool.unit === "USDG" ? 2 : 4)} <span style={{ fontSize: 15, opacity: 0.6, fontWeight: 400 }}>{selPool.unit} shielded</span>
+                    </div>
+                  )}
                   <div className="pf-note" style={{ marginBottom: 14 }}>
-                    Your balance and any in-pool transfer are hidden, and the pool breaks the deposit↔withdrawal link.
-                    Deposit/withdraw <b>amounts</b> are public (matching amounts can re-link on a small pool — unshield to a
-                    fresh address). Notes recover from the chain, so they aren't tied to this browser.
-                    <button className="pf-link gold pf-inline-btn" disabled={!!busy} onClick={() => { if (poolKeys) run("rescan", () => rescan(poolKeys), "✓ Rescanned."); }}>rescan</button>
+                    {isSupply
+                      ? <>Your supply position and the yield it earns are hidden — the note's share count is fixed, but the shares appreciate as interest accrues. Withdraw any time to receive USDG plus accrued yield.</>
+                      : <>Your balance and any in-pool transfer are hidden, and the pool breaks the deposit↔withdrawal link. Deposit/withdraw <b>amounts</b> are public (matching amounts can re-link on a small pool — unshield to a fresh address).</>}
+                    <button className="pf-link gold pf-inline-btn" disabled={!!busy} onClick={() => { if (poolKeys) run("rescan", () => rescan(poolKeys, selPool), "✓ Rescanned."); }}>rescan</button>
                   </div>
+
+                  {pool.notes.length > 1 && (
+                    <div className="pf-note" style={{ marginBottom: 14 }}>Largest single withdrawal or transfer: <b>{maxHint}</b> — the circuit spends one note per transaction, so larger amounts go in steps.</div>
+                  )}
+
+                  {selPool.stock && impaired && (
+                    <div className="live-card" style={{ marginBottom: 12, borderColor: "var(--gold, #c9a227)" }}>
+                      <div className="pf-note" style={{ margin: 0 }}>⚠ <b>Backing impaired.</b> The issuer has burned some of this pool's stock, so withdrawals now pay a <b>pro-rata share</b> of what remains — the loss is split fairly across all holders, in the same proportion no matter when you exit. New deposits are closed until the backing is restored.</div>
+                    </div>
+                  )}
 
                   {poolReg === false && (
                     <div className="live-card" style={{ marginBottom: 12 }}>
                       <div className="live-row" style={{ flexWrap: "wrap", gap: 10 }}>
-                        <span className="live-note" style={{ flex: "1 1 300px" }}>To <b>receive</b> shielded USDG from others, publish your keys once (a small tx). Not needed to shield/unshield your own funds.</span>
+                        <span className="live-note" style={{ flex: "1 1 300px" }}>To <b>receive</b> shielded {selPool.label} from others, publish your keys once (a small tx). Not needed to shield/unshield your own funds.</span>
                         <button className="btn" disabled={!!busy} onClick={registerPool}>{busy === "registerPool" ? "registering…" : "Register to receive"}</button>
                       </div>
                     </div>
@@ -227,10 +315,10 @@ export function PrivatePage() {
 
                   {/* Shield (deposit) */}
                   <div className="live-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-                    <input className="live-input" placeholder="amount to shield" inputMode="decimal"
+                    <input className="live-input" placeholder={`amount to ${isSupply ? "supply" : "shield"} (${inputUnit})`} inputMode="decimal"
                       value={shieldAmt} onChange={(e) => setShieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
-                    <button className="btn btn-gold" disabled={!!busy} onClick={shield}>
-                      {busy === "shield" ? (stage ? stage + "…" : "shielding…") : "Shield USDG →"}
+                    <button className="btn btn-gold" disabled={!!busy || (selPool.stock && impaired)} onClick={shield}>
+                      {busy === "shield" ? (stage ? stage + "…" : "shielding…") : (isSupply ? "Supply USDG →" : `Shield ${inputUnit} →`)}
                     </button>
                   </div>
 
@@ -239,30 +327,31 @@ export function PrivatePage() {
                     <div className="live-note">Send privately to another user (in-pool — nothing is unshielded):</div>
                     <input className="live-input" placeholder="recipient wallet address (0x…)" value={xferTo} onChange={(e) => setXferTo(e.target.value)} style={inputStyle} />
                     <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
-                      <input className="live-input" placeholder="amount to send" inputMode="decimal" value={xferAmt} onChange={(e) => setXferAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
+                      <input className="live-input" placeholder={`amount to send (${inputUnit})`} inputMode="decimal" value={xferAmt} onChange={(e) => setXferAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
                       <button className="btn" disabled={!!busy || pool.balance === 0n} onClick={transfer}>{busy === "xfer" ? (stage ? stage + "…" : "sending…") : "Send privately →"}</button>
                     </div>
-                    <div className="pf-note">The recipient must have unlocked + registered. It appears in their shielded balance — no amount leaves the pool, so it's fully private.</div>
+                    <div className="pf-note">The recipient must have unlocked + registered <b>in this pool</b>. It appears in their shielded balance — no amount leaves the pool, so it's fully private.</div>
                   </div>
 
                   {/* Unshield (withdraw) */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--line, #333)", paddingTop: 14 }}>
-                    <div className="live-note">Unshield to:</div>
+                    <div className="live-note">{isSupply ? "Withdraw (USDG + yield) to:" : "Unshield to:"}</div>
                     <input className="live-input" placeholder="destination address (0x…)" value={unshieldTo} onChange={(e) => setUnshieldTo(e.target.value)} style={inputStyle} />
-                    <div className="pf-note">⚠ Unshielding to your own main wallet — or in an amount that matches your deposit — can re-link you on a small pool. Use a <b>fresh</b> address for stronger privacy.</div>
+                    <div className="pf-note">⚠ Withdrawing to your own main wallet — or in an amount that matches your deposit — can re-link you on a small pool. Use a <b>fresh</b> address for stronger privacy.</div>
                     <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
-                      <input className="live-input" placeholder="amount to unshield" inputMode="decimal"
+                      <input className="live-input" placeholder={`amount to ${isSupply ? "withdraw" : "unshield"} (${inputUnit})`} inputMode="decimal"
                         value={unshieldAmt} onChange={(e) => setUnshieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
                       <button className="btn" disabled={!!busy || pool.balance === 0n} onClick={unshield}>
-                        {busy === "unshield" ? (stage ? stage + "…" : "unshielding…") : "Unshield →"}
+                        {busy === "unshield" ? (stage ? stage + "…" : "unshielding…") : (isSupply ? "Withdraw →" : "Unshield →")}
                       </button>
                     </div>
+                    {isSupply && <div className="pf-note">Amounts are in USDG; your position is held as yield-bearing shares, so a withdrawal redeems the equivalent shares and pays USDG including accrued yield (≈, since the share price moves).</div>}
                   </div>
 
                   <div className="pf-note" style={{ marginTop: 12 }}>
                     Notes are encrypted to your key and stored on-chain, so they recover from any device by scanning —
                     nothing is tied to this browser. The first shield downloads a ~12 MB proving key; proving runs in your
-                    browser. Testnet USDG only.
+                    browser. Experimental, testnet only.
                   </div>
                 </div>
               )}

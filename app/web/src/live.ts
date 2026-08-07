@@ -47,6 +47,11 @@ export const ADDR = {
   // Essey Private — Phase 1 (shielded USDG pool, hides amounts). Depth-20, gate openMode on testnet.
   shieldedPool: "0xcD7953960bbc1276F0856Dad5E502fc01cE629aB" as Address,
   shieldedPoolGate: "0xcBdA12dF938d665fF5752b9C49740A7D47ff5562" as Address,
+  // Phase 2 — shielded lending supply (private, yield-bearing; notes are aUSDG shares of ADDR.pool).
+  shieldedSupply: "0xeF52251672d073fDD22f996D8665112BE005EecC" as Address,
+  // Phase 1b — shielded STOCK (pro-rata haircut survives issuer adminBurn). One pool per stock token.
+  shieldedStockAapl: "0x49f1C16FeDe8f6099Dc39d3b3C41B9890D51Ae53" as Address,
+  shieldedStockNvda: "0x8e358964666153cd604Cf15be575e75a34fE9cB3" as Address,
   // The relayer that submits withdrawals/transfers on the user's behalf (hides tx-origin, gasless).
   poolRelayer: "0x1Ed246983ca4E022f31CEb2b1280FDD46362C23c" as Address,
 };
@@ -218,7 +223,48 @@ export const shieldedPoolAbi = parseAbi([
 const newCommitmentItem = parseAbiItem("event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput)");
 const newNullifierItem = parseAbiItem("event NewNullifier(bytes32 nullifier)");
 const publicKeyItem = parseAbiItem("event PublicKey(address indexed owner, bytes key)");
-const POOL_DEPLOY_BLOCK = 97_728_346n;
+
+// The supply pool adds supply() (USDG in -> shielded aUSDG-SHARE note) + sharesToUsdg (view). Its
+// transact/register/isSpent/events are identical to shieldedPoolAbi.
+export const shieldedSupplyAbi = parseAbi([
+  "function supply(uint256 usdgAmount, (uint256[2] a, uint256[2][2] b, uint256[2] c, bytes32 root, bytes32[2] inputNullifiers, bytes32[2] outputCommitments, uint256 publicAmount, bytes32 extDataHash) args, (address recipient, int256 extAmount, address relayer, uint256 fee, bytes encryptedOutput1, bytes encryptedOutput2) extData)",
+  "function sharesToUsdg(uint256 shares) view returns (uint256)",
+]);
+// The stock pool adds the burn-resilience views (a haircut applies if the issuer burned backing).
+export const shieldedStockAbi = parseAbi([
+  "function isImpaired() view returns (bool)",
+]);
+// ERC-4626 reads on the lending pool the supply pool wraps — preview the shares a USDG deposit mints, and the
+// shares a USDG value is worth (so the supply UI can talk USDG while notes are share-denominated).
+const erc4626Abi = parseAbi([
+  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
+  "function convertToShares(uint256 assets) view returns (uint256 shares)",
+  "function convertToAssets(uint256 shares) view returns (uint256 assets)",
+]);
+
+// Essey Private — the shielded pools. All share the depth-20 circuit / verifier / hasher, so the same unlocked
+// keys and the same in-browser prover work across every pool; they differ only in the backing token and, for
+// supply, in being share-denominated (a note's value is aUSDG shares, converted to USDG at the UI edge).
+export type ShieldedKind = "plain" | "supply";
+export interface ShieldedPoolCfg {
+  key: string; // stable id, also the React key
+  label: string; // shown in the pool selector
+  blurb: string; // one-line description under the balance
+  address: Address; // the shielded pool contract
+  token: Address; // the ERC-20 users deposit / receive
+  unit: string; // display unit of a note's raw value ("USDG" / "AAPL" / "NVDA" / "shares")
+  decimals: number;
+  deployBlock: bigint; // scan floor — a LOWER bound on the pool's first commitment
+  kind: ShieldedKind;
+  stock?: boolean; // plain pool whose backing is burnable stock -> show impairment / haircut
+  lendingPool?: Address; // supply only: the ERC-4626 pool, for share<->USDG conversion
+}
+export const SHIELDED_POOLS: ShieldedPoolCfg[] = [
+  { key: "usdg", label: "USDG", blurb: "Hide your USDG balance and amounts.", address: ADDR.shieldedPool, token: ADDR.usdg, unit: "USDG", decimals: 18, deployBlock: 97_728_346n, kind: "plain" },
+  { key: "aapl", label: "AAPL", blurb: "A private AAPL position — resilient to issuer token burns.", address: ADDR.shieldedStockAapl, token: ADDR.aapl, unit: "AAPL", decimals: 18, deployBlock: 97_832_310n, kind: "plain", stock: true },
+  { key: "nvda", label: "NVDA", blurb: "A private NVDA position — resilient to issuer token burns.", address: ADDR.shieldedStockNvda, token: ADDR.nvda, unit: "NVDA", decimals: 18, deployBlock: 97_832_416n, kind: "plain", stock: true },
+  { key: "supply", label: "USDG · yield", blurb: "Supply USDG privately and earn yield — the position and its yield stay hidden.", address: ADDR.shieldedSupply, token: ADDR.usdg, unit: "shares", decimals: 18, deployBlock: 97_808_037n, kind: "supply", lendingPool: ADDR.pool },
+];
 // The known ERC-20s a received stealth address could hold — we read balances directly rather than trust
 // event amounts, so the inbox shows what is actually spendable right now.
 const KNOWN_TOKENS: { key: string; addr: Address }[] = [
@@ -684,48 +730,62 @@ export const flows = {
     return { spendKp: deriveKeypair(sig), encKp: deriveEncKeypair(sig) };
   },
 
-  /// Publish your spend + encryption public keys on-chain so others can send you shielded funds (needed only
-  /// to RECEIVE in-pool transfers; depositing/withdrawing your own funds doesn't require it).
-  registerPool: (a: Address, keys: PoolKeys): Promise<Hex> =>
-    send(a, ADDR.shieldedPool, shieldedPoolAbi, "register", [{ owner: a, publicKey: packAccountKey(keys.spendKp.pubkey, keys.encKp.encPub) }]),
+  /// Publish your spend + encryption public keys in `pool` so others can send you shielded funds there (needed
+  /// only to RECEIVE in-pool transfers; depositing/withdrawing your own funds doesn't require it). Per-pool.
+  registerPool: (a: Address, keys: PoolKeys, pool: ShieldedPoolCfg): Promise<Hex> =>
+    send(a, pool.address, shieldedPoolAbi, "register", [{ owner: a, publicKey: packAccountKey(keys.spendKp.pubkey, keys.encKp.encPub) }]),
 
-  /// Shield `amount` USDG. The output note is encrypted to YOUR key and stored on-chain, so the balance
-  /// recovers from any device by scanning — no browser-local note to lose.
-  shieldDeposit: async (a: Address, amount: bigint, keys: PoolKeys, onStage?: (s: string) => void): Promise<Hex> => {
+  /// Shield into `pool`. For a plain pool this deposits `amount` of the backing token and shields it 1:1. For
+  /// the SUPPLY pool, `amount` is USDG: it deposits into the lending pool and shields the SHARES received, so
+  /// the note is share-denominated (previewDeposit tells us how many, and the contract requires exactly that).
+  /// The output note is encrypted to YOUR key and stored on-chain, so the balance recovers by scanning.
+  shieldDeposit: async (a: Address, amount: bigint, keys: PoolKeys, pool: ShieldedPoolCfg, onStage?: (s: string) => void): Promise<Hex> => {
+    const leaves = await poolLeaves(pool);
+    if (pool.kind === "supply") {
+      onStage?.("quoting");
+      const shares = await pub.readContract({ address: pool.lendingPool!, abi: erc4626Abi, functionName: "previewDeposit", args: [amount] }) as bigint;
+      if (shares <= 0n) throw new Error("That USDG amount is too small to mint any pool shares.");
+      onStage?.("proving");
+      const { proof, ext } = await buildDepositProof(keys.spendKp, keys.encKp, shares, leaves); // note value = SHARES
+      onStage?.("approving");
+      await ensureAllowance(a, pool.token, pool.address, amount); // approve USDG to the supply pool
+      onStage?.("shielding");
+      return await send(a, pool.address, shieldedSupplyAbi, "supply", [amount, proofToTuple(proof), extToTuple(ext)]);
+    }
     onStage?.("proving");
-    const leaves = await poolLeaves();
     const { proof, ext } = await buildDepositProof(keys.spendKp, keys.encKp, amount, leaves);
     onStage?.("approving");
-    await ensureAllowance(a, ADDR.usdg, ADDR.shieldedPool, amount);
+    await ensureAllowance(a, pool.token, pool.address, amount);
     onStage?.("shielding");
-    return await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    return await send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
-  /// Withdraw `amount` from a shielded note out to `recipient`. When `viaRelayer`, the tx is submitted by the
-  /// relayer (hides the user's tx-origin, gasless for the user); otherwise the user self-submits. `amount` is
-  /// what the recipient receives; the relayer fee (if any) is taken from the change.
-  shieldWithdraw: async (a: Address, note: PoolNote, amount: bigint, recipient: Address, keys: PoolKeys, viaRelayer: boolean, onStage?: (s: string) => void): Promise<Hex> => {
+  /// Withdraw `amount` (the note's raw unit) from a shielded note out to `recipient`. For a plain pool the
+  /// recipient receives `amount` of the token (a stock pool may pay a pro-rata haircut if the issuer burned
+  /// backing); for supply, `amount` is SHARES and the recipient receives the redeemed USDG (incl. yield). When
+  /// `viaRelayer`, the relayer submits (hides tx-origin, gasless). The fee (if any) is taken from the change.
+  shieldWithdraw: async (a: Address, note: PoolNote, amount: bigint, recipient: Address, keys: PoolKeys, viaRelayer: boolean, pool: ShieldedPoolCfg, onStage?: (s: string) => void): Promise<Hex> => {
     onStage?.("proving");
-    const leaves = await poolLeaves();
+    const leaves = await poolLeaves(pool);
     const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
     const { proof, ext } = await buildWithdrawProof(keys.spendKp, keys.encKp, note, amount, recipient, leaves, relayOpts);
     onStage?.(viaRelayer ? "relaying" : "withdrawing");
-    return viaRelayer ? await relaySubmit(proof, ext) : await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    return viaRelayer ? await relaySubmit(proof, ext, pool.address) : await send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
-  /// Send `amount` of shielded USDG to another registered user IN-POOL — never unshielded. The sent note is
-  /// encrypted to THEM (they recover it by scanning); the change to you. When `viaRelayer`, the relayer submits
-  /// (hides the sender's tx-origin). Recipient must have registered.
-  shieldTransfer: async (a: Address, recipientAddr: Address, amount: bigint, note: PoolNote, keys: PoolKeys, viaRelayer: boolean, onStage?: (s: string) => void): Promise<Hex> => {
+  /// Send `amount` (raw unit) to another registered user IN-POOL — never unshielded. The sent note is encrypted
+  /// to THEM (they recover it by scanning); the change to you. When `viaRelayer`, the relayer submits (hides the
+  /// sender's tx-origin). Recipient must have registered IN THIS pool.
+  shieldTransfer: async (a: Address, recipientAddr: Address, amount: bigint, note: PoolNote, keys: PoolKeys, viaRelayer: boolean, pool: ShieldedPoolCfg, onStage?: (s: string) => void): Promise<Hex> => {
     onStage?.("looking up");
-    const acct = await lookupPoolAccount(recipientAddr);
-    if (!acct) throw new Error("That address hasn't set up a shielded account yet — they need to unlock + register first.");
+    const acct = await lookupPoolAccount(pool, recipientAddr);
+    if (!acct) throw new Error("That address hasn't set up a shielded account in this pool yet — they need to unlock + register on it first.");
     onStage?.("proving");
-    const leaves = await poolLeaves();
+    const leaves = await poolLeaves(pool);
     const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
     const { proof, ext } = await buildTransferProof(keys.spendKp, keys.encKp, note, amount, acct.spendPub, acct.encPub, leaves, relayOpts);
     onStage?.(viaRelayer ? "relaying" : "sending");
-    return viaRelayer ? await relaySubmit(proof, ext) : await send(a, ADDR.shieldedPool, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    return viaRelayer ? await relaySubmit(proof, ext, pool.address) : await send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
   },
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
@@ -840,12 +900,12 @@ const POOL_LOG_CHUNK = 45_000n; // stay under RPC getLogs range caps (RH block n
 /// Every commitment in the pool tree with its index + on-chain encrypted note, ordered by index. This is the
 /// source for BOTH the merkle tree (values) and note recovery (encryptedOutput). Paginated — the merkle path
 /// depends on the FULL leaf set, so a silent truncation would corrupt roots/paths.
-async function poolCommitments(): Promise<ChainCommitment[]> {
+async function poolCommitments(pool: ShieldedPoolCfg): Promise<ChainCommitment[]> {
   const head = await pub.getBlockNumber();
   const out: ChainCommitment[] = [];
-  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += POOL_LOG_CHUNK + 1n) {
+  for (let from = pool.deployBlock; from <= head; from += POOL_LOG_CHUNK + 1n) {
     const to = from + POOL_LOG_CHUNK > head ? head : from + POOL_LOG_CHUNK;
-    const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: newCommitmentItem, fromBlock: from, toBlock: to });
+    const logs = await pub.getLogs({ address: pool.address, event: newCommitmentItem, fromBlock: from, toBlock: to });
     for (const l of logs) {
       const { commitment, index, encryptedOutput } = l.args as { commitment?: Hex; index?: bigint; encryptedOutput?: Hex };
       if (commitment !== undefined && index !== undefined) {
@@ -858,17 +918,17 @@ async function poolCommitments(): Promise<ChainCommitment[]> {
 }
 
 /// The ordered commitment values — what the prover needs to rebuild the merkle tree and compute paths.
-async function poolLeaves(): Promise<bigint[]> {
-  return (await poolCommitments()).map((c) => c.commitment);
+async function poolLeaves(pool: ShieldedPoolCfg): Promise<bigint[]> {
+  return (await poolCommitments(pool)).map((c) => c.commitment);
 }
 
 /// The set of spent nullifiers (decimal strings), for filtering already-spent notes. Paginated.
-async function spentNullifiers(): Promise<Set<string>> {
+async function spentNullifiers(pool: ShieldedPoolCfg): Promise<Set<string>> {
   const head = await pub.getBlockNumber();
   const spent = new Set<string>();
-  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += POOL_LOG_CHUNK + 1n) {
+  for (let from = pool.deployBlock; from <= head; from += POOL_LOG_CHUNK + 1n) {
     const to = from + POOL_LOG_CHUNK > head ? head : from + POOL_LOG_CHUNK;
-    const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: newNullifierItem, fromBlock: from, toBlock: to });
+    const logs = await pub.getLogs({ address: pool.address, event: newNullifierItem, fromBlock: from, toBlock: to });
     for (const l of logs) {
       const { nullifier } = l.args as { nullifier?: Hex };
       if (nullifier !== undefined) spent.add(BigInt(nullifier).toString());
@@ -877,14 +937,15 @@ async function spentNullifiers(): Promise<Set<string>> {
   return spent;
 }
 
-/// A registered account's spend + encryption public keys (latest PublicKey event for `owner`), or null if
-/// they haven't registered. Senders need this to build an in-pool transfer to them.
-export async function lookupPoolAccount(owner: Address): Promise<{ spendPub: bigint; encPub: Uint8Array } | null> {
+/// A registered account's spend + encryption public keys (latest PublicKey event for `owner`) in `pool`, or null
+/// if they haven't registered THERE. Senders need this to build an in-pool transfer to them. Registration is
+/// per-pool (each pool has its own PublicKey log), so a sender must look the recipient up in the same pool.
+export async function lookupPoolAccount(pool: ShieldedPoolCfg, owner: Address): Promise<{ spendPub: bigint; encPub: Uint8Array } | null> {
   const head = await pub.getBlockNumber();
   let latest: Hex | null = null;
-  for (let from = POOL_DEPLOY_BLOCK; from <= head; from += POOL_LOG_CHUNK + 1n) {
+  for (let from = pool.deployBlock; from <= head; from += POOL_LOG_CHUNK + 1n) {
     const to = from + POOL_LOG_CHUNK > head ? head : from + POOL_LOG_CHUNK;
-    const logs = await pub.getLogs({ address: ADDR.shieldedPool, event: publicKeyItem, args: { owner }, fromBlock: from, toBlock: to });
+    const logs = await pub.getLogs({ address: pool.address, event: publicKeyItem, args: { owner }, fromBlock: from, toBlock: to });
     for (const l of logs) {
       const { key } = l.args as { key?: Hex };
       if (key !== undefined) latest = key; // later events win
@@ -894,14 +955,36 @@ export async function lookupPoolAccount(owner: Address): Promise<{ spendPub: big
   try { return unpackAccountKey(latest); } catch { return null; }
 }
 
-/// The caller's spendable shielded notes + balance, recovered by SCANNING + DECRYPTING the chain — works on any
-/// device, and includes notes others have sent you. No localStorage: the chain is the source of truth.
-export async function scanPool(keys: PoolKeys): Promise<{ notes: PoolNote[]; balance: bigint }> {
-  const [chain, spent] = await Promise.all([poolCommitments(), spentNullifiers()]);
+/// The caller's spendable shielded notes + balance in `pool`, recovered by SCANNING + DECRYPTING the chain —
+/// works on any device, and includes notes others have sent you. No localStorage: the chain is the source of
+/// truth. `balance` is in the pool's raw unit (USDG / stock / shares); the UI converts shares to USDG.
+export async function scanPool(pool: ShieldedPoolCfg, keys: PoolKeys): Promise<{ notes: PoolNote[]; balance: bigint }> {
+  const [chain, spent] = await Promise.all([poolCommitments(pool), spentNullifiers(pool)]);
   const owned = recoverNotes(chain, keys.spendKp, keys.encKp);
   const unspent = owned.filter((n) => !spent.has(noteNullifier(keys.spendKp, n).toString()));
   const balance = unspent.reduce((s, n) => s + BigInt(n.amount), 0n);
   return { notes: unspent, balance };
+}
+
+/// Supply pool: the USDG a share-note is worth right now (principal + accrued yield). For the UI to show a
+/// USDG figure while notes stay share-denominated. Returns 0 for a non-supply pool.
+export async function sharesToUsdg(pool: ShieldedPoolCfg, shares: bigint): Promise<bigint> {
+  if (pool.kind !== "supply" || shares === 0n) return 0n;
+  return await pub.readContract({ address: pool.address, abi: shieldedSupplyAbi, functionName: "sharesToUsdg", args: [shares] }) as bigint;
+}
+
+/// Stock pool: has the issuer burned the pool's backing below the outstanding notes? (Withdrawals then pay a
+/// pro-rata haircut rather than par.) False for non-stock pools.
+export async function stockImpaired(pool: ShieldedPoolCfg): Promise<boolean> {
+  if (!pool.stock) return false;
+  return await pub.readContract({ address: pool.address, abi: shieldedStockAbi, functionName: "isImpaired" }) as boolean;
+}
+
+/// Supply pool: how many aUSDG SHARES a USDG amount is worth right now — for sizing a withdrawal, whose note is
+/// share-denominated, from a USDG figure the user typed. Identity for non-supply pools.
+export async function usdgToShares(pool: ShieldedPoolCfg, usdg: bigint): Promise<bigint> {
+  if (pool.kind !== "supply" || usdg === 0n) return usdg;
+  return await pub.readContract({ address: pool.lendingPool!, abi: erc4626Abi, functionName: "convertToShares", args: [usdg] }) as bigint;
 }
 
 /// Map the SDK's ProofCalldata / ExtData to the on-chain tuple shapes (bytes32 fields as 32-byte hex).
@@ -935,8 +1018,9 @@ export const RELAYER_FEE = 0n;
 /// Submit a pre-built proof through the relayer (POST /api/relay) instead of the user's own wallet — so the tx
 /// originates from the relayer, hiding the user's tx-origin, and needs no gas from the user. Bigints go over
 /// JSON as decimal strings. Returns the relayer's tx hash.
-async function relaySubmit(proof: ProofCalldata, ext: PoolExtData): Promise<Hex> {
+async function relaySubmit(proof: ProofCalldata, ext: PoolExtData, pool: Address): Promise<Hex> {
   const body = {
+    pool,
     proof: {
       a: [proof.a[0].toString(), proof.a[1].toString()],
       b: [[proof.b[0][0].toString(), proof.b[0][1].toString()], [proof.b[1][0].toString(), proof.b[1][1].toString()]],

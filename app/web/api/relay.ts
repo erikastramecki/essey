@@ -13,7 +13,15 @@ import { privateKeyToAccount } from "viem/accounts";
 
 const RPC = "https://rpc.testnet.chain.robinhood.com";
 const CHAIN = defineChain({ id: 46630, name: "Robinhood Chain Testnet", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [RPC] } } });
-const POOL = "0xcD7953960bbc1276F0856Dad5E502fc01cE629aB" as const;
+// The shielded pools this relayer will submit to. An ALLOWLIST, not a free target: the caller names the pool
+// (USDG / AAPL / NVDA / supply) but can only pick one of ours, so the relayer can never be pointed at an
+// arbitrary contract. All expose the same `transact(proof, extData)` withdrawal/transfer entrypoint.
+const ALLOWED_POOLS: Record<string, `0x${string}`> = {
+  "0xcd7953960bbc1276f0856dad5e502fc01ce629ab": "0xcD7953960bbc1276F0856Dad5E502fc01cE629aB", // shielded USDG
+  "0xef52251672d073fdd22f996d8665112be005eecc": "0xeF52251672d073fDD22f996D8665112BE005EecC", // shielded supply
+  "0x49f1c16fede8f6099dc39d3b3c41b9890d51ae53": "0x49f1C16FeDe8f6099Dc39d3b3C41B9890D51Ae53", // shielded AAPL
+  "0x8e358964666153cd604cf15be575e75a34fe9cb3": "0x8e358964666153cd604Cf15be575e75a34fE9cB3", // shielded NVDA
+};
 const MIN_FEE = 0n; // testnet: relayer eats gas from its funded wallet; production sets a gas-covering minimum.
 
 const poolAbi = parseAbi([
@@ -57,8 +65,13 @@ export default async function handler(req: { method?: string; body?: unknown }, 
 
   try {
     const account = privateKeyToAccount((pk.startsWith("0x") ? pk : "0x" + pk) as `0x${string}`);
-    const body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as { proof?: WireProof; extData?: WireExt };
+    const body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as { pool?: string; proof?: WireProof; extData?: WireExt };
     if (!body?.proof || !body?.extData) return res.status(400).json({ error: "missing proof/extData" });
+    // Resolve + allowlist the target pool (default to the USDG pool for older clients that omit it). Guard with
+    // hasOwn so prototype keys ("__proto__"/"constructor") can't slip past the allowlist check.
+    const poolKey = (body.pool ?? "0xcD7953960bbc1276F0856Dad5E502fc01cE629aB").toLowerCase();
+    if (!Object.hasOwn(ALLOWED_POOLS, poolKey)) return res.status(400).json({ error: "unknown pool" });
+    const pool = ALLOWED_POOLS[poolKey];
     const proof = toProof(body.proof);
     const extData = toExt(body.extData);
 
@@ -72,10 +85,10 @@ export default async function handler(req: { method?: string; body?: unknown }, 
 
     const pub = createPublicClient({ chain: CHAIN, transport: http(RPC) });
     // Simulate first — never spend gas on a tx that would revert.
-    await pub.simulateContract({ address: POOL, abi: poolAbi, functionName: "transact", args: [proof, extData], account });
+    await pub.simulateContract({ address: pool, abi: poolAbi, functionName: "transact", args: [proof, extData], account });
 
     const w = createWalletClient({ account, chain: CHAIN, transport: http(RPC) });
-    const hash = await w.writeContract({ address: POOL, abi: poolAbi, functionName: "transact", args: [proof, extData], chain: CHAIN, gas: 4_000_000n });
+    const hash = await w.writeContract({ address: pool, abi: poolAbi, functionName: "transact", args: [proof, extData], chain: CHAIN, gas: 4_000_000n });
     return res.status(200).json({ hash });
   } catch (e) {
     return res.status(400).json({ error: (e as Error)?.message ?? String(e) });
