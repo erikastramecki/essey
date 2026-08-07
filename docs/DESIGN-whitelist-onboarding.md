@@ -28,6 +28,29 @@ to fake than a free mint is worth). Education = onboarding = sybil-resistance, f
 
 ---
 
+## The quest, as shipped (canonical)
+
+The live quest on essey.xyz is these **10 steps** — source of truth: `app/web/src/journey.tsx`. **8 are
+required** to complete the quest; the last 2 are **bonus** (they boost your raffle odds). Each step is
+checked live against on-chain state.
+
+1. **Connect** a wallet on Robinhood Chain testnet.
+2. **Get funds** — gas ETH from the faucet, then free $ESSEY + USDG play money.
+3. **Join the quest** — register on-chain (one tx; credits your referrer if you came from a link).
+4. **Buy a Seat** on the Exchange (the fee feeds the Bell's pot).
+5. **Stake a Tier** — stake $ESSEY on a Seat you own so it earns a bigger share of every payout.
+6. **Ring & claim** — ring the Bell when the pot is full, then claim your payout as stock into your Vault.
+7. **Open a Case** — roll a multiplier (0.65×–50×) that pays out in real AAPL stock; withdraw your winnings.
+8. **Supply liquidity** — supply USDG to the lending pool to earn.
+9. *(bonus)* **Invite a friend** — share your referral link; every join boosts your odds.
+10. *(bonus)* **Borrow against your stock** — the full loop. *(Not live on testnet yet — coming soon.)*
+
+> The detailed design sections below predate the build and describe an earlier ordering (and a "Verify"
+> station / 72h-hold that did not ship). Where they differ, **this list is what shipped.** On-chain
+> qualification for the whitelist raffle is being aligned to these required steps (the `QuestLens` bar).
+
+---
+
 ## 0. The hard architectural fact that shapes everything
 
 `Seat.minter` is **immutable and set at construction** (`Seat.sol:26`, `Seat.sol:47`). Whoever is
