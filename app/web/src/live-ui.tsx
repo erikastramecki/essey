@@ -1,6 +1,7 @@
 // Live testnet UI: the faucet, the live Exchange, and the shared banner. Everything here talks to
 // the REAL deployed contracts on 46630 — labeled TESTNET throughout, play money only.
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { ADDR, BUNDLE, NET, PRICE, TIERS, flows, reads, fmt, niceError } from "./live";
@@ -85,12 +86,17 @@ export function LiveExchange() {
           ) : (
             <>
               {/* the one obvious action */}
-              <button className="btn btn-gold ex-buy" disabled={!!busy}
+              <button className="btn btn-gold ex-buy"
+                disabled={!!busy || float_ === 0n || (!!bal && (bal.essey < PRICE.seat || bal.usdg < PRICE.swapFee))}
                 onClick={() => act("buy", () => flows.buySeat(a!).then(({ id }) => setMsg(`✓ Seat #${id} is yours! Your fee just fed the Bell's pot. Next: stake a Tier at the Bell to start earning.`)), "✓ Seat purchased")}>
-                {busy === "buy" ? "buying your Seat…" : `Buy a Seat  ·  ${fmt(PRICE.seat)} $ESSEY + ${fmt(PRICE.swapFee)} USDG`}
+                {busy === "buy" ? "buying your Seat…"
+                  : float_ === 0n ? "No Seats for sale right now"
+                  : (!!bal && (bal.essey < PRICE.seat || bal.usdg < PRICE.swapFee)) ? "Need more $ESSEY / USDG — top up on the Quest"
+                  : `Buy a Seat  ·  ${fmt(PRICE.seat)} $ESSEY + ${fmt(PRICE.swapFee)} USDG`}
               </button>
+              {float_ === 0n && <div className="live-note ex-help">Every Seat is held right now — check back, or watch the <Link to="/tape">Tape</Link> for one returning to the Exchange (holders can sell back anytime).</div>}
               <div className="live-note ex-help">You'll get the next available Seat. The first time, your wallet asks to approve
-                $ESSEY and USDG — that's normal; just confirm each popup. Need funds? Grab them on the <a href="/start">Quest</a> page.</div>
+                $ESSEY and USDG — that's normal; just confirm each popup. Need funds? Grab them on the <Link to="/start">Quest</Link> page.</div>
 
               {/* advanced, hidden by default */}
               <button className="ex-more" onClick={() => setAdv((v) => !v)}>
@@ -192,7 +198,7 @@ export function LiveBell() {
         {!ready ? (
           <div className="live-card"><div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to stake and get paid.</span><ConnectButton /></div></div>
         ) : seats.length === 0 ? (
-          <div className="live-card"><div className="live-note">You need a Seat first. <a href="/market">Buy one on the Exchange →</a> then come back to stake it and start earning.</div></div>
+          <div className="live-card"><div className="live-note">You need a Seat first. <Link to="/market">Buy one on the Exchange →</Link> then come back to stake it and start earning.</div></div>
         ) : (
           <>
             {seats.length > 1 && (
@@ -237,6 +243,7 @@ export function LiveBell() {
                     onClick={() => act("ring", () => flows.ringBell(a!), "✓ rung — the pot split across staked Seats, and your tip is in")}>
                     {busy === "ring" ? "ringing…" : (pot ?? 0n) === 0n ? "Pot is empty — grow it first" : "Ring the Bell"}
                   </button>
+                  {(pot ?? 0n) === 0n && <div className="live-note"><Link to="/market">→ Trade on the Exchange</Link> or open a <Link to="/cases">Case</Link> to grow the pot, then come back to ring.</div>}
                 </div>
 
                 {/* Step 3 — claim */}

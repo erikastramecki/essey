@@ -221,7 +221,7 @@ type CardDef = {
 };
 
 function TierToy() {
-  const TIERS = [["Base", 100], ["Tier I", 160], ["Tier II", 200], ["Tier III", 333]] as const;
+  const TIERS = [["Tier I", 100], ["Tier II", 160], ["Tier III", 200], ["Tier IV", 333]] as const;
   const [t, setT] = useState(0);
   const w = TIERS[t][1];
   return (
@@ -284,7 +284,7 @@ function VaultToy() {
 
 function PayoutToy() {
   const [pref, setPref] = useState<"base" | "stock">("stock");
-  const SLICES = [["Tier III", 333], ["Tier II", 200], ["Base", 100]] as const;
+  const SLICES = [["Tier IV", 333], ["Tier III", 200], ["Tier I", 100]] as const;
   const total = SLICES.reduce((a, [, w]) => a + w, 0);
   return (
     <div className="toy">

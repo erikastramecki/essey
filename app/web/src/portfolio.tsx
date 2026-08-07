@@ -114,9 +114,11 @@ export function PortfolioPage() {
             <div className="pf-block">
               <div className="pf-block-h">Lending {p.pool.mine > 0n || p.loans.length > 0 ? <Link className="pf-link" to="/lend">manage →</Link> : <Link className="pf-link" to="/lend">supply / borrow →</Link>}</div>
               <div className="pf-lend num">
-                <span className="pf-lend-item">supplied <b>{fmt(p.pool.mine, 2)}</b> USDG <i>@ {p.pool.supplyApy.toFixed(2)}% APY</i></span>
+                {p.pool.mine > 0n
+                  ? <span className="pf-lend-item">supplied <b>{fmt(p.pool.mine, 2)}</b> USDG <i>@ {p.pool.supplyApy.toFixed(2)}% APY</i></span>
+                  : <span className="pf-note">not supplying yet — supply USDG to earn {p.pool.supplyApy.toFixed(2)}% APY →</span>}
                 {p.loans.length === 0
-                  ? <span className="pf-note">no open loans{p.wins.aapl > 0n || p.wins.nvda > 0n ? " — you hold stock you can borrow against" : ""}.</span>
+                  ? <span className="pf-note">no open loans{p.wins.aapl > 0n || p.wins.nvda > 0n ? " — you hold stock (borrowing against it is coming to testnet)" : ""}.</span>
                   : p.loans.map((l) => <span className="pf-lend-item" key={l.id.toString()}>Loan #{l.id.toString()} · owe <b>{fmt(l.debt, 2)}</b> USDG</span>)}
               </div>
             </div>

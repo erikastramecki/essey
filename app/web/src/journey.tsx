@@ -93,7 +93,13 @@ export function useJourney() {
 export function JourneyStrip({ here }: { here?: StepId }) {
   const w = useWallet();
   const { steps, next, doneCount, allRequiredDone } = useJourney();
-  const cur = here ? steps.find((s) => s.id === here) ?? next : next;
+  // Pin to this page's step ONLY once the user has actually reached it (their true next step is at or beyond it);
+  // otherwise guide them to their real next step — so a disconnected visitor on /market isn't told "Buy a Seat"
+  // (a step they can't do yet) but is pointed at Connect.
+  const hereStep = here ? steps.find((s) => s.id === here) : undefined;
+  const nextIdx = steps.findIndex((s) => s.id === next.id);
+  const hereIdx = hereStep ? steps.findIndex((s) => s.id === hereStep.id) : -1;
+  const cur = hereStep && nextIdx >= hereIdx ? hereStep : next;
   const onboarding = cur.id === "connect" || cur.id === "fund" || cur.id === "join" || cur.id === "invite"; // all handled at /start
   return (
     <div className="journey-strip">
