@@ -71,8 +71,9 @@ export function LiveExchange() {
       <div className="wrap">
         <div className="live-card">
           <div className="live-h">BUY A SEAT <span className="preview-chip">testnet</span></div>
-          <p className="ex-intro">A <b>Seat</b> is your membership pass. Own one and you earn a cut of every fee the
-            club collects — trades, Cases, loan interest. There are only 2,222.</p>
+          <p className="ex-intro">A <b>Seat</b> is your membership pass — 1 of only 2,222. Own one and <b>stake a Tier
+            at the Bell</b> to earn a cut of every fee the club collects — trades, Cases, loan interest. (Owning holds
+            your spot; staking is what earns.)</p>
           <div className="ex-stats num">
             <span><b>{float_ !== null ? float_.toString() : "…"}</b> Seats available</span>
             <span className="ex-price"><b>{fmt(PRICE.seat)}</b> $ESSEY <i>+ {fmt(PRICE.swapFee)} USDG fee</i></span>
@@ -85,7 +86,7 @@ export function LiveExchange() {
             <>
               {/* the one obvious action */}
               <button className="btn btn-gold ex-buy" disabled={!!busy}
-                onClick={() => act("buy", () => flows.buySeat(a!).then(({ id }) => setMsg(`✓ Seat #${id} is yours! Your fee just fed the Bell's pot.`)), "✓ Seat purchased")}>
+                onClick={() => act("buy", () => flows.buySeat(a!).then(({ id }) => setMsg(`✓ Seat #${id} is yours! Your fee just fed the Bell's pot. Next: stake a Tier at the Bell to start earning.`)), "✓ Seat purchased")}>
                 {busy === "buy" ? "buying your Seat…" : `Buy a Seat  ·  ${fmt(PRICE.seat)} $ESSEY + ${fmt(PRICE.swapFee)} USDG`}
               </button>
               <div className="live-note ex-help">You'll get the next available Seat. The first time, your wallet asks to approve

@@ -69,6 +69,9 @@ export function WarningModal() {
         <p className="warn-lede"><b>Essey is experimental software.</b> It's early, it's built in the open — including
           the audits that made us look bad. Read this before you connect a wallet.</p>
         <ul className="warn-list">
+          <li><b>Testnet, play money — you can't lose real money here.</b> Everything is live on Robinhood Chain
+            <b> testnet</b> with real contracts and real mechanics, but the tokens have <b>no real value</b> and this
+            is not on mainnet. So explore freely. Then, the honest rest:</li>
           <li><b>Nothing here is financial advice.</b> Not from us, not from the app, not from anyone.</li>
           <li><b>The assets are volatile.</b> $ESSEY is a pure access token — you spend it to get in; you never earn
             it back as a reward. Its price can go to zero. Tokenized stocks move with their markets and carry
@@ -83,8 +86,6 @@ export function WarningModal() {
             ordinary software has ordinary bugs. Proof removes one <em>class</em> of risk, not all of it.</li>
           <li><b>Your jurisdiction is your responsibility.</b> Some features are restricted in some places for good
             reason.</li>
-          <li><b>Testnet, play money.</b> Everything here is live on Robinhood Chain <b>testnet</b> — real
-            contracts, real mechanics, but the tokens have <b>no real value</b>. This is not on mainnet.</li>
         </ul>
         <button className="btn btn-gold warn-accept" onClick={accept}>I understand — let me in</button>
         <Link className="warn-docs" to="/start" onClick={accept}>Or start the guided tour →</Link>
