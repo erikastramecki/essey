@@ -152,6 +152,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const [sellBusy, setSellBusy] = useState(false);
   const [sellMsg, setSellMsg] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null); // live-draw narration
+  const [rollErr, setRollErr] = useState<string | null>(null); // live roll failed on-chain — surface it, never a phantom win
   const railRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   // Refs so the reel's finish() closure reads current draw state without re-subscribing.
@@ -185,6 +186,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
 
   const spin = () => {
     if (phase === "spinning") return;
+    setRollErr(null);
     if (live) return spinLive();
     const winner = weightedDraw(c.items);
     setStrip(buildStrip(winner)); setWon(winner); setSold(false); setStage(null); setPhase("spinning");
@@ -195,10 +197,13 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   // rest until the true multiplier arrives, then reveals. Reel-during-signing — unchanged UX.
   const spinLive = () => {
     const provisional = weightedDraw(LIVE_ITEMS);
-    setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setStage("approving"); setPhase("spinning");
+    setStrip(buildStrip(provisional)); setWon(provisional); setSold(false); setRollErr(null); setStage("approving"); setPhase("spinning");
     flows.degenOpen(w.address as Address, setStage)
       .then(({ multBps, payoutShares }) => { setWon(degenWinItem(multBps, payoutShares)); setStage(null); })
-      .catch((e) => { setStage("err:" + niceError(e)); });
+      // The roll never landed on-chain (buy/approve reverted, keeper failed, etc). NEVER reveal the provisional
+      // item as a win — that would offer a "Withdraw to wallet" for winnings that were never credited (which
+      // then reverts NothingOwed). Snap back to idle and surface the real error so the user can act on it.
+      .catch((e) => { setRollErr(niceError(e)); setWon(null); setStage(null); setPhase("idle"); });
   };
 
   // Collect winnings (pull-based) to the wallet. Degen winnings are credited to owed[]; withdraw claims them.
@@ -254,7 +259,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => { stagePendingRef.current = live && stage !== null && !stage.startsWith("err:"); }, [live, stage]);
   useEffect(() => { wonRef.current = won; }, [won]);
 
-  const again = () => { setPhase("idle"); setWon(null); setSold(false); setStage(null); };
+  const again = () => { setPhase("idle"); setWon(null); setSold(false); setStage(null); setRollErr(null); };
   const rWon = won ? RARITY[won.rarity] : null;
   const stageLabel: Record<string, string> = { approving: "approving spend…", buying: "buying the case…", sealing: "sealing the draw on-chain…", opening: "opening…" };
 
@@ -297,6 +302,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                           <i>simulated draw — <span className="live-connect"><ConnectButton /></span> to open a real one</i></>
                       : <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
                           <i>simulated — <span className="live-connect"><ConnectButton /></span> to go live</i></>}
+                  {rollErr && <div className="spin-stage-label num err" style={{ position: "static", marginTop: 12 }}>{rollErr} — the roll didn't go through, so nothing was drawn. Try again.</div>}
                 </div>
               ) : (
                 <>
