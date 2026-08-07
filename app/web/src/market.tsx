@@ -374,10 +374,10 @@ function EsseyToy() {
 function CasesToy() {
   return (
     <div className="toy">
-      <div className="case-teaser">🎁 → <span className="num">1× NVDA</span> sealed in a Vault-NFT</div>
-      <div className="toy-note">Open a Case, get real stock sealed in a Vault — keep it, borrow against it, or sell it
-        back. The twist: <b>the prize is reserved in real inventory before you open</b>, provably. The fair-value
-        <b> 401(k) pack</b> is live on testnet — anything spicier waits on legal review.</div>
+      <div className="case-teaser">🎁 → <span className="num">3× AAPL</span> sealed in a Vault-NFT</div>
+      <div className="toy-note">Open a Case, <b>roll a multiplier</b> (0.65×–50×) that pays out in real stock, sealed
+        in a Vault — keep it, borrow against it, or sell it back. The payout is <b>backed in real inventory before
+        you open</b>, and the odds are on-chain — provably fair. Live on testnet, play money.</div>
     </div>
   );
 }

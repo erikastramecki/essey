@@ -151,7 +151,7 @@ function Landing() {
             {[
               ["/market", "⬡", "Exchange", "Buy, snipe, or sell a Seat on the live Exchange."],
               ["/bell", "🔔", "The Bell", "Stake a Tier, ring the Bell, claim a Payout into your Vault."],
-              ["/cases", "🎁", "Cases", "Open a Case for a provably-fair real-stock draw."],
+              ["/cases", "🎁", "Cases", "Open a Case — a provably-fair multiplier draw that pays out in real stock."],
               ["/lend", "⚖", "Lend", "Supply USDG to earn, or borrow against the stock you win."],
               ["/private", "🛡", "Private", "Hide your balance, send privately, and earn yield unseen."],
               ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, loans."],

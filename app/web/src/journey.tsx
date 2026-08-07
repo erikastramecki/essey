@@ -51,7 +51,7 @@ export const STEPS: Step[] = [
   { id: "payout", n: 6, title: "Ring & claim", what: "When the fee pot is full, ring the Bell — then claim your payout as stock into your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
     // The Bell now pays real stock into the Vault (AAPL/NVDA); it fails open to USDG only if conversion can't settle.
     done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n || s.vaultAapl > 0n || s.vaultNvda > 0n) },
-  { id: "case", n: 7, title: "Open a Case", what: "Open a Case for a real stock draw — AAPL or NVDA, fair value either way.", to: "/cases", cta: "Go to Cases",
+  { id: "case", n: 7, title: "Open a Case", what: "Open a Case — roll a multiplier (0.65×–50×) that pays out in real AAPL stock. Then withdraw your winnings to your wallet.", to: "/cases", cta: "Go to Cases",
     done: (p) => !!p && (p.wins.aapl > 0n || p.wins.nvda > 0n) },
   { id: "supply", n: 8, title: "Supply liquidity", what: "Supply USDG to the lending pool and earn the interest borrowers pay.", to: "/lend", cta: "Go to Lend",
     done: (p) => !!p && p.pool.mine > 0n },

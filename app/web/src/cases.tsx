@@ -6,11 +6,11 @@
 // SCARCITY OF THE NAME, never payout size. The color system ranks how rare a pull is; the value
 // column stays flat on purpose — that flatness IS the product ("always ~fair value; the draw decides
 // which stock"). No multipliers exist here, and the UI must never imply them.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Address } from "viem";
 import { EMonogram } from "./market";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, flows, fmt, niceError } from "./live";
+import { ADDR, flows, reads, fmt, niceError } from "./live";
 
 // The reel's live-mode flavor items (the strip spins over these; the reveal shows the actual roll).
 const LIVE_ITEMS: Item[] = [
@@ -153,6 +153,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const [sellMsg, setSellMsg] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null); // live-draw narration
   const [rollErr, setRollErr] = useState<string | null>(null); // live roll failed on-chain — surface it, never a phantom win
+  const [ladder, setLadder] = useState<{ multBps: number; pct: number }[]>([]); // the REAL on-chain multiplier odds
   const railRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   // Refs so the reel's finish() closure reads current draw state without re-subscribing.
@@ -163,7 +164,13 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
   const c = CASES[caseIdx];
   const reelItems = live ? LIVE_ITEMS : c.items;
 
-  const byOdds = useMemo(() => [...c.items].sort((a, b) => b.odds - a.odds), [c]);
+  // The real, on-chain multiplier ladder — a public read, so the "provably-fair" odds are shown (and
+  // verifiable) whether or not a wallet is connected. Sorted biggest-multiple first.
+  useEffect(() => {
+    let alive = true;
+    reads.degen(null).then((d) => { if (alive) setLadder([...d.ladder].sort((a, b) => b.multBps - a.multBps)); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const pickCase = (i: number) => {
     if (phase === "spinning") return;
@@ -296,7 +303,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                   <p>{live ? "The 401(k) Pack" : c.name} · {usd(c.price)} in $ESSEY</p>
                   {live
                     ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN A CASE · LIVE</button>
-                        <i>real draw on testnet — AAPL or NVDA, play money</i></>
+                        <i>real draw on testnet — win a multiplier on AAPL, play money</i></>
                     : w.address && !w.chainOk
                       ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
                           <i>simulated draw — <span className="live-connect"><ConnectButton /></span> to open a real one</i></>
@@ -342,25 +349,28 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
           )}
         </div>
 
-        {/* contents + odds */}
+        {/* the odds — the REAL multiplier ladder, read live from the contract (provably fair, verifiable) */}
         <div className="case-contents">
           <div className="cc-head">
-            <span>What's inside {c.name}</span>
-            <span className="cc-note">sample lineup · live inventory (and exact odds) are on-chain at launch</span>
+            <span>The odds</span>
+            <span className="cc-note">read live from the contract · a roll multiplies your stake and pays out in real AAPL stock</span>
           </div>
           <div className="cc-grid">
-            {byOdds.map((it) => (
-              <div className="cc-row" key={it.sym} style={{ "--rar": RARITY[it.rarity].color } as React.CSSProperties}>
-                <ItemCard it={it} size="grid" />
-                <div className="cc-odds num">{it.odds}%</div>
-              </div>
-            ))}
+            {ladder.length === 0 ? (
+              <div className="cc-note">loading the on-chain odds…</div>
+            ) : ladder.map((r) => {
+              const x = r.multBps / 10000;
+              const rar = degenRarity(r.multBps);
+              return (
+                <div className="cc-row" key={r.multBps} style={{ "--rar": RARITY[rar].color } as React.CSSProperties}>
+                  <span className="num" style={{ fontWeight: 700, color: RARITY[rar].color }}>{Number.isInteger(x) ? x : x.toFixed(2)}×</span>
+                  <div className="cc-odds num">{r.pct >= 10 ? r.pct.toFixed(0) : r.pct.toFixed(2)}%</div>
+                </div>
+              );
+            })}
           </div>
           <div className="cc-legend">
-            {(Object.keys(RARITY) as RarityKey[]).map((k) => (
-              <span key={k} className="cc-key" style={{ "--rar": RARITY[k].color } as React.CSSProperties}>{RARITY[k].label}</span>
-            ))}
-            <span className="cc-legend-note">rarity = how rare the name is to pull — every tier is ~equal value</span>
+            <span className="cc-legend-note">Bigger multiples are rarer. Like any multiplier game, <b>an average roll returns less than it costs</b> — the full ladder is on-chain, so anyone can verify the odds. Play money, testnet.</span>
           </div>
         </div>
 
