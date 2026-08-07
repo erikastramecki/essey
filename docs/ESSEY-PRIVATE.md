@@ -37,6 +37,17 @@ so **the position and the yield it earns are hidden**. Yield accrues automatical
 but the shares appreciate as interest accrues, so its value grows with no on-chain event tied to you. Withdraw the
 note any time to receive your USDG plus accrued yield, to any address.
 
+### 6. Shielded stock — *private stock positions, resilient to issuer burns*
+Shield tokenized stock (AAPL / NVDA), not just USDG — hold a **private stock balance**, transfer it privately, and
+withdraw to any address. Stock carries one hazard USDG does not: the token's issuer can **burn tokens at any
+address**, including the pool's own backing (a real Robinhood Stock Token power, a regulatory clawback surface). A
+naive shielded pool assumes its backing is inviolable, so a burn would freeze the last people to withdraw entirely —
+a bank run. The shielded-stock pool instead applies a **pro-rata haircut**: if the backing is ever burned, every
+holder redeems their proportional share of what remains, in the same proportion no matter what order they exit — the
+loss is shared fairly, never dumped on whoever is slowest. Once impaired, deposits close (so no new depositor
+subsidizes the shortfall) while withdrawals always stay open. This failure mode and its mitigation are proven by a
+dedicated on-chain harness before the feature is trusted with real value.
+
 ## The honest limits (testnet)
 
 - **Amounts are public at the edges.** The shielded pool hides in-pool balances and the deposit↔withdrawal *link*,
@@ -54,11 +65,17 @@ note any time to receive your USDG plus accrued yield, to any address.
 - A **formal specialist zk audit** by an outside firm.
 - The **production screening engine** behind the front door, and the operator's **MSB / AML** track.
 - **Production relayer hardening** (a gas-covering fee + rate-limiting) and mainnet token decimals.
-- Depth we can add: **shielded stock** (AAPL/NVDA, not just USDG), viewing keys for selective disclosure, and a
+- The **live-token burn assumption** for shielded stock: the pool reads any drop in its raw backing as an issuer
+  burn. That is correct for the Robinhood Stock Token model (corporate actions move a display multiplier, not raw
+  balances), but it is the assumption to confirm against the production token before real value.
+- Depth we can add: viewing keys for selective disclosure, a 16-input circuit for note consolidation, and a
   decentralized relayer network.
 
 ## How it's verified
 
 Every money-touching change is attacked by multiple independent adversarial agents before it moves — the same gate
 the rest of Essey uses. The private-money cycle (shield → transfer → receive → unshield, cross-device) and the
-private yield-bearing supply are proven on-chain on testnet. Try it on the [Private](/private) page.
+private yield-bearing supply are proven on-chain on testnet. Shielded stock ships with a dedicated **adminBurn
+harness** that characterizes the bank-run failure of a naive pool and proves the pro-rata haircut socializes an
+issuer burn fairly and order-independently — the same socialization the lending engine uses for the same hazard.
+Try it on the [Private](/private) page.

@@ -31,6 +31,11 @@ Seat's Vault by a Bell claim). Reuses the existing USDG/AAPL/NVDA/pool/quest/mar
 | PoolVerifier (Groth16, depth-20) | `0x46a8121ea850AA5F6497a20642e11cFd964E14C9` |
 | Poseidon(2) hasher | `0xF9A2D0b462221c017c74bACB26d43bd2165C98a1` |
 | MockEntropy (degen keeper) | `0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F` |
+| **Essey Private — Phase 2 (shielded lending supply, private yield, share-denominated notes)** | |
+| EsseyShieldedSupply (wraps ERC-4626 EsseyPool) | `0xeF52251672d073fDD22f996D8665112BE005EecC` |
+| **Essey Private — Phase 1b (shielded STOCK, pro-rata haircut survives issuer adminBurn, depth 20)** | |
+| EsseyShieldedStock — AAPL (`0xaC6c…B731`) | `0x49f1C16FeDe8f6099Dc39d3b3C41B9890D51Ae53` |
+| EsseyShieldedStock — NVDA (`0x8393…91E9`) | `0x8e358964666153cd604Cf15be575e75a34fE9cB3` |
 | USDG / AAPL / NVDA / pool / quest / markets | *unchanged (see below)* |
 
 **⚠️ FEED KEEPER REQUIRED:** the mock Chainlink feeds go stale after ~25h (`FEED_HEARTBEAT+GRACE`). When
