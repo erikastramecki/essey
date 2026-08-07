@@ -118,6 +118,16 @@ export function ConnectButton() {
       </span>
     );
   }
+  // No injected wallet at all (most tweet/mobile-Safari traffic) — don't dead-end at a Connect button that just
+  // errors; point them at how to get one. MetaMask injects on load, so they must reload after installing.
+  if (w.ready && !w.hasProvider) {
+    return (
+      <span className="wallet-wrap">
+        <a className="btn btn-gold" href="https://metamask.io/download/" target="_blank" rel="noreferrer">Install a wallet ↗</a>
+        <i className="wallet-err">You'll need a crypto wallet like MetaMask — install it, then reload this page.</i>
+      </span>
+    );
+  }
   return (
     <span className="wallet-wrap">
       <button className="btn btn-ghost" onClick={w.connect}>Connect wallet</button>

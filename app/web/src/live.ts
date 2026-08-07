@@ -1047,7 +1047,8 @@ export function niceError(e: unknown): string {
   const m = String((e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? e);
   const s = m.toLowerCase();
   if (s.includes("user rejected") || s.includes("user denied") || s.includes("rejected the request")) return "You cancelled the transaction.";
-  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH — grab some from the chain faucet on the Start page.";
+  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH — grab some from the faucet on the Quest page (the ⚡ button on /start).";
+  if (s.includes("erc20insufficientbalance") || s.includes("transfer amount exceeds balance") || s.includes("exceeds balance")) return "Not enough $ESSEY or USDG — grab play money from the faucet on the Quest page (/start).";
   if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown — 8h between drips.";
   if (s.includes("chain") && s.includes("match")) return "Wrong network — switch to Robinhood Chain testnet.";
   if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first — try again and confirm both wallet popups.";

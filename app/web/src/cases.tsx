@@ -7,6 +7,7 @@
 // column stays flat on purpose — that flatness IS the product ("always ~fair value; the draw decides
 // which stock"). No multipliers exist here, and the UI must never imply them.
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { EMonogram } from "./market";
 import { useWallet, ConnectButton } from "./wallet";
@@ -303,7 +304,8 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                   <p>{live ? "The 401(k) Pack" : c.name} · {usd(c.price)} in $ESSEY</p>
                   {live
                     ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN A CASE · LIVE</button>
-                        <i>real draw on testnet — win a multiplier on AAPL, play money</i></>
+                        <i>real draw on testnet — win a multiplier on AAPL, play money</i>
+                        <i>opening needs $ESSEY + USDG + a little gas ETH — grab them free on the <Link className="pf-link gold" to="/start">Quest page ⚡</Link></i></>
                     : w.address && !w.chainOk
                       ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
                           <i>simulated draw — <span className="live-connect"><ConnectButton /></span> to open a real one</i></>

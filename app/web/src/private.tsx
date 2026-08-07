@@ -246,6 +246,9 @@ export function PrivatePage() {
           </div></div>
         ) : (
           <>
+            <div className="pf-note" style={{ marginBottom: 12 }}>
+              New here? Every action needs a little testnet <b>gas ETH</b>, and shielding needs <b>play-money tokens</b> — grab both free on the <Link className="pf-link gold" to="/start">Quest page ⚡</Link>.
+            </div>
             {/* 0 — shielded pools (hide amounts) — the flagship. Parametrized: USDG / AAPL / NVDA / private-yield. */}
             <div className="pf-block">
               <div className="pf-block-h">Shielded balance <span className="preview-chip live">hides amounts</span></div>
