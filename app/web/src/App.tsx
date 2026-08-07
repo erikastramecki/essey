@@ -16,7 +16,7 @@ import { LeaderboardPage } from "./leaderboard";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
-const GROUPS = ["The Market", "The engine", "Audits"];
+const GROUPS = ["The Market", "Essey Private", "The engine", "Audits"];
 
 // Action-clear nav (founder: a tester must know where each flow lives). The landing tells the story;
 // each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
@@ -153,6 +153,7 @@ function Landing() {
               ["/bell", "🔔", "The Bell", "Stake a Tier, ring the Bell, claim a Payout into your Vault."],
               ["/cases", "🎁", "Cases", "Open a Case for a provably-fair real-stock draw."],
               ["/lend", "⚖", "Lend", "Supply USDG to earn, or borrow against the stock you win."],
+              ["/private", "🛡", "Private", "Hide your balance, send privately, and earn yield unseen."],
               ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, loans."],
             ].map(([to, icon, h, p]) => (
               <Link key={to} className="dest-card" to={to}>
@@ -165,6 +166,26 @@ function Landing() {
           </div>
           <div className="learn-row">
             Curious how it holds together? <Link to="/provable">Provable</Link> · <Link to="/engine">The engine</Link> · <Link to="/docs">Docs</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Essey Private — the privacy layer. */}
+      <section className="band" style={{ paddingTop: 8 }}>
+        <div className="wrap">
+          <div className="start-cta">
+            <div>
+              <span className="eyebrow">🛡 Essey Private · experimental · testnet</span>
+              <h2>Hold, move, and earn — without being watched</h2>
+              <p>A privacy layer on Robinhood Chain: stealth-address payments, a shielded pool that hides your
+                balance and amounts, private transfers that recover on any device, a trustless relayer for gasless
+                private withdrawals, and private <b>yield-bearing</b> lending supply. Proofs run in your browser;
+                your keys never leave your device.</p>
+            </div>
+            <Link className="btn btn-gold start-cta-btn" to="/private">Open Essey Private →</Link>
+          </div>
+          <div className="learn-row">
+            How it works, plainly: <Link to="/docs">Essey Private — the privacy layer →</Link>
           </div>
         </div>
       </section>

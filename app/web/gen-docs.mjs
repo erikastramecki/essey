@@ -16,6 +16,7 @@ const PICK = [
   ["The Market", "THE-MARKET.md", "The Market layer — design", "Seats, Vaults, Tiers, the Bell paid in real stock, the Exchange, Notes, and Cases — fair-value and the Degen multiplier. Every mechanic, why it's shaped that way, and what's live vs designed."],
   ["The Market", "TOKENOMICS.md", "$ESSEY tokenomics", "Three assets, three jobs, never crossed. Fixed supply, no emissions, free mint, three fee engines ranked by durability — and how it fails, stated plainly."],
   ["The Market", "DESIGN-whitelist-onboarding.md", "Earning a Seat — the whitelist", "The testnet trading-day quest: earn a free mint by using the protocol, committed on-chain as a timelocked Merkle root anyone can recompute."],
+  ["Essey Private", "ESSEY-PRIVATE.md", "Essey Private — the privacy layer", "Stealth-address payments, a shielded pool that hides amounts, private transfers with cross-device recovery, a trustless relayer, and private yield-bearing lending supply. What each does, plainly, with the honest limits and what's still ahead."],
   ["The engine", "SCOPE-robinhood-chain.md", "Robinhood Chain scope", "The lending engine underneath: real Stock Tokens, Chainlink feeds, and what the chain does and doesn't give us."],
   ["The engine", "LTV-RISK-FRAMEWORK.md", "LTV & risk framework", "How loan-to-value limits are chosen per asset from a stress model."],
   ["The engine", "INTEREST-RATE-MODEL.md", "Interest rate model", "How supply/borrow rates are set by utilization to attract liquidity."],
