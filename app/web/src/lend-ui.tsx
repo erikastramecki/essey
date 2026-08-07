@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { parseUnits } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { ADDR, NET, BORROW_OPENS, flows, reads, fmt, niceError } from "./live";
+import { ADDR, NET, flows, reads, fmt, niceError } from "./live";
 
 type PoolState = Awaited<ReturnType<typeof reads.poolState>>;
 
@@ -108,7 +108,6 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const now = new Date();
   const load = useCallback(() => {
     reads.stockWins(a).then(setWins).catch(() => {});
     reads.myLoans(a).then(setLoans).catch(() => {});
@@ -147,7 +146,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
     <div className="live-card">
       <div className="live-h">BORROW — AGAINST STOCK {open
         ? <span className="preview-chip live">live now</span>
-        : <span className="preview-chip">opens {BORROW_OPENS.toUTCString().slice(5, 16)}</span>}
+        : <span className="preview-chip">testnet: coming soon</span>}
       </div>
 
       {loans.length > 0 && (
@@ -162,9 +161,10 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
       )}
 
       {!open ? (
-        <div className="live-note">Borrowing against stock opens {BORROW_OPENS.toUTCString()} — collateral markets sit
-          behind a 2-day timelock for safety (a real feature, not a wait we chose). It also only accepts new loans
-          during US market hours, when the price feed is live. {now < BORROW_OPENS ? "Check back then." : "The market may just be closed right now — try during US session hours."}</div>
+        <div className="live-note">Borrowing against stock isn't live on testnet yet. The testnet stock tokens are
+          simple mocks that don't expose the price data the collateral market needs to size a loan safely — so we've
+          kept borrowing closed rather than open a position we can't price honestly. It's on the roadmap; supplying
+          USDG to earn (above) works today.</div>
       ) : !haveStock ? (
         <div className="live-note">You don't hold any stock to borrow against yet. <Link to="/cases">Open a Case →</Link> to draw some AAPL or NVDA, then come back.</div>
       ) : (
@@ -186,7 +186,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
             <span className="lend-unit">USDG</span>
             <button className="btn btn-gold" disabled={!!busy || !(parseFloat(debt) > 0)} onClick={doBorrow}>{busy === "borrow" ? "borrowing…" : "Borrow"}</button>
           </div>
-          {maxDebt !== null && <div className="live-note num">You can borrow up to <b>{fmt(maxDebt, 2)} USDG</b> against this — we lend 35% of the stock's value, so a price dip can't put you underwater.</div>}
+          {maxDebt !== null && <div className="live-note num">You can borrow up to <b>{fmt(maxDebt, 2)} USDG</b> against this — a conservative 35% of the stock's value, which leaves a wide buffer. It's still a loan: if the stock falls far enough, your collateral can be <b>liquidated</b> to cover the debt. Repay anytime to get it back.</div>}
         </>
       )}
       <div className="live-note">Your loan is a Note — a transferable position that carries its debt, its collateral, and

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { reads, flows, fmt, NET, BORROW_OPENS, WHITELIST_SPOTS, type Portfolio, niceError } from "./live";
+import { reads, flows, fmt, NET, WHITELIST_SPOTS, type Portfolio, niceError } from "./live";
 
 export type StepId = "connect" | "fund" | "join" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow" | "invite";
 
@@ -57,7 +57,7 @@ export const STEPS: Step[] = [
     done: (p) => !!p && p.pool.mine > 0n },
   { id: "invite", n: 9, title: "Invite a friend", what: "Share your referral link — every friend who joins the quest boosts your odds.", to: "/start", cta: "Get your link", bonus: true,
     done: (p) => !!p && p.quest.referrals > 0n },
-  { id: "borrow", n: 10, title: "Borrow against your stock", what: `Borrow USDG against the stock you drew — the full loop. (Opens ${BORROW_OPENS.toUTCString().slice(5, 11)}.)`, to: "/lend", cta: "Go to Lend", bonus: true,
+  { id: "borrow", n: 10, title: "Borrow against your stock", what: `Borrow USDG against the stock you drew — the full loop. (Not live on testnet yet — coming soon.)`, to: "/lend", cta: "Go to Lend", bonus: true,
     done: (p) => !!p && p.loans.length > 0 },
 ];
 
@@ -160,7 +160,7 @@ export function StartPage() {
         {allRequiredDone && (
           <div className="quest-done">
             🎉 <b>You've completed the quest.</b> Your wallet is in the pool for one of {WHITELIST_SPOTS.toLocaleString()} whitelist
-            spots. Boost your odds with the bonus tasks below — invite friends, and (from {BORROW_OPENS.toUTCString().slice(5, 11)}) borrow against your stock.
+            spots. Boost your odds with the bonus tasks below — invite friends (borrowing against stock is coming to testnet soon).
           </div>
         )}
 
