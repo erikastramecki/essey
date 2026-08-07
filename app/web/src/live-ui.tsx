@@ -97,6 +97,7 @@ export function LiveExchange() {
               {float_ === 0n && <div className="live-note ex-help">Every Seat is held right now — check back, or watch the <Link to="/tape">Tape</Link> for one returning to the Exchange (holders can sell back anytime).</div>}
               <div className="live-note ex-help">You'll get the next available Seat. The first time, your wallet asks to approve
                 $ESSEY and USDG — that's normal; just confirm each popup. Need funds? Grab them on the <Link to="/start">Quest</Link> page.</div>
+              <div className="live-note ex-help">🛡 Every Seat has a hard <b>USDG floor</b> — redeem it for its share of the reserve anytime (see <Link to="/portfolio">Portfolio</Link>). Downside you can count on, in stable value.</div>
 
               {/* advanced, hidden by default */}
               <button className="ex-more" onClick={() => setAdv((v) => !v)}>

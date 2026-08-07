@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { useJourney, ReferralCard } from "./journey";
-import { NET, ADDR, TIERS, flows, fmt, niceError } from "./live";
+import { NET, ADDR, TIERS, flows, reads, fmt, niceError } from "./live";
 
 export function PortfolioPage() {
   const w = useWallet();
@@ -16,6 +16,8 @@ export function PortfolioPage() {
   const a = w.address as Address | null;
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [floor, setFloor] = useState<{ floor: bigint; reserve: bigint; backed: bigint } | null>(null);
+  useEffect(() => { reads.seatFloor().then(setFloor).catch(() => {}); }, []);
 
   const run = async (label: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(label); setMsg(null);
@@ -81,6 +83,10 @@ export function PortfolioPage() {
               {p.seats.length === 0 ? (
                 <div className="pf-empty">No Seats yet. <Link to="/market">Buy one on the Market →</Link></div>
               ) : (
+                <>
+                {floor && floor.floor > 0n && (
+                  <div className="pf-note" style={{ marginBottom: 10 }}>🛡 <b>Every Seat has a hard floor.</b> Redeem one for <b>≥ {fmt(floor.floor, 2)} USDG</b> from the reserve, anytime — that's the reserve ({fmt(floor.reserve, 0)} USDG) split across the {floor.backed.toString()} max-supply Seats, and it only ever rises. Redeeming <b>locks the Seat</b> and forfeits its membership.</div>
+                )}
                 <div className="pf-seats">
                   {p.seats.map((s) => (
                     <div className="pf-seat" key={s.id.toString()}>
@@ -103,10 +109,17 @@ export function PortfolioPage() {
                           ? <button className="pf-link gold pf-inline-btn" disabled={busy === "claim" + s.id} onClick={() => a && run("claim" + s.id, () => flows.claimPayout(a, s.id), `✓ Payout claimed into Seat #${s.id}'s Vault`)}>{busy === "claim" + s.id ? "claiming…" : "claim now"}</button>
                           : s.tier === 0 ? <Link className="pf-link gold" to="/bell">stake →</Link>
                           : <Link className="pf-link" to="/bell">upgrade →</Link>}
+                        {floor && floor.floor > 0n && (
+                          <button className="pf-link pf-inline-btn" disabled={!!busy} title="Redeem this Seat for its USDG floor. This locks the Seat and forfeits its membership."
+                            onClick={() => a && run("redeem" + s.id, () => flows.redeemSeatFloor(a, s.id), `✓ Seat #${s.id} redeemed for ${fmt(floor.floor, 2)} USDG — membership forfeited.`)}>
+                            {busy === "redeem" + s.id ? "redeeming…" : `redeem ↓ ${fmt(floor.floor, 2)} USDG`}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
+                </>
               )}
             </div>
 

@@ -26,6 +26,8 @@ export const ADDR = {
   usdg: "0x7461E670d44FF4397A3E48030C5b06f6163a5De2" as Address,
   bell: "0x31115d449f359a05298295415665af18fd708d0d" as Address,
   exchange: "0x57864a956a13d42837f121790715713cbaa7df09" as Address,
+  // A USDG reserve that gives every Seat a hard, stable floor (redeem a Seat for its pro-rata share). Immutable.
+  seatReserve: "0x55e37465d76ae51bE3a9065a43a7d2bF25830A13" as Address,
   cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
   faucet: "0x11c696cf869c1caace32e7ea6d1d2074c452ded2" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
@@ -209,6 +211,15 @@ const SECP256K1 = 1n; // ERC-5564 schemeId
 // The announcer's deploy block — scan floor. Robinhood Chain block numbers are ~97M, so scanning from 0
 // would blow past every RPC getLogs range cap and strand the inbox; start from where the announcer exists.
 const STEALTH_DEPLOY_BLOCK = 97_690_338n;
+
+// SeatReserve — the Seat price floor. floorPerSeat = reserve / backedSupply (backedSupply = Seat maxSupply).
+export const seatReserveAbi = parseAbi([
+  "function floorPerSeat() view returns (uint256)",
+  "function reserve() view returns (uint256)",
+  "function backedSupply() view returns (uint256)",
+  "function fund(uint256 amount)",
+  "function redeem(uint256 seatId) returns (uint256 paid)",
+]);
 
 // Essey Private — shielded pool ABI (hides amounts). Nested tuples: the Groth16 proof + the extData.
 // register() publishes a user's spend+encryption public keys so others can send them shielded funds.
@@ -425,6 +436,16 @@ export const reads = {
   maxBorrow: (token: Address, collateralRaw: bigint) =>
     pub.readContract({ address: ADDR.markets, abi: marketsAbi, functionName: "maxBorrow", args: [token, collateralRaw] }),
 
+  /// The Seat price floor — what one Seat redeems for right now (USDG), plus the reserve total + backed supply.
+  seatFloor: async (): Promise<{ floor: bigint; reserve: bigint; backed: bigint }> => {
+    const [floor, reserveBal, backed] = await Promise.all([
+      pub.readContract({ address: ADDR.seatReserve, abi: seatReserveAbi, functionName: "floorPerSeat" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.seatReserve, abi: seatReserveAbi, functionName: "reserve" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.seatReserve, abi: seatReserveAbi, functionName: "backedSupply" }) as Promise<bigint>,
+    ]);
+    return { floor, reserve: reserveBal, backed };
+  },
+
   /// Open loan positions held by `a`, found by scanning the Note collection's Transfer events (same
   /// approach as Seats) and keeping the ones still owned with live debt.
   myLoans: async (a: Address): Promise<{ id: bigint; token: Address; collateralRaw: bigint; debt: bigint }[]> => {
@@ -555,6 +576,19 @@ export const flows = {
     await ensureAllowance(a, ADDR.usdg, ADDR.exchange, PRICE.sellFee);
     await send(a, ADDR.seat, seatAbi, "approve", [ADDR.exchange, id]);
     return send(a, ADDR.exchange, exchangeAbi, "sell", [id]);
+  },
+
+  /// Redeem a Seat for its USDG floor from the reserve. This FORFEITS membership — the Seat is locked in the
+  /// reserve permanently. Approve the Seat to the reserve, then redeem (pays floorPerSeat in USDG).
+  redeemSeatFloor: async (a: Address, id: bigint): Promise<Hex> => {
+    await send(a, ADDR.seat, seatAbi, "approve", [ADDR.seatReserve, id]);
+    return send(a, ADDR.seatReserve, seatReserveAbi, "redeem", [id]);
+  },
+
+  /// Strengthen the floor for EVERY Seat holder — anyone can add USDG to the reserve (it can only go up).
+  fundSeatFloor: async (a: Address, amount: bigint): Promise<Hex> => {
+    await ensureAllowance(a, ADDR.usdg, ADDR.seatReserve, amount);
+    return send(a, ADDR.seatReserve, seatReserveAbi, "fund", [amount]);
   },
 
   /// Stake $ESSEY to activate a Seat at `tier` (or upgrade if already active). Half the fee burns,
