@@ -1,80 +1,59 @@
-# Essey — RWA lending built around a formally-verified risk kernel
+# Essey — a stock-market club where the odds and the books are both *provable*
 
-Multi-chain lending against tokenized real-world assets. Borrow a stablecoin against crypto and
-tokenized equities, where the solvency rule is designed to be enforced by a **formally-verified
-risk kernel** (dregg) with settlement gated by an **on-chain zk proof** (`sui::groth16`).
-Non-custodial throughout: the borrower sends the transaction and supplies the collateral.
+Essey is an on-chain stock-market club on **Robinhood Chain** (an Arbitrum Orbit L2). Buy a Seat, earn
+Payouts in **real tokenized stock**, open **Cases** for a provably-fair stock draw, borrow against what you
+hold, and move any of it **privately**. Every ring of the Bell, every draw, and every loan is a verifiable
+on-chain transaction.
 
-## What is actually proven today
+**Live demo:** https://essey.xyz
 
-The kernel and the proof design are real. **They are not yet what enforces the live code**, and
-this section will change as that lands:
+> **Testnet, play money.** Everything here is live on Robinhood Chain **testnet** with play-money assets that
+> have **no real value**. Essey is **experimental**. Payouts are protocol fees distributed to Seat holders as
+> stock — a mechanical, LP-style fee-share, **not a dividend, not a yield promise**. Nothing here is an offer of
+> securities or financial advice.
+
+## What's live
+
+| Surface | What it is |
+|---|---|
+| **Seats + the Exchange** | 2,222 membership NFTs. Each carries its own on-chain wallet — the **Vault** (ERC-6551). Trade Seats on the Exchange. |
+| **The Bell** | The pot (trade fees, royalties, loan interest) rings out to every active Seat's Vault, by Tier — **paid in real tokenized stock**, converted at the claim edge. |
+| **Cases** | Open a Case for a **provably-fair** real-stock draw (AAPL / NVDA). The draw only ever decides *which* name, never how much. Keep it, borrow against it, or sell it back. Plus a **Degen** multiplier variant. |
+| **Lend** | Supply USDG to earn, or borrow a stablecoin against the stock you win/hold. On-chain LTV enforced against a Chainlink feed. |
+| **Essey Private** | A privacy layer: stealth-address payments, shielded pools that hide amounts (USDG, AAPL/NVDA stock, and yield-bearing supply), private transfers with cross-device recovery, and a trustless relayer. Proving runs in your browser; keys never leave your device. |
+
+## What is actually proven today (stated plainly)
+
+"Provable" is the design's north star, not a blanket claim about the live deployment:
 
 | | Status |
 |---|---|
-| dregg risk kernel (Lean 4) | Real and formally verified — but the operator falls back to an equivalent in-process LTV check when the kernel is absent, and says so via `authMode` |
-| zk settlement (`sui::groth16`) | Verifier is live on-chain. **`dregg_lending` cannot originate and `settle_batch` cannot succeed** until both circuits are re-proven upstream |
-| the circuits themselves | **Never audited.** `circuit/` contains a Poseidon gadget and no constraint system |
-| Robinhood Chain (`rh-chain/`) | **No dregg.** LTV is enforced on-chain against a Chainlink feed — the same guarantee Aave gives, not a proof |
+| **Provably-fair draws** | Real and live. Cases/Degen settle against on-chain entropy (a mock keeper on testnet; a real entropy oracle on mainnet), so the odds are verifiable, not trusted. |
+| **The market-layer contracts** | Audited across multiple adversarial rounds, published fix-first — see [`docs/audits/`](docs/audits/). |
+| **Essey Private** | Audited (≥3 independent adversarial agents per change) and the full private-money cycle is proven on-chain on testnet. |
+| **Solvency of lending** | On-chain LTV against a Chainlink feed — the same guarantee Aave gives, **not** a proof yet. A formally-verified solvency kernel is the roadmap, not the live enforcement. |
+| **Tokenized-stock risk** | The stock-token issuer can pause, rescale (scaled-UI), or burn tokens. The contracts defend against these hazards explicitly (e.g. the shielded-stock pro-rata haircut); it is an inherent risk of a real RWA, stated openly. |
 
-So: "provably safe" describes the design's goal, not the current deployment. What the contracts
-enforce today is a conservative LTV check against a signed or on-chain price. Everything open is
-listed in **[docs/OUTSTANDING.md](docs/OUTSTANDING.md)**.
-
-**Live demo (devnet):** https://essey.xyz  ·  Operator API: https://assay-operator-sui.vercel.app
-
-**Security audits:** [docs/audits/](docs/audits/) — adversarial rounds with independent verification, published fix-first. **[docs/OUTSTANDING.md](docs/OUTSTANDING.md)** lists everything known-open, including items that block mainnet.
-
-> Devnet + test assets only. Not an offer of securities. See `docs/` for the full design, risk
-> framework, interest-rate model, and security audit.
+Everything known-open, including what blocks mainnet, is listed in **[`docs/OUTSTANDING.md`](docs/OUTSTANDING.md)**.
 
 ## Repo layout
+
 ```
-move/
-  dregg_lending_async/   the lending program (dynamic rates, isolation caps, attested disburse)
-  dregg_verifier/        vendored BN254 Groth16 verifier (generic; from the dregg project)
-app/
-  sui-sdk/               @essey/sui-sdk — PTB builders, object readers, attestation, math
-    scripts/             setup, governance (set-curve), keeper, liquidation-keeper
-    test/                on-chain loops, pentest, five-loans evidence
-  operator-api/          the operator: /quote (Pyth) + /borrow (attestation) + /faucet
-    essey-operator/      esbuild-bundled Vercel serverless deploy
-  web/                   the site (Vite + React + @mysten/dapp-kit)
-  sui-harness/           dev-up-sui.sh (local stack), markets.json (source of truth), add-market.sh
-  deploy.sh              one-command deploy (web/operator) with preflight + smoke check
-docs/                    architecture, LTV framework, interest-rate model, audit, evidence, why-different
-operator/pyth.mjs        Pyth Hermes oracle policy (conservative pricing, market-hours discipline)
+rh-chain/        the live product — Solidity contracts on Robinhood Chain (Seats, the Bell, Cases,
+                 the converter, lending, and Essey Private: shielded pools + stealth payments)
+app/web/         the site (Vite + React) at essey.xyz — every mechanic, live on testnet
+circuit/         zk work (Poseidon / IVC R&D toward provable solvency)
+mcp/             MCP tooling
+docs/            design, LTV & risk framework, interest-rate model, the privacy layer, audits, OUTSTANDING
+brand/           brand assets
 ```
 
-## Run it locally
-```bash
-bash app/sui-harness/dev-up-sui.sh      # deploy + seed a pool + start the operator + write web/.env.local
-cd app/web && npm run dev               # http://localhost:5173
-```
+**Legacy (prior iteration, retained for history):** `move/`, `operator/`, `app/sui-sdk/`,
+`app/operator-api/`, `app/sui-harness/` are from Essey's earlier Sui RWA-lending design. They are **not** the
+current product and are kept for the audit trail only — the live system is `rh-chain/` + `app/web/`.
 
-## Deploy
-```bash
-bash app/deploy.sh            # web + operator (preflight tsc, build, deploy, pin alias, smoke check)
-bash app/deploy.sh --web      # web only
-```
+## Security & audits
 
-## Add markets
-```bash
-bash app/sui-harness/add-market.sh spec.json   # publishes a small new coin pkg, appends to markets.json
-bash app/sui-harness/deploy-markets.sh         # push registry/faucet + redeploy
-```
-
-## Dependencies & separation
-- **Self-contained on Sui:** the contract vendors `dregg_verifier` locally; no reach into sibling repos.
-- **Optional dregg kernel:** the operator's `/borrow` uses the formally-verified dregg kernel when a
-  Rust `dregg` workspace is present (`DREGG` env), and an honest in-operator LTV+oracle fallback
-  otherwise (flagged `authMode`). The on-chain guards are real either way. The hosted deploy runs the
-  fallback (no Rust on serverless).
-- **Secrets** (`.operator-sui.key`, `.env.*`) are git-ignored — never commit them.
-- Contains **no CoinVoyage code**. The `dregg_verifier` copy is generic verifier code from the dregg
-  project (same owner).
-
-## Known backlog (see `docs/`)
-Mainnet posture (real assets + regulatory read + independent audit), first-depositor share inflation
-(MED, mitigated by seed), attestation single-use (LOW), hosted dregg-kernel host, BTC-collateral flow
-(scoped, paused).
+Every money-touching change is attacked by multiple independent adversarial agents before it ships; findings
+are published **fix-first**, clean or not, in [`docs/audits/`](docs/audits/). [`docs/OUTSTANDING.md`](docs/OUTSTANDING.md)
+lists everything we know is unfinished. Secrets (`.env*`, keys) are git-ignored — never committed.
