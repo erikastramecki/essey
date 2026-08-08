@@ -7,7 +7,7 @@ import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { reads, flows, fmt, NET, WHITELIST_SPOTS, type Portfolio, niceError } from "./live";
 
-export type StepId = "connect" | "fund" | "join" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow" | "invite";
+export type StepId = "connect" | "fund" | "join" | "seat" | "stake" | "payout" | "case" | "supply" | "borrow" | "invite" | "shield";
 
 // Referral capture: a ?ref=0x… link stashes the referrer so a later on-chain register credits them.
 const REF_KEY = "essey-ref";
@@ -59,6 +59,8 @@ export const STEPS: Step[] = [
     done: (p) => !!p && p.quest.referrals > 0n },
   { id: "borrow", n: 10, title: "Borrow against your stock", what: `Borrow USDG against the stock you drew — the full loop. (Not live on testnet yet — coming soon.)`, to: "/lend", cta: "Go to Lend", bonus: true,
     done: (p) => !!p && p.loans.length > 0 },
+  { id: "shield", n: 11, title: "Go private", what: "Shield some USDG in Essey Private — the deposit is public, but your balance and every move after are hidden. (Bonus — boosts your odds.)", to: "/private", cta: "Go to Essey Private", bonus: true,
+    done: (p) => !!p && !!p.shielded },
 ];
 
 /// Live progress, polled. Returns the portfolio, per-step done flags, and the next unfinished step.

@@ -246,6 +246,7 @@ export const shieldedPoolAbi = parseAbi([
 const newCommitmentItem = parseAbiItem("event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput)");
 const newNullifierItem = parseAbiItem("event NewNullifier(bytes32 nullifier)");
 const publicKeyItem = parseAbiItem("event PublicKey(address indexed owner, bytes key)");
+const erc20TransferItem = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 
 // The supply pool adds supply() (USDG in -> shielded aUSDG-SHARE note) + sharesToUsdg (view). Its
 // transact/register/isSpent/events are identical to shieldedPoolAbi.
@@ -552,15 +553,30 @@ export const reads = {
   /// Everything the Portfolio and the guided journey need, in one pass: balances, each owned Seat
   /// with its tier + claimable + Vault balance, Case winnings, pool position, and quest status.
   portfolio: async (a: Address) => {
-    const [gas, bal, ids, wins, pool, loans, quest] = await Promise.all([
+    const [gas, bal, ids, wins, pool, loans, quest, shielded] = await Promise.all([
       reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a), reads.quest(a),
+      reads.hasShielded(a).catch(() => false), // best-effort — a scan hiccup must never break the whole portfolio
     ]);
     const seats = await Promise.all(ids.map(async (id) => {
       const st = await reads.seatState(id);
       const [vaultUsdg, vaultStock] = await Promise.all([reads.vaultBalance(st.vault), reads.vaultStocks(st.vault)]);
       return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda };
     }));
-    return { gas, ...bal, seats, wins, pool, loans, quest };
+    return { gas, ...bal, seats, wins, pool, loans, quest, shielded };
+  },
+
+  /// Has this wallet ever shielded into Essey Private? Detected from the PUBLIC deposit leg — a USDG transfer
+  /// from the wallet into the shielded pool. (Only the deposit is attributable; withdraw/transfer legs are
+  /// unlinkable by design.) Paginated + early-returns on the first hit; used for the bonus quest step.
+  hasShielded: async (a: Address): Promise<boolean> => {
+    const head = await pub.getBlockNumber();
+    const CHUNK = 45_000n, from0 = 97_728_346n; // shielded USDG pool deploy block
+    for (let from = from0; from <= head; from += CHUNK + 1n) {
+      const to = from + CHUNK > head ? head : from + CHUNK;
+      const logs = await pub.getLogs({ address: ADDR.usdg, event: erc20TransferItem, args: { from: a, to: ADDR.shieldedPool }, fromBlock: from, toBlock: to });
+      if (logs.length > 0) return true;
+    }
+    return false;
   },
 };
 
