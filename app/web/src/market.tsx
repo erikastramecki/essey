@@ -143,7 +143,7 @@ export function ExchangeHero() {
           <p className="lede">Buy a Seat. Earn Payouts in real stock. Borrow against them. Every ring, every draw,
             every loan — verifiable on-chain.</p>
           <div className="hero-cta">
-            <Link className="btn btn-gold" to="/start">Start the quest — earn a mint spot</Link>
+            <Link className="btn btn-gold" to="/start">Start the quest — earn a whitelist spot</Link>
             <Link className="btn btn-ghost" to="/portfolio">Your portfolio</Link>
           </div>
           <div className="proof-strip num">⬡ 2,222 Seats · fees pay out as stock · every claim links a real tx</div>
@@ -151,7 +151,7 @@ export function ExchangeHero() {
         <aside className={"bell-plate" + (rung ? " rung" : "")}>
           <div className="bell-head">
             <span className="bell-title">THE BELL</span>
-            <span className="preview-chip live" title="Live on Robinhood Chain testnet — connect to ring the real Bell.">testnet</span>
+            <span className="preview-chip" title="A demo of the Bell — connect and head to the Bell to ring the real one.">demo</span>
           </div>
           <div className="bell-pot">
             <span className="bell-emoji" aria-hidden>🔔</span>

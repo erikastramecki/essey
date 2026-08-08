@@ -269,7 +269,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
 
   const again = () => { setPhase("idle"); setWon(null); setSold(false); setStage(null); setRollErr(null); };
   const rWon = won ? RARITY[won.rarity] : null;
-  const stageLabel: Record<string, string> = { approving: "approving spend…", buying: "buying the case…", sealing: "sealing the draw on-chain…", opening: "opening…" };
+  const stageLabel: Record<string, string> = { approving: "approving spend…", buying: "buying the case…", sealing: "sealing the draw on-chain…", revealing: "revealing the roll…", opening: "opening…" };
 
   return (
     <section className="band cases-arcade" id="cases" style={embedded ? { paddingTop: 0 } : undefined}>
@@ -334,11 +334,11 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                 <div className="reveal-sym num">{won.sym}</div>
                 <div className="reveal-name">{won.name}</div>
                 <div className="reveal-unit num">{won.unit} · {usd(won.value)}</div>
-                <div className="reveal-stamp"><EMonogram size={34} /><span>draw fair ✓ · sealed to your wallet</span></div>
+                <div className="reveal-stamp"><EMonogram size={34} /><span>draw fair ✓{live ? " · sealed to your wallet" : " · preview"}</span></div>
               </div>
               <div className="reveal-actions">
                 {sold
-                  ? <div className="reveal-sold num">{sellMsg ?? "withdrawn to your wallet"}</div>
+                  ? <div className="reveal-sold num">{sellMsg ?? (live ? "withdrawn to your wallet" : "preview only — connect to play for real")}</div>
                   : <>
                     <button className="btn btn-gold" onClick={again}>Roll again</button>
                     <button className="btn btn-ghost" disabled={sellBusy} onClick={collect}>{sellBusy ? "withdrawing…" : "Withdraw to wallet"}</button>

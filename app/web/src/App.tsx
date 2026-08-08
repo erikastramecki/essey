@@ -139,11 +139,12 @@ function Landing() {
         <div className="wrap">
           <div className="start-cta">
             <div>
-              <span className="eyebrow">Live on testnet · earn a mint spot</span>
+              <span className="eyebrow">Live on testnet · earn a whitelist spot</span>
               <h2>Test the club, earn your whitelist</h2>
-              <p>Every mechanic is live on testnet with play money. Complete the quest — trade a Seat, stake a
-                Tier, ring the Bell, claim a Payout, open a Case, supply liquidity, invite friends — and you're in
-                the raffle for one of 2,222 mainnet mint spots. No risk, real contracts.</p>
+              <p>Every mechanic is live on testnet with play money. Do the core loop — register, own a Seat, win
+                stock from a Case, and supply liquidity — and you're on-chain-qualified for one of 2,222 mainnet
+                whitelist spots. Stake a Tier, ring the Bell, and invite friends to boost your odds. No risk,
+                real contracts.</p>
             </div>
             <Link className="btn btn-gold start-cta-btn" to="/start">Start the quest →</Link>
           </div>
