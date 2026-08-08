@@ -28,6 +28,8 @@ export const ADDR = {
   exchange: "0x57864a956a13d42837f121790715713cbaa7df09" as Address,
   // A USDG reserve that gives every Seat a hard, stable floor (redeem a Seat for its pro-rata share). Immutable.
   seatReserve: "0x55e37465d76ae51bE3a9065a43a7d2bF25830A13" as Address,
+  // DCA / Auto-stack: recurring USDG→stock buys, non-custodial, keeper-executed, floored via its converter.
+  recurringBuy: "0xF0DCE628d4023cdc8115E6f5998D9279eA06d9ab" as Address,
   cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
   faucet: "0x11c696cf869c1caace32e7ea6d1d2074c452ded2" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
@@ -211,6 +213,16 @@ const SECP256K1 = 1n; // ERC-5564 schemeId
 // The announcer's deploy block — scan floor. Robinhood Chain block numbers are ~97M, so scanning from 0
 // would blow past every RPC getLogs range cap and strand the inbox; start from where the announcer exists.
 const STEALTH_DEPLOY_BLOCK = 97_690_338n;
+
+// RecurringBuy — non-custodial DCA. Schedule struct order: owner, stock, amountPerFill, everySec, totalFills, filled, nextDue, cancelled.
+export const recurringBuyAbi = parseAbi([
+  "function create(address stock, uint128 amountPerFill, uint64 everySec, uint32 totalFills) returns (uint256 id)",
+  "function executeFill(uint256 id)",
+  "function cancel(uint256 id)",
+  "function dueNow(uint256 id) view returns (bool)",
+  "function nextId() view returns (uint256)",
+  "function schedules(uint256) view returns (address owner, address stock, uint128 amountPerFill, uint64 everySec, uint32 totalFills, uint32 filled, uint64 nextDue, bool cancelled)",
+]);
 
 // SeatReserve — the Seat price floor. floorPerSeat = reserve / backedSupply (backedSupply = Seat maxSupply).
 export const seatReserveAbi = parseAbi([
@@ -446,6 +458,18 @@ export const reads = {
     return { floor, reserve: reserveBal, backed };
   },
 
+  /// A user's DCA schedules (Auto-stack). Iterates the small on-chain set and filters to `a`.
+  dcaSchedules: async (a: Address): Promise<{ id: bigint; stock: Address; amountPerFill: bigint; everySec: bigint; totalFills: number; filled: number; nextDue: bigint; cancelled: boolean }[]> => {
+    const n = await pub.readContract({ address: ADDR.recurringBuy, abi: recurringBuyAbi, functionName: "nextId" }) as bigint;
+    const out: { id: bigint; stock: Address; amountPerFill: bigint; everySec: bigint; totalFills: number; filled: number; nextDue: bigint; cancelled: boolean }[] = [];
+    for (let i = 1n; i <= n; i++) {
+      const s = await pub.readContract({ address: ADDR.recurringBuy, abi: recurringBuyAbi, functionName: "schedules", args: [i] }) as readonly [Address, Address, bigint, bigint, number, number, bigint, boolean];
+      if (s[0].toLowerCase() !== a.toLowerCase()) continue;
+      out.push({ id: i, stock: s[1], amountPerFill: s[2], everySec: s[3], totalFills: Number(s[4]), filled: Number(s[5]), nextDue: s[6], cancelled: s[7] });
+    }
+    return out;
+  },
+
   /// Open loan positions held by `a`, found by scanning the Note collection's Transfer events (same
   /// approach as Seats) and keeping the ones still owned with live debt.
   myLoans: async (a: Address): Promise<{ id: bigint; token: Address; collateralRaw: bigint; debt: bigint }[]> => {
@@ -590,6 +614,16 @@ export const flows = {
     await ensureAllowance(a, ADDR.usdg, ADDR.seatReserve, amount);
     return send(a, ADDR.seatReserve, seatReserveAbi, "fund", [amount]);
   },
+
+  /// Start an Auto-stack (DCA). Funds stay in the wallet — this only sets the USDG allowance ceiling (the total
+  /// the schedule can ever pull) and creates the schedule. A keeper (or you) executes each due fill.
+  createDca: async (a: Address, stock: Address, amountPerFill: bigint, everySec: bigint, totalFills: number): Promise<Hex> => {
+    await ensureAllowance(a, ADDR.usdg, ADDR.recurringBuy, amountPerFill * BigInt(totalFills));
+    return send(a, ADDR.recurringBuy, recurringBuyAbi, "create", [stock, amountPerFill, everySec, totalFills]);
+  },
+
+  /// Stop an Auto-stack (owner only). Revoking the USDG allowance also neutralizes it.
+  cancelDca: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.recurringBuy, recurringBuyAbi, "cancel", [id]),
 
   /// Stake $ESSEY to activate a Seat at `tier` (or upgrade if already active). Half the fee burns,
   /// half goes to treasury; the Seat starts earning payout weight from the next ring.

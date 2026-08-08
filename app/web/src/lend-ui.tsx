@@ -46,10 +46,13 @@ export function LendPage() {
             <span className="live-note">Connect on Robinhood Chain testnet to supply or borrow.</span><ConnectButton />
           </div></div>
         ) : (
-          <div className="lend-grid">
-            <SupplyPanel a={a!} pool={pool} onDone={loadPool} />
-            <BorrowPanel a={a!} onDone={loadPool} />
-          </div>
+          <>
+            <div className="lend-grid">
+              <SupplyPanel a={a!} pool={pool} onDone={loadPool} />
+              <BorrowPanel a={a!} onDone={loadPool} />
+            </div>
+            <DcaPanel a={a!} />
+          </>
         )}
       </div>
     </section>
@@ -191,6 +194,75 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
       )}
       <div className="live-note">Your loan is a Note — a transferable position that carries its debt, its collateral, and
         its solvency with it. Repay anytime to get the collateral back. <a href={`${NET.explorer}/address/${ADDR.pool}`} target="_blank" rel="noreferrer">the pool ↗</a></div>
+      {msg && <div className="live-msg">{msg}</div>}
+    </div>
+  );
+}
+
+const dcaInput = { padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line, #333)", background: "var(--bg-2, #111)", color: "inherit", fontSize: 14, fontFamily: "inherit" } as const;
+
+/// Auto-stack into stock — a non-custodial recurring USDG→stock buy (DCA), settled through the oracle-floored,
+/// session-gated converter and run by Essey's keeper.
+function DcaPanel({ a }: { a: Address }) {
+  const [stock, setStock] = useState<Address>(ADDR.aapl);
+  const [perFill, setPerFill] = useState("");
+  const [freq, setFreq] = useState<number>(86400);
+  const [count, setCount] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [list, setList] = useState<Awaited<ReturnType<typeof reads.dcaSchedules>>>([]);
+
+  const load = useCallback(() => { reads.dcaSchedules(a).then(setList).catch(() => {}); }, [a]);
+  useEffect(() => { load(); }, [load]);
+
+  const create = async () => {
+    const amt = parseFloat(perFill), n = parseInt(count || "0", 10);
+    if (!(amt > 0)) { setMsg("Enter a USDG amount per buy."); return; }
+    if (!(n > 0 && n <= 1000)) { setMsg("Enter a number of buys (1–1000)."); return; }
+    setBusy("create"); setMsg(null);
+    try {
+      await flows.createDca(a, stock, parseUnits(perFill, 18), BigInt(freq), n);
+      setMsg("✓ Auto-stack started — fills run automatically during US market hours."); setPerFill(""); setCount(""); load();
+    } catch (e) { setMsg(niceError(e)); } finally { setBusy(null); }
+  };
+
+  const cancel = async (id: bigint) => {
+    setBusy("cancel" + id); setMsg(null);
+    try { await flows.cancelDca(a, id); setMsg("✓ Auto-stack cancelled."); load(); }
+    catch (e) { setMsg(niceError(e)); } finally { setBusy(null); }
+  };
+
+  const active = list.filter((s) => !s.cancelled && s.filled < s.totalFills);
+  const total = parseFloat(perFill || "0") * parseInt(count || "0", 10);
+  const freqLabel = (sec: number) => sec % 86400 === 0 ? `${sec / 86400}d` : `${sec / 3600}h`;
+
+  return (
+    <div className="live-card" style={{ marginTop: 16 }}>
+      <div className="live-h">AUTO-STACK INTO STOCK <span className="preview-chip">DCA</span></div>
+      <div className="live-note" style={{ marginBottom: 12 }}>Dollar-cost-average into stock — a recurring USDG→stock buy that runs on its own. <b>Your funds stay in your wallet</b>: each buy pulls only that buy's USDG (cancel or revoke the allowance anytime). Fills settle at an oracle-fair price within a ≤5% floor, <b>during US market hours</b>, executed by Essey's keeper. Testnet, play money.</div>
+      <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
+        <select value={stock} onChange={(e) => setStock(e.target.value as Address)} style={{ ...dcaInput, flex: "0 0 90px" }} aria-label="stock">
+          <option value={ADDR.aapl}>AAPL</option><option value={ADDR.nvda}>NVDA</option>
+        </select>
+        <input className="live-input" placeholder="USDG / buy" inputMode="decimal" value={perFill} onChange={(e) => setPerFill(e.target.value)} style={{ ...dcaInput, flex: "1 1 110px" }} />
+        <select value={freq} onChange={(e) => setFreq(+e.target.value)} style={{ ...dcaInput, flex: "0 0 100px" }} aria-label="frequency">
+          <option value={3600}>hourly</option><option value={86400}>daily</option><option value={604800}>weekly</option>
+        </select>
+        <input className="live-input" placeholder="# buys" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} style={{ ...dcaInput, flex: "0 0 90px" }} />
+        <button className="btn btn-gold" disabled={busy === "create"} onClick={create}>{busy === "create" ? "starting…" : "Start Auto-stack →"}</button>
+      </div>
+      {total > 0 && <div className="live-note num" style={{ marginTop: 8 }}>Total committed: <b>{total.toLocaleString()}</b> USDG over {count} buys (the allowance you approve — funds stay in your wallet until each fill).</div>}
+      {active.length > 0 && (
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="live-note">Your active Auto-stacks:</div>
+          {active.map((s) => (
+            <div key={s.id.toString()} className="lend-loan num">
+              <span>{fmt(s.amountPerFill, 2)} USDG → {s.stock.toLowerCase() === ADDR.aapl.toLowerCase() ? "AAPL" : "NVDA"} · every {freqLabel(Number(s.everySec))} · <b>{s.filled}/{s.totalFills}</b> filled</span>
+              <button className="btn btn-ghost" disabled={busy === "cancel" + s.id} onClick={() => cancel(s.id)}>{busy === "cancel" + s.id ? "cancelling…" : "Cancel"}</button>
+            </div>
+          ))}
+        </div>
+      )}
       {msg && <div className="live-msg">{msg}</div>}
     </div>
   );
