@@ -38,7 +38,7 @@ export const ADDR = {
   pool: "0x283a4891458180f502E82E40470d3e06321ba748" as Address,
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
   quest: "0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427" as Address,
-  lens: "0xaAC27dBbDF85096fe0481F8E194ac2ffef146df3" as Address,
+  lens: "0xD673a14f96ad94f37f91373a8d17Acc3E30bd23f" as Address, // QuestLens v2: qualify = register + Seat + hold-stock + supply
   // Stock-payout converter (Bell claim-edge → real stock into the Vault).
   converter: "0x3c6a57b21c000caecc61655568eabb6cfbb67fb0" as Address,
   // Degen (multiplier) case + its testnet entropy keeper.

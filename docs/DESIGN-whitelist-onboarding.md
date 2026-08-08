@@ -46,8 +46,13 @@ checked live against on-chain state.
 10. *(bonus)* **Borrow against your stock** — the full loop. *(Not live on testnet yet — coming soon.)*
 
 > The detailed design sections below predate the build and describe an earlier ordering (and a "Verify"
-> station / 72h-hold that did not ship). Where they differ, **this list is what shipped.** On-chain
-> qualification for the whitelist raffle is being aligned to these required steps (the `QuestLens` bar).
+> station / 72h-hold that did not ship). Where they differ, **this list is what shipped.**
+>
+> **On-chain qualification for the raffle** is the `QuestLens` bar: **register + own a Seat + hold tokenized
+> stock (won/acquired) + supply USDG** — four independent, balance-verifiable, real-money actions that resist
+> sybil farming. Staking a Tier, ringing the Bell, inviting friends, and shielding are guided steps that boost
+> engagement but don't gate the raffle (staking isn't cheaply verifiable in a stateless lens, and the Bell can't
+> always be rung solo). Complete the four and your wallet is on-chain-qualified.
 
 ---
 

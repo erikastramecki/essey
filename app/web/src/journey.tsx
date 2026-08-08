@@ -46,9 +46,9 @@ export const STEPS: Step[] = [
     done: (p) => !!p && p.quest.registered },
   { id: "seat", n: 4, title: "Buy a Seat", what: "Trade $ESSEY for a Seat on the Exchange — the fee feeds the Bell's pot.", to: "/market", cta: "Go to the Exchange",
     done: (p) => !!p && p.seats.length > 0 },
-  { id: "stake", n: 5, title: "Stake a Tier", what: "Boost a Seat you own — stake $ESSEY so it earns a bigger share of every payout.", to: "/bell", cta: "Go to the Bell",
+  { id: "stake", n: 5, title: "Stake a Tier", what: "Boost a Seat you own — stake $ESSEY so it earns a bigger share of every payout. (Bonus — boosts your odds.)", to: "/bell", cta: "Go to the Bell", bonus: true,
     done: (p) => !!p && p.seats.some((s) => s.tier > 0) },
-  { id: "payout", n: 6, title: "Ring & claim", what: "When the fee pot is full, ring the Bell — then claim your payout as stock into your Seat's Vault.", to: "/bell", cta: "Ring the Bell",
+  { id: "payout", n: 6, title: "Ring & claim", what: "When the fee pot is full, ring the Bell — then claim your payout as stock into your Seat's Vault. (Bonus — the pot fills from others' activity, so it's not always ringable solo.)", to: "/bell", cta: "Ring the Bell", bonus: true,
     // The Bell now pays real stock into the Vault (AAPL/NVDA); it fails open to USDG only if conversion can't settle.
     done: (p) => !!p && p.seats.some((s) => s.vaultUsdg > 0n || s.vaultAapl > 0n || s.vaultNvda > 0n) },
   { id: "case", n: 7, title: "Open a Case", what: "Open a Case — roll a multiplier (0.65×–50×) that pays out in real AAPL stock. Then withdraw your winnings to your wallet.", to: "/cases", cta: "Go to Cases",
@@ -165,8 +165,9 @@ export function StartPage() {
 
         {allRequiredDone && (
           <div className="quest-done">
-            🎉 <b>You've completed the quest.</b> Your wallet is in the pool for one of {WHITELIST_SPOTS.toLocaleString()} whitelist
-            spots. Boost your odds with the bonus tasks below — invite friends (borrowing against stock is coming to testnet soon).
+            🎉 <b>You've completed the quest.</b> Your wallet is on-chain-qualified for one of {WHITELIST_SPOTS.toLocaleString()} whitelist
+            spots (register + a Seat + stock + a supply — all verifiable on-chain). Boost your odds with the bonus
+            tasks below — stake a Tier, ring the Bell, and invite friends (borrowing against stock is coming to testnet soon).
           </div>
         )}
 

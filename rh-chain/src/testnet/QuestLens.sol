@@ -19,9 +19,12 @@ interface IQuest {
 /// `qualified` / adding fields to `status`, never by touching the money contracts.
 ///
 /// "QUALIFIED" (a real-activity bar that resists sybil farming): the wallet opted into the quest AND
-/// committed capital in two independent ways — it owns a Seat (bought on the Exchange, faucet-gated)
-/// and it has supplied to the lending pool. Both cost real (test) money and gas per wallet, so a
-/// referral only counts once a friend genuinely used the protocol — not for spawning empty wallets.
+/// committed capital in THREE independent ways — it owns a Seat (bought on the Exchange, faucet-gated), it
+/// holds tokenized stock (won from a Case or otherwise acquired — either way it cost money to get), and it has
+/// supplied to the lending pool. Each costs real (test) money and gas per wallet, so a referral only counts
+/// once a friend genuinely used the protocol across the core loop — not for spawning empty wallets. (Staking a
+/// Tier and ringing the Bell are guided UI steps that boost engagement but aren't cheaply verifiable in a
+/// stateless lens — staking needs per-Seat enumeration — so they guide, they don't gate.)
 contract QuestLens {
     IQuest public immutable quest;
     IERC721 public immutable seat;
@@ -56,7 +59,8 @@ contract QuestLens {
     /// The leaderboard's qualification bar. Kept as its own function so it can tighten/loosen without
     /// changing `status`'s shape.
     function qualified(address a) public view returns (bool) {
-        return quest.registered(a) && seat.balanceOf(a) > 0 && pool.balanceOf(a) > 0;
+        return quest.registered(a) && seat.balanceOf(a) > 0 && pool.balanceOf(a) > 0
+            && aapl.balanceOf(a) + nvda.balanceOf(a) > 0; // + holds tokenized stock (won/acquired via the club)
     }
 
     /// Batch: one call returns qualification for a whole set — the primitive the leaderboard scales on.
