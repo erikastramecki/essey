@@ -50,6 +50,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     error InsufficientLiquidity(uint256 want, uint256 have);
     error BadCurve();
     error BadSink();
+    error AssetDecimalsMismatch();
 
     event Borrowed(uint256 indexed id, address indexed borrower, address indexed token, uint256 collateral, uint256 debt);
     event Repaid(uint256 indexed id, uint256 paid, uint256 collateralReturned);
@@ -122,6 +123,11 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         if (bellSink_ != address(0) && address(IRewardSink(bellSink_).reward()) != address(asset_)) {
             revert BadSink();
         }
+        // `markets.assetDecimals` is the third term of collateralValue's normalization (alongside the
+        // collateral + feed decimals, which ARE cross-checked at propose/commit). Cross-check it against the
+        // borrow asset's real decimals() here, so a mis-set value — e.g. 18 instead of mainnet USDG's 6 —
+        // cannot reintroduce the 1e12 LTV over-valuation. Impossible-by-construction, matching fix #3.
+        if (markets_.assetDecimals() != IERC20Metadata(address(asset_)).decimals()) revert AssetDecimalsMismatch();
         note = new Note(); // binds itself to this pool as its only minter/burner
         markets = markets_;
         baseBps = base_;

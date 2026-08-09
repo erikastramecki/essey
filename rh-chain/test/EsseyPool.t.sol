@@ -513,6 +513,15 @@ contract EsseyPoolTest is Test {
         new EsseyPool(usdg, mk, 90_000, 90_000, 90_000, 0, address(0), address(0x7EA), 0); // legs individually ok, sum is not
     }
 
+    /// Mainnet-config fix: the pool's markets.assetDecimals must MATCH the real borrow-asset decimals(), so a
+    /// mis-set value (e.g. 18 against mainnet USDG's 6) can't reintroduce the 1e12 LTV over-valuation. usdg is
+    /// 6-dec; a markets built with assetDecimals=18 must be un-poolable against it.
+    function test_assetDecimalsMustMatchTheBorrowAsset() public {
+        EsseyMarkets wrong = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, ADMIN, 18); // 18 != usdg's 6
+        vm.expectRevert(EsseyPool.AssetDecimalsMismatch.selector);
+        new EsseyPool(usdg, wrong, 1_000, 0, 0, 0, address(0), address(0x7EA), 0);
+    }
+
     function test_withdrawBeyondCashReverts() public {
         _borrow(700e6);
         vm.prank(LENDER);
