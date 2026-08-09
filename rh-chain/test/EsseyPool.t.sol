@@ -19,6 +19,13 @@ contract MockUSDG is ERC20 {
     function mint(address to, uint256 a) external { _mint(to, a); }
 }
 
+/// A token whose `paused()` returns a NON-boolean 32-byte word (2). The selector is `paused()`
+/// regardless of the declared return type, so it stresses the pool's decode path: abi.decode(_, (bool))
+/// would panic (0x21) on this word and — since it runs in accrue()'s own frame — brick the whole pool.
+contract NonBoolPausedMock {
+    function paused() external pure returns (uint256) { return 2; }
+}
+
 contract EsseyPoolTest is Test {
     EsseyPool pool;
     EsseyMarkets mk;
@@ -305,6 +312,25 @@ contract EsseyPoolTest is Test {
         vm.warp(block.timestamp + 365 days);
         p2.accrue();
         assertEq(p2.debtOf(id), 700e6, "no interest while repayment is impossible");
+    }
+
+    /// CRITICAL (borrow-path fix #1): a watched token whose paused() returns a NON-boolean word must not
+    /// freeze the pool. Pre-fix, abi.decode(ret,(bool)) panicked (0x21) inside accrue() — run by every
+    /// entry point — bricking deposit/borrow/repay/liquidate until an admin reset the watch list.
+    function test_nonBooleanPausedWordDoesNotFreezeThePool() public {
+        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0);
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
+
+        NonBoolPausedMock evil = new NonBoolPausedMock();
+        address[] memory watch = new address[](1); watch[0] = address(evil);
+        vm.prank(ADMIN); p2.setAccrualPauseWatch(watch);
+
+        vm.warp(block.timestamp + 1 days);
+        p2.accrue(); // pre-fix: reverts Panic(0x21); post-fix: nonzero word treated as paused, no revert
+
+        // and entry points still work — the pool is not bricked (deposit runs accrue() first)
+        vm.startPrank(LENDER); uint256 sh = p2.deposit(1_000e6, LENDER); vm.stopPrank();
+        assertGt(sh, 0, "deposit still works; the pool is not frozen by a non-boolean paused() word");
     }
 
     /// R1-AUDIT: THE FIRST-DEPOSITOR INFLATION ATTACK, run as an actual attack rather than

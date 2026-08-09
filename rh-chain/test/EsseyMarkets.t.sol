@@ -245,6 +245,25 @@ contract EsseyMarketsTest is Test {
         mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 8, m);
     }
 
+    /// Borrow-path fix #3: the operator-typed decimals must MATCH the token's / feed's real decimals(),
+    /// so a one-char typo can't silently reproduce the 1e12 mispricing. tok is 18-dec, px feed is 8-dec.
+    function test_decimalsMustMatchRealTokenAndFeed() public {
+        EsseyMarkets.Market memory m = _conservative(); // collateralDecimals: 18 (correct for tok)
+        // wrong collateral decimals (token is really 18)
+        m.collateralDecimals = 6;
+        vm.prank(ADMIN);
+        vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.InvalidRiskParams.selector, "collateral decimals mismatch"));
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 8, m);
+        // wrong feed decimals (feed is really 8)
+        m.collateralDecimals = 18;
+        vm.prank(ADMIN);
+        vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.InvalidRiskParams.selector, "feed decimals mismatch"));
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 6, m);
+        // matching decimals are accepted
+        vm.prank(ADMIN);
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 8, m);
+    }
+
     // ---------------------------------------------------------------- timelock
 
     function test_paramChangeCannotBeCommittedImmediately() public {

@@ -203,9 +203,15 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     function _anyCollateralPaused() internal view returns (bool) {
         uint256 n = accrualPauseWatch.length;
         for (uint256 i = 0; i < n; i++) {
+            // Cap the gas so a watched token cannot gas-grief accrue() (which every entry point runs).
             (bool ok, bytes memory ret) =
-                accrualPauseWatch[i].staticcall(abi.encodeWithSignature("paused()"));
-            if (ok && ret.length >= 32 && abi.decode(ret, (bool))) return true;
+                accrualPauseWatch[i].staticcall{gas: 50_000}(abi.encodeWithSignature("paused()"));
+            // Decode the return as a RAW WORD, never as `bool`: abi.decode(_, (bool)) reverts Panic(0x21)
+            // on any 32-byte word other than 0/1, and because this runs inside accrue()'s own frame that
+            // panic would bubble up and brick EVERY entry point — including liquidation — until an admin
+            // reset the watch list. A nonzero word is treated as paused (fail-safe: suspend rather than
+            // revert); a malformed/oversized/short return is treated as not-paused.
+            if (ok && ret.length >= 32 && abi.decode(ret, (uint256)) != 0) return true;
         }
         return false;
     }

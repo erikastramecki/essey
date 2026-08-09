@@ -5,6 +5,7 @@ import {StaleFeedGuard} from "./StaleFeedGuard.sol";
 import {LivenessOracle} from "./LivenessOracle.sol";
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 import {IScaledUI} from "./interfaces/IScaledUI.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /// Risk registry: which Stock Tokens are accepted, on what terms, and when.
 ///
@@ -171,6 +172,7 @@ contract EsseyMarkets is StaleFeedGuard {
     ) external {
         if (msg.sender != admin) revert NotAdmin();
         _validate(m);
+        _assertRealDecimals(token, m.collateralDecimals, feed, feedDecimals);
         _pending[token] =
             PendingMarket(m, feed, maxStaleness, feedDecimals, block.timestamp + PARAM_TIMELOCK);
         emit MarketProposed(token, m.ltvBps, m.liqThresholdBps, block.timestamp + PARAM_TIMELOCK);
@@ -184,6 +186,9 @@ contract EsseyMarkets is StaleFeedGuard {
         // Re-validate at commit: the rules may have tightened since the proposal was made, and a
         // stale proposal must not be able to install parameters that would be rejected today.
         _validate(p.m);
+        // Re-cross-check decimals at commit too: the token's decimals() can't change, but this keeps the
+        // guarantee at the authoritative install point, symmetric with the re-validation above.
+        _assertRealDecimals(token, p.m.collateralDecimals, p.feed, p.feedDecimals);
         _setFeed(token, p.feed, p.maxStaleness, p.feedDecimals);
         _markets[token] = p.m;
         delete _pending[token];
@@ -206,6 +211,21 @@ contract EsseyMarkets is StaleFeedGuard {
         if (m.liqBonusBps > MAX_LIQ_BONUS_BPS) revert InvalidRiskParams("bonus too high");
         if (m.cap == 0) revert InvalidRiskParams("cap must be set");
         if (m.collateralDecimals == 0 || m.collateralDecimals > 36) revert InvalidRiskParams("bad collateral decimals");
+    }
+
+    /// Cross-check the operator-typed decimals against the token's / feed's real decimals() on-chain.
+    /// collateralValue normalises with `collateralDecimals` and `feedDecimals`; if either disagrees with
+    /// the source of truth, a one-character typo silently reproduces the original 1e12 mispricing (the
+    /// drain the decimals fix was meant to close). Making them impossible to commit unless they match
+    /// removes the operator-trust surface entirely — impossible-by-construction, not deploy-discipline.
+    function _assertRealDecimals(
+        address token,
+        uint8 collateralDecimals,
+        AggregatorV3Interface feed,
+        uint8 feedDecimals
+    ) internal view {
+        if (collateralDecimals != IERC20Metadata(token).decimals()) revert InvalidRiskParams("collateral decimals mismatch");
+        if (feedDecimals != feed.decimals()) revert InvalidRiskParams("feed decimals mismatch");
     }
 
     /// Deliberately redundant with the enabled-check inside `collateralValue`: it fails fast with
