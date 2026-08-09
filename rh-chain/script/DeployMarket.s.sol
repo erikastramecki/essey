@@ -13,6 +13,7 @@ import {EsseyExchange} from "../src/market/EsseyExchange.sol";
 import {EsseyCases} from "../src/market/EsseyCases.sol";
 import {MintDistributor} from "../src/market/MintDistributor.sol";
 import {IConverter} from "../src/market/IConverter.sol";
+import {FeeRouter} from "../src/market/FeeRouter.sol";
 
 /// The Market layer deploy — the ONE place the wiring order lives as code.
 ///
@@ -40,8 +41,15 @@ contract DeployMarket is Script {
     uint256 constant MAX_SUPPLY = 2222;
     uint256 constant ROOT_TIMELOCK = 2 days;
     uint256 constant TIP_BPS = 100; // 1% to whoever rings the Bell
-    uint256 constant BOOSTER_SHARE_BPS = 7000; // 70% of every trade/case fee to the pot
     uint256 constant CASE_SPREAD_BPS = 500; // 5% sell-back discount (floor 150 enforced on-chain)
+    // Fee routing (mainnet-config B1 fix). The FeeRouter routes only USDG and cannot hold $ESSEY, so it
+    // is the Exchange's treasury ONLY (the Exchange's $ESSEY stays in its reserve). Cases sends 100% of its
+    // USDG fee straight to the Bell (its $ESSEY case-price goes to the multisig treasury). The 60/20/20
+    // revenue/bankroll/ops split therefore runs on Exchange trade fees; Cases fees are 100% revenue-share.
+    uint256 constant EXCHANGE_BOOSTER_BPS = 0; // Exchange -> 100% of USDG fee to the FeeRouter
+    uint256 constant CASES_BOOSTER_BPS = 10_000; // Cases -> 100% of USDG fee to the Bell pot
+    uint256 constant FR_BELL_BPS = 6_000; // FeeRouter: 60% revenue-share
+    uint256 constant FR_BANKROLL_BPS = 2_000; // FeeRouter: 20% bankroll (ops = remainder 20%)
 
     /// Tier ladder: weights are the payout multiplier vs Base=100; fees are the $ESSEY activation
     /// sink (half burned by the Bell). Four rungs at launch.
@@ -59,6 +67,8 @@ contract DeployMarket is Script {
         address treasury; // receives $ESSEY supply, protocol fee shares, case prices
         address seeder; // Exchange float manager (add-only role)
         address bankroll; // Cases inventory/buyback funder (add-only role)
+        address frBankroll; // FeeRouter SOLVENCY reserve (distinct from Cases' prize bankroll above)
+        address frOps; // FeeRouter operating treasury
         IERC20 usdg; // the reward/fee stable (6 decimals on Robinhood Chain)
         AggregatorV3Interface usdgFeed; // USDG/USD Chainlink feed (Cases sell-back base leg)
         AggregatorV3Interface sequencerFeed; // address(0) on this chain; see StaleFeedGuard
@@ -82,6 +92,7 @@ contract DeployMarket is Script {
         SeatArt art;
         EsseyExchange exchange;
         EsseyCases cases_;
+        FeeRouter feeRouter;
     }
 
     function _configFromEnv() internal view returns (Config memory c) {
@@ -89,6 +100,8 @@ contract DeployMarket is Script {
         c.treasury = vm.envOr("TREASURY", c.admin);
         c.seeder = vm.envOr("SEEDER", c.admin);
         c.bankroll = vm.envOr("BANKROLL", c.admin);
+        c.frBankroll = vm.envOr("FR_BANKROLL", c.treasury); // FeeRouter solvency reserve (multisig-managed)
+        c.frOps = vm.envOr("FR_OPS", c.treasury); // FeeRouter ops treasury
         c.usdg = IERC20(vm.envAddress("USDG"));
         c.usdgFeed = AggregatorV3Interface(vm.envAddress("USDG_FEED"));
         c.sequencerFeed = AggregatorV3Interface(vm.envOr("SEQUENCER_FEED", address(0)));
@@ -111,16 +124,23 @@ contract DeployMarket is Script {
         d.essey = new EsseyToken(c.treasury);
         (uint256[] memory fees, uint256[] memory weights) = _ladder();
         d.bell = new Bell(d.seat, d.essey, c.usdg, c.treasury, c.minRing, TIP_BPS, fees, weights, c.converter, c.defaultPayout);
+        // FeeRouter (B1 fix): 60% Bell revenue-share / 20% bankroll / 20% ops, on USDG only. Deployed after
+        // the Bell (it references it). Its token MUST equal bell.reward() (USDG) for the routed cut to grow
+        // the pot — c.usdg is that stable, checked by the Exchange/Bell constructors downstream.
+        d.feeRouter = new FeeRouter(c.usdg, address(d.bell), c.frBankroll, c.frOps, FR_BELL_BPS, FR_BANKROLL_BPS);
         // SeatArt is deliberately NOT constructed here: its constructor asserts seat.hook() == bell,
-        // so it can only exist after the admin's setSeatHook — see wireAll. (The first draft of this
-        // script constructed it here and the guard correctly refused to deploy.)
+        // so it can only exist after the admin's setSeatHook — see wireAll.
+        // Exchange treasury = the FeeRouter (its USDG fee routes 60/20/20); boosterShareBps = 0 so 100% of the
+        // fee reaches the router. The Exchange's $ESSEY never touches treasury (stays in the two-sided reserve).
         d.exchange = new EsseyExchange(
-            IERC721(address(d.seat)), d.essey, d.bell, c.treasury, c.seeder,
-            c.seatPrice, c.swapFee, c.snipeFee, c.sellFee, BOOSTER_SHARE_BPS
+            IERC721(address(d.seat)), d.essey, d.bell, address(d.feeRouter), c.seeder,
+            c.seatPrice, c.swapFee, c.snipeFee, c.sellFee, EXCHANGE_BOOSTER_BPS
         );
+        // Cases treasury = the multisig (holds the $ESSEY case price); boosterShareBps = 10000 sends 100% of
+        // the USDG fee to the Bell pot, zero remainder to treasury -> nothing stranded (B1).
         d.cases_ = new EsseyCases(
             d.essey, d.bell, c.usdgFeed, c.sequencerFeed, c.treasury, c.bankroll,
-            c.casePrice, c.caseBuyFee, CASE_SPREAD_BPS, BOOSTER_SHARE_BPS, c.seeder // seeder = the convenience open-keeper
+            c.casePrice, c.caseBuyFee, CASE_SPREAD_BPS, CASES_BOOSTER_BPS, c.seeder // seeder = the convenience open-keeper
         );
     }
 
@@ -150,6 +170,7 @@ contract DeployMarket is Script {
         console.log("essey       ", address(d.essey));
         console.log("bell        ", address(d.bell));
         console.log("art         ", address(d.art));
+        console.log("feeRouter   ", address(d.feeRouter));
         console.log("exchange    ", address(d.exchange));
         console.log("cases       ", address(d.cases_));
         console.log("");
