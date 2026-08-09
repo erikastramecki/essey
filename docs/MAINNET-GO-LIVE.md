@@ -23,14 +23,26 @@ in `OUTSTANDING.md` too, so the two never drift.
 
 The Mancer-style revenue-share flywheel. Contract written + tested; not yet audited or deployed.
 
-- **#50** per-Seat payout-asset toggle (stock vs USDG) — UI only, feature already on-chain.
-- **#51** `FeeRouter.sol` (60% Bell / 20% bankroll / 20% ops) — ✅ built, 9/9 tests, 100% coverage.
-- **#52** 3-agent audit of the FeeRouter + the redeploy set.
-- **#53** redeploy Exchange/Cases/Degen → router + migrate reserves/inventory *(high blast radius)*.
-- **#54** revenue-share headline UI + `TOKENOMICS.md` v2 + docs consolidation.
+- **#51** `FeeRouter.sol` (60% Bell / 20% bankroll / 20% ops) — ✅ DONE. Immutable/ownerless, two
+  impossible-by-construction guards, 10/10 tests, 100% coverage, **6 clean adversarial verdicts across two
+  same-round audits**. Committed to `feat/essey-market-layer`.
+- **#54** `TOKENOMICS.md` v2 + docs consolidation — ✅ DONE. Canonical doc now describes the 60/20/20
+  revenue-share, the Seat floor (was undocumented), and reconciles "no *$ESSEY* buyback"; `TOKENOMICS-essey.md`
+  retired to a pointer.
+- **#50** per-Seat payout choice — on-chain finding: today `defaultPayout=BUNDLE` and the converter does not
+  support USDG, so a holder cannot pick plain USDG (only which stock). **Decision: converter USDG-passthrough**
+  — stock stays the default, USDG becomes the opt-out. Lands in Phase 6 (mainnet converter config); the testnet
+  toggle, if shipped, offers stock-selection only.
+- **Revenue-share headline UI** — DEFERRED to Phase 6. It isn't honest to headline "earn a 60% revenue-share"
+  before the router is actually wired (testnet fees currently route boosterShare→Bell / rest→treasury, not
+  through the router), and the public "earn revenue" claim needs securities-counsel sign-off first.
 
-**Gate:** router + redeploy set audited clean (same round); split verified on-chain (a real fee lands
-60/20/20); docs describe the deployed reality, not the old "100% to Bell."
+**Why no testnet redeploy:** the live Exchange is *adminless over funds* (the `seeder` role can only add Seat
+float; there is no withdraw for the $ESSEY reserve or inventory), so inserting the router by redeploying it
+would strand those assets. The router therefore ships in the mainnet deploy, not as a testnet migration.
+
+**Gate:** fee model documented + audited; router wiring specified for Phase 6. (On-chain 60/20/20 verification
+happens at Phase 6 smoke-test, since the router only goes live on mainnet.)
 
 ## Phase 1 — Close the borrowing-path findings
 
@@ -107,6 +119,12 @@ wallet (and only approved ones) can mint a Seat on mainnet; declined/pending can
 ## Phase 6 — Mainnet deploy + seed
 
 - Deploy the full stack with the multisig config; verify addresses; update `DEPLOYMENT` + `live.ts`.
+- **FeeRouter wiring:** deploy the router, then deploy each fee emitter (Exchange/Cases/Degen) with
+  `treasury = FeeRouter` and `boosterShareBps = 0`, so 100% of every fee flows `→ router → 60/20/20`,
+  enforced on-chain from launch (greenfield — no migration). Run a supervised keeper to `flush()` the router.
+- **Payout choice:** deploy the mainnet converter with a **USDG passthrough** (`isSupported(USDG)=true`,
+  identity convert) so a Seat can be set to pay in USDG; keep `defaultPayout = BUNDLE` (stock default).
+  Then ship the per-Seat payout toggle (#50) and the revenue-share headline UI (counsel-approved copy).
 - Seed: Seat inventory + $ESSEY reserve, converter stock reserves, bankroll, FeeRouter wiring.
 - Commit the **initial approved beta cohort** as the first mainnet root.
 - **Smoke-test every path with tiny real amounts** before opening: buy/sell a Seat, ring the Bell (both
