@@ -46,6 +46,8 @@ contract DeployMarketTest is Test, IERC721Receiver {
         c.treasury = address(0x7EA);
         c.seeder = address(this);
         c.bankroll = address(this);
+        c.frBankroll = address(0x7EA); // FeeRouter solvency reserve
+        c.frOps = address(0x7EA); // FeeRouter ops
         c.usdg = IERC20(address(usdg));
         c.usdgFeed = AggregatorV3Interface(address(usdgFeed));
         c.sequencerFeed = AggregatorV3Interface(address(0));
@@ -86,6 +88,8 @@ contract DeployMarketTest is Test, IERC721Receiver {
         c.treasury = address(0x7EA);
         c.seeder = address(this);
         c.bankroll = address(this);
+        c.frBankroll = address(0x7EA); // FeeRouter solvency reserve
+        c.frOps = address(0x7EA); // FeeRouter ops
         c.usdg = IERC20(address(usdg));
         c.usdgFeed = AggregatorV3Interface(address(usdgFeed));
         c.reserveCap = 10;
@@ -143,9 +147,12 @@ contract DeployMarketTest is Test, IERC721Receiver {
         d.cases_.seedUnits(address(aapl), 3);
 
         vm.startPrank(alice);
-        uint256 bought = d.exchange.buy(); // fee -> the pot
-        uint256 caseId = d.cases_.buy(); // fee -> the pot
+        uint256 bought = d.exchange.buy(); // USDG fee -> the FeeRouter (B1 wiring)
+        uint256 caseId = d.cases_.buy(); // USDG fee -> the Bell pot (Cases boosterShareBps=10000)
         vm.stopPrank();
+        // The Exchange fee sits in the FeeRouter until flushed (Bell funding is keeper-driven now); a
+        // keeper flush routes 60% to the Bell pot, 20% bankroll, 20% ops.
+        d.feeRouter.flush();
         vm.roll(block.number + 2);
         vm.prank(alice);
         (address wonToken,) = d.cases_.open(caseId);
