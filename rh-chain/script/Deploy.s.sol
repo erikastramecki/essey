@@ -91,7 +91,7 @@ contract Deploy is Script {
         vm.startBroadcast();
 
         // 15-minute liveness bound, 10-minute gap trigger, 1-hour post-outage grace.
-        LivenessOracle liveness = new LivenessOracle(keeper, guardian, 15 minutes, 1 hours, 10 minutes);
+        LivenessOracle liveness = new LivenessOracle(keeper, guardian, 30 minutes, 30 minutes, 15 minutes);
         EsseyMarkets markets =
             new EsseyMarkets(AggregatorV3Interface(sequencer), liveness, admin, assetDec);
         // Zero-rate to start: the MVP is proving the loan path, not the interest curve.

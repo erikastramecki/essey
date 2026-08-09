@@ -28,6 +28,7 @@ contract LivenessOracle {
     error NotGuardian();
     error ZeroAddress();
     error BadGapThreshold();
+    error BadResumeGrace();
 
     event Heartbeat(uint256 at);
     event GapDetected(uint256 gapSeconds, uint256 liquidationsResumeAt);
@@ -67,6 +68,12 @@ contract LivenessOracle {
     ) {
         if (keeper_ == address(0) || guardian_ == address(0)) revert ZeroAddress();
         if (gapThreshold_ == 0 || gapThreshold_ > maxHeartbeatAge_) revert BadGapThreshold();
+        // The post-gap grace must not dwarf the gap that triggers it. A gap only just over the threshold
+        // — e.g. routine keeper jitter — would otherwise suspend liquidations for many multiples of the
+        // outage's own length, and repeated jitter re-arms it: a liquidation DoS. Bounding resumeGrace to
+        // <= 4x gapThreshold makes that impossible-by-construction; the previously-shipped 1h grace over a
+        // 10m gap (6x) is now un-deployable.
+        if (resumeGrace_ > 4 * gapThreshold_) revert BadResumeGrace();
         keeper = keeper_;
         guardian = guardian_;
         maxHeartbeatAge = maxHeartbeatAge_;

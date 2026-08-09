@@ -22,7 +22,7 @@ contract EsseyMarketsTest is Test {
     // 2025-07-21 15:00 UTC — a Monday, 11:00 ET, inside the US equity session.
     uint256 constant MON_IN_SESSION = 1_753_110_000;
     uint256 constant MAX_AGE = 15 minutes;
-    uint256 constant GRACE = 1 hours;
+    uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
 
     // The conservative v1 stance: 35% LTV / 55% liquidation = a 20pp gap.

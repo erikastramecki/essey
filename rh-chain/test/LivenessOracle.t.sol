@@ -10,7 +10,7 @@ contract LivenessOracleTest is Test {
     address GUARDIAN;
 
     uint256 constant MAX_AGE = 15 minutes;
-    uint256 constant GRACE = 1 hours;
+    uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
 
     function setUp() public {
@@ -129,6 +129,19 @@ contract LivenessOracleTest is Test {
         new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, MAX_AGE + 1);
         vm.expectRevert(LivenessOracle.BadGapThreshold.selector);
         new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, 0);
+    }
+
+    /// Borrow-path fix #8: the post-gap grace must not dwarf the gap that triggers it. A gap barely over
+    /// the threshold — routine keeper jitter — would otherwise suspend liquidations for many multiples of
+    /// the outage's own length, and re-arm on each blip: a liquidation DoS. resumeGrace > 4x gapThreshold
+    /// is un-deployable; the previously-shipped 1h grace over a 10m gap (6x) now fails at construction.
+    function test_resumeGraceCannotDwarfTheGapThreshold() public {
+        vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
+        new LivenessOracle(KEEPER, GUARDIAN, 15 minutes, 1 hours, 10 minutes); // the old shipped 6x config
+        // exactly 4x is allowed; strictly more is not
+        new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, 40 minutes, 10 minutes); // 4x -> ok
+        vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
+        new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, 40 minutes + 1, 10 minutes); // just over 4x
     }
 
     function test_onlyKeeperCanBeat() public {

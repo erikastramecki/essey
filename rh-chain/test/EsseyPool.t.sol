@@ -44,7 +44,7 @@ contract EsseyPoolTest is Test {
 
     uint256 constant MON_IN_SESSION = 1_753_110_000;
     uint256 constant MAX_AGE = 15 minutes;
-    uint256 constant GRACE = 1 hours;
+    uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
 
     function setUp() public virtual {
