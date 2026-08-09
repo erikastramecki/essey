@@ -90,7 +90,8 @@ contract Deploy is Script {
 
         vm.startBroadcast();
 
-        // 15-minute liveness bound, 10-minute gap trigger, 1-hour post-outage grace.
+        // 30-minute liveness bound, 15-minute gap trigger, 30-minute post-outage grace (grace <= 4x gap,
+        // per the LivenessOracle guard; gap comfortably above keeper jitter).
         LivenessOracle liveness = new LivenessOracle(keeper, guardian, 30 minutes, 30 minutes, 15 minutes);
         EsseyMarkets markets =
             new EsseyMarkets(AggregatorV3Interface(sequencer), liveness, admin, assetDec);

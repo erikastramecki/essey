@@ -30,9 +30,18 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
 
 ## Deploy config / parameters
 
-- **FeeRouter wiring:** deploy `FeeRouter(usdg, bell, bankroll, ops, 6000, 2000)` → 60% Bell / 20% bankroll /
-  20% ops; then deploy each fee emitter (Exchange/Cases/Degen) with `treasury = FeeRouter` and
-  `boosterShareBps = 0`, so 100% of fees flow through the router. Supervised keeper calls `flush()`.
+- **FeeRouter wiring (CORRECTED after the mainnet-config audit — B1):** the FeeRouter routes exactly ONE
+  token (USDG) and has no rescue, so it must **NEVER** be the `treasury` of an emitter that also sends $ESSEY
+  there — that $ESSEY would be stranded forever. Cases/Degen/Bell send $ESSEY (case price, tier fee) to
+  `treasury`. Corrected wiring:
+  - Deploy `FeeRouter(usdg, bell, bankroll, ops, 6000, 2000)` → 60% Bell / 20% bankroll / 20% ops. Keeper flushes.
+  - **Exchange:** `treasury = FeeRouter`, `boosterShareBps = 0` → its 100%-USDG fee flows through the router
+    (the Exchange's $ESSEY stays in its two-sided reserve, never touches `treasury` — safe).
+  - **Cases / Degen:** `treasury = MULTISIG` (holds the $ESSEY case price), `boosterShareBps = 10000` → 100%
+    of their USDG fee → the Bell pot directly (revenue-share; no bankroll/ops carve for these two).
+  - **Bell** tier activation: $ESSEY → 50% burn / 50% `treasury = MULTISIG`.
+  - Net: the 60/20/20 split applies to Exchange trade fees (the primary engine); Cases/Degen USDG fees are
+    100% revenue-share to the Bell; all $ESSEY sinks land in the multisig. No token is ever stranded.
 - **Payout choice:** deploy the converter with a **USDG passthrough** (`isSupported(USDG)=true`, identity) +
   `Bell.defaultPayout = BUNDLE` (stock default, USDG opt-out) — the decided per-Seat payout choice.
 - **Lending:** `EsseyMarkets(sequencerFeed=<disabled/keeper>, liveness, admin=multisig, assetDecimals=6)`;
@@ -64,8 +73,31 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   the 20pp gap absorb this, but it's the accepted overnight/weekend blindness.
 - **adminBurn / multiplier EOA** — unmitigated on-chain (Robinhood's key); priced into LTV + disclosed.
 
+## Mainnet-config audit round — findings + disposition
+
+The round (3 lenses: 6-dec USDG · feeds/sequencer/roles · wiring/Dice/multisig) surfaced the following;
+each is closed by a code fix, a config correction, or an accepted+disclosed disposition.
+
+| Finding | Sev | Disposition |
+|---|---|---|
+| `assetDecimals` not cross-checked vs the real asset | MED | ✅ **code fix** — pool-constructor invariant (`1503f90`) |
+| Scheduled-`uiMultiplier`↔feed desync borrow window | MED-HIGH | ✅ **code fix** — `canBorrow` refuses borrows within 1h of a pending `effectiveAt` (`676c205`) |
+| No on-chain liveness gate on `canBorrow` | MED | ✅ **code fix** — `canBorrow` now gates on `liquidationsAllowed()` (`676c205`) |
+| Admin can swap a live market's feed | HIGH | ✅ **code fix** — feed is append-only on `commitMarket` (`676c205`) |
+| **B1** `treasury=FeeRouter` strands $ESSEY | BLOCKER | ✅ **config fix** — corrected wiring above (Exchange→router; Cases/Degen/Bell $ESSEY→multisig) |
+| **B2** Degen reserve seeded by minting mock stock | BLOCKER | ⚠️ **deploy TODO** — mainnet must acquire real stock to `seedReserve` (a `Deploy-mainnet` seeding step; degen fail-safe-reverts until seeded) |
+| Mainnet `Deploy.s.sol` ships zero rates | MED | ⚠️ **config** — set the intended curve at deploy: `base=1000 (10% APR), reserve=2000 (20%)`, `bellShareBps=5000` |
+| Entropy provider defaults to `0xDACE` | LOW | ⚠️ **deploy** — pass the real Dice `ENTROPY_PROVIDER`; entropy design itself confirmed sound |
+| Stale liveness comments in 2 scripts | LOW | ✅ **fixed** (`Deploy.s.sol`, `DeployLending.s.sol`) |
+| Bell funding keeper-dependent (`boosterShareBps=0` on Exchange) | LOW | ops — run a `FeeRouter.flush()` keeper |
+| Early-close (#6) · deny-list default-open | LOW | accepted + disclosed (see `OUTSTANDING.md`) |
+
+**adminBurn protection confirmed SOUND** by the audit (the collateral index does its job). **Entropy design
+confirmed SOUND** (provable-solvency reservation before the roll, commit-reveal correct, reclaim valve).
+
 ## Gate
 
-The **mainnet-config audit round** (3 adversarial lenses: 6-dec USDG · feeds/sequencer/roles · wiring/Dice/
-multisig) is running against this config. 3-clean-same-round is the true mainnet gate. Then Phase 4 (multisig)
-+ Phase 3 (keepers) + counsel sign-off → Phase 6 deploy.
+Code fixes are in (380/380 tests green). The remaining items are **deploy-time config** (B2 seeding, mainnet
+rates, entropy provider) that land in the `Deploy-mainnet` script (Phase 6), not code. A **re-run of the
+mainnet-config audit round** on the hardened code confirms 3-clean before the gate is called met. Then Phase 4
+(multisig) + Phase 3 (keepers) + counsel sign-off → Phase 6 deploy.

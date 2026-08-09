@@ -30,8 +30,8 @@ contract DeployLending is Script {
 
         vm.startBroadcast();
 
-        // Liveness: 15-min heartbeat, 1-hour resume grace, 10-min gap. Deployer is keeper+guardian on
-        // testnet; a real keeper would beat it (liquidations gate on it, borrow/supply do not).
+        // Liveness: 30-min heartbeat, 30-min resume grace, 15-min gap (grace <= 4x gap guard). Deployer is
+        // keeper+guardian on testnet; a real keeper would beat it (liquidation AND now borrow gate on it).
         LivenessOracle liveness = new LivenessOracle(me, me, 30 minutes, 30 minutes, 15 minutes);
         EsseyMarkets markets = new EsseyMarkets(AggregatorV3Interface(address(0)), liveness, me, 18);
         // 10% base APR, 20% of interest reserved, loan-interest reserve split 50% → the Bell.
