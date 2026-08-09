@@ -328,9 +328,37 @@ contract EsseyPoolTest is Test {
         vm.warp(block.timestamp + 1 days);
         p2.accrue(); // pre-fix: reverts Panic(0x21); post-fix: nonzero word treated as paused, no revert
 
-        // and entry points still work — the pool is not bricked (deposit runs accrue() first)
+        // and entry points still work — the pool is not bricked (deposit runs accrue() first).
+        // Mint fresh so the test doesn't depend on LENDER's leftover balance across harnesses.
+        usdg.mint(LENDER, 1_000e6);
         vm.startPrank(LENDER); uint256 sh = p2.deposit(1_000e6, LENDER); vm.stopPrank();
         assertGt(sh, 0, "deposit still works; the pool is not frozen by a non-boolean paused() word");
+    }
+
+    /// HIGH (borrow-path fix #4): interest pending between accruals must NOT be extractable by an atomic
+    /// deposit->redeem. Pre-fix, OZ priced the deposit against stale (pre-accrual) totalAssets, so the
+    /// depositor captured interest owed to existing lenders. Post-fix, accrue() runs before the preview,
+    /// so the attacker buys shares at the current price and redeems at the same price — no free interest.
+    function test_pendingInterestNotExtractableByDepositRedeem() public {
+        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0); // 10% APR
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
+        vm.startPrank(ALICE);
+        tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
+        p2.borrow(address(tok), 10e18, 700e6); // a borrower generating interest (max LTV on 10 @ $200)
+        vm.stopPrank();
+
+        // interest accrues but is NOT yet booked (no accrue() call in the interim)
+        vm.warp(block.timestamp + 30 days);
+
+        address ATTACKER = makeAddr("attacker4");
+        usdg.mint(ATTACKER, 100_000e6);
+        vm.startPrank(ATTACKER);
+        usdg.approve(address(p2), type(uint256).max);
+        uint256 shares = p2.deposit(100_000e6, ATTACKER); // pre-fix: priced at stale low totalAssets
+        uint256 got = p2.redeem(shares, ATTACKER, ATTACKER); // pre-fix: redeems after interest booked -> profit
+        vm.stopPrank();
+
+        assertLe(got, 100_000e6, "attacker cannot skim pending interest owed to existing lenders");
     }
 
     /// R1-AUDIT: THE FIRST-DEPOSITOR INFLATION ATTACK, run as an actual attack rather than

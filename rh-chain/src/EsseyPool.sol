@@ -264,6 +264,33 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         super._withdraw(caller, receiver, owner_, assets_, shares);
     }
 
+    /// Borrow-path fix #4: accrue BEFORE the share price is computed. OZ's public deposit/mint/withdraw/
+    /// redeem call previewX() — which reads totalAssets() — BEFORE _deposit/_withdraw, where accrual used
+    /// to happen. So shares were priced against stale, pre-interest totalAssets: a depositor could buy
+    /// shares cheap and let the pending interest book into value in the same tx (deposit -> accrue ->
+    /// redeem, flash-loanable), skimming interest owed to existing lenders. Accruing in the public entry
+    /// point makes the preview see current debt. The accrue() still inside _deposit/_withdraw is then a
+    /// dt==0 no-op, kept as defense-in-depth and because it carries the nonReentrant guard.
+    function deposit(uint256 assets_, address receiver) public override returns (uint256) {
+        accrue();
+        return super.deposit(assets_, receiver);
+    }
+
+    function mint(uint256 shares, address receiver) public override returns (uint256) {
+        accrue();
+        return super.mint(shares, receiver);
+    }
+
+    function withdraw(uint256 assets_, address receiver, address owner_) public override returns (uint256) {
+        accrue();
+        return super.withdraw(assets_, receiver, owner_);
+    }
+
+    function redeem(uint256 shares, address receiver, address owner_) public override returns (uint256) {
+        accrue();
+        return super.redeem(shares, receiver, owner_);
+    }
+
     // ---------------------------------------------------------------- reserves -> the Bell
 
     /// Route accrued protocol reserves: `bellShareBps` to the Bell's pot, the rest to the reserve
