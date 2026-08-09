@@ -154,7 +154,7 @@ contract StaleFeedGuard {
         //
         // A very quiet stock that has not moved 0.5% since the open would also be refused. That is
         // the conservative direction — declining to lend on an unconfirmed price — and is accepted.
-        if (inSession && updatedAt < _sessionOpenOf(block.timestamp)) {
+        if (inSession && updatedAt < _sessionOpenEarliestOf(block.timestamp)) {
             inSession = false;
         }
 
@@ -187,6 +187,14 @@ contract StaleFeedGuard {
     uint256 public constant SESSION_OPEN_UTC = 14 hours + 30 minutes;
     /// 20:00 UTC — the earlier of the two session closes (EDT). Conservative.
     uint256 public constant SESSION_CLOSE_UTC = 20 hours;
+    /// 13:30 UTC — the EARLIER of the two session opens (EDT). Used ONLY as the holiday-check threshold
+    /// below. A genuine EDT opening-hour print (13:30-14:30 UTC) must not be mistaken for a stale
+    /// yesterday/holiday print: the old code compared against SESSION_OPEN_UTC (14:30) and false-rejected
+    /// those prints, setting inSession=false — and because `canLiquidate` shares that flag, that was a
+    /// liquidation OUTAGE on EDT days. Yesterday's close (prior-day ~20:00 UTC) is still far below today's
+    /// 13:30, so holiday detection is unaffected; the only cost is possibly honouring an early
+    /// (13:30-14:30) print on an EST day, which is well within the staleness bound already accepted.
+    uint256 public constant SESSION_OPEN_EARLIEST_UTC = 13 hours + 30 minutes;
 
     function _isWeekday(uint256 ts) internal pure returns (bool) {
         // 1970-01-01 was a Thursday: shift so 0 = Monday.
@@ -194,9 +202,10 @@ contract StaleFeedGuard {
         return dow < 5;
     }
 
-    /// The start of today's session, in absolute time.
-    function _sessionOpenOf(uint256 ts) internal pure returns (uint256) {
-        return (ts / 86400) * 86400 + SESSION_OPEN_UTC;
+    /// The earliest today's session could have opened (EDT open, 13:30 UTC), in absolute time — the
+    /// holiday-check threshold. See SESSION_OPEN_EARLIEST_UTC.
+    function _sessionOpenEarliestOf(uint256 ts) internal pure returns (uint256) {
+        return (ts / 86400) * 86400 + SESSION_OPEN_EARLIEST_UTC;
     }
 
     function feedConfig(address token) external view returns (FeedConfig memory) {

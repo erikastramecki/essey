@@ -217,6 +217,19 @@ contract StaleFeedGuardTest is Test {
         assertTrue(inSession, "a normal session must still work");
     }
 
+    /// Borrow-path fix #7: a genuine EDT opening-hour print (13:30-14:30 UTC) must NOT be false-rejected as
+    /// a holiday. Pre-fix the holiday threshold was SESSION_OPEN_UTC (14:30, EST open), so such a print set
+    /// inSession=false — and because canLiquidate shares the flag, a liquidation OUTAGE on EDT days.
+    function test_edtOpeningHourPrintIsNotFalseRejected() public {
+        uint256 day = (MON_IN_SESSION / 86400) * 86400;
+        uint256 mid = day + 14 hours + 35 minutes; // in the intersection window (>=14:30): clock says open
+        px.set(200e8, day + 13 hours + 45 minutes); // a fresh EDT opening-hour print (13:30-14:30 UTC)
+        vm.warp(mid);
+        assertTrue(g.isUsMarketHours(mid), "the calendar believes it is a session");
+        (,, bool inSession) = g.priceOf(TOK);
+        assertTrue(inSession, "an EDT opening-hour print is a valid today print, not a holiday");
+    }
+
     function test_weekendIsNeverInSession() public view {
         uint256 day = (MON_IN_SESSION / 86400) * 86400;
         // Monday + 5 = Saturday, +6 = Sunday. Midday both days, when a naive
