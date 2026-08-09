@@ -294,4 +294,43 @@ contract EsseyMarketsTest is Test {
         mk.disableMarket(address(tok));
         assertFalse(mk.market(address(tok)).enabled);
     }
+
+    // ---------------------------------------------------------------- fix #9: pin boundaries + constants
+    // (kills mutation survivors on PARAM_TIMELOCK and MIN_RISK_GAP_BPS — a shortened timelock or narrowed
+    //  gap passed a green suite because nothing asserted the exact edge or the exact value.)
+
+    /// The timelock boundary is exact: locked at effectiveAt-1, open at effectiveAt.
+    function test_timelockBoundaryIsExact() public {
+        vm.startPrank(ADMIN);
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 8, _conservative());
+        uint256 effectiveAt = block.timestamp + mk.PARAM_TIMELOCK();
+        vm.warp(effectiveAt - 1);
+        vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.TimelockNotElapsed.selector, 1));
+        mk.commitMarket(address(tok));
+        vm.warp(effectiveAt); // exactly elapsed
+        mk.commitMarket(address(tok));
+        vm.stopPrank();
+        assertTrue(mk.market(address(tok)).enabled, "commits exactly at the timelock boundary");
+    }
+
+    /// The risk gap boundary is exact: a gap of exactly MIN_RISK_GAP_BPS is allowed, one bp narrower is not.
+    function test_riskGapBoundaryIsExact() public {
+        uint16 gap = mk.MIN_RISK_GAP_BPS();
+        EsseyMarkets.Market memory m = _conservative();
+        m.ltvBps = 3_000;
+        m.liqThresholdBps = 3_000 + gap; // gap exactly at the minimum -> allowed
+        vm.prank(ADMIN);
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 8, m);
+        m.liqThresholdBps -= 1; // one bp narrower -> rejected
+        vm.prank(ADMIN);
+        vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.InvalidRiskParams.selector, "risk gap too narrow"));
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 90_000, 8, m);
+    }
+
+    /// Pin the value-carrying constants so a mutation that shrinks them can't survive a green suite.
+    function test_riskConstantsArePinned() public view {
+        assertEq(mk.MIN_RISK_GAP_BPS(), 2_000, "the lender-protecting risk gap");
+        assertEq(mk.PARAM_TIMELOCK(), 2 days, "the parameter-change timelock");
+        assertEq(mk.MAX_LIQ_THRESHOLD_BPS(), 9_000, "the liquidation-threshold ceiling");
+    }
 }
