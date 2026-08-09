@@ -232,6 +232,55 @@ contract EsseyPoolTest is Test {
         assertEq(pool.debtOf(id), 0, "debt still cleared");
     }
 
+    // ---------------------------------------------------------------- end-to-end lifecycle
+
+    /// Composes fixes #2/#4/#5 in one realistic flow: borrow with interest -> a partial adminBurn -> a
+    /// borrower who arrives AFTER the burn is insulated -> the pre-burn borrower is liquidated on her
+    /// haircut collateral -> the post-burn borrower repays and recovers his FULL deposit, having
+    /// subsidised neither the burn nor the liquidation.
+    function test_fullLifecycle_burnInsulationAccrualLiquidation() public {
+        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0); // 10% APR
+        usdg.mint(LENDER, 500_000e6); // harness-independent liquidity
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(500_000e6, LENDER); vm.stopPrank();
+
+        // Alice borrows at max LTV against 10 AAPL @ $200 (in session from setUp)
+        vm.startPrank(ALICE);
+        tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
+        uint256 aliceId = p2.borrow(address(tok), 10e18, 700e6);
+        vm.stopPrank();
+
+        // the issuer burns half of Alice's collateral out of the pool
+        tok.adminBurn(address(p2), 5e18); // 10 -> 5 for the tok cohort (only Alice so far)
+
+        // Bob borrows FRESH after the burn — his snapshot is the post-burn index, so he is insulated
+        address BOB = makeAddr("bob_lifecycle");
+        tok.mint(BOB, 10e18); usdg.mint(BOB, 100_000e6);
+        vm.startPrank(BOB);
+        tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
+        uint256 bobId = p2.borrow(address(tok), 10e18, 700e6);
+        vm.stopPrank();
+
+        // a little time passes (still in session): interest accrues on both debts. _advanceLive keeps the
+        // keeper heartbeat fresh (5-min beats < gapThreshold, so no grace) so liquidation stays enabled.
+        _advanceLive(2 hours);
+        p2.accrue();
+        assertGt(p2.debtOf(aliceId), 700e6, "interest accrued on Alice");
+        assertGt(p2.debtOf(bobId), 700e6, "interest accrued on Bob");
+
+        // price drops: Alice's HAIRCUT collateral (5 @ $120 = $600) is now below her debt -> liquidate her
+        px.set(120e8, block.timestamp);
+        vm.prank(LIQUIDATOR); usdg.approve(address(p2), type(uint256).max); // approve THIS pool
+        vm.prank(LIQUIDATOR);
+        p2.liquidate(aliceId);
+        assertEq(p2.debtOf(aliceId), 0, "Alice liquidated on her haircut collateral");
+
+        // Bob repays and recovers his FULL 10 AAPL — insulated from both the burn and Alice's liquidation
+        uint256 bobOwed = p2.debtOf(bobId);
+        vm.startPrank(BOB); usdg.mint(BOB, bobOwed); p2.repay(bobId, bobOwed); vm.stopPrank();
+        assertEq(p2.debtOf(bobId), 0, "Bob's debt cleared");
+        assertEq(tok.balanceOf(BOB), 10e18, "post-burn borrower recovered his FULL deposit (insulated)");
+    }
+
     // ---------------------------------------------------------------- accrual
 
     function test_interestAccruesAndLenderEarns() public {
