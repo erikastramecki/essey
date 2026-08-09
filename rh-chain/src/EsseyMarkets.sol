@@ -147,10 +147,10 @@ contract EsseyMarkets is StaleFeedGuard {
         // sequencer restart could admit a borrow on a stale pre-outage price. During the post-outage
         // resume grace, declining new borrows is the safe, conservative response.
         if (!liveness.liquidationsAllowed()) return false;
-        // Corporate-action desync guard: around a scheduled uiMultiplier change the token's multiplier and
-        // its Chainlink feed reprice at different instants, opening a ~2x mis-valuation window a borrower
-        // could TIME (effectiveAt is public). Refuse new borrows within MULTIPLIER_GUARD_WINDOW of it.
-        if (_corporateActionWindow(token)) return false;
+        // Corporate-action desync guard: around a uiMultiplier change the token's multiplier and its
+        // Chainlink feed reprice at different instants, opening a ~2x mis-valuation window a borrower could
+        // TIME (effectiveAt is public). Refuse new borrows while it holds.
+        if (_desyncGuard(token)) return false;
         try this.collateralValue(token, 1e18) returns (uint256, bool inSession) {
             return inSession;
         } catch {
@@ -158,18 +158,50 @@ contract EsseyMarkets is StaleFeedGuard {
         }
     }
 
-    /// Blocks around a scheduled corporate action (see canBorrow). Symmetric window so the danger period
-    /// just after `effectiveAt` (multiplier flipped, feed not yet repriced) is covered as well as the run-up.
     uint256 public constant MULTIPLIER_GUARD_WINDOW = 1 hours;
 
-    function _corporateActionWindow(address token) internal view returns (bool) {
+    /// The last uiMultiplier this registry observed for a token, and when it last MOVED. `syncMultiplier`
+    /// (called on the borrow AND liquidate paths) records a move the instant a corporate action applies —
+    /// this is what covers the POST-flip desync window robustly, without depending on whether the token
+    /// keeps its scheduled `newUIMultiplier` populated after the flip.
+    mapping(address => uint256) public seenMultiplier;
+    mapping(address => uint256) public multiplierMovedAt;
+
+    /// True while a scheduled or just-applied uiMultiplier change makes the token's multiplier and its
+    /// Chainlink feed inconsistent — the ~2x mis-valuation window. Both canBorrow AND canLiquidate refuse to
+    /// act while this holds (declining on an unverifiable price beats a mispriced borrow OR a wrongful
+    /// seizure; the ~1h gap is absorbed by the 20pp MIN_RISK_GAP_BPS buffer).
+    function _desyncGuard(address token) internal view returns (bool) {
+        // (a) scheduled action within the window (pre-flip / at-flip while newUIMultiplier still reports it)
         try IScaledUI(token).newUIMultiplier() returns (uint256, uint256 effectiveAt) {
-            if (effectiveAt == 0) return false;
-            uint256 diff = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
-            return diff <= MULTIPLIER_GUARD_WINDOW;
+            if (effectiveAt != 0) {
+                uint256 d = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
+                if (d <= MULTIPLIER_GUARD_WINDOW) return true;
+            }
+        } catch {}
+        // (b) the live multiplier MOVED within the window (post-flip, observed via syncMultiplier)
+        uint256 movedAt = multiplierMovedAt[token];
+        return movedAt != 0 && block.timestamp - movedAt < MULTIPLIER_GUARD_WINDOW;
+    }
+
+    function _liveMultiplier(address token) internal view returns (uint256) {
+        try IScaledUI(token).uiMultiplier() returns (uint256 m) {
+            return m;
         } catch {
-            return false; // a token without the scheduled-multiplier view simply has no scheduled action
+            return 0;
         }
+    }
+
+    /// Observe the token's live uiMultiplier and stamp the moment it moves. Permissionless + non-view; the
+    /// pool calls it on the borrow/liquidate paths (a keeper may also call it) so `_desyncGuard` sees a
+    /// corporate action the instant it applies — the FIRST action that touches the pool records the move and
+    /// is itself gated by the window.
+    function syncMultiplier(address token) public {
+        uint256 cur = _liveMultiplier(token);
+        if (cur == 0) return; // token without the view / transient read failure — nothing to record
+        uint256 prev = seenMultiplier[token];
+        if (prev != 0 && cur != prev) multiplierMovedAt[token] = block.timestamp;
+        seenMultiplier[token] = cur;
     }
 
     /// Liquidation additionally requires demonstrated chain liveness — see LivenessOracle. A
@@ -178,6 +210,11 @@ contract EsseyMarkets is StaleFeedGuard {
         Market memory m = _markets[token];
         if (!m.enabled) return false;
         if (!liveness.liquidationsAllowed()) return false;
+        // Same corporate-action desync guard as canBorrow — SYMMETRY IS THE POINT: during the ~2x
+        // mis-valuation window `collateralValue` reads ~half, which would flip healthy positions to
+        // "underwater" and let a liquidator seize (near-)full collateral for half the debt. Declining to
+        // liquidate on an unverifiable price (the ~1h window is inside the 20pp gap) beats wrongful seizure.
+        if (_desyncGuard(token)) return false;
         try this.collateralValue(token, 1e18) returns (uint256, bool inSession) {
             return inSession;
         } catch {
@@ -222,6 +259,9 @@ contract EsseyMarkets is StaleFeedGuard {
         if (existing.configured && address(existing.feed) != address(p.feed)) revert FeedIsImmutable(token);
         _setFeed(token, p.feed, p.maxStaleness, p.feedDecimals);
         _markets[token] = p.m;
+        // Seed the observed-multiplier baseline (once) so the first post-commit corporate action registers
+        // as a MOVE via syncMultiplier, not as uninitialised state.
+        if (seenMultiplier[token] == 0) seenMultiplier[token] = _liveMultiplier(token);
         delete _pending[token];
         emit MarketCommitted(token, p.m.ltvBps, p.m.liqThresholdBps);
     }

@@ -149,6 +149,26 @@ contract EsseyMarketsTest is Test {
         assertTrue(mk.canBorrow(address(tok)), "borrow reopens outside the guard window");
     }
 
+    /// Mainnet-config (HIGH, symmetry): the corporate-action desync guard must gate LIQUIDATION too, or a
+    /// liquidator could seize healthy positions at the mispriced-low feed during the window.
+    function test_liquidationBlockedDuringCorporateActionWindow() public {
+        assertTrue(mk.canLiquidate(address(tok)), "liquidation open at baseline");
+        tok.schedule(2e18, block.timestamp + 20 minutes); // split scheduled inside the window
+        assertFalse(mk.canLiquidate(address(tok)), "liquidation declines during the desync window");
+    }
+
+    /// Mainnet-config (residual): if the token CLEARS newUIMultiplier at the flip, only the observed-move
+    /// guard can catch the post-flip window. A live uiMultiplier move (with no schedule) must block BOTH
+    /// borrow and liquidation once observed via syncMultiplier (the pool calls it on both paths).
+    function test_observedMultiplierMoveBlocksBothPaths() public {
+        assertTrue(mk.canBorrow(address(tok)));
+        assertTrue(mk.canLiquidate(address(tok)));
+        tok.setMultiplier(2e18); // the split APPLIES: uiMultiplier flips, newUIMultiplier stays (0,0)
+        mk.syncMultiplier(address(tok)); // as the pool does on the borrow/liquidate path
+        assertFalse(mk.canBorrow(address(tok)), "observed post-flip move blocks borrow (no schedule needed)");
+        assertFalse(mk.canLiquidate(address(tok)), "and blocks liquidation");
+    }
+
     /// Mainnet-config (HIGH): a market's price feed is APPEND-ONLY — a later commit cannot swap it (rug edge).
     function test_feedCannotBeSwappedOnRecommit() public {
         MockFeed evilFeed = new MockFeed(1e8, 8); // attacker-controlled $1 feed

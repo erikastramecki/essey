@@ -326,6 +326,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         nonReentrant
         returns (uint256 id)
     {
+        markets.syncMultiplier(token); // stamp any corporate-action multiplier move before the desync gate
         if (!markets.canBorrow(token)) revert MarketClosed(token);
         accrue();
 
@@ -403,6 +404,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     function liquidate(uint256 id) external nonReentrant {
         Position memory p = positions[id];
         if (p.principal == 0) revert NoDebt();
+        markets.syncMultiplier(p.token); // stamp any corporate-action multiplier move before the desync gate
         if (!markets.canLiquidate(p.token)) revert LiquidationNotAllowed(p.token);
         accrue();
 
