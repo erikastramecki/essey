@@ -169,9 +169,14 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
             lastAccrual = block.timestamp;
             return;
         }
-        // Any paused collateral market suspends the clock: repayment is impossible pool-wide
-        // while the borrow asset or a collateral token cannot move.
-        if (_anyCollateralPaused()) {
+        // Only a BORROW-ASSET pause suspends the clock. Every repay and liquidate transfers the borrow
+        // asset, so its pause is the one event that blocks EVERY position from closing — the sole case
+        // where forgiving interest pool-wide is correct. A COLLATERAL-token pause blocks only that token's
+        // positions, not everyone's, so it must NOT forgive interest for the whole pool: watching
+        // collateral tokens (the previous behaviour) let an unrelated token's pause hand every borrower a
+        // free loan (fix #5). Accepted residual: a borrower whose collateral is paused still accrues during
+        // the freeze; suspending only the affected positions would need per-market accrual indices.
+        if (_borrowAssetPaused()) {
             lastAccrual = block.timestamp;
             return;
         }
@@ -192,29 +197,18 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         lastAccrual = block.timestamp;
     }
 
-    /// Tokens whose pause state suspends accrual. Kept as an explicit list rather than scanning
-    /// every position, so the cost is bounded and the operator controls the set.
-    address[] public accrualPauseWatch;
-
-    function setAccrualPauseWatch(address[] calldata tokens) external {
-        if (msg.sender != markets.admin()) revert NotBorrower();
-        accrualPauseWatch = tokens;
-    }
-
-    function _anyCollateralPaused() internal view returns (bool) {
-        uint256 n = accrualPauseWatch.length;
-        for (uint256 i = 0; i < n; i++) {
-            // Cap the gas so a watched token cannot gas-grief accrue() (which every entry point runs).
-            (bool ok, bytes memory ret) =
-                accrualPauseWatch[i].staticcall{gas: 50_000}(abi.encodeWithSignature("paused()"));
-            // Decode the return as a RAW WORD, never as `bool`: abi.decode(_, (bool)) reverts Panic(0x21)
-            // on any 32-byte word other than 0/1, and because this runs inside accrue()'s own frame that
-            // panic would bubble up and brick EVERY entry point — including liquidation — until an admin
-            // reset the watch list. A nonzero word is treated as paused (fail-safe: suspend rather than
-            // revert); a malformed/oversized/short return is treated as not-paused.
-            if (ok && ret.length >= 32 && abi.decode(ret, (uint256)) != 0) return true;
-        }
-        return false;
+    /// Does the BORROW ASSET report itself paused? Its pause blocks every repayment and liquidation, so
+    /// accrual is suspended while it holds (see accrue). No admin-set watch list: the one token that
+    /// matters is fixed (`asset()`), which also removes the admin surface the list carried.
+    ///
+    /// Decoded as a RAW WORD, never as `bool`: abi.decode(_, (bool)) reverts Panic(0x21) on any 32-byte
+    /// word other than 0/1, and because this runs inside accrue()'s own frame that panic would bubble up
+    /// and brick EVERY entry point — including liquidation (fix #1). A nonzero word is treated as paused
+    /// (fail-safe: suspend rather than revert); a missing/short/reverting `paused()` is treated as
+    /// not-paused. Gas-capped so a misbehaving asset can't grief accrue().
+    function _borrowAssetPaused() internal view returns (bool) {
+        (bool ok, bytes memory ret) = asset().staticcall{gas: 50_000}(abi.encodeWithSignature("paused()"));
+        return ok && ret.length >= 32 && abi.decode(ret, (uint256)) != 0;
     }
 
     function debtOf(uint256 id) public view returns (uint256) {

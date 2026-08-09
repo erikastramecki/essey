@@ -17,13 +17,11 @@ contract MockUSDG is ERC20 {
     constructor() ERC20("Global Dollar", "USDG") {}
     function decimals() public pure override returns (uint8) { return 6; }
     function mint(address to, uint256 a) external { _mint(to, a); }
-}
-
-/// A token whose `paused()` returns a NON-boolean 32-byte word (2). The selector is `paused()`
-/// regardless of the declared return type, so it stresses the pool's decode path: abi.decode(_, (bool))
-/// would panic (0x21) on this word and — since it runs in accrue()'s own frame — brick the whole pool.
-contract NonBoolPausedMock {
-    function paused() external pure returns (uint256) { return 2; }
+    // Borrow-asset pause (fix #5): the pool suspends accrual only while the BORROW ASSET is paused.
+    // Stored as a raw word so a test can also feed a NON-boolean value (fix #1 — must not panic accrue()).
+    uint256 private _pausedWord;
+    function setPausedWord(uint256 w) external { _pausedWord = w; }
+    function paused() external view returns (uint256) { return _pausedWord; }
 }
 
 contract EsseyPoolTest is Test {
@@ -297,42 +295,47 @@ contract EsseyPoolTest is Test {
         pool.borrow(address(tok), 10e18, 0);
     }
 
-    /// R1-AUDIT: interest must not accrue while the issuer's pause makes repayment impossible.
-    function test_accrualSuspendsWhileCollateralIsPaused() public {
+    /// R1-AUDIT + fix #5: accrual suspends ONLY while the BORROW ASSET is paused (the one pause that blocks
+    /// every repayment). A COLLATERAL-token pause must NOT forgive interest pool-wide — watching collateral
+    /// tokens let an unrelated pause hand every borrower a free loan.
+    function test_accrualSuspendsOnlyWhenBorrowAssetPaused() public {
         EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0);
         vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
         vm.startPrank(ALICE);
         tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
         uint256 id = p2.borrow(address(tok), 10e18, 700e6);
         vm.stopPrank();
-        address[] memory watch = new address[](1); watch[0] = address(tok);
-        vm.prank(ADMIN); p2.setAccrualPauseWatch(watch);
 
+        // A COLLATERAL pause must NOT forgive interest (the fix): it still accrues.
         tok.setPaused(true);
         vm.warp(block.timestamp + 365 days);
         p2.accrue();
-        assertEq(p2.debtOf(id), 700e6, "no interest while repayment is impossible");
+        assertGt(p2.debtOf(id), 700e6, "a collateral pause must NOT hand a free loan");
+
+        // The BORROW ASSET pause DOES suspend accrual (no one can repay while it holds).
+        uint256 debtBefore = p2.debtOf(id);
+        usdg.setPausedWord(1);
+        vm.warp(block.timestamp + 365 days);
+        p2.accrue();
+        assertEq(p2.debtOf(id), debtBefore, "no interest while the borrow asset is paused");
+        usdg.setPausedWord(0);
     }
 
-    /// CRITICAL (borrow-path fix #1): a watched token whose paused() returns a NON-boolean word must not
-    /// freeze the pool. Pre-fix, abi.decode(ret,(bool)) panicked (0x21) inside accrue() — run by every
-    /// entry point — bricking deposit/borrow/repay/liquidate until an admin reset the watch list.
+    /// CRITICAL (fix #1): a BORROW ASSET whose paused() returns a NON-boolean word must not freeze the pool.
+    /// Pre-fix, abi.decode(ret,(bool)) panicked (0x21) inside accrue() — run by every entry point —
+    /// bricking deposit/borrow/repay/liquidate.
     function test_nonBooleanPausedWordDoesNotFreezeThePool() public {
         EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0);
         vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
 
-        NonBoolPausedMock evil = new NonBoolPausedMock();
-        address[] memory watch = new address[](1); watch[0] = address(evil);
-        vm.prank(ADMIN); p2.setAccrualPauseWatch(watch);
-
+        usdg.setPausedWord(2); // a NON-boolean word on the borrow asset
         vm.warp(block.timestamp + 1 days);
         p2.accrue(); // pre-fix: reverts Panic(0x21); post-fix: nonzero word treated as paused, no revert
 
-        // and entry points still work — the pool is not bricked (deposit runs accrue() first).
-        // Mint fresh so the test doesn't depend on LENDER's leftover balance across harnesses.
+        // an entry point still works despite the non-bool word (deposit runs accrue() first)
         usdg.mint(LENDER, 1_000e6);
         vm.startPrank(LENDER); uint256 sh = p2.deposit(1_000e6, LENDER); vm.stopPrank();
-        assertGt(sh, 0, "deposit still works; the pool is not frozen by a non-boolean paused() word");
+        assertGt(sh, 0, "not frozen by a non-boolean paused() word on the borrow asset");
     }
 
     /// HIGH (borrow-path fix #4): interest pending between accruals must NOT be extractable by an atomic
@@ -400,13 +403,6 @@ contract EsseyPoolTest is Test {
     }
 
     // ------------------------------------------------- guards found by mutation sweep
-
-    function test_onlyAdminCanSetTheAccrualPauseWatch() public {
-        address[] memory w = new address[](1); w[0] = address(tok);
-        vm.prank(ALICE);
-        vm.expectRevert(EsseyPool.NotBorrower.selector);
-        pool.setAccrualPauseWatch(w);
-    }
 
     function test_withdrawBeyondAvailableCashReverts() public {
         _borrow(700e6);
