@@ -384,6 +384,12 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // total is the denominator). This is what stops one borrower being made whole out of
         // another's collateral after an adminBurn.
         uint256 give = _effectiveCollateral(p.token, p.collateralRaw, p.collIndexSnapshot);
+        // Dust-guard: floored per-position entitlements can sum a few wei above the reconcile-floored
+        // total, so the LAST closer in a freshly-burned cohort could be owed ~1 wei more than the pool
+        // holds. Cap at the live balance — the pool can never transfer collateral it does not have; the
+        // wei stays in the pool (safe direction).
+        uint256 heldForRepay = IERC20(p.token).balanceOf(address(this));
+        if (give > heldForRepay) give = heldForRepay;
         _closePosition(id, p, owed); // burns the Note; msg.sender was verified as its holder above
         IERC20(p.token).safeTransfer(msg.sender, give);
         emit Repaid(id, owed, give);
@@ -405,6 +411,10 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // position whose collateral had been burned away read as healthy — permanently
         // unliquidatable while fully unsecured.
         uint256 effective = _effectiveCollateral(p.token, p.collateralRaw, p.collIndexSnapshot);
+        // Dust-guard (see repay): cap at the live balance so seize + refund can never exceed what the
+        // pool holds. Capping lower only ever makes a position read as MORE underwater — the safe direction.
+        uint256 heldForLiq = IERC20(p.token).balanceOf(address(this));
+        if (effective > heldForLiq) effective = heldForLiq;
         uint256 owed = debtOf(id);
         if (!markets.isUnderwater(p.token, effective, owed)) revert PositionHealthy();
 

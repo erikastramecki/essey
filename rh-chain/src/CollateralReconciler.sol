@@ -59,9 +59,14 @@ abstract contract CollateralReconciler {
     event CollateralShortfall(address indexed token, uint256 recorded, uint256 actual, uint256 shortfall);
 
     error InsufficientRecorded(address token, uint256 have, uint256 want);
-    /// A total burn zeroed the index while positions were still open. Those dead positions carry no
-    /// entitlement and can still be repaid/liquidated (they just return 0 collateral), but a NEW position
-    /// cannot be mixed into a wiped cohort under one index — clear the dead ones first.
+    /// A total burn (issuer destroyed 100% of this pool's balance of the token) zeroed the index while
+    /// positions were still open. Those dead positions carry zero entitlement and remain closeable (repay/
+    /// liquidate return 0 collateral), but a NEW position cannot be mixed into a wiped cohort under one
+    /// index. This is NOT reliably self-clearing: closing a dead position is economically irrational (its
+    /// collateral is already gone), so the market stays un-borrowable for that token — which is the SAFE
+    /// outcome (never lend against a fully-destroyed collateral). The admin's immediate `disableMarket`
+    /// turns the dead market off operationally. Only the issuer's adminBurn can reach this state; no
+    /// external caller can force it, and no funds are at risk beyond the adminBurn bad debt itself.
     error CollateralCohortWiped(address token);
 
     /// The live index for `token`. 0 means either never-credited OR a total burn (both correctly yield a
