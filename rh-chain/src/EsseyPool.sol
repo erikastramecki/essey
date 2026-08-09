@@ -63,7 +63,8 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         address token;
         uint256 collateralRaw;
         uint256 principal;
-        uint256 indexSnapshot;
+        uint256 indexSnapshot; // borrow index at open (debt growth)
+        uint256 collIndexSnapshot; // collateral survival index at open (burn sharing — fix #2)
     }
 
     uint256 internal constant WAD = 1e18;
@@ -328,11 +329,13 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         if (!markets.canBorrow(token)) revert MarketClosed(token);
         accrue();
 
-        IERC20(token).safeTransferFrom(msg.sender, address(this), collateralRaw);
-        _creditCollateral(token, collateralRaw);
-        // Reconcile AFTER pulling: if the issuer burned tokens out of this pool, find out before
-        // lending against a balance that no longer exists (the adminBurn hazard).
+        // Reconcile BEFORE pulling, so `actual` excludes this fresh deposit: the index then reflects
+        // only PRIOR burns, and _creditCollateral snapshots that already-lowered index — insulating
+        // this new position from losses it wasn't present for (fix #2). The fresh collateral genuinely
+        // exists, so we still never lend against a burned balance (the adminBurn hazard).
         _reconcile(token);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), collateralRaw);
+        uint256 collSnap = _creditCollateral(token, collateralRaw);
 
         // A zero-debt position can never be repaid (repay reverts NoDebt) nor liquidated
         // (isUnderwater is false at zero), so its collateral would be trapped forever.
@@ -350,7 +353,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         marketBorrows[token] = would;
         totalBorrows += debt;
         id = nextPositionId++;
-        positions[id] = Position(token, collateralRaw, debt, borrowIndex);
+        positions[id] = Position(token, collateralRaw, debt, borrowIndex, collSnap);
         note.mint(msg.sender, id); // the position deed — holder is the borrower from here on
         IERC20(asset()).safeTransfer(msg.sender, debt);
         emit Borrowed(id, msg.sender, token, collateralRaw, debt);
@@ -380,7 +383,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // Pro-rata against what survives, computed BEFORE the ledger is debited (the nominal
         // total is the denominator). This is what stops one borrower being made whole out of
         // another's collateral after an adminBurn.
-        uint256 give = _effectiveCollateral(p.token, p.collateralRaw);
+        uint256 give = _effectiveCollateral(p.token, p.collateralRaw, p.collIndexSnapshot);
         _closePosition(id, p, owed); // burns the Note; msg.sender was verified as its holder above
         IERC20(p.token).safeTransfer(msg.sender, give);
         emit Repaid(id, owed, give);
@@ -401,7 +404,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // Health must be judged on collateral that STILL EXISTS. Using the stored figure made a
         // position whose collateral had been burned away read as healthy — permanently
         // unliquidatable while fully unsecured.
-        uint256 effective = _effectiveCollateral(p.token, p.collateralRaw);
+        uint256 effective = _effectiveCollateral(p.token, p.collateralRaw, p.collIndexSnapshot);
         uint256 owed = debtOf(id);
         if (!markets.isUnderwater(p.token, effective, owed)) revert PositionHealthy();
 
@@ -451,7 +454,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// the one place its Note burns: a spent deed cannot exist, so nobody can be sold a claim on a
     /// position that already ended.
     function _closePositionTail(uint256 id, Position memory p) internal {
-        _debitCollateral(p.token, p.collateralRaw);
+        _debitCollateral(p.token, p.collateralRaw, p.collIndexSnapshot);
         delete positions[id];
         note.burn(id);
     }

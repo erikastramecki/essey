@@ -56,12 +56,13 @@ contract GuardHarness is StaleFeedGuard {
 
 contract ReconcilerHarness is CollateralReconciler {
     function reconcile(address t) external returns (uint256) { return _reconcile(t); }
-    function credit(address t, uint256 a) external { _creditCollateral(t, a); }
-    function debit(address t, uint256 a) external { _debitCollateral(t, a); }
-    function effective(address t, uint256 raw) external view returns (uint256) {
-        return _effectiveCollateral(t, raw);
+    function credit(address t, uint256 a) external returns (uint256) { return _creditCollateral(t, a); }
+    function debit(address t, uint256 a, uint256 snap) external { _debitCollateral(t, a, snap); }
+    function effective(address t, uint256 raw, uint256 snap) external view returns (uint256) {
+        return _effectiveCollateral(t, raw, snap);
     }
     function uiAmount(address t, uint256 raw) external view returns (uint256) { return _uiAmount(t, raw); }
+    function index(address t) external view returns (uint256) { return _index(t); }
 }
 
 // ---------------------------------------------------------------- tests
@@ -245,17 +246,18 @@ contract StaleFeedGuardTest is Test {
 contract CollateralReconcilerTest is Test {
     ReconcilerHarness r;
     MockStock tok;
+    uint256 snap0; // the setUp position's index snapshot
 
     function setUp() public {
         r = new ReconcilerHarness();
         tok = new MockStock();
         tok.mint(address(r), 100e18);
-        r.credit(address(tok), 100e18);
+        snap0 = r.credit(address(tok), 100e18);
     }
 
     function test_noShortfallWhenBalancesAgree() public {
         assertEq(r.reconcile(address(tok)), 0);
-        assertEq(r.effective(address(tok), 100e18), 100e18);
+        assertEq(r.effective(address(tok), 100e18, snap0), 100e18);
     }
 
     /// adminBurn is detected and RECORDED, and must not revert — reverting would freeze every
@@ -265,35 +267,56 @@ contract CollateralReconcilerTest is Test {
         assertEq(r.reconcile(address(tok)), 30e18);
         assertEq(r.shortfallRaw(address(tok)), 30e18);
         assertEq(r.reconcile(address(tok)), 0, "idempotent: nothing NEW the second time");
-        // the nominal total is deliberately NOT reduced — it is the pro-rata denominator
+        // the nominal total is deliberately NOT reduced — it is for reporting, not the entitlement math
         assertEq(r.recordedRaw(address(tok)), 100e18);
+        // the sole position recovers the surviving 70
+        assertEq(r.effective(address(tok), 100e18, snap0), 70e18);
     }
 
-    /// THE ORDERING BUG. Two borrowers, one burn: each must lose their share, in EITHER order.
-    /// Previously the pooled balance was clamped against a per-borrower figure, so whoever repaid
-    /// first recovered everything — including the other's collateral.
+    /// THE ORDERING BUG. Two borrowers PRESENT AT THE BURN, one burn: each must lose their share, in
+    /// EITHER order. Previously the pooled balance was clamped against a per-borrower figure, so whoever
+    /// repaid first recovered everything — including the other's collateral.
     function test_burnLossIsSharedProRataNotByRepaymentOrder() public {
-        // Alice 10, Bob 10 (on top of the 100 from setUp, so isolate: use a fresh harness)
         ReconcilerHarness r2 = new ReconcilerHarness();
         MockStock t2 = new MockStock();
         t2.mint(address(r2), 20e18);
-        r2.credit(address(t2), 10e18); // Alice
-        r2.credit(address(t2), 10e18); // Bob
+        uint256 sA = r2.credit(address(t2), 10e18); // Alice
+        uint256 sB = r2.credit(address(t2), 10e18); // Bob (same cohort — both pre-burn)
         t2.adminBurn(address(r2), 10e18); // Robinhood destroys half
+        r2.reconcile(address(t2)); // the pool reconciles before computing any entitlement
 
-        // whoever asks first gets 5, not 10
-        assertEq(r2.effective(address(t2), 10e18), 5e18, "Alice's share");
-        // Alice exits: transfer her 5 and debit her nominal 10
-        t2.adminBurn(address(r2), 5e18); // stand-in for the outbound transfer
-        r2.debit(address(t2), 10e18);
-        // Bob's share is still 5 — he is not left with zero
-        assertEq(r2.effective(address(t2), 10e18), 5e18, "Bob's share, unharmed by Alice going first");
+        assertEq(r2.effective(address(t2), 10e18, sA), 5e18, "Alice's share");
+        // Alice exits: transfer her 5 out (stand-in burn) and debit her nominal 10
+        t2.adminBurn(address(r2), 5e18);
+        r2.debit(address(t2), 10e18, sA);
+        // Bob's share is still 5 — unharmed by Alice going first
+        assertEq(r2.effective(address(t2), 10e18, sB), 5e18, "Bob's share, order-independent");
+    }
+
+    /// FIX #2 — a borrower who deposits AFTER a burn is INSULATED from it. Alice bears the whole loss;
+    /// Bob, who arrived later, recovers his full deposit. (Pre-fix, Bob's intact collateral was diluted
+    /// by the shared denominator and he silently paid for Alice's burn.)
+    function test_postBurnDepositorIsInsulated() public {
+        ReconcilerHarness r2 = new ReconcilerHarness();
+        MockStock t2 = new MockStock();
+        t2.mint(address(r2), 20e18);
+        uint256 sA = r2.credit(address(t2), 20e18); // Alice, before the burn
+        t2.adminBurn(address(r2), 10e18); // half of Alice's collateral destroyed
+        r2.reconcile(address(t2)); // index -> 0.5
+        t2.mint(address(r2), 10e18);
+        uint256 sB = r2.credit(address(t2), 10e18); // Bob deposits fresh, AFTER the burn
+        r2.reconcile(address(t2));
+
+        assertEq(r2.effective(address(t2), 20e18, sA), 10e18, "Alice (pre-burn) bears the loss");
+        assertEq(r2.effective(address(t2), 10e18, sB), 10e18, "Bob (post-burn) recovers his full deposit");
+        // solvency: the two entitlements sum to exactly the surviving balance
+        assertEq(t2.balanceOf(address(r2)), 20e18, "10 (Alice) + 10 (Bob) == actual");
     }
 
     function test_totalBurnLeavesEveryoneAtZeroNotSomeoneWhole() public {
         tok.adminBurn(address(r), 100e18);
         assertEq(r.reconcile(address(tok)), 100e18);
-        assertEq(r.effective(address(tok), 100e18), 0);
+        assertEq(r.effective(address(tok), 100e18, snap0), 0); // exactly 0, not dust
     }
 
     /// Valuation must follow the corporate-action multiplier: a 4:1 split quadruples the
@@ -315,6 +338,67 @@ contract CollateralReconcilerTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(CollateralReconciler.InsufficientRecorded.selector, address(tok), 100e18, 101e18)
         );
-        r.debit(address(tok), 101e18);
+        r.debit(address(tok), 101e18, snap0);
+    }
+
+    /// THE SOLVENCY INVARIANT (fix #2), fuzzed over random deposit/burn/close sequences: the sum of every
+    /// open position's entitlement never exceeds the pool's actual balance — no burn, in any interleaving
+    /// with deposits and closes, can ever let the pool owe out more collateral than it holds. Closing a
+    /// position pays out its effective amount (simulated by burning that much from the harness balance).
+    function testFuzz_entitlementsNeverExceedBalance(uint256 seed) public {
+        ReconcilerHarness h = new ReconcilerHarness();
+        MockStock t = new MockStock();
+        uint256[] memory rawArr = new uint256[](32);
+        uint256[] memory snapArr = new uint256[](32);
+        uint256 n = 0;
+
+        for (uint256 i = 0; i < 24; i++) {
+            seed = uint256(keccak256(abi.encode(seed, i)));
+            uint256 action = seed % 3;
+
+            if (action == 0 && n < 32) {
+                // DEPOSIT: mint fresh raw, reconcile, credit — skip if a total burn wiped the open cohort
+                if (n > 0 && h.index(address(t)) == 0) {
+                    // wiped cohort: a new deposit would (correctly) revert; nothing to do
+                } else {
+                    uint256 raw = 1e18 + ((seed >> 8) % 100e18);
+                    t.mint(address(h), raw);
+                    h.reconcile(address(t));
+                    uint256 snap = h.credit(address(t), raw);
+                    rawArr[n] = raw;
+                    snapArr[n] = snap;
+                    n++;
+                }
+            } else if (action == 1 && n > 0) {
+                // CLOSE a random position: reconcile, pay out its effective (burn it), debit
+                uint256 k = (seed >> 8) % n;
+                h.reconcile(address(t));
+                uint256 eff = h.effective(address(t), rawArr[k], snapArr[k]);
+                if (eff > 0) t.adminBurn(address(h), eff); // stand-in for the outbound transfer
+                h.debit(address(t), rawArr[k], snapArr[k]);
+                rawArr[k] = rawArr[n - 1];
+                snapArr[k] = snapArr[n - 1];
+                n--;
+            } else if (n > 0) {
+                // BURN a random amount of the surviving balance (the adminBurn hazard)
+                uint256 bal = t.balanceOf(address(h));
+                if (bal > 0) {
+                    uint256 burn = 1 + ((seed >> 8) % bal);
+                    t.adminBurn(address(h), burn);
+                    h.reconcile(address(t));
+                }
+            }
+
+            // INVARIANT after every step
+            h.reconcile(address(t));
+            uint256 sumEff = 0;
+            for (uint256 j = 0; j < n; j++) {
+                uint256 e = h.effective(address(t), rawArr[j], snapArr[j]);
+                assertLe(e, rawArr[j], "an entitlement never exceeds the raw posted");
+                sumEff += e;
+            }
+            assertLe(sumEff, t.balanceOf(address(h)), "solvency: entitlements never exceed the balance");
+            assertLe(h.index(address(t)), 1e18, "index never exceeds full survival");
+        }
     }
 }
