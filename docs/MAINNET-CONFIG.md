@@ -95,9 +95,21 @@ each is closed by a code fix, a config correction, or an accepted+disclosed disp
 **adminBurn protection confirmed SOUND** by the audit (the collateral index does its job). **Entropy design
 confirmed SOUND** (provable-solvency reservation before the roll, commit-reveal correct, reclaim valve).
 
+- **Feeds MUST be the Chainlink AggregatorProxy address, never a raw aggregator.** The market feed is now
+  append-only (a rug-edge fix), so a market can't migrate its feed. Chainlink rotates the underlying
+  aggregator behind a stable proxy; configuring the proxy keeps the market alive across rotations, whereas a
+  raw aggregator that's later retired would strand the market (stale price → unliquidatable → bad debt).
+  Verify `RobinhoodFeeds.sol` holds proxy addresses. (Deploy discipline; the feed-swap attack is the worse
+  hazard, so append-only + proxy is the correct combination.)
+
 ## Gate
 
-Code fixes are in (380/380 tests green). The remaining items are **deploy-time config** (B2 seeding, mainnet
-rates, entropy provider) that land in the `Deploy-mainnet` script (Phase 6), not code. A **re-run of the
-mainnet-config audit round** on the hardened code confirms 3-clean before the gate is called met. Then Phase 4
-(multisig) + Phase 3 (keepers) + counsel sign-off → Phase 6 deploy.
+**Code side: MET.** Two fix iterations + a final **3-clean mainnet-config audit round** on the hardened code
+(6-dec USDG · sequencer/feeds/roles · wiring · desync state-machine · fresh skeptic — all CLEAN); 382/382 tests
+green. Every code finding closed impossible-by-construction or with a symmetric guard + tests. Accepted,
+disclosed residuals: the issuer/feed reprice-timing gap (absorbed by the 20pp gap), the disabled sequencer
+check (keeper substitute), the adminBurn/multiplier EOA hazard, early-close (#6).
+
+**Remaining = deploy-time config (Phase 6, not code)** + **human gates:** Degen real-stock seeding, the mainnet
+rate curve, the real Dice `ENTROPY_PROVIDER`, feeds-as-proxy — all baked into the `Deploy-mainnet` script; then
+Phase 4 (multisig) + Phase 3 (keepers) + securities-counsel sign-off → Phase 6 deploy + smoke-test.
