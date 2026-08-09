@@ -119,11 +119,46 @@ contract EsseyMarketsTest is Test {
 
     function test_borrowAllowedInSessionOnly() public {
         assertTrue(mk.canBorrow(address(tok)));
-        // move to 03:00 UTC — out of session, feed still fresh
-        uint256 night = (MON_IN_SESSION / 86400) * 86400 + 1 days + 3 hours;
+        // Out of session (~03:00 UTC), computed from NOW (setUp warped +2d for the timelock, so deriving
+        // from a fixed constant would warp backward and underflow the keeper age). Off-hours blocks new
+        // borrows — the invariant here. (The liveness + corporate-action gates canBorrow now also applies
+        // have their own dedicated tests below.)
+        uint256 night = (block.timestamp / 86400) * 86400 + 1 days + 3 hours;
         vm.warp(night);
         px.set(200e8, night);
         assertFalse(mk.canBorrow(address(tok)), "no new borrows off-hours");
+    }
+
+    /// Mainnet-config: canBorrow now also gates on chain liveness (not just liquidation). With a stale
+    /// keeper (sequencer-restart proxy), no new borrows even in session, on a fresh price.
+    function test_borrowGatedOnChainLiveness() public {
+        assertTrue(mk.canBorrow(address(tok)), "borrow open when live + in session");
+        vm.warp(block.timestamp + 2 hours); // keeper now stale (> maxHeartbeatAge), still in-session
+        px.set(200e8, block.timestamp);
+        assertFalse(mk.canBorrow(address(tok)), "no new borrow while chain liveness is unproven");
+    }
+
+    /// Mainnet-config: refuse new borrows within the guard window of a scheduled uiMultiplier change
+    /// (the corporate-action feed<->multiplier desync window).
+    function test_borrowBlockedNearScheduledCorporateAction() public {
+        assertTrue(mk.canBorrow(address(tok)));
+        tok.schedule(2e18, block.timestamp + 20 minutes); // a split scheduled inside the 1h guard window
+        assertFalse(mk.canBorrow(address(tok)), "no borrow near a scheduled multiplier change");
+        // once the action is far enough away (outside the window), borrowing reopens
+        tok.schedule(2e18, block.timestamp + 5 hours);
+        assertTrue(mk.canBorrow(address(tok)), "borrow reopens outside the guard window");
+    }
+
+    /// Mainnet-config (HIGH): a market's price feed is APPEND-ONLY — a later commit cannot swap it (rug edge).
+    function test_feedCannotBeSwappedOnRecommit() public {
+        MockFeed evilFeed = new MockFeed(1e8, 8); // attacker-controlled $1 feed
+        EsseyMarkets.Market memory m = _conservative();
+        vm.startPrank(ADMIN);
+        mk.proposeMarket(address(tok), AggregatorV3Interface(address(evilFeed)), 90_000, 8, m);
+        vm.warp(block.timestamp + mk.PARAM_TIMELOCK());
+        vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.FeedIsImmutable.selector, address(tok)));
+        mk.commitMarket(address(tok));
+        vm.stopPrank();
     }
 
     /// Liquidation needs chain liveness as well as a live market. This is the outage protection.

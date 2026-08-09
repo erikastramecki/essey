@@ -26,6 +26,7 @@ contract EsseyMarkets is StaleFeedGuard {
     error InvalidRiskParams(string reason);
     error NoPendingChange(address token);
     error TimelockNotElapsed(uint256 secondsRemaining);
+    error FeedIsImmutable(address token);
 
     event MarketProposed(address indexed token, uint16 ltvBps, uint16 liqThresholdBps, uint256 effectiveAt);
     event MarketCommitted(address indexed token, uint16 ltvBps, uint16 liqThresholdBps);
@@ -141,10 +142,33 @@ contract EsseyMarkets is StaleFeedGuard {
     function canBorrow(address token) external view returns (bool) {
         Market memory m = _markets[token];
         if (!m.enabled) return false;
+        // Mainnet-config: gate NEW borrows on chain liveness too (not just liquidation). Under the
+        // disabled-sequencer config the price path has no on-chain sequencer gate, so without this a
+        // sequencer restart could admit a borrow on a stale pre-outage price. During the post-outage
+        // resume grace, declining new borrows is the safe, conservative response.
+        if (!liveness.liquidationsAllowed()) return false;
+        // Corporate-action desync guard: around a scheduled uiMultiplier change the token's multiplier and
+        // its Chainlink feed reprice at different instants, opening a ~2x mis-valuation window a borrower
+        // could TIME (effectiveAt is public). Refuse new borrows within MULTIPLIER_GUARD_WINDOW of it.
+        if (_corporateActionWindow(token)) return false;
         try this.collateralValue(token, 1e18) returns (uint256, bool inSession) {
             return inSession;
         } catch {
             return false;
+        }
+    }
+
+    /// Blocks around a scheduled corporate action (see canBorrow). Symmetric window so the danger period
+    /// just after `effectiveAt` (multiplier flipped, feed not yet repriced) is covered as well as the run-up.
+    uint256 public constant MULTIPLIER_GUARD_WINDOW = 1 hours;
+
+    function _corporateActionWindow(address token) internal view returns (bool) {
+        try IScaledUI(token).newUIMultiplier() returns (uint256, uint256 effectiveAt) {
+            if (effectiveAt == 0) return false;
+            uint256 diff = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
+            return diff <= MULTIPLIER_GUARD_WINDOW;
+        } catch {
+            return false; // a token without the scheduled-multiplier view simply has no scheduled action
         }
     }
 
@@ -189,6 +213,13 @@ contract EsseyMarkets is StaleFeedGuard {
         // Re-cross-check decimals at commit too: the token's decimals() can't change, but this keeps the
         // guarantee at the authoritative install point, symmetric with the re-validation above.
         _assertRealDecimals(token, p.m.collateralDecimals, p.feed, p.feedDecimals);
+        // Feed is APPEND-ONLY per market: once a feed is configured for a token, a later commit cannot SWAP
+        // it. An admin swapping a live market's feed to an attacker-controlled one — even behind the 2-day
+        // timelock — could force-liquidate healthy borrowers or enable pool-draining over-borrow. Risk-param
+        // updates stay allowed; a genuine feed migration onboards a new token entry. (StockConverter is
+        // append-only for feeds for the same reason.)
+        FeedConfig memory existing = _feeds[token];
+        if (existing.configured && address(existing.feed) != address(p.feed)) revert FeedIsImmutable(token);
         _setFeed(token, p.feed, p.maxStaleness, p.feedDecimals);
         _markets[token] = p.m;
         delete _pending[token];
