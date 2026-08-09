@@ -65,12 +65,39 @@ batch proof. Keep the table honest as scope changes.
 | medium | `resumeGrace` at 6× `gapThreshold` turns routine keeper jitter into a permanent liquidation DoS. |
 | medium | ~50 mutations survive a green suite, including `MIN_RISK_GAP_BPS` and `PARAM_TIMELOCK`. |
 
-**Status.** The market layer around this code (Seats/Bell/Exchange/Cases/Notes and the Degen Case)
-is deployed on testnet and audited clean in the published market-layer rounds. The findings above are
-against the **borrowing path**, which is deployed but not yet switched on (open borrowing is
-timelock-gated to ~2026-08-05, Blocker 2). They must be closed with a clean round before that path is
-trusted on mainnet. The track record still says caution: multiple prior rounds saw a shipped fix
-either not work or introduce a new defect, or a commit-message claim disproven by the next round.
+**Status — 8 of 9 FIXED (2026-08-09), on branch `feat/essey-market-layer` (not yet pushed/deployed).**
+Each fix landed with a regression test; the batch passed a borrow-path clean round (correctness + exploit +
+session-timing lenses), and the collateral-index rewrite (row 2) additionally passed a dedicated 3-agent
+audit + a 20k-run solvency fuzz.
+
+| Finding | Resolution |
+|---|---|
+| critical — `paused()` panic freeze | ✅ `6b11a73` decode a raw word (not `bool`) + gas-cap |
+| high — pro-rata wrong on OPEN | ✅ `3f01603`+`6cae026` per-token collateral **index**; positions snapshot it, so post-burn depositors are insulated; payout clamped to live balance. **New pool address (layout change).** |
+| high — decimals trust fields | ✅ `6b11a73` cross-check vs real `token.decimals()`/`feed.decimals()` at propose+commit |
+| high — interest extractable pre-share-price | ✅ `38f6075` accrue() before the ERC4626 preview (public overrides) |
+| medium — pause forgives interest pool-wide | ✅ `656dc1c` narrowed to a **borrow-asset** pause only; removed the admin watch list |
+| medium — half-day early close | ⚠️ **ACCEPTED for MVP (see below)** — the one still open |
+| medium — EDT holiday liquidation outage | ✅ `7af8cce` holiday threshold = earliest open (13:30 UTC) |
+| medium — `resumeGrace` jitter DoS | ✅ `fb6cd37` constructor guard `resumeGrace ≤ 4× gapThreshold` |
+| medium — mutation survivors | ✅ `cef0046` pinned the timelock/gap boundaries + constant values (gambit/vertigo CI runner still TODO) |
+
+**Accepted limitation — half-day early close (LOW).** `SESSION_CLOSE_UTC` is a fixed 20:00 UTC with no
+early-close calendar, so on ~3 half-days/year (13:00 ET close) a NEW borrow can open against an
+already-closed market for ~2–3h on a ≤2–3h-stale print. The clean-round audit scored this **LOW** and
+would not block a push: the marginal exposure over the already-accepted overnight/weekend blindness is
+~2–3 hours of staleness, and the ltv→liqThreshold **GAP** (`MIN_RISK_GAP_BPS` ≈ 20pp, sized to absorb a
+60h+ weekend+outage gap) already covers it. **Sharpest case (named per the audit): a half-day immediately
+before a long weekend** (Jul 3 → Jul 4 → weekend; the Black-Friday half-day → weekend), where a fresh
+max-LTV borrow rides a ~2.5–4.5-day blind window before the next liquidation — still GAP-absorbed, but where
+the margin is most consumed. **If ever fixed, use a fail-CLOSED keeper session flag** (reuses the deployed
+liveness keeper; stops asserting "open" at 13:00 ET) — **not** an on-chain early-close date table, which adds
+a yearly-maintained admin surface AND fails OPEN (a forgotten update silently reverts to the 20:00 bug).
+
+**Remaining before open borrowing is trusted on mainnet:** the mainnet-config audit round (Phase 2), the
+`uiMultiplier` testnet mocks (so borrow is exercisable on testnet), the gambit/vertigo CI runner, and a
+`commitMarket` rehearsal with real borrow+liquidate. The track record still says caution: prior rounds saw
+shipped fixes not work or introduce new defects — hence the dedicated audit + fuzz on the highest-risk change.
 
 ---
 
