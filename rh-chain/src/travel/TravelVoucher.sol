@@ -91,13 +91,15 @@ contract TravelVoucher is ERC721, ReentrancyGuard {
     error NothingToSkim();
 
     constructor(
+        string memory name_, // per-operator brand, e.g. "CoinVoyage Travel Voucher" (set once by the factory)
+        string memory symbol_,
         IERC20 usdg_,
         address travelSwap_,
         address issuer_,
         address admin_,
         uint16 spreadBps_,
         address spreadRecipient_
-    ) ERC721("Essey Travel Voucher", "TRIP") {
+    ) ERC721(name_, symbol_) {
         if (
             address(usdg_) == address(0) || travelSwap_ == address(0) || issuer_ == address(0)
                 || admin_ == address(0) || spreadRecipient_ == address(0)

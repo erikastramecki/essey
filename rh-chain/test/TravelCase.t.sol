@@ -68,7 +68,7 @@ contract TravelCaseTest is Test, IERC721Receiver {
         feeSink = address(bell);
 
         // issuer = this, admin = this, spread 5%, spread sink = the Bell (TravelSwap's fee farm)
-        voucher = new TravelVoucher(IERC20(address(usdg)), travelSwap, address(this), address(this), 500, feeSink);
+        voucher = new TravelVoucher("Essey Travel Voucher", "TRIP", IERC20(address(usdg)), travelSwap, address(this), address(this), 500, feeSink);
         voucher.setTier(TIER_A, VAL_A);
         voucher.setTier(TIER_B, VAL_B);
 

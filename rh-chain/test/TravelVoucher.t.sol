@@ -26,7 +26,7 @@ contract TravelVoucherTest is Test {
 
     function setUp() public {
         usdg = new MockUSDG();
-        v = new TravelVoucher(IERC20(address(usdg)), travelSwap, issuer, admin, 500, feeSink); // 5% spread
+        v = new TravelVoucher("Essey Travel Voucher", "TRIP", IERC20(address(usdg)), travelSwap, issuer, admin, 500, feeSink); // 5% spread
         vm.prank(admin);
         v.setTier(TIER, VALUE);
         usdg.mint(issuer, 1_000_000e6);
@@ -129,7 +129,7 @@ contract TravelVoucherTest is Test {
         vm.expectRevert(TravelVoucher.BadSpread.selector);
         v.setSpread(2_001, feeSink); // > 20%
         vm.expectRevert(TravelVoucher.BadSpread.selector);
-        new TravelVoucher(IERC20(address(usdg)), travelSwap, issuer, admin, 2_001, feeSink);
+        new TravelVoucher("Essey Travel Voucher", "TRIP", IERC20(address(usdg)), travelSwap, issuer, admin, 2_001, feeSink);
     }
 
     // ---------------------------------------------------------------- settlement-address rotation (timelocked)
