@@ -13,54 +13,10 @@ import (
 	"github.com/consensys/gnark/std/math/uints"
 	"github.com/consensys/gnark/std/signature/ecdsa"
 	"github.com/consensys/gnark/test"
-	iden3 "github.com/iden3/go-iden3-crypto/poseidon"
 )
 
-// bi extracts the *big.Int a Position field was assigned (the tests build Positions from big.Ints).
-func bi(v frontend.Variable) *big.Int { return v.(*big.Int) }
-
-// positionLeaf is the NATIVE counterpart of positionLeafCircuit — the same Poseidon over the ten
-// loan_commit_of fields, so the tree the test builds matches what the circuit recomputes.
-func positionLeaf(t *testing.T, p Position) *big.Int {
-	t.Helper()
-	h, err := iden3.Hash([]*big.Int{
-		bi(p.PoolHi), bi(p.PoolLo), bi(p.BorrowerHi), bi(p.BorrowerLo),
-		bi(p.Debt), bi(p.Collateral), bi(p.LtvBps), bi(p.Nonce), bi(p.TypeHi), bi(p.TypeLo),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h
-}
-
-// emptySiblings is an all-zero sibling path — the leaf sits in an otherwise-empty tree at `idx`.
-func emptySiblings(t *testing.T, depth int) []*big.Int {
-	t.Helper()
-	sib := make([]*big.Int, depth)
-	for i := range sib {
-		sib[i] = big.NewInt(0)
-	}
-	return sib
-}
-
-// climb is the NATIVE Merkle root: parent = Poseidon(left, right), leaf on the left when the path bit is
-// 0 — the exact rule merkleRoot() enforces in-circuit.
-func climb(t *testing.T, leaf *big.Int, idx uint64, siblings []*big.Int) *big.Int {
-	t.Helper()
-	cur := leaf
-	for i := 0; i < len(siblings); i++ {
-		in := []*big.Int{cur, siblings[i]}
-		if (idx>>uint(i))&1 == 1 {
-			in = []*big.Int{siblings[i], cur}
-		}
-		h, err := iden3.Hash(in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cur = h
-	}
-	return cur
-}
+// The native tree helpers (phash / positionLeaf / climb / emptySiblings) live in transition_test.go —
+// this file reuses them so the oracle-bound transition builds its tree exactly like TransitionCircuit.
 
 // posForPrice is a position with collateral 1 at 35% LTV, so max debt at price P is P*3500/10000.
 func posForPrice(debt *big.Int) Position {
