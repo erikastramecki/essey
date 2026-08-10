@@ -54,6 +54,47 @@ func digestToScalar(api frontend.API, fr *emulated.Field[emulated.Secp256k1Fr], 
 	return fr.ReduceStrict(fr.FromBits(le...))
 }
 
+// verifyPythQuorum enforces that the pinned guardians signed `body` (the accumulator update the
+// guardians double-keccak and sign) and returns the Merkle root committed at body[68:88]. Shared by
+// the portable proof (BatchCircuit) and the oracle-bound transition so the guardian trust chain lives
+// in exactly one place.
+func verifyPythQuorum(api frontend.API, body []uints.U8,
+	pubs []ecdsa.PublicKey[emulated.Secp256k1Fp, emulated.Secp256k1Fr],
+	sigs []ecdsa.Signature[emulated.Secp256k1Fr]) ([]uints.U8, error) {
+	h1, _ := sha3.NewLegacyKeccak256(api)
+	h1.Write(body)
+	h2, _ := sha3.NewLegacyKeccak256(api)
+	h2.Write(h1.Sum())
+	fr, err := emulated.NewField[emulated.Secp256k1Fr](api)
+	if err != nil {
+		return nil, err
+	}
+	msg := digestToScalar(api, fr, h2.Sum())
+	params := sw_emulated.GetCurveParams[emulated.Secp256k1Fp]()
+	for i := range pubs {
+		pubs[i].Verify(api, params, msg, &sigs[i])
+	}
+	return body[68:88], nil
+}
+
+// attestPythPrice climbs `message` via `proof` to `root` (Pyth's keccak160 sorted-pair Merkle tree),
+// asserts it lands on the signed root, and returns the price extracted from message[33:41]. The
+// returned value is a real Pyth-attested price — usable in a solvency check as an alternative to a
+// free-witness price.
+func attestPythPrice(api frontend.API, uapi *uints.BinaryField[uints.U64], cmp160 *cmp.BoundedComparator,
+	root, message []uints.U8, proof [][]uints.U8) frontend.Variable {
+	cur := keccak20(api, append([]uints.U8{uints.NewU8(0)}, message...))
+	for _, sib := range proof {
+		lo, hi := sortPair(api, uapi, cmp160, cur, sib)
+		in := append([]uints.U8{uints.NewU8(1)}, lo...)
+		cur = keccak20(api, append(in, hi...))
+	}
+	for i := 0; i < 20; i++ {
+		uapi.ByteAssertEq(root[i], cur[i])
+	}
+	return packBE(api, message[33:41])
+}
+
 // LoanSlot is one loan in a batch: its Pyth price message + Merkle proof (under the shared root) and
 // its solvency terms, with a per-loan public commitment.
 type LoanSlot struct {
@@ -87,34 +128,15 @@ func (c *BatchCircuit) Define(api frontend.API) error {
 	if err != nil {
 		return err
 	}
-	h1, _ := sha3.NewLegacyKeccak256(api)
-	h1.Write(c.Body)
-	h2, _ := sha3.NewLegacyKeccak256(api)
-	h2.Write(h1.Sum())
-	fr, err := emulated.NewField[emulated.Secp256k1Fr](api)
+	root, err := verifyPythQuorum(api, c.Body, c.Pubs, c.Sigs)
 	if err != nil {
 		return err
 	}
-	msg := digestToScalar(api, fr, h2.Sum())
-	params := sw_emulated.GetCurveParams[emulated.Secp256k1Fp]()
-	for i := range c.Pubs {
-		c.Pubs[i].Verify(api, params, msg, &c.Sigs[i])
-	}
-	root := c.Body[68:88]
 	cmp160 := cmp.NewBoundedComparator(api, new(big.Int).Lsh(big.NewInt(1), 160), false)
 
 	for li := range c.Loans {
 		ln := &c.Loans[li]
-		cur := keccak20(api, append([]uints.U8{uints.NewU8(0)}, ln.Message...))
-		for _, sib := range ln.Proof {
-			lo, hi := sortPair(api, uapi, cmp160, cur, sib)
-			in := append([]uints.U8{uints.NewU8(1)}, lo...)
-			cur = keccak20(api, append(in, hi...))
-		}
-		for i := 0; i < 20; i++ {
-			uapi.ByteAssertEq(root[i], cur[i])
-		}
-		price := packBE(api, ln.Message[33:41])
+		price := attestPythPrice(api, uapi, cmp160, root, ln.Message, ln.Proof)
 		enforceLoan(api, ln.PoolHi, ln.PoolLo, ln.BorrowerHi, ln.BorrowerLo,
 			ln.Debt, ln.Collateral, ln.LtvBps, ln.Nonce, ln.TypeHi, ln.TypeLo, price, ln.Commit)
 	}

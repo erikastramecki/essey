@@ -19,13 +19,21 @@ func enforceLoan(api frontend.API,
 	c := PoseidonBn254(api, []frontend.Variable{poolHi, poolLo, bHi, bLo, debt, coll, ltvBps, nonce, tHi, tLo, price})
 	api.AssertIsEqual(c, commit)
 
-	// 2) Range-bound the operands so no product can wrap the BN254 field and hide an overflow.
+	// 2+3) Range checks + solvency inequality (shared with the oracle-bound transition's proveBorrow).
+	enforceSolvent(api, debt, coll, price, ltvBps)
+}
+
+// enforceSolvent is the core rung-1 rule — the range checks and the solvency inequality, with NO
+// commitment binding. enforceLoan (commitment-bound) and proveBorrow (state-transition) both call it,
+// so the "debt * 10000 <= collateral * price * ltvBps" rule lives in exactly one place.
+func enforceSolvent(api frontend.API, debt, coll, price, ltvBps frontend.Variable) {
+	// Range-bound the operands so no product can wrap the BN254 field and hide an overflow.
 	api.ToBinary(debt, 64)
 	api.ToBinary(coll, 64)
 	api.ToBinary(price, 96)
 	api.ToBinary(ltvBps, 16)
 
-	// 3) Solvency: debt * 10000 <= collateral * price * ltvBps.
+	// Solvency: debt * 10000 <= collateral * price * ltvBps.
 	lhs := api.Mul(debt, bpsDenom)
 	rhs := api.Mul(api.Mul(coll, price), ltvBps)
 	api.AssertIsLessOrEqual(lhs, rhs)
