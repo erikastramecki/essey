@@ -95,6 +95,11 @@ class Sel:
         kept = [c for c in rest if not any(x in (c["name"] or "").lower() for x in SUPPRESS)]
         if kept:                      # drop user-suppressed variants unless they're the only option
             rest = kept
+        _cat = path.split("/")[0]     # category-specific suppression of a broken variant
+        if _cat in SUPPRESS_IN:
+            k2 = [c for c in rest if (c["name"] or "").lower() not in SUPPRESS_IN[_cat]]
+            if k2:
+                rest = k2
         for c in parts:
             self.emit(c, path)
         if not rest:
@@ -162,6 +167,8 @@ _PRI = {"body": 0, "suit": 1, "hair": 2, "eyemod": 3, "hat": 4}  # drivers resol
 # Categories the PSD gives no "None"/rarity, so we make them OPTIONAL: P(present) below (absent otherwise).
 OPTIONAL = {"16 Neko": 0.05}  # Neko fox mask = rare accessory
 SUPPRESS = ("swollen",)       # user-flagged variants removed from every pool (bruised/red-rimmed eye)
+# category-specific: drop a broken/mismatched variant from ONE category until the art is re-cut.
+SUPPRESS_IN = {"14 Ring": {"bar"}}   # female 'Bar' ring renders as an oversized gold bird over the glass
 
 def generate(tree, rng):
     s = Sel(rng)
@@ -258,8 +265,8 @@ def apply_conflicts(s, leafmeta):
                 return p[1] if len(p) > 1 else p[0]
         return None
     grip, cane, snake = _variant("19 Hand Grip"), _variant("18 Canes"), _variant("25 Snake")
-    if grip and cane and (cane, grip) in _CG:
-        hide_cats |= {"18 Canes"}; cane = None
+    if grip and cane:   # a cane's topper sits at hand height and pierces any held item (QA rounds 3-5)
+        hide_cats |= {"18 Canes"}; cane = None   # -> the cane is the held object; drop it if an item is held
     if grip and snake and grip in _SG:
         hide_cats |= {"25 Snake"}; snake = None
     if cane and snake and (cane, snake) in _CS:
@@ -332,10 +339,11 @@ def composite(leaves, leafmeta, gender):
         sy, sx = y0 - t, x0 - l
         sr = rgb[sy:sy + (y1 - y0), sx:sx + (x1 - x0)]; sa = a[sy:sy + (y1 - y0), sx:sx + (x1 - x0)]
         back = canvas[y0:y1, x0:x1, :3]; mode = lf.get("blend", "normal")
-        if m.get("category") == "26 AR":   # holographic HUD authored for SCREEN washes out on light
-            back = back * (1 - 0.9 * sa[..., None])   # backing: near-opaque dark under the holo, then
-            canvas[y0:y1, x0:x1, :3] = back           # screen -> crisp & fully visible on ANY background
-            col = 1 - (1 - back) * (1 - sr)
+        if m.get("category") in ("26 AR", "17 AR"):   # holographic HUD -> visible on ANY background
+            lum = 0.299 * sr[..., 0] + 0.587 * sr[..., 1] + 0.114 * sr[..., 2]  # AR pixel brightness
+            back = back * (1 - (0.85 * lum * sa)[..., None])  # darken bg ONLY under BRIGHT holo pixels
+            canvas[y0:y1, x0:x1, :3] = back                    # (dark structural pixels stay translucent,
+            col = 1 - (1 - back) * (1 - sr)                    #  so no opaque black blobs) then screen
         else:
             col = back * sr if mode == "multiply" else (1 - (1 - back) * (1 - sr)) if mode == "screen" else sr
         _over(canvas, col, sa, x0, y0)

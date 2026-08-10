@@ -159,3 +159,24 @@ Ceasar, Laser, Wrist, Ring, Beard, Tattoos, phoenix eyes, hawk) renders on every
 Open items are all **art-asset** (need the designer, or accept as sub-1% cosmetic):
 Carmen-hat stray stroke · Punk-Red colour label · cigar smoke-plume length · cane-joint drip ·
 poker-chip-beside-cane · necklace-through-translucent-glass. None block the builder logic.
+
+### DEFERRED — iterative image-perfection passes (post-build)
+The **AR holographic screen** still doesn't render perfectly on some tokens (the darken-then-screen
+backing reads heavy — dark holo rings; flagged on a Cthulu token). This and the art-asset items above
+are **cosmetic, not rule/pipeline defects**. Plan (owner's call): once the **builder (A/B/C) is done**,
+run repeated agent QA passes over the images, fixing/tuning until they're pixel-perfect — the AR blend
+(darken factor / per-variant tuning) is the top candidate. Tracked so we don't lose it. ⬜
+
+### Round 4 — fresh 300, 5 confirmed
+**FIXED (engine):**
+| Class | Fix |
+|---|---|
+| **AR gauge → opaque black blob** (moderate; the flagged AR issue) | AR blend reworked: dark backing now **luminance-weighted** (`0.85·luminance·alpha`) for both `26 AR`+`17 AR`, so bright glow pops on any bg while dark structural pixels stay translucent — no black blobs. Client compositor mirrored. ✅ |
+| Cigar + cane collision (#230) | tightened hand-object overlap threshold **0.30 → 0.15** (`compute_conflicts.py`). ✅ |
+| **'Bar' ring = broken oversized gold-bird asset over the glass** (#6485, ~14% of females) | `SUPPRESS_IN={"14 Ring":{"bar"}}` — dropped from the female ring pool until the art is re-cut. ✅ |
+
+**DESIGNER (art re-anchor/re-export, can't fix via rules):**
+- Devilish **tail floats** disconnected from the shoulder (#5001) — needs a body anchor (the horn is fine).
+- `Carmen` hat **stray brim wisp** (#7673) — leftover vector stroke at the brim tip.
+
+_Round 5 (confirm AR + Bar fixes) running._

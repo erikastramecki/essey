@@ -12,6 +12,8 @@ import { PortfolioPage } from "./portfolio";
 import { PrivatePage } from "./private";
 import { LendPage } from "./lend-ui";
 import { OperatorPage } from "./operator";
+import { ExplorerPage } from "./explorer";
+import { BuilderPage } from "./builder";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { LeaderboardPage } from "./leaderboard";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
@@ -28,6 +30,7 @@ const NAV = [
   ["/cases", "Cases"],
   ["/lend", "Lend"],
   ["/launch", "Launch"],
+  ["/explorer", "Scan"],
   ["/tape", "Tape"],
   ["/leaderboard", "Leaders"],
   ["/portfolio", "Portfolio"],
@@ -63,6 +66,8 @@ export default function App() {
             <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesPage /></AppPage>} />
             <Route path="/lend" element={<AppPage title="Lend" here="supply"><LendPage /></AppPage>} />
             <Route path="/launch" element={<AppPage title="Launch"><OperatorPage /></AppPage>} />
+            <Route path="/explorer" element={<ExplorerPage />} />
+            <Route path="/builder" element={<AppPage title="PFP Builder"><BuilderPage /></AppPage>} />
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
             <Route path="/leaderboard" element={<AppPage title="Leaderboard"><LeaderboardPage /></AppPage>} />
             <Route path="/portfolio" element={<AppPage title="Portfolio"><PortfolioPage /></AppPage>} />

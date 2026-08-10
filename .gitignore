@@ -30,3 +30,8 @@ broadcast/
 
 # portable-proof demo cached keys (large, regenerated)
 circuit/poseidon/.demo-keys/
+
+# PFP builder — local art + taxonomy (private, pre-mint)
+app/web/public/traits/
+app/web/public/builder/
+app/web/.reservations.json
