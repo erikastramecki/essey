@@ -1,0 +1,17 @@
+# Proprietary art + generated collection + rarity — NEVER commit to this PUBLIC repo.
+# Pre-mint exposure (copyable art, snipe-able rarities) + far too large for git.
+# These live in private storage / IPFS at reveal.
+traits/
+out/
+review_imgs/
+review_chunks/
+*.png
+*.jpg
+*.jpeg
+*.psd
+*.webp
+*_manifest.json
+builder_constraints.json
+rarity.json
+render_flags.json
+gallery*.html
