@@ -1,4 +1,4 @@
-// The Market layer surface — the gamified face of Essey, Dons v3 (docs/TOKENOMICS-v3.md).
+// The Market layer surface — the gamified face of Essey (docs/TOKENOMICS-v3.md).
 // Everything here is STATIC: the toys are client-side sandboxes with the deployed numbers baked in.
 // Guardrail: no section may claim more than the contracts deliver — the Don contracts are audited
 // and live on Robinhood Chain testnet; the toys here are sandboxes and say so on the surface itself,

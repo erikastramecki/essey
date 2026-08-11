@@ -20,7 +20,7 @@ export const NET = {
 };
 
 export const ADDR = {
-  // Dons v3 stack — deployed + rehearsed 2026-08-11 (see docs/DEPLOYMENT-testnet.md; audited, 2 clean rounds).
+  // Dons stack — deployed + rehearsed 2026-08-11 (see docs/DEPLOYMENT-testnet.md; audited, 2 clean rounds).
   don: "0x0C30ccbf727c5f9803A81e64873C6898a1e15771" as Address, // the 8,888 PFP membership NFT (lien-capable)
   distributor: "0x2Bbc39AcB8A1A76909759f7B2f31D57f1535601d" as Address, // mint: free WL / reroll / custom
   essey: "0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F" as Address, // $ESSEY v2 (8.888B supply)

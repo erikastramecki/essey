@@ -1,4 +1,4 @@
-# Essey Tokenomics v3 — The Dons
+# Essey Tokenomics — The Dons
 
 > **Status: shipped spec (updated 2026-08-11).** Supersedes the Seat model in `TOKENOMICS.md`. The 2,222
 > Seats become the **8,888 Dons** — a PFP collection that IS the seat at the table. This document is
@@ -199,6 +199,6 @@ Genuinely open (everything else above is deployed):
 - **`DonLoan` pot sizing** — how much $ESSEY the lending facility is seeded with.
 - **Mainnet `DonFeeRouter` wiring** — the real ETH→USDG route (testnet runs an interim route with mocks).
 
-Resolved since the v3 draft: mint chain (**Robinhood Chain, deployed**) · supply re-motif (**done**,
+Resolved since the initial draft: mint chain (**Robinhood Chain, deployed**) · supply re-motif (**done**,
 8,888,888,888e18) · pairing-vs-activation (**no pairing** — one reserve backs the floor; activation stays
 **user-paid** so the 50% burn is a real demand sink) · season/vest/cooldown (**cut** — see §5).

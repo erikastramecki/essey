@@ -1,4 +1,4 @@
-// Dons v3 — on-chain config for the builder mint + Don flows. TESTNET addresses (RH chainId 46630),
+// Dons — on-chain config for the builder mint + Don flows. TESTNET addresses (RH chainId 46630),
 // deployed + rehearsed 2026-08-11 (see docs/DEPLOYMENT-testnet.md). Mainnet swaps this table at #81.
 import { parseAbi, defineChain } from "viem";
 

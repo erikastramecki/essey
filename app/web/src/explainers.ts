@@ -1,4 +1,4 @@
-// In-flow explainers — Dons v3 approved copy for every decision point (source: explainer set, 2026-08-11).
+// In-flow explainers — approved copy for every decision point (source: explainer set, 2026-08-11).
 // Pure data, no JSX: page owners import EXPLAINERS and render `body` inline next to the control it
 // explains (1–3 sentences, muted style). Bodies may contain {placeholder} tokens — these are LIVE
 // numbers that must be rendered from chain state, never hard-coded. Use fillExplainer() to substitute.

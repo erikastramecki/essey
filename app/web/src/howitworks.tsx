@@ -1,4 +1,4 @@
-// /how-it-works — the full Dons v3 story as a designed scroll page (not a markdown dump).
+// /how-it-works — the full Dons story as a designed scroll page (not a markdown dump).
 // Copy is the approved explainer set (2026-08-11); every number mirrors the deployed contracts and
 // the page says so up front. Styling: the house design system (styles.css hw-* classes, theme
 // tokens — works in both themes). Wide tables + diagrams scroll inside their own container; the
@@ -77,7 +77,7 @@ export function HowItWorksPage() {
     <div className="hw">
       {/* ---- hero ---- */}
       <div className="hw-hero">
-        <span className="eyebrow">Essey · Dons v3</span>
+        <span className="eyebrow">Essey · The Dons</span>
         <h1>How Essey works</h1>
         <p>
           {md("A Don is a **seat**, a **floor**, and a **margin account** — all in one NFT. Every number on this page is read from the deployed contracts, not a pitch deck. Where a value is admin-tunable, we say so.")}
@@ -368,7 +368,7 @@ const FEE_MAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBo
   <rect width="1200" height="675" fill="#0b0c10"/>
 
   <text x="30" y="52" font-size="34" font-weight="700" fill="#e6c877">WHERE EVERY FEE GOES</text>
-  <text x="30" y="80" font-size="16" fill="#9a958a">Essey Dons v3 · 8,888 seats at the table · every route is on-chain and immutable</text>
+  <text x="30" y="80" font-size="16" fill="#9a958a">Essey · 8,888 seats at the table · every route is on-chain and immutable</text>
 
   <text x="186" y="112" font-size="13" font-weight="700" letter-spacing="2" fill="#9a958a" text-anchor="middle">FEES IN</text>
   <text x="610" y="112" font-size="13" font-weight="700" letter-spacing="2" fill="#9a958a" text-anchor="middle">ROUTED</text>
@@ -458,7 +458,7 @@ const FEE_MAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBo
   <text x="880" y="532" font-size="14.5" fill="#b8b3a6">AMM price = max(300,000, live floor).</text>
 
   <text x="1170" y="652" font-size="15" font-weight="700" fill="#c9a24b" text-anchor="end">essey.xyz</text>
-  <text x="30" y="652" font-size="13" fill="#6f6a5e">numbers read from the deployed contracts · Dons v3</text>
+  <text x="30" y="652" font-size="13" fill="#6f6a5e">numbers read from the deployed contracts</text>
 </svg>`;
 
 const FLYWHEEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 675" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
