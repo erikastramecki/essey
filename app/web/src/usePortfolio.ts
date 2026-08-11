@@ -5,7 +5,7 @@ import type { Address } from "viem";
 import { useWallet } from "./wallet";
 import { reads, type Portfolio } from "./live";
 
-/// Live portfolio, polled every 20s. Returns the connected wallet's balances, Seats, Vaults, loans, etc.
+/// Live portfolio, polled every 20s. Returns the connected wallet's balances, Dons, Vaults, loans, etc.
 export function usePortfolio() {
   const w = useWallet();
   const a = w.address as Address | null;

@@ -16,7 +16,7 @@ export function PortfolioPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [floor, setFloor] = useState<{ floor: bigint; reserve: bigint; backed: bigint } | null>(null);
-  useEffect(() => { reads.seatFloor().then(setFloor).catch(() => {}); }, []);
+  useEffect(() => { reads.donFloor().then(setFloor).catch(() => {}); }, []);
 
   const run = async (label: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(label); setMsg(null);
@@ -31,7 +31,7 @@ export function PortfolioPage() {
         <div className="band-head"><div>
           <span className="eyebrow">Portfolio</span>
           <h2>Your Essey</h2>
-          <p>Everything you hold on testnet — balances, Seats and their Tiers, the Payouts sitting in each
+          <p>Everything you hold on testnet — balances, Dons and their Tiers, the Payouts sitting in each
             Vault, and the stock you've drawn from Cases. Come back here to do it all again.</p>
         </div>
         </div>
@@ -49,13 +49,13 @@ export function PortfolioPage() {
               <Stat label="Gas (ETH)" value={fmt(p.gas, 4)} />
               <Stat label="$ESSEY" value={fmt(p.essey)} sub="the access chip" />
               <Stat label="USDG" value={fmt(p.usdg)} sub="fees & payouts" />
-              <Stat label="Seats" value={p.seats.length.toString()} sub="membership" />
+              <Stat label="Dons" value={p.dons.length.toString()} sub="seats at the table" />
             </div>
 
             {/* Returning-user launchpad: the repeat actions, one hop each. */}
             <div className="pf-quick">
               <span className="pf-quick-h">Quick actions</span>
-              <Link className="pf-quick-btn" to="/market">⬡ Buy a Seat</Link>
+              <Link className="pf-quick-btn" to="/market">⬡ Buy a Don</Link>
               <Link className="pf-quick-btn" to="/bell">🔔 Stake / Ring</Link>
               <Link className="pf-quick-btn" to="/cases">🎁 Open a Case</Link>
               <Link className="pf-quick-btn" to="/lend">⚖ Supply</Link>
@@ -64,22 +64,24 @@ export function PortfolioPage() {
 
             {msg && <div className="live-msg" style={{ marginBottom: 14 }}>{msg}</div>}
 
-            {/* Seats */}
+            {/* Dons */}
             <div className="pf-block">
-              <div className="pf-block-h">Your Seats {p.seats.length > 0 && <Link className="pf-link" to="/bell">manage tiers →</Link>}</div>
-              {p.seats.length === 0 ? (
-                <div className="pf-empty">No Seats yet. <Link to="/market">Buy one on the Market →</Link></div>
+              <div className="pf-block-h">Your Dons {p.dons.length > 0 && <Link className="pf-link" to="/bell">manage tiers →</Link>}</div>
+              {p.dons.length === 0 ? (
+                <div className="pf-empty">No Dons yet. <Link to="/market">Buy one on the Market →</Link></div>
               ) : (
                 <>
                 {floor && floor.floor > 0n && (
-                  <div className="pf-note" style={{ marginBottom: 10 }}>🛡 <b>Every Seat has a hard floor.</b> Redeem one for <b>≥ {fmt(floor.floor, 2)} USDG</b> from the reserve, anytime — that's the reserve ({fmt(floor.reserve, 0)} USDG) split across the {floor.backed.toString()} max-supply Seats, and it only ever rises. Redeeming <b>locks the Seat</b> and forfeits its membership.</div>
+                  <div className="pf-note" style={{ marginBottom: 10 }}>🛡 <b>Every Don has a hard floor.</b> Redeem one for <b>≥ {fmt(floor.floor, 2)} $ESSEY</b> from the reserve, anytime — that's the reserve ({fmt(floor.reserve, 0)} $ESSEY) split across the {floor.backed.toString()} Dons it backs, and it only ever rises. Redeeming <b>locks the Don</b> and forfeits its membership and Vault.</div>
                 )}
                 <div className="pf-seats">
-                  {p.seats.map((s) => (
+                  {p.dons.map((s) => (
                     <div className="pf-seat" key={s.id.toString()}>
                       <div className="pf-seat-top">
-                        <span className="pf-seat-id num">Seat #{s.id.toString()}</span>
+                        <span className="pf-seat-id num">Don #{s.id.toString()}</span>
                         <span className={"pf-tier" + (s.tier > 0 ? " on" : "")}>{s.tier === 0 ? "Base" : (TIERS[s.tier - 1]?.name ?? `Tier ${s.tier}`)}</span>
+                        {s.locked && <span className="pf-tier on" title="This Don's traits are frozen forever — staking locks the art.">🔒 art locked</span>}
+                        {s.liened && <span className="pf-tier on" title="Pledged as loan collateral — it stays in your wallet, staked and earning, but can't move until the debt clears.">📜 collateralized — still earning</span>}
                       </div>
                       <div className="pf-seat-row num">
                         <span>ready to claim: <b>{fmt(s.pending, 4)}</b> USDG</span>
@@ -88,18 +90,19 @@ export function PortfolioPage() {
                             <> · <b>{s.vaultAapl > 0n && `${fmt(s.vaultAapl, 2)} AAPL`}{s.vaultAapl > 0n && s.vaultNvda > 0n ? " · " : ""}{s.vaultNvda > 0n && `${fmt(s.vaultNvda, 2)} NVDA`}</b> in stock</>
                           )}
                         </span>
+                        {s.liened && <span>loan debt: <b>{fmt(s.debt, 2)}</b> $ESSEY</span>}
                       </div>
                       <div className="pf-seat-actions">
-                        <a className="pf-link" href={`${NET.explorer}/token/${ADDR.seat}?a=${s.id}`} target="_blank" rel="noreferrer">Seat ↗</a>
+                        <a className="pf-link" href={`${NET.explorer}/token/${ADDR.don}?a=${s.id}`} target="_blank" rel="noreferrer">Don ↗</a>
                         <a className="pf-link" href={`${NET.explorer}/address/${s.vault}`} target="_blank" rel="noreferrer">Vault ↗</a>
                         {s.pending > 0n
-                          ? <button className="pf-link gold pf-inline-btn" disabled={busy === "claim" + s.id} onClick={() => a && run("claim" + s.id, () => flows.claimPayout(a, s.id), `✓ Payout claimed into Seat #${s.id}'s Vault`)}>{busy === "claim" + s.id ? "claiming…" : "claim now"}</button>
+                          ? <button className="pf-link gold pf-inline-btn" disabled={busy === "claim" + s.id} onClick={() => a && run("claim" + s.id, () => flows.claimPayout(a, s.id), `✓ Payout claimed into Don #${s.id}'s Vault`)}>{busy === "claim" + s.id ? "claiming…" : "claim now"}</button>
                           : s.tier === 0 ? <Link className="pf-link gold" to="/bell">stake →</Link>
                           : <Link className="pf-link" to="/bell">upgrade →</Link>}
-                        {floor && floor.floor > 0n && (
-                          <button className="pf-link pf-inline-btn" disabled={!!busy} title="Redeem this Seat for its USDG floor. This locks the Seat and forfeits its membership."
-                            onClick={() => a && run("redeem" + s.id, () => flows.redeemSeatFloor(a, s.id), `✓ Seat #${s.id} redeemed for ${fmt(floor.floor, 2)} USDG — membership forfeited.`)}>
-                            {busy === "redeem" + s.id ? "redeeming…" : `redeem ↓ ${fmt(floor.floor, 2)} USDG`}
+                        {floor && floor.floor > 0n && !s.liened && (
+                          <button className="pf-link pf-inline-btn" disabled={!!busy} title="Redeem this Don for its $ESSEY floor. This locks the Don and forfeits its membership and Vault."
+                            onClick={() => a && run("redeem" + s.id, () => flows.redeemDonFloor(a, s.id), `✓ Don #${s.id} redeemed for ${fmt(floor.floor, 2)} $ESSEY — membership forfeited.`)}>
+                            {busy === "redeem" + s.id ? "redeeming…" : `redeem ↓ ${fmt(floor.floor, 2)} $ESSEY`}
                           </button>
                         )}
                       </div>

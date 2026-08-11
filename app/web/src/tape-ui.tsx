@@ -63,7 +63,7 @@ const FILTERS: [string, (r: TapeRow) => boolean][] = [
   ["All", () => true],
   ["Bell & Payouts", (r) => r.kind === "bell_rung" || r.kind === "payout" || r.kind === "interest"],
   ["Trades", (r) => r.kind === "trade"],
-  ["Seats & Tiers", (r) => r.kind === "seat_minted" || r.kind === "seat_move" || r.kind === "tier"],
+  ["Dons & Tiers", (r) => r.kind === "don_minted" || r.kind === "don_move" || r.kind === "tier"],
   ["Cases", (r) => r.kind === "case"],
   ["Loans", (r) => r.kind === "loan"],
   ["⬡ proven only", (r) => r.proven],

@@ -13,6 +13,9 @@ import { LendPage } from "./lend-ui";
 import { OperatorPage } from "./operator";
 import { ExplorerPage } from "./explorer";
 import { BuilderPage } from "./builder";
+import { HowItWorksPage } from "./howitworks";
+import { FaucetPage } from "./faucet";
+import { NotFoundPage } from "./notfound";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
@@ -23,6 +26,7 @@ const GROUPS = ["The Market", "Essey Private", "The engine", "Audits"];
 // each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
 const NAV = [
   ["/builder", "Build"],
+  ["/how-it-works", "How it works"],
   ["/market", "Exchange"],
   ["/bell", "Bell"],
   ["/cases", "Cases"],
@@ -32,6 +36,7 @@ const NAV = [
   ["/tape", "Tape"],
   ["/portfolio", "Portfolio"],
   ["/private", "Private"],
+  ["/faucet", "Faucet"],
   ["/docs", "Docs"],
 ] as const;
 
@@ -58,6 +63,8 @@ export default function App() {
             <Route path="/launch" element={<AppPage title="Launch"><OperatorPage /></AppPage>} />
             <Route path="/explorer" element={<ExplorerPage />} />
             <Route path="/builder" element={<AppPage title="PFP Builder"><BuilderPage /></AppPage>} />
+            <Route path="/how-it-works" element={<AppPage title="How it works"><HowItWorksPage /></AppPage>} />
+            <Route path="/faucet" element={<AppPage title="Faucet"><FaucetPage /></AppPage>} />
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
             <Route path="/portfolio" element={<AppPage title="Portfolio"><PortfolioPage /></AppPage>} />
             <Route path="/private" element={<AppPage title="Private"><PrivatePage /></AppPage>} />
@@ -65,7 +72,7 @@ export default function App() {
             <Route path="/engine" element={<PageShell title="The engine"><EngineSection /></PageShell>} />
             <Route path="/docs" element={<DocsPage />} />
             <Route path="/docs/:slug" element={<DocsPage />} />
-            <Route path="*" element={<Landing />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
       </WalletProvider>
@@ -195,7 +202,7 @@ function Footer() {
       <div className="wrap foot-in">
         <div>
           <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to
-            Seat holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
+            Don holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
             guaranteed, ever. The Market contracts are adversarially audited (published rounds in the docs room)
             and <b>live on Robinhood Chain testnet</b> — everything here is play money with no real value; not
             on mainnet.{" "}

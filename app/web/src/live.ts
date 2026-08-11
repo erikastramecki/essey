@@ -20,18 +20,24 @@ export const NET = {
 };
 
 export const ADDR = {
-  // Stock-payout stack — redeployed 2026-08-04 (converter-wired Bell; stock payouts proven on-chain).
-  seat: "0x7bcc821cdf7e3ad9e43188d0f0b24049db0b1bee" as Address,
-  essey: "0x0659eca47665da545e1157ede11fcb4c8222879f" as Address,
+  // Dons v3 stack — deployed + rehearsed 2026-08-11 (see docs/DEPLOYMENT-testnet.md; audited, 2 clean rounds).
+  don: "0x0C30ccbf727c5f9803A81e64873C6898a1e15771" as Address, // the 8,888 PFP membership NFT (lien-capable)
+  distributor: "0x2Bbc39AcB8A1A76909759f7B2f31D57f1535601d" as Address, // mint: free WL / reroll / custom
+  essey: "0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F" as Address, // $ESSEY v2 (8.888B supply)
+  // Legacy $ESSEY v1 — the Cases/Degen/Faucet stack was deployed against it and still charges in it.
+  esseyV1: "0x0659eca47665da545e1157ede11fcb4c8222879f" as Address,
   usdg: "0x7461E670d44FF4397A3E48030C5b06f6163a5De2" as Address,
-  bell: "0x31115d449f359a05298295415665af18fd708d0d" as Address,
-  exchange: "0x57864a956a13d42837f121790715713cbaa7df09" as Address,
-  // A USDG reserve that gives every Seat a hard, stable floor (redeem a Seat for its pro-rata share). Immutable.
-  seatReserve: "0x55e37465d76ae51bE3a9065a43a7d2bF25830A13" as Address,
+  bell: "0x5f2Df783437b5383f8E96196Bb92A0c22527a289" as Address, // Dons-era Bell: 5-tier 666-ladder, elect-3, no ringer tip
+  exchange: "0x10c22bC22B4deE66a7DE2f790a2678e622441753" as Address, // DonExchange AMM: 8%/12% fees, price = max(300k, live floor)
+  // An $ESSEY reserve that gives every Don a hard, rising floor (redeem a Don for its pro-rata share). Immutable.
+  donReserve: "0xD4aC7ADD2A790B9916367c35F9F892b6D92F24D6" as Address,
+  loan: "0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7" as Address, // DonLoan: 50% LTV / 70% liq / 15% APR, ESSEY-denominated
+  feeRouter: "0x6EC22ab8442de2F780477d9A56926e0BA0382032" as Address, // feeSink: ETH+ESSEY fees → USDG → Bell pot
   // DCA / Auto-stack: recurring USDG→stock buys, non-custodial, keeper-executed, floored via its converter.
   recurringBuy: "0xF0DCE628d4023cdc8115E6f5998D9279eA06d9ab" as Address,
   cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
-  faucet: "0x11c696cf869c1caace32e7ea6d1d2074c452ded2" as Address,
+  // Dons-era faucet: drips 5,000 v2 $ESSEY + 1,000 USDG per 8h (the old 0x11c6…ded2 faucet dripped v1).
+  faucet: "0x2ac1Bb0977e8f5b733C059ce3706963B38248C91" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
   nvda: "0x8393cc99FAC1CF79E3bEceA56f344159ddFd91E9" as Address,
   // Lending stack (unchanged)
@@ -62,17 +68,25 @@ export const ADDR = {
 };
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
-// Matches BundleConverter.BUNDLE; used as the Seat payout preference for the default mix.
+// Matches BundleConverter.BUNDLE; used as the Don payout election for the default mix.
 export const BUNDLE = "0x000000000000000000000000000000000000B0B1" as Address;
 
-// Whitelist raffle size — 2,222 mint spots (the Seat supply).
-export const WHITELIST_SPOTS = 2222;
+// Don whitelist scope (daodon/Homes/TravelSwap snapshot): 4,286 free mints across 3,659 wallets.
+export const WHITELIST_MINTS = 4286;
+export const WHITELIST_WALLETS = 3659;
+
+// Fixed collection size — 8,888 Dons, scarce by construction (Don.maxSupply).
+export const MAX_DONS = 8888;
 
 // Collateral markets open after the 2-day parameter timelock (a real safety feature, not a knob).
 export const BORROW_OPENS = new Date("2026-08-05T18:55:00Z");
 
-// Launch parameters as deployed (18-dec mock USDG on testnet).
-export const PRICE = { seat: 500n * 10n ** 18n, swapFee: 10n * 10n ** 18n, snipeFee: 15n * 10n ** 18n, sellFee: 8n * 10n ** 18n, casePrice: 100n * 10n ** 18n, caseFee: 5n * 10n ** 18n };
+// Legacy Cases pricing as deployed (v1 $ESSEY price + USDG fee). The DonExchange has no flat prices:
+// its quote is price() = max(300k, live floor) plus a percentage fee — see FEE_BPS + reads.quote*.
+export const PRICE = { casePrice: 100n * 10n ** 18n, caseFee: 5n * 10n ** 18n };
+
+// DonExchange percentage fees (of price(), charged in $ESSEY): 8% buy/sell, 12% to snipe a specific Don.
+export const FEE_BPS = { swap: 800n, snipe: 1200n };
 
 export const erc20Abi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
@@ -83,12 +97,16 @@ export const erc20Abi = parseAbi([
 export const exchangeAbi = parseAbi([
   "function inventoryCount() view returns (uint256)",
   "function inventoryAt(uint256) view returns (uint256)",
+  "function inInventory(uint256) view returns (bool)",
   "function esseyReserve() view returns (uint256)",
-  "function buy() returns (uint256)",
-  "function snipe(uint256)",
-  "function sell(uint256)",
+  "function price() view returns (uint256)",
+  "function feeOn(uint256 bps) view returns (uint256)",
+  "function buy(uint256 maxCost) returns (uint256)",
+  "function snipe(uint256 id, uint256 maxCost)",
+  "function sell(uint256 id, uint256 minOut)",
   "event Bought(uint256 indexed id, address indexed buyer, uint256 price, uint256 fee)",
   "event Sniped(uint256 indexed id, address indexed buyer, uint256 price, uint256 fee)",
+  "event Sold(uint256 indexed id, address indexed seller, uint256 net, uint256 fee)",
 ]);
 export const casesAbi = parseAbi([
   "function buy() returns (uint256)",
@@ -109,8 +127,11 @@ export const bellAbi = parseAbi([
   "function upgrade(uint256 id, uint8 newTier)",
   "function ring()",
   "function claim(uint256 id) returns (uint256)",
+  "function setPayout(uint256 id, address[] tokens, uint16[] bps)",
   "function setPayoutToken(uint256 id, address token)",
   "function payoutTokenOf(uint256) view returns (address)",
+  "function electionCount(uint256) view returns (uint256)",
+  "function payoutElections(uint256, uint256) view returns (address token, uint16 bps)",
   "function defaultPayout() view returns (address)",
   "function converter() view returns (address)",
   "event ClaimConverted(uint256 indexed id, address token, uint256 amountOut)",
@@ -123,15 +144,22 @@ export const converterAbi = parseAbi([
   "function bundleAt(uint256) view returns (address)",
   "function reserveOf(address) view returns (uint256)",
 ]);
-export const seatAbi = parseAbi([
+export const donAbi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function ownerOf(uint256) view returns (address)",
   "function approve(address,uint256)",
   "function tokenURI(uint256) view returns (string)",
   "function vaultOf(uint256) view returns (address)",
+  "function traits(uint256) view returns (bytes32)",
+  "function locked(uint256) view returns (bool)",
+  "function liened(uint256) view returns (bool)",
+  "function totalMinted() view returns (uint256)",
+  "function maxSupply() view returns (uint256)",
   "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
 ]);
-const DEPLOY_BLOCK = 96_550_000n; // Seat deployed ~here; owned-Seat scan starts from this
+const erc721TransferItem = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)");
+const DON_DEPLOY_BLOCK = 99_658_900n; // Don deployed at 99,658,912; owned-Don scan starts from this
+const POOL_DEPLOY_BLOCK = 96_550_000n; // lending-pool Note scan floor (old-stack deploy era)
 export const faucetAbi = parseAbi([
   "function drip()",
   "function lastDrip(address) view returns (uint256)",
@@ -213,13 +241,27 @@ export const recurringBuyAbi = parseAbi([
   "function schedules(uint256) view returns (address owner, address stock, uint128 amountPerFill, uint64 everySec, uint32 totalFills, uint32 filled, uint64 nextDue, bool cancelled)",
 ]);
 
-// SeatReserve — the Seat price floor. floorPerSeat = reserve / backedSupply (backedSupply = Seat maxSupply).
-export const seatReserveAbi = parseAbi([
-  "function floorPerSeat() view returns (uint256)",
+// DonReserve — the Don price floor in $ESSEY. floorPerDon = reserve / backedSupply (init = Don maxSupply).
+export const donReserveAbi = parseAbi([
+  "function floorPerDon() view returns (uint256)",
   "function reserve() view returns (uint256)",
   "function backedSupply() view returns (uint256)",
   "function fund(uint256 amount)",
-  "function redeem(uint256 seatId) returns (uint256 paid)",
+  "function redeem(uint256 donId) returns (uint256 paid)",
+]);
+
+// DonLoan — borrow $ESSEY against a Don at 50% of the live floor. The Don is LIENED in place (still in
+// the wallet, still staked + earning) until repay; liquidation (debt > 70% of live floor) consumes it.
+export const donLoanAbi = parseAbi([
+  "function lendable() view returns (uint256)",
+  "function maxBorrow() view returns (uint256)",
+  "function debtOf(uint256 donId) view returns (uint256)",
+  "function liquidationThreshold() view returns (uint256)",
+  "function loans(uint256) view returns (address borrower, uint256 principal, uint256 accrued, uint64 lastAccrual, uint64 nonce)",
+  "function ltvBps() view returns (uint256)",
+  "function rateBps() view returns (uint256)",
+  "function borrow(uint256 donId, uint256 amount)",
+  "function repay(uint256 donId, uint256 amount) returns (uint256 paid)",
 ]);
 
 // Essey Private — shielded pool ABI (hides amounts). Nested tuples: the Groth16 proof + the extData.
@@ -470,12 +512,21 @@ export const reads = {
   caseUnits: () => pub.readContract({ address: ADDR.cases, abi: casesAbi, functionName: "inventoryCount" }),
   pot: () => pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "pot" }),
   balances: async (a: Address) => {
-    const [essey, usdg, seats] = await Promise.all([
+    const [essey, usdg, dons] = await Promise.all([
       pub.readContract({ address: ADDR.essey, abi: erc20Abi, functionName: "balanceOf", args: [a] }),
       pub.readContract({ address: ADDR.usdg, abi: erc20Abi, functionName: "balanceOf", args: [a] }),
-      pub.readContract({ address: ADDR.seat, abi: seatAbi, functionName: "balanceOf", args: [a] }),
+      pub.readContract({ address: ADDR.don, abi: donAbi, functionName: "balanceOf", args: [a] }),
     ]);
-    return { essey, usdg, seats };
+    return { essey, usdg, dons };
+  },
+
+  /// The live Exchange quote: price = max(300k, live floor), plus the buy (8%) and snipe (12%) fees in
+  /// $ESSEY. One price() read on-chain per fee so all figures come off the same quote.
+  quote: async (): Promise<{ price: bigint; buyFee: bigint; snipeFee: bigint; buyTotal: bigint; snipeTotal: bigint; sellNet: bigint }> => {
+    const price = await pub.readContract({ address: ADDR.exchange, abi: exchangeAbi, functionName: "price" }) as bigint;
+    const buyFee = (price * FEE_BPS.swap) / 10_000n;
+    const snipeFee = (price * FEE_BPS.snipe) / 10_000n;
+    return { price, buyFee, snipeFee, buyTotal: price + buyFee, snipeTotal: price + snipeFee, sellNet: price - buyFee };
   },
   floatIds: async (): Promise<bigint[]> => {
     const n = await reads.floatCount();
@@ -484,12 +535,12 @@ export const reads = {
       pub.readContract({ address: ADDR.exchange, abi: exchangeAbi, functionName: "inventoryAt", args: [BigInt(i)] })));
   },
 
-  /// Seats the address currently owns — computed from Transfer events (Seat isn't Enumerable), which
+  /// Dons the address currently owns — computed from Transfer events (Don isn't Enumerable), which
   /// is exact and honest: in minus out. Bounded to the collection's lifetime so the scan stays cheap.
-  ownedSeats: async (a: Address): Promise<bigint[]> => {
+  ownedDons: async (a: Address): Promise<bigint[]> => {
     const [inLogs, outLogs] = await Promise.all([
-      pub.getLogs({ address: ADDR.seat, event: seatAbi[5], args: { to: a }, fromBlock: DEPLOY_BLOCK, toBlock: "latest" }),
-      pub.getLogs({ address: ADDR.seat, event: seatAbi[5], args: { from: a }, fromBlock: DEPLOY_BLOCK, toBlock: "latest" }),
+      pub.getLogs({ address: ADDR.don, event: erc721TransferItem, args: { to: a }, fromBlock: DON_DEPLOY_BLOCK, toBlock: "latest" }),
+      pub.getLogs({ address: ADDR.don, event: erc721TransferItem, args: { from: a }, fromBlock: DON_DEPLOY_BLOCK, toBlock: "latest" }),
     ]);
     const owned = new Set<string>();
     // Order across the two lists by block then logIndex so the latest movement of each id wins.
@@ -503,14 +554,20 @@ export const reads = {
     return [...owned].map(BigInt).sort((x, y) => (x < y ? -1 : 1));
   },
 
-  seatState: async (id: bigint): Promise<{ tier: number; pending: bigint; vault: Address }> => {
-    const [state, pending, vault] = await Promise.all([
+  donState: async (id: bigint): Promise<{ tier: number; pending: bigint; vault: Address; locked: boolean; liened: boolean }> => {
+    const [state, pending, vault, locked, liened] = await Promise.all([
       pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "seats", args: [id] }),
       pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "pendingOf", args: [id] }),
-      pub.readContract({ address: ADDR.seat, abi: seatAbi, functionName: "vaultOf", args: [id] }),
+      pub.readContract({ address: ADDR.don, abi: donAbi, functionName: "vaultOf", args: [id] }),
+      pub.readContract({ address: ADDR.don, abi: donAbi, functionName: "locked", args: [id] }),
+      pub.readContract({ address: ADDR.don, abi: donAbi, functionName: "liened", args: [id] }),
     ]);
-    return { tier: Number((state as readonly unknown[])[0]), pending: pending as bigint, vault: vault as Address };
+    return { tier: Number((state as readonly unknown[])[0]), pending: pending as bigint, vault: vault as Address, locked: locked as boolean, liened: liened as boolean };
   },
+
+  /// A liened Don's live loan debt in $ESSEY (0 = no open loan).
+  donDebt: (id: bigint) =>
+    pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "debtOf", args: [id] }) as Promise<bigint>,
 
   tierFee: (tierIndex: number) => // cumulative $ESSEY to reach tier (tierIndex is 0-based)
     pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "tierFees", args: [BigInt(tierIndex)] }),
@@ -518,7 +575,7 @@ export const reads = {
   vaultBalance: (vault: Address) =>
     pub.readContract({ address: ADDR.usdg, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
 
-  /// Stock held in a Seat's Vault — what a stock Payout lands as (and what you'd borrow against).
+  /// Stock held in a Don's Vault — what a stock Payout lands as.
   vaultStocks: async (vault: Address): Promise<{ aapl: bigint; nvda: bigint }> => {
     const [aapl, nvda] = await Promise.all([
       pub.readContract({ address: ADDR.aapl, abi: erc20Abi, functionName: "balanceOf", args: [vault] }),
@@ -527,10 +584,19 @@ export const reads = {
     return { aapl, nvda };
   },
 
-  /// A Seat's payout preference: 0x0 = the default bundle, else the chosen stock. Only meaningful once
-  /// a converter is wired (address(0) converter ⇒ everything pays base USDG regardless).
+  /// A Don's first elected payout stock: 0x0 = no election (the default BUNDLE), else the chosen stock.
   payoutPref: (id: bigint) =>
     pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "payoutTokenOf", args: [id] }) as Promise<Address>,
+
+  /// A Don's full payout election — up to 3 stocks with weights (bps summing to 10000). Empty = the
+  /// default BUNDLE basket.
+  payoutElections: async (id: bigint): Promise<{ token: Address; bps: number }[]> => {
+    const n = Number(await pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "electionCount", args: [id] }));
+    return Promise.all(Array.from({ length: n }, async (_, i) => {
+      const [token, bps] = await pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "payoutElections", args: [id, BigInt(i)] }) as readonly [Address, number];
+      return { token, bps: Number(bps) };
+    }));
+  },
 
   gasBalance: (a: Address) => pub.getBalance({ address: a }),
 
@@ -562,12 +628,12 @@ export const reads = {
   maxBorrow: (token: Address, collateralRaw: bigint) =>
     pub.readContract({ address: ADDR.markets, abi: marketsAbi, functionName: "maxBorrow", args: [token, collateralRaw] }),
 
-  /// The Seat price floor — what one Seat redeems for right now (USDG), plus the reserve total + backed supply.
-  seatFloor: async (): Promise<{ floor: bigint; reserve: bigint; backed: bigint }> => {
+  /// The Don price floor — what one Don redeems for right now ($ESSEY), plus the reserve total + backed supply.
+  donFloor: async (): Promise<{ floor: bigint; reserve: bigint; backed: bigint }> => {
     const [floor, reserveBal, backed] = await Promise.all([
-      pub.readContract({ address: ADDR.seatReserve, abi: seatReserveAbi, functionName: "floorPerSeat" }) as Promise<bigint>,
-      pub.readContract({ address: ADDR.seatReserve, abi: seatReserveAbi, functionName: "reserve" }) as Promise<bigint>,
-      pub.readContract({ address: ADDR.seatReserve, abi: seatReserveAbi, functionName: "backedSupply" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.donReserve, abi: donReserveAbi, functionName: "floorPerDon" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.donReserve, abi: donReserveAbi, functionName: "reserve" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.donReserve, abi: donReserveAbi, functionName: "backedSupply" }) as Promise<bigint>,
     ]);
     return { floor, reserve: reserveBal, backed };
   },
@@ -585,10 +651,10 @@ export const reads = {
   },
 
   /// Open loan positions held by `a`, found by scanning the Note collection's Transfer events (same
-  /// approach as Seats) and keeping the ones still owned with live debt.
+  /// approach as Dons) and keeping the ones still owned with live debt.
   myLoans: async (a: Address): Promise<{ id: bigint; token: Address; collateralRaw: bigint; debt: bigint }[]> => {
     const note = await pub.readContract({ address: ADDR.pool, abi: poolAbi, functionName: "note" }) as Address;
-    const logs = await pub.getLogs({ address: note, event: seatAbi[5], args: { to: a }, fromBlock: DEPLOY_BLOCK, toBlock: "latest" });
+    const logs = await pub.getLogs({ address: note, event: erc721TransferItem, args: { to: a }, fromBlock: POOL_DEPLOY_BLOCK, toBlock: "latest" });
     const ids = [...new Set(logs.map((l) => (l.args as { tokenId?: bigint }).tokenId).filter((x): x is bigint => x !== undefined))];
     const out: { id: bigint; token: Address; collateralRaw: bigint; debt: bigint }[] = [];
     for (const id of ids) {
@@ -621,19 +687,22 @@ export const reads = {
     return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed };
   },
 
-  /// Everything the Portfolio needs, in one pass: balances, each owned Seat with its tier + claimable
-  /// + Vault balance, Case winnings, pool position, and shielded status.
+  /// Everything the Portfolio needs, in one pass: balances, each owned Don with its tier + claimable
+  /// + lien/art status + Vault balance, Case winnings, pool position, and shielded status.
   portfolio: async (a: Address) => {
     const [gas, bal, ids, wins, pool, loans, shielded] = await Promise.all([
-      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a),
+      reads.gasBalance(a), reads.balances(a), reads.ownedDons(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a),
       reads.hasShielded(a).catch(() => false), // best-effort — a scan hiccup must never break the whole portfolio
     ]);
-    const seats = await Promise.all(ids.map(async (id) => {
-      const st = await reads.seatState(id);
-      const [vaultUsdg, vaultStock] = await Promise.all([reads.vaultBalance(st.vault), reads.vaultStocks(st.vault)]);
-      return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda };
+    const dons = await Promise.all(ids.map(async (id) => {
+      const st = await reads.donState(id);
+      const [vaultUsdg, vaultStock, debt] = await Promise.all([
+        reads.vaultBalance(st.vault), reads.vaultStocks(st.vault),
+        st.liened ? reads.donDebt(id) : Promise.resolve(0n),
+      ]);
+      return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda, debt };
     }));
-    return { gas, ...bal, seats, wins, pool, loans, shielded };
+    return { gas, ...bal, dons, wins, pool, loans, shielded };
   },
 
   /// Has this wallet ever shielded into Essey Private? Detected from the PUBLIC deposit leg — a USDG transfer
@@ -653,53 +722,63 @@ export const reads = {
 
 export type Portfolio = Awaited<ReturnType<typeof reads.portfolio>>;
 
-// The four launch tiers EXACTLY as deployed by DeployMarket._ladder (cumulative $ESSEY fee, payout
+// The five 666-ladder tiers EXACTLY as deployed on the Dons Bell (cumulative $ESSEY fee, payout
 // weight). tier N = arrays[N-1]. Verified against chain via reads.tierFee at render time.
 export const TIERS = [
-  { tier: 1, name: "Tier I", fee: 1_000n * 10n ** 18n, weight: 100 },
-  { tier: 2, name: "Tier II", fee: 1_600n * 10n ** 18n, weight: 160 },
-  { tier: 3, name: "Tier III", fee: 2_000n * 10n ** 18n, weight: 200 },
-  { tier: 4, name: "Tier IV", fee: 3_330n * 10n ** 18n, weight: 333 },
+  { tier: 1, name: "Tier I", fee: 66_666n * 10n ** 18n, weight: 100 },
+  { tier: 2, name: "Tier II", fee: 166_666n * 10n ** 18n, weight: 125 },
+  { tier: 3, name: "Tier III", fee: 366_666n * 10n ** 18n, weight: 160 },
+  { tier: 4, name: "Tier IV", fee: 666_666n * 10n ** 18n, weight: 200 },
+  { tier: 5, name: "Tier V", fee: 1_666_666n * 10n ** 18n, weight: 333 },
 ];
 
 // ---------------------------------------------------------------- flows
 export const flows = {
   drip: (a: Address) => send(a, ADDR.faucet, faucetAbi, "drip"),
 
-  buySeat: async (a: Address): Promise<{ id: bigint; tx: Hex }> => {
-    await ensureAllowance(a, ADDR.essey, ADDR.exchange, PRICE.seat);
-    await ensureAllowance(a, ADDR.usdg, ADDR.exchange, PRICE.swapFee);
-    const tx = await send(a, ADDR.exchange, exchangeAbi, "buy");
+  /// Buy the next Don at the live quote (price + 8% fee, all $ESSEY). The floor — and so price() — can
+  /// rise permissionlessly between quote and trade, so pass the on-chain bound with ~1% headroom: the
+  /// trade reverts (SlippageExceeded) rather than over-charging.
+  buyDon: async (a: Address): Promise<{ id: bigint; tx: Hex }> => {
+    const { buyTotal } = await reads.quote();
+    const maxCost = buyTotal + buyTotal / 100n;
+    await ensureAllowance(a, ADDR.essey, ADDR.exchange, maxCost);
+    const tx = await send(a, ADDR.exchange, exchangeAbi, "buy", [maxCost]);
     const rcptLogs = await pub.getTransactionReceipt({ hash: tx });
     // The Bought id is topic[1] of the exchange's own log in this receipt.
-    const log = rcptLogs.logs.find((l) => l.address.toLowerCase() === ADDR.exchange.toLowerCase());
+    const log = rcptLogs.logs.find((l) => l.address.toLowerCase() === ADDR.exchange.toLowerCase() && l.topics.length === 3);
     const id = log ? BigInt(log.topics[1] ?? "0x0") : 0n;
     return { id, tx };
   },
 
-  snipeSeat: async (a: Address, id: bigint): Promise<Hex> => {
-    await ensureAllowance(a, ADDR.essey, ADDR.exchange, PRICE.seat);
-    await ensureAllowance(a, ADDR.usdg, ADDR.exchange, PRICE.snipeFee);
-    return send(a, ADDR.exchange, exchangeAbi, "snipe", [id]);
+  /// Snipe a specific Don # at the live quote + the 12% premium fee. Same ~1% slippage headroom as buy.
+  snipeDon: async (a: Address, id: bigint): Promise<Hex> => {
+    const { snipeTotal } = await reads.quote();
+    const maxCost = snipeTotal + snipeTotal / 100n;
+    await ensureAllowance(a, ADDR.essey, ADDR.exchange, maxCost);
+    return send(a, ADDR.exchange, exchangeAbi, "snipe", [id, maxCost]);
   },
 
-  sellSeat: async (a: Address, id: bigint): Promise<Hex> => {
-    await ensureAllowance(a, ADDR.usdg, ADDR.exchange, PRICE.sellFee);
-    await send(a, ADDR.seat, seatAbi, "approve", [ADDR.exchange, id]);
-    return send(a, ADDR.exchange, exchangeAbi, "sell", [id]);
+  /// Sell a Don back to the Exchange for the live price minus the 8% fee ($ESSEY). `minOut` is the quoted
+  /// net minus ~1% — reverts rather than under-paying if the quote moved.
+  sellDon: async (a: Address, id: bigint): Promise<Hex> => {
+    const { sellNet } = await reads.quote();
+    const minOut = sellNet - sellNet / 100n;
+    await send(a, ADDR.don, donAbi, "approve", [ADDR.exchange, id]);
+    return send(a, ADDR.exchange, exchangeAbi, "sell", [id, minOut]);
   },
 
-  /// Redeem a Seat for its USDG floor from the reserve. This FORFEITS membership — the Seat is locked in the
-  /// reserve permanently. Approve the Seat to the reserve, then redeem (pays floorPerSeat in USDG).
-  redeemSeatFloor: async (a: Address, id: bigint): Promise<Hex> => {
-    await send(a, ADDR.seat, seatAbi, "approve", [ADDR.seatReserve, id]);
-    return send(a, ADDR.seatReserve, seatReserveAbi, "redeem", [id]);
+  /// Redeem a Don for its $ESSEY floor from the reserve. This FORFEITS membership (and the Vault's contents
+  /// travel with the locked Don) — the Don is locked in the reserve permanently. Approve, then redeem.
+  redeemDonFloor: async (a: Address, id: bigint): Promise<Hex> => {
+    await send(a, ADDR.don, donAbi, "approve", [ADDR.donReserve, id]);
+    return send(a, ADDR.donReserve, donReserveAbi, "redeem", [id]);
   },
 
-  /// Strengthen the floor for EVERY Seat holder — anyone can add USDG to the reserve (it can only go up).
-  fundSeatFloor: async (a: Address, amount: bigint): Promise<Hex> => {
-    await ensureAllowance(a, ADDR.usdg, ADDR.seatReserve, amount);
-    return send(a, ADDR.seatReserve, seatReserveAbi, "fund", [amount]);
+  /// Strengthen the floor for EVERY Don holder — anyone can add $ESSEY to the reserve (it can only go up).
+  fundDonFloor: async (a: Address, amount: bigint): Promise<Hex> => {
+    await ensureAllowance(a, ADDR.essey, ADDR.donReserve, amount);
+    return send(a, ADDR.donReserve, donReserveAbi, "fund", [amount]);
   },
 
   /// Start an Auto-stack (DCA). Funds stay in the wallet — this only sets the USDG allowance ceiling (the total
@@ -712,8 +791,8 @@ export const flows = {
   /// Stop an Auto-stack (owner only). Revoking the USDG allowance also neutralizes it.
   cancelDca: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.recurringBuy, recurringBuyAbi, "cancel", [id]),
 
-  /// Stake $ESSEY to activate a Seat at `tier` (or upgrade if already active). Half the fee burns,
-  /// half goes to treasury; the Seat starts earning payout weight from the next ring.
+  /// Stake $ESSEY to activate a Don at `tier` (or upgrade if already active). Half the fee burns,
+  /// half goes to treasury; the Don starts earning payout weight from the next ring.
   setTier: async (a: Address, id: bigint, tier: number): Promise<Hex> => {
     const cur = Number((await pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "seats", args: [id] }) as readonly unknown[])[0]);
     const fee = await reads.tierFee(tier - 1); // cumulative; activate/upgrade pull the right delta
@@ -733,14 +812,42 @@ export const flows = {
     return send(a, ADDR.cases, casesSellAbi, "sellBack", [token]);
   },
 
-  /// Claim a Seat's accrued Payout — it lands in that Seat's Vault (permissionless, but the funds go
-  /// to the Vault the Seat owner controls, never the caller).
+  /// Claim a Don's accrued Payout — it lands in that Don's Vault (permissionless, but the funds go
+  /// to the Vault the Don owner controls, never the caller).
   claimPayout: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.bell, bellAbi, "claim", [id]),
 
-  /// Set how a Seat's Payouts are delivered: BUNDLE (the default basket), a single stock, or 0x0 to
-  /// reset to the default. Owner-only on-chain; clears on Seat transfer.
+  /// The simple payout choice: BUNDLE (the default basket), a single stock at 100%, or 0x0 to reset to
+  /// the default. Owner-only on-chain; clears on Don transfer.
   setPayoutToken: (a: Address, id: bigint, token: Address): Promise<Hex> =>
     send(a, ADDR.bell, bellAbi, "setPayoutToken", [id, token]),
+
+  /// Elect up to 3 stocks a Don's Payouts split across, weights in bps summing to exactly 10000 —
+  /// "build your own dividend basket". Validated here so a typo fails before the wallet prompt; the
+  /// contract enforces the same rules (max 3, converter-supported, sum == 10000).
+  setPayoutMix: (a: Address, id: bigint, elections: { token: Address; bps: number }[]): Promise<Hex> => {
+    if (elections.length > 3) throw new Error("Pick at most 3 stocks.");
+    if (elections.some((e) => e.bps <= 0)) throw new Error("Every chosen stock needs a share above 0%.");
+    if (elections.reduce((s, e) => s + e.bps, 0) !== 10_000) throw new Error("The shares must add up to exactly 100%.");
+    return send(a, ADDR.bell, bellAbi, "setPayout", [id, elections.map((e) => e.token), elections.map((e) => e.bps)]);
+  },
+
+  // ---- Don loan (lien-in-place $ESSEY borrowing) ----
+
+  /// Borrow $ESSEY against a Don you own (up to 50% of the live floor). The Don is liened IN PLACE — it
+  /// stays in your wallet, stays staked, keeps earning — but can't move until the debt clears. If debt
+  /// ever exceeds 70% of the LIVE floor, anyone can liquidate: the Don is consumed (redeemed into the
+  /// reserve) and its Vault + membership are forfeited.
+  borrowAgainstDon: (a: Address, id: bigint, amount: bigint): Promise<Hex> =>
+    send(a, ADDR.loan, donLoanAbi, "borrow", [id, amount]),
+
+  /// Repay a Don loan (interest first — forwarded to the reserve, raising everyone's floor). The contract
+  /// pulls at most the outstanding debt, so the 1% headroom only covers interest accrued since quoting;
+  /// full repayment releases the lien.
+  repayDonLoan: async (a: Address, id: bigint, owed: bigint): Promise<Hex> => {
+    const amount = owed + owed / 100n;
+    await ensureAllowance(a, ADDR.essey, ADDR.loan, amount);
+    return send(a, ADDR.loan, donLoanAbi, "repay", [id, amount]);
+  },
 
   // ---- lending ----
   supply: async (a: Address, amount: bigint): Promise<Hex> => {
@@ -765,7 +872,7 @@ export const flows = {
   degenOpen: async (a: Address, onStage?: (s: string) => void): Promise<{ multBps: number; payoutShares: bigint; seq: bigint }> => {
     const fee = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as bigint;
     onStage?.("approving");
-    await ensureAllowance(a, ADDR.essey, ADDR.degenCases, PRICE.casePrice); // case price, sunk to treasury (one-time)
+    await ensureAllowance(a, ADDR.esseyV1, ADDR.degenCases, PRICE.casePrice); // case price (legacy v1 $ESSEY), sunk to treasury (one-time)
     await ensureAllowance(a, ADDR.usdg, ADDR.degenCases, PRICE.caseFee); // buy fee, feeds the Bell pot (one-time)
     onStage?.("buying");
     // The ONLY per-roll signature: buy requests the roll. Settlement is permissionless — a keeper (or,
@@ -944,7 +1051,7 @@ export const flows = {
   /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.
   openCase: async (a: Address, onStage: (s: string) => void): Promise<{ token: Address; amount: bigint; tx: Hex }> => {
     onStage("approving");
-    await ensureAllowance(a, ADDR.essey, ADDR.cases, PRICE.casePrice); // one-time
+    await ensureAllowance(a, ADDR.esseyV1, ADDR.cases, PRICE.casePrice); // legacy v1 $ESSEY (Cases pre-date the Dons stack) — one-time
     await ensureAllowance(a, ADDR.usdg, ADDR.cases, PRICE.caseFee); // one-time
     onStage("buying");
     // The buy is the only signature the buyer needs. The keeper reveals (open delivers to the buyer);
@@ -1206,9 +1313,14 @@ export function niceError(e: unknown): string {
   if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first — try again and confirm both wallet popups.";
   if (s.includes("marketclosed") || s.includes("notinsession")) return "Only open during US market hours — try again while the stock market is open (weekdays, ~9:30am–4pm ET).";
   if (s.includes("soldout") || s.includes("emptyinventory")) return "Sold out — no inventory left right now.";
-  if (s.includes("notseatowner") || s.includes("notborrower")) return "That isn't yours to act on.";
-  if (s.includes("alreadyactive")) return "That Seat is already staked — use upgrade instead.";
-  if (s.includes("potbelowminimum") || s.includes("noactiveseats")) return "The pot isn't ringable yet — trade a bit to grow it, or wait for an active Seat.";
+  if (s.includes("notseatowner") || s.includes("notdonowner") || s.includes("notborrower")) return "That isn't yours to act on.";
+  if (s.includes("alreadyactive")) return "That Don is already staked — use upgrade instead.";
+  if (s.includes("potbelowminimum") || s.includes("noactiveseats")) return "The pot isn't ringable yet — trade a bit to grow it, or wait for an active Don.";
+  if (s.includes("slippageexceeded")) return "The price moved past your bound — refresh the quote and try again.";
+  if (s.includes("notininventory")) return "That Don isn't on the Exchange right now — check the available list.";
+  if (s.includes("lienactive")) return "That Don is loan collateral — repay the loan to unlock it.";
+  if (s.includes("exceedsltv")) return "That's more than 50% of the live floor — borrow less.";
+  if (s.includes("loanexists")) return "That Don already has an open loan — repay it before borrowing again.";
   if (s.includes("already spent") || s.includes("input 0 is already spent") || s.includes("input 1 is already spent")) return "That shielded note was already spent — your local balance was stale. Refresh and try again.";
   if (s.includes("invalid merkle root")) return "The pool changed while proving — refresh so your balance is current, then retry.";
   // Otherwise: strip the noisy viem wrapper, keep the first human line.

@@ -16,7 +16,7 @@ export type TapeRow = {
 
 // Event signatures we surface, per contract. Kept minimal and legible — one line per Tape row type.
 const EVENTS = {
-  seat: [parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)")],
+  don: [parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)")],
   bell: [
     parseAbiItem("event Rang(address indexed ringer, uint256 pot, uint256 tip, uint256 distributed)"),
     parseAbiItem("event Claimed(uint256 indexed id, uint256 amount, address vault)"),
@@ -26,7 +26,12 @@ const EVENTS = {
   exchange: [
     parseAbiItem("event Bought(uint256 indexed id, address indexed buyer, uint256 price, uint256 fee)"),
     parseAbiItem("event Sniped(uint256 indexed id, address indexed buyer, uint256 price, uint256 fee)"),
-    parseAbiItem("event Sold(uint256 indexed id, address indexed seller, uint256 price, uint256 fee)"),
+    parseAbiItem("event Sold(uint256 indexed id, address indexed seller, uint256 net, uint256 fee)"),
+  ],
+  donloan: [
+    parseAbiItem("event Borrowed(uint256 indexed donId, address indexed borrower, uint256 amount, uint64 nonce)"),
+    parseAbiItem("event Repaid(uint256 indexed donId, address indexed payer, uint256 interestPaid, uint256 principalPaid, bool closed)"),
+    parseAbiItem("event Liquidated(uint256 indexed donId, address indexed caller, uint256 proceeds, uint256 debtRecovered, uint256 surplusToBorrower, uint256 tip)"),
   ],
   cases: [
     parseAbiItem("event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)"),
@@ -48,24 +53,30 @@ function row(contract: string, l: Log & { eventName?: string; args?: Record<stri
   const base = { key: `${l.transactionHash}:${l.logIndex}`, block: l.blockNumber ?? 0n, tx: l.transactionHash as `0x${string}` };
   const usd = (v: unknown) => fmt(v as bigint, 2);
   switch (`${contract}.${l.eventName}`) {
-    case "seat.Transfer":
+    case "don.Transfer":
       return a.from === ZERO
-        ? { ...base, kind: "seat_minted", proven: true, icon: "◆", text: `SEAT #${a.tokenId} minted · Vault created` }
-        : { ...base, kind: "seat_move", proven: false, icon: "→", text: `SEAT #${a.tokenId} changed hands` };
+        ? { ...base, kind: "don_minted", proven: true, icon: "◆", text: `DON #${a.tokenId} minted · Vault created` }
+        : { ...base, kind: "don_move", proven: false, icon: "→", text: `DON #${a.tokenId} changed hands` };
     case "bell.Rang":
-      return { ...base, kind: "bell_rung", proven: true, icon: "🔔", text: `BELL RUNG · ${usd(a.distributed)} USDG paid out · tip ${usd(a.tip)}` };
+      return { ...base, kind: "bell_rung", proven: true, icon: "🔔", text: `BELL RUNG · ${usd(a.distributed)} USDG paid out across staked Dons` };
     case "bell.Claimed":
-      return { ...base, kind: "payout", proven: true, icon: "◆", text: `PAYOUT · Seat #${a.id} claimed ${usd(a.amount)} USDG → Vault` };
+      return { ...base, kind: "payout", proven: true, icon: "◆", text: `PAYOUT · Don #${a.id} claimed ${usd(a.amount)} USDG → Vault` };
     case "bell.Activated":
-      return { ...base, kind: "tier", proven: false, icon: "▲", text: `TIER · Seat #${a.id} activated at Tier ${a.tier}` };
+      return { ...base, kind: "tier", proven: false, icon: "▲", text: `TIER · Don #${a.id} activated at Tier ${a.tier}` };
     case "bell.Upgraded":
-      return { ...base, kind: "tier", proven: false, icon: "▲", text: `TIER UP · Seat #${a.id} → Tier ${a.toTier}` };
+      return { ...base, kind: "tier", proven: false, icon: "▲", text: `TIER UP · Don #${a.id} → Tier ${a.toTier}` };
     case "exchange.Bought":
-      return { ...base, kind: "trade", proven: false, icon: "⇄", text: `EXCHANGE · Seat #${a.id} bought · fee → the Bell` };
+      return { ...base, kind: "trade", proven: false, icon: "⇄", text: `EXCHANGE · Don #${a.id} bought · fee → stock + treasury` };
     case "exchange.Sniped":
-      return { ...base, kind: "trade", proven: false, icon: "⇄", text: `EXCHANGE · Seat #${a.id} sniped · fee → the Bell` };
+      return { ...base, kind: "trade", proven: false, icon: "⇄", text: `EXCHANGE · Don #${a.id} sniped · fee → stock + treasury` };
     case "exchange.Sold":
-      return { ...base, kind: "trade", proven: false, icon: "⇄", text: `EXCHANGE · Seat #${a.id} sold back` };
+      return { ...base, kind: "trade", proven: false, icon: "⇄", text: `EXCHANGE · Don #${a.id} sold back for ${usd(a.net)} $ESSEY` };
+    case "donloan.Borrowed":
+      return { ...base, kind: "loan", proven: true, icon: "📜", text: `DON LOAN · ${usd(a.amount)} $ESSEY borrowed against Don #${a.donId} (lien in place)` };
+    case "donloan.Repaid":
+      return { ...base, kind: "loan", proven: true, icon: "📜", text: `DON LOAN · Don #${a.donId} repaid ${usd((a.interestPaid as bigint) + (a.principalPaid as bigint))} $ESSEY${a.closed ? " · lien released" : ""}` };
+    case "donloan.Liquidated":
+      return { ...base, kind: "loan", proven: true, icon: "📜", text: `LIQUIDATED · Don #${a.donId} consumed at the floor · ${usd(a.debtRecovered)} $ESSEY recovered` };
     case "cases.CaseOpened":
       return { ...base, kind: "case", proven: true, icon: "🎁", text: `CASE OPENED · drew ${fmt(a.amount as bigint, 2)} ${stock(a.token as string)} · draw fair ✓` };
     case "cases.SoldBack":
@@ -82,7 +93,7 @@ function row(contract: string, l: Log & { eventName?: string; args?: Record<stri
 }
 
 const SRC: [string, Address][] = [
-  ["seat", ADDR.seat], ["bell", ADDR.bell], ["exchange", ADDR.exchange], ["cases", ADDR.cases], ["pool", ADDR.pool],
+  ["don", ADDR.don], ["bell", ADDR.bell], ["exchange", ADDR.exchange], ["donloan", ADDR.loan], ["cases", ADDR.cases], ["pool", ADDR.pool],
 ];
 
 /// Read the freshest Tape rows — a bounded window of recent blocks, newest first. Errors on any one
