@@ -34,7 +34,7 @@ abstract contract IEntropyConsumer {
 
 /// EsseyCasesDegen — the "degen case": a provably-fair, provably-solvent MULTIPLIER gacha (variant (b)
 /// in TOKENOMICS-essey.md). You buy a case; a roll pays `multiplier x referenceValue` in stock, from
-/// 0.65x up to a 50x "Gold Bell". Same variance/RoI as StonkBrokers' Broker Box (~90% RTP) — but the
+/// 0.65x up to a 50x "Gold Bell". Same variance/RoI as the reference desk' Broker Box (~90% RTP) — but the
 /// odds are on-chain and disclosed, and the payout is backed by real reserved stock BEFORE you open.
 /// "The only case system where the odds AND the bankroll are provable."
 ///

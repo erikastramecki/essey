@@ -15,15 +15,14 @@ interface ISeatLike {
     function vaultOf(uint256 id) external view returns (address);
 }
 
-/// The Bell — Essey's fee → reward engine, the StonkBrokers "Clock In" mechanic rebuilt on a strictly
+/// The Bell — Essey's fee → reward engine, the classic "clock-in" mechanic rebuilt on a strictly
 /// better distribution pattern.
 ///
 /// Fees (in the reward token) accrue in this contract as the pot. When the pot reaches `minRing`,
 /// ANYONE can ring the Bell: the ringer earns a tip, and the rest of the pot is credited to active
 /// Seats pro-rata by Tier weight. Distribution is the O(1) accumulator pattern (MasterChef/Synthetix):
 /// ringing does ONE division — `accPerWeight += pot / totalWeight` — and each Seat later pulls
-/// `weight × Δacc` into its Vault. No per-holder push loop (StonkBrokers pays gas per broker on every
-/// drop), no off-chain Merkle computation, no trusted root-poster. Fully on-chain and O(1) both ways.
+/// `weight × Δacc` into its Vault. No per-holder push loop (the naive push pattern pays gas per holder on every /// drop), no off-chain Merkle computation, no trusted root-poster. Fully on-chain and O(1) both ways.
 ///
 /// Tiers: a Seat's owner stakes $ESSEY to activate a Tier (weight multiplier). The fee is a SINK, not a
 /// refundable stake — half burned, half to treasury — and the Tier clears on true ownership transfer
@@ -342,8 +341,7 @@ contract Bell is ISeatHook, ReentrancyGuard {
         reward.safeTransfer(vault, amt);
     }
 
-    /// Recover tokens mis-sent to the Bell — "rescue without trust". StonkBrokers solves this with an
-    /// owner-only rescueToken that can also drain the pot; this cannot: the reward token itself can
+    /// Recover tokens mis-sent to the Bell — "rescue without trust". Others solve this with an /// owner-only rescueToken that can also drain the pot; this cannot: the reward token itself can
     /// never be swept (the pot and reserved rewards are untouchable by construction), ETH cannot enter
     /// (no receive), the destination is the immutable treasury, and there is no privileged caller at
     /// all — anyone may trigger it.

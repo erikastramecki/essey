@@ -39,12 +39,12 @@ contract DeployDons is Script {
     uint256 constant ROOT_TIMELOCK = 2 days;
     uint256 constant TIP_BPS = 0; // founder: no ring tip — a protocol keeper rings
 
-    // AMM: softened StonkBroker Anvil fees, 70% of every fee -> stock for staked Dons.
+    // AMM: softened the reference desk Anvil fees, 70% of every fee -> stock for staked Dons.
     uint256 constant SWAP_FEE_BPS = 800;
     uint256 constant SNIPE_FEE_BPS = 1200;
     uint256 constant STOCK_SHARE_BPS = 7000;
 
-    // Borrow: the StonkBroker numbers on Essey's provable floor.
+    // Borrow: the proven desk numbers on Essey's provable floor.
     uint256 constant LTV_BPS = 5000;
     uint256 constant LIQ_THRESHOLD_BPS = 7000;
     uint256 constant RATE_BPS = 1500;
@@ -52,7 +52,7 @@ contract DeployDons is Script {
 
     uint256 constant MIN_OUT_BPS = 9700; // DonFeeRouter slippage floor (>= 9000 enforced)
 
-    /// The 5-tier 666-motif ladder (founder: match StonkBroker's 5 rungs + 1.25x, 66,666-scaled fees).
+    /// The 5-tier 666-motif ladder (founder: match the reference desk's 5 rungs + 1.25x, 66,666-scaled fees).
     function _ladder() internal pure returns (uint256[] memory fees, uint256[] memory weights) {
         fees = new uint256[](5);
         weights = new uint256[](5);

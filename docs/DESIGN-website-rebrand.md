@@ -6,11 +6,11 @@ under the 3-agent audit gate. This document is the brief the build works from.
 **What changed (founder decision, 2026-08-02, recorded in `DESIGN-seats-market-layer.md` §"Website &
 messaging reframe" and task #14):** the Market layer — Seats, Vaults, Tiers, the Exchange, the Bell,
 Payouts, After Hours, Notes, Cases, the Tape — becomes *the* face of Essey. The lending protocol
-doesn't recede; it becomes the **proof engine underneath the game**. The site must do what StonkBrokers'
+doesn't recede; it becomes the **proof engine underneath the game**. The site must do what the reference desk'
 site did — pull people in with live, gamified engagement energy — and point every bit of that energy at
 the one thing no meme competitor can claim: **provably fair AND provably solvent.**
 
-**Reference we are answering (and out-classing):** StonkBrokers (stonkbrokers.cash), same Robinhood
+**Reference we are answering (and out-classing):** the reference desk (the reference desk.cash), same Robinhood
 Chain, same tokenized-stock assets. What worked for them: (1) a first-visit experimental-software
 disclaimer modal, (2) a constantly-scrolling live "drops happening now" ticker where each row is a real
 tx, (3) a docs reading room, (4) heavy gamification. We match the *architecture* of that engagement and
@@ -117,7 +117,7 @@ everywhere; our discipline is the flex.
 opacity texture over ink, mono glyphs) — printing real events as they happen: `● BELL RUNG · 0.44 ETH →
 1,662 Vaults · proof ✓ 0x9f…`. It is docked, ~40px tall, and it is the first thing that says "this place
 is live and it publishes everything." The risk: we permanently spend screen real estate and commit to an
-indexer being up. The payoff: it's the StonkBrokers "drops ticker" reflex, but re-cast as a **printing
+indexer being up. The payoff: it's the the reference desk "drops ticker" reflex, but re-cast as a **printing
 press for proof** — the single strongest expression of "provably solvent" as a *feeling*, not a claim.
 On mobile it collapses to a tap-to-expand single-line crawl (§8). This is the aesthetic bet of the
 rebrand: **turn the whole site into a room where a ticker is always printing receipts.**
@@ -188,7 +188,7 @@ signature gesture: **the moment fees become stock in people's Vaults, made physi
 
 ## 3. The live Tape — a printing press for proof
 
-The Tape is the heart of the rebrand and the direct answer to StonkBrokers' "drops happening now" ticker.
+The Tape is the heart of the rebrand and the direct answer to the reference desk' "drops happening now" ticker.
 Their ticker broadcasts *hype* ("someone just won 12×!"). **Ours broadcasts *proof* — every row is a real
 Blockscout tx, and every row that can be verified carries the hallmark and a "verify" affordance.** It
 exists in three surfaces at three densities:
@@ -365,7 +365,7 @@ never "dividend."
   other, the ⬡ hallmark stamped in the corner = *proven solvent*. A "transfer" demo shows the whole
   position changing hands intact. This is the moment the game meets the hard tech: *a self-contained,
   provably-solvent, portable credit object* (`Note.sol` — bearer deeds, `ownerOf(id)` auth; the killer
-  line vs StonkBrokers' escrow-dead LoanVault).
+  line vs the reference desk' escrow-dead LoanVault).
 
 ### 🎁 Cases — *stock gacha (scoped, gated)*
 - **One-liner:** "Open a Case, get real stock sealed in a Vault. Keep it, borrow against it, or sell it
@@ -400,7 +400,7 @@ anything.*
 
 ## 6. The experimental-software warning (first-visit modal)
 
-Matches StonkBrokers' first-visit disclaimer reflex and our own no-overclaim discipline
+Matches the reference desk' first-visit disclaimer reflex and our own no-overclaim discipline
 (`WHY-ESSEY-IS-DIFFERENT.md` §"being honest about the limits"). Honest enough to be real, human enough not
 to scare people off. Reuses the existing `Overlay` component (`App.tsx`, focus-trap, scroll-lock) so it's
 one build. Shows once, stored in `localStorage`; re-openable from the footer ("Terms & risk").
@@ -474,7 +474,7 @@ elevate the room:
 
 ## 8. Mobile-first + theme
 
-**Mobile is the primary surface** (StonkBrokers' traction was phone-first; a ring-the-Bell tap has to feel
+**Mobile is the primary surface** (the reference desk' traction was phone-first; a ring-the-Bell tap has to feel
 great one-handed).
 
 - **Hero on phone:** stacks to Bell widget first (the live hook), then headline, then CTAs. The Tape peek
@@ -580,5 +580,5 @@ theme-awareness itself signals polish/trust:
 Essey is the stock-market club where **the odds and the books are both provable**. Buy a Seat, raise its
 Tier, and when anyone rings the Bell, protocol fees land in your Vault as real stock — then borrow against
 that stock in the same place. Every ring, every draw, every loan prints to a live Tape where each line is
-a real on-chain receipt you can check yourself. StonkBrokers is provably fair. Essey is **provably fair
+a real on-chain receipt you can check yourself. the reference desk is provably fair. Essey is **provably fair
 AND provably solvent** — and the whole site is a room where a ticker never stops printing the proof.

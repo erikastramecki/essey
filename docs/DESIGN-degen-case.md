@@ -4,7 +4,7 @@ Status: **design / ungated parts spec'd; entropy + legal are gated (see §7).** 
 variant (b), the "degen case" already scoped in `TOKENOMICS-essey.md` §"Two variants".
 
 ## 1. Positioning — beat them at their own game
-StonkBrokers' Broker Box is a 0.70×–50× multiplier roll at ~90% RTP. Two things they **cannot** show:
+the reference desk' Broker Box is a 0.70×–50× multiplier roll at ~90% RTP. Two things they **cannot** show:
 - that the RNG was fair (it's their box, their draw), and
 - that the top multiplier is actually backed (no solvency proof).
 
@@ -45,7 +45,7 @@ Extend the `EsseyCases` backing invariant (`buy` reverts unless inventory exceed
   it resolves. `buy` reverts unless the free reserve covers the new case's worst case on top of all
   outstanding reservations. So "the house had the 50× reserved before you opened" is an on-chain
   invariant, not a promise.
-- **This *is* the progression/FOMO mechanic** (the same one StonkBrokers has: *"a tier opens when free
+- **This *is* the progression/FOMO mechanic** (the same one the reference desk has: *"a tier opens when free
   stock can reserve one worst-case round"*). The **max-multiplier tier scales with the bankroll**:
   small reserve → top tier is 5×; as the edge compounds the reserve, **the 50× "Gold Bell" unlocks** —
   provably. A live "Gold Bell: LOCKED / UNLOCKS at $X reserve" meter turns solvency into hype.

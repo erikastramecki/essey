@@ -3,7 +3,7 @@
 **This document is retired. The canonical tokenomics doc is [`TOKENOMICS.md`](./TOKENOMICS.md).**
 
 This file was the 2026-08-02 *design spec* for the token and market-layer economy, written against the
-StonkBrokers reference model (`ECONOMICS-seats-model.md`) while the mechanics were still being decided.
+the reference desk reference model (`ECONOMICS-seats-model.md`) while the mechanics were still being decided.
 Almost all of its open questions are now resolved and shipped, and some of its framing (a ZK-verifiable
 "buyback treasury"; buyback-as-open-question) belongs to a pivot that has since been retired.
 

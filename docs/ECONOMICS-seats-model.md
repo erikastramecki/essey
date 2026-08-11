@@ -1,4 +1,4 @@
-# ECONOMICS — Seat/Market layer, modeled from StonkBrokers' measured data
+# ECONOMICS — Seat/Market layer, modeled from the reference desk' measured data
 
 Source: their live contracts on Robinhood Chain via Blockscout API, measured **2026-08-02** (raw data
 memo in session scratchpad; headline numbers reproduced here). Reference design:
@@ -13,7 +13,7 @@ their day-16 numbers as the optimistic bound and their visible decay as the real
 | Metric | Measured | Note |
 |---|---|---|
 | Protocol age | ~16 days | all rates compressed into launch window |
-| $STONKBROKER holders | 12,336 | token reach ≫ NFT reach |
+| the reference desk holders | 12,336 | token reach ≫ NFT reach |
 | NFT unique holders | **562 wallets** | the *real* community size behind the noise |
 | NFTs actually circulating | ~2,190 (49.3%) | **the AMM vault itself holds 2,254 = 50.7% of supply** |
 | Activated (on payroll) | 1,662–1,663 | = **~76% of circulating** (not 37% of total — wrong denominator) |
@@ -50,7 +50,7 @@ economic choice.)
 
 **Tier fees: set by the ladder rule at launch, in $ESSEY, against the live Exchange price.** Keep our
 weight ratios (100/160/200/333). Calibrate fees so upgrade cost-per-weight-point ≤ (Exchange price +
-Tier-1 fee) per weight-point — the verified StonkBrokers rule that keeps every tier rational. 50%
+Tier-1 fee) per weight-point — the verified the reference desk rule that keeps every tier rational. 50%
 burn / 50% treasury, expectations set by insight #4.
 
 **Exchange fees: 10% swap / 15% snipe on ETH notional (their proven schedule), TWAP-sandwich oracle.**
@@ -66,7 +66,7 @@ can't be a discount exit (their verified invariant, adopted).
 | **Loan interest share** | **recurring, TVL-driven — OUR structural edge** | reserve share of interest: e.g. $1M borrowed × 8% APR × 10% reserve share ≈ $8k/yr baseline, scaling linearly with TVL and immune to NFT-market mood |
 
 Insight #2 is the strategic one: **their pot decays with NFT churn; ours can be fed by lending interest,
-which persists as long as positions stay open.** StonkBrokers has no equivalent — their "recurring"
+which persists as long as positions stay open.** the reference desk has no equivalent — their "recurring"
 engine is marketplace royalties, which still depends on NFT trading. A lending protocol's fee base
 compounds with TVL instead. This is the economic argument for the flywheel priority (payouts-in-stock →
 borrow-against-stock): every loop through it grows the *durable* pot source.

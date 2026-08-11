@@ -12,7 +12,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 /// and the debt + collateral claim travel together. Burning on close means a spent Note cannot exist:
 /// nobody can be sold a claim on a position that already ended.
 ///
-/// Contrast with StonkBrokers' LoanVault, which escrows the whole NFT for the life of the loan (the
+/// Contrast with the reference desk' LoanVault, which escrows the whole NFT for the life of the loan (the
 /// asset goes dead while borrowed). Here the position itself stays live, transferable, and composable.
 contract Note is ERC721 {
     address public immutable pool;

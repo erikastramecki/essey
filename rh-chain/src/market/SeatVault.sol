@@ -9,7 +9,7 @@ import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Re
 /// SeatVault — a Seat's token-bound wallet (ERC-6551 style). It is *owned by whoever holds the Seat
 /// NFT*: `owner()` reads the NFT's current owner, and only that owner may move assets out. So the Vault,
 /// and everything sealed inside it (collateral, earned Payouts), travels with the Seat on transfer —
-/// the "position-as-a-wallet" primitive borrowed from StonkBrokers, on Essey's rails.
+/// the "position-as-a-wallet" primitive borrowed from the reference desk, on Essey's rails.
 ///
 /// Deployed as a minimal-proxy clone per tokenId (see Seat), so its address is deterministic and the
 /// binding is set once at initialization.

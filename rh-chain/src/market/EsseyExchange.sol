@@ -15,19 +15,19 @@ import {Bell} from "./Bell.sol";
 ///   - SNIPE:       pay `seatPrice` $ESSEY + `snipeFee` (a premium) → receive a SPECIFIC Seat #.
 ///   - SELL:        return a Seat to inventory + pay `sellFee` → receive `seatPrice` $ESSEY back.
 ///
-/// Faithful to StonkBrokers' Anvil AMM: a FLAT price (no bonding curve), with float — the inventory the
+/// Faithful to the proven broker-desk AMM shape: a FLAT price (no bonding curve), with float — the inventory the
 /// Exchange holds — as the scarcity dial (their vault holds ~50% of the collection). Every trade fee is
 /// charged in the **Bell's reward token** and split `boosterShareBps` to the Bell (fed by plain transfer
 /// → grows the pot) / remainder to treasury. So the Exchange is a primary fee engine for the Bell.
 ///
 /// v1 simplifications (deliberate, documented): flat immutable price + flat immutable fees, so there is
 /// no price/fee oracle to manipulate and no admin to move them. A %-of-ETH-notional fee with a
-/// TWAP-sandwich oracle (StonkBrokers' model) is a possible v2 refinement.
+/// TWAP-sandwich oracle (the reference desk' model) is a possible v2 refinement.
 ///
 /// Adminless over funds. The only privileged role is `seeder`, which can ONLY pull pre-owned Seats into
 /// inventory (float management) — it can never touch the $ESSEY reserve, fees, or anyone's assets.
 /// Decoupled from minting: the Exchange is not the Seat minter; it acquires float via `seed` and via
-/// sell-backs, exactly like StonkBrokers' vault.
+/// sell-backs, exactly like the reference desk' vault.
 contract EsseyExchange is IERC721Receiver, ReentrancyGuard {
     using SafeERC20 for IERC20;
 

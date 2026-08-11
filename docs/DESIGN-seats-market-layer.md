@@ -1,15 +1,15 @@
 # DESIGN — Seats: Essey's NFT + incentives layer
 
-A consumer/engagement layer for Essey, adapting the mechanics that gave StonkBrokers (on the same
+A consumer/engagement layer for Essey, adapting the mechanics that gave the reference desk (on the same
 Robinhood Chain rails) real traction — NFT-as-wallet, fee→reward distribution, staking tiers, an NFT
 AMM, live public feed — re-skinned as a **stock-market club** in Essey's voice, and fused with Essey's
-one true differentiator: **everything is provable.** StonkBrokers is "provably fair." Essey is
+one true differentiator: **everything is provable.** the reference desk is "provably fair." Essey is
 **provably fair *and* provably solvent** — the NFTs, the yield, and any randomness all verify against
 the ZK stack in `circuit/poseidon` (see `docs/SCOPE-solvency-rollup.md`).
 
 ## Glossary (finance-native — say what it is, no theme to decode)
 
-| Essey term | What it is (mechanic) | StonkBrokers analog |
+| Essey term | What it is (mechanic) | the reference desk analog |
 |---|---|---|
 | **Seat** | membership NFT — like an exchange seat: scarce, tradeable, entitled to a share of the floor | Broker (4,444) |
 | **Vault** | the Seat's ERC-6551 token-bound wallet; holds collateral + earned Payouts | broker's TBA |
@@ -20,7 +20,7 @@ the ZK stack in `circuit/poseidon` (see `docs/SCOPE-solvency-rollup.md`).
 | **After Hours** | a second payout engine (e.g. liquidation revenue) | Overtime |
 | **Note** | a loan position as a transferable NFT whose Vault holds the collateral | Certificate/deed |
 | **the Tape** | live public feed of Bells, Payouts, proofs, and loans — each row a real tx | live drops ticker |
-| **$ESSEY** | the access/sink token — buy Seats on the Exchange, raise Tier, etc. | $STONKBROKER |
+| **$ESSEY** | the access/sink token — buy Seats on the Exchange, raise Tier, etc. | the reference desk |
 
 ## The two NFTs
 
@@ -42,7 +42,7 @@ meets the hard tech: a Note is a self-contained, provably-solvent, portable cred
 ## Mechanic-by-mechanic adaptation
 
 - **NFT-as-wallet (ERC-6551).** The core primitive, adopted wholesale. On EVM/Robinhood Chain we use an
-  ERC-6551 registry + account (same standard StonkBrokers uses). *On Sui this is native* — a Move object
+  ERC-6551 registry + account (same standard the reference desk uses). *On Sui this is native* — a Move object
   can own its collateral objects directly, so the Note/Vault is just how Sui already works; the
   formally-verified `dregg` core gets this for free.
 - **Fee → reward distribution ("the Bell").** Protocol fees (loan origination, a slice of interest,
@@ -58,7 +58,7 @@ meets the hard tech: a Note is a self-contained, provably-solvent, portable cred
 - **The Tape (live feed).** A public, real-time ticker of Bells, loans proven solvent, and mints — each
   row a real tx link. On-brand: it broadcasts *proof*, not hype. Lightweight (app + indexer).
 - **Reward lineup = tokenized stocks.** Essey already lends against Robinhood Stock Tokens; a Payout can
-  distribute the same tokenized equities StonkBrokers uses (AAPL/NVDA/…) — or USDG — as the reward.
+  distribute the same tokenized equities the reference desk uses (AAPL/NVDA/…) — or USDG — as the reward.
 
 ## The provable twist (the part they can't copy)
 
@@ -70,7 +70,7 @@ Every gamified element routes through the ZK stack:
 
 ## Architecture / where each piece lives
 
-- **EVM / `rh-chain/`** (Robinhood Chain — the consumer surface, same as StonkBrokers): Seat (ERC-721 +
+- **EVM / `rh-chain/`** (Robinhood Chain — the consumer surface, same as the reference desk): Seat (ERC-721 +
   ERC-6551), SeatVault, Booster/Bell, Tier staking, the Exchange AMM, Note integration into `EsseyPool`.
   New contracts are **additive**; the one edit to audited code is switching `EsseyPool` position auth
   from stored `borrower` → `ownerOf(id)`.
@@ -104,7 +104,7 @@ Every gamified element routes through the ZK stack:
    (~0.25% protocol fee). Caveat: USDG-as-source returned NO_ROUTE (unresolved); quotes verified,
    execution not yet exercised end-to-end.
    Consequences: the **in-protocol Converter is the on-chain DEX route** (Uniswap is live on Robinhood
-   Chain since mainnet day one, and StonkBrokers' StonkStockRouterV2 proves on-chain ETH→stock swaps
+   Chain since mainnet day one, and the reference desk's stock router proves on-chain ETH→stock swaps
    work there today).
 
    *Decision (2026-08-02, delegated by founder):* **build direct on Robinhood Chain's on-chain rails —
@@ -120,7 +120,7 @@ Every gamified element routes through the ZK stack:
    cannot exist. `EsseyPool` diff is minimal and surgical: the stored `borrower` field is GONE — repay
    auth, returned collateral, and liquidation surplus all follow `note.ownerOf(id)` at execution time.
    Result: **positions are transferable bearer deeds** — sell a loan mid-life and the debt + collateral
-   claim travel together (vs StonkBrokers' LoanVault, which escrows the NFT dead for the loan's life).
+   claim travel together (vs the reference desk' LoanVault, which escrows the NFT dead for the loan's life).
    Validated: 5 new bearer-note tests AND the full audited invariant suite re-run green under the
    subclassed harness (NoteTest extends EsseyPoolTest — all 26 hardened tests pass under bearer
    semantics). *v2 (deferred, deliberate):* collateral held in a per-position Vault under a pool lien +
@@ -152,7 +152,7 @@ reframed around it once the core technical build lands:
 
 - **Tone:** fun, gamified, engaging — the Market (Seats, Tiers, the Bell, the Exchange, the Tape) front and
   center, with the provable-trust spine as the differentiator ("provably fair AND provably solvent").
-- **Experimental-software warning:** a StonkBrokers-style first-visit modal — experimental software,
+- **Experimental-software warning:** a broker-desk-style first-visit modal — experimental software,
   nothing is financial advice, assets are volatile, no guarantee of payouts, user responsible for their
   jurisdiction — worded honestly per our no-overclaim discipline (and "Payout" never "dividend").
 - Update landing sections, the docs reading room, and align social/tweet copy with the new direction.
@@ -160,9 +160,9 @@ reframed around it once the core technical build lands:
 
 ## Economics modeling (in progress — measured, not assumed)
 
-Calibrate our collection size, tier fees, and Exchange fee bps from StonkBrokers' *measured* on-chain
+Calibrate our collection size, tier fees, and Exchange fee bps from the reference desk' *measured* on-chain
 economy (their contracts are public on Blockscout). Inputs being pulled: fee inflow cadence, drop
-sizes, activation rate by tier, $STONKBROKER burn total, AMM trade volume, protocol age. Already
+sizes, activation rate by tier, the reference desk burn total, AMM trade volume, protocol age. Already
 captured from their live site (2026-08-02): **$349,083 total distributed** across ~746 Clock In + ~208
 Overtime rounds; recent drops 0.014–0.70 ETH; **~1,662 of 4,444 activated (~37%)**. Output: an
 economics memo with defensible assumptions for supply (do we want 4,444?), tier-ladder pricing (per the
@@ -170,10 +170,10 @@ verified ladder rule), Exchange fees, and projected Bell pot run-rate.
 
 Every contract phase goes through the 3-agent audit gate (see `docs/audits/`) before push.
 
-## Improvements over StonkBrokers' structure
+## Improvements over the reference desk' structure
 
 **Verified against their actual on-chain source** (all five core contracts are verified on Blockscout:
-`StockBooster`, `ActivationManager`, `StonkLoanVault`, `StonkNFTAMMVault`, `StonkBrokers`; fetched
+the reference desk's booster/activation/loan-vault/NFT-AMM contracts; fetched
 2026-08-02). Each claim below cites what the real code does.
 
 1. **O(1) accumulator payouts instead of their O(N) push.** *Confirmed in source:* `continueDrop` is a
@@ -223,7 +223,7 @@ Every contract phase goes through the 3-agent audit gate (see `docs/audits/`) be
 
 ## Trust & migration model (why adminless is safe here — and how we migrate anyway)
 
-StonkBrokers' booster has owner rescue/cancel keys, and reading their code shows *why*: their drop is a
+the reference desk' booster has owner rescue/cancel keys, and reading their code shows *why*: their drop is a
 stateful multi-tx process (swap through a router, cursor through holders) that can wedge mid-round, so
 they need an un-wedge key. Notably they apply a **tiered trust model** — their Broker Box machines,
 where user money sits, are explicitly ownerless ("no key to player funds"); admin exists only over
@@ -258,7 +258,7 @@ keeps/trades it, **borrows against it on `EsseyPool`**, or **sells it back to th
 - **sell-back spread** — resale to the system pays ~95% of oracle value, the ~5% spread is house revenue.
 So the engine earns on the round trip — every open *and* every sell-back — not just the entry.
 
-Reference implementation is StonkBrokers' Broker Box (verified live on the same chain):
+Reference implementation is the reference desk' Broker Box (verified live on the same chain):
 tiered tickets, prize table burned into bytecode, **worst-case payout reserved in real inventory per
 open case** (a pull can never win an uncovered prize), 95% sell-back with the 5% spread as house
 revenue, deed-sealing, ownerless machines. Essey's twists:
@@ -267,10 +267,10 @@ revenue, deed-sealing, ownerless machines. Essey's twists:
   max prize. "The only case system where the odds AND the bankroll are provable."
 - **Two variants to scope, with very different risk profiles:** (a) a 1×/mystery-pack model — you always
   receive fair value in *some* stock, randomness picks *which* (closer to a collectible pack than a
-  wager); (b) multiplier-on-money Degen-style rolls (StonkBrokers' 0.70×–50×, RTP 90%) — a game of
+  wager); (b) multiplier-on-money Degen-style rolls (the reference desk' 0.70×–50×, RTP 90%) — a game of
   chance, US-restricted in their deployment for a reason.
 - **Open technical dependency:** entropy on Robinhood Chain — no Chainlink VRF on the production path;
-  StonkBrokers built miner-backed DERP + a conductor. Options: their conductor, our own commit-to-future-
+  the reference desk built miner-backed DERP + a conductor. Options: their conductor, our own commit-to-future-
   entropy scheme, or a ZK-draw design. Decide at scoping time.
 - Fee/spread parameters come from the economics memo, and the cross-product fee-coherence rule applies
   (case fees vs Exchange fees vs Note fees must not create a discount exit).
@@ -301,12 +301,12 @@ The market layer (Seat/SeatVault/Bell/StockConverter/Note + the EsseyPool diff) 
 ## Honest risk flags — what we adapt carefully, not blindly
 
 - **The casino surface (Broker Box / Case variant (b)).** A stake-to-win multiplier machine is reg-hot —
-  StonkBrokers geoblocks it in the US for a reason — and sits in tension with "provably solvent
+  the reference desk geoblocks it in the US for a reason — and sits in tension with "provably solvent
   lending" branding. Scoping the Case system (above) must treat variant (b) as a separate,
   legally-reviewed decision with jurisdiction gating; variant (a) (mystery-pack, always-fair-value) and
   1× certificate-style purchases ("no game of chance") are the lower-risk on-ramp. The provably-fair
   engine itself (ZK draws) is benign and reusable either way.
-- **"Payout" framing.** StonkBrokers leans on an offshore entity + "these aren't dividends" disclaimers.
+- **"Payout" framing.** the reference desk leans on an offshore entity + "these aren't dividends" disclaimers.
   Essey's moat is institutional-grade *trust*; we keep Payouts honestly framed (protocol fees to NFT
   stakers, mechanically LP fees) and don't adopt securities-adjacent language — hence "Payout," never
   "dividend."

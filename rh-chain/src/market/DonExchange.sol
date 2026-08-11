@@ -13,10 +13,10 @@ interface IDonFloor {
 }
 
 /// DonExchange — the Dons' broker desk. A two-sided vault holding an inventory of Dons (seeded with 25% of the
-/// collection = 2,222) and an $ESSEY reserve, trading between them at one price. Faithful to StonkBrokers'
+/// collection = 2,222) and an $ESSEY reserve, trading between them at one price. Faithful to the proven desk mechanics'
 /// Anvil AMM and a direct evolution of EsseyExchange (the audited Seat AMM), with two changes the Dons need:
 ///
-///   1. PERCENTAGE fees (StonkBroker-style, softened): 8% on a standard buy/sell, 12% to snipe a specific Don —
+///   1. PERCENTAGE fees (broker-desk-style, softened): 8% on a standard buy/sell, 12% to snipe a specific Don —
 ///      as a % of `price()`, charged in $ESSEY (the trade currency, so no separate fee token / no swap).
 ///   2. Fee SPLIT 70% → `feeSink` (the fee→stock router, which DCA-buys Robinhood stock for the staked Dons) /
 ///      30% → `treasury`. So every trade pays the seated holders.

@@ -7,10 +7,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Don} from "./Don.sol";
 import {DonReserve} from "./DonReserve.sol";
 
-/// DonLoan — borrow $ESSEY against your Don, the StonkBroker NFT-loan mechanic rebuilt on Essey's
-/// provable floor. 15% APR, 50% LTV, the numbers StonkBroker ships.
+/// DonLoan — borrow $ESSEY against your Don, the proven NFT-loan desk mechanic rebuilt on Essey's
+/// provable floor. 15% APR, 50% LTV — proven desk numbers.
 ///
-/// WHY ESSEY-DENOMINATED (the StonkBroker shape): StonkBroker lends the asset its NFT floor is priced
+/// WHY ESSEY-DENOMINATED: the proven NFT-desk mechanic lends the asset its floor is priced
 /// in, with no external oracle — the protocol's own floor IS the price. Essey's Don floor is
 /// `DonReserve.floorPerDon()` in $ESSEY, so the facility lends $ESSEY. Debt and collateral share one
 /// unit, so LTV and liquidation need NO oracle, NO session gate, NO keeper — and solvency is provable
