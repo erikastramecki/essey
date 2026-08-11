@@ -350,163 +350,156 @@ export function BuilderPage() {
   const busyAny = mint.status === "busy" || mint.status === "pending";
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "20px 16px", color: "#ece9e1" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-        <h1 style={{ margin: 0, letterSpacing: ".18em", fontWeight: 800, background: "linear-gradient(90deg,#e6c877,#c9a24b)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>PFP BUILDER</h1>
-        <span style={{ fontSize: 13, color: "#9a978d" }}>pick traits · rules keep it valid · {MINT_LIVE ? "mint your 1-of-1 on testnet" : "your 1-of-1 · minting soon"}</span>
+    <div className="bld">
+      <div className="bld-head">
+        <h1>The builder</h1>
+        <span>pick traits · rules keep it valid · {MINT_LIVE ? "mint your 1-of-1 on testnet" : "your 1-of-1 · minting soon"}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,440px) 1fr", gap: 22, alignItems: "start" }}>
+      <div className="bld-grid">
         {/* preview + actions (sticky) */}
-        <div style={{ position: "sticky", top: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ background: "#0d0e12", border: "1px solid #26283340", borderRadius: 16, padding: 10 }}>
-            <canvas ref={canvasRef} style={{ width: "100%", aspectRatio: "1", borderRadius: 10, display: "block", background: "#111218" }} />
+        <div className="bld-stage">
+          <div className="bld-canvas">
+            <canvas ref={canvasRef} />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {(["male", "female"] as G[]).map((g) => <button key={g} onClick={() => switchGender(g)} style={chip(gender === g)}>{g}</button>)}
-            <button onClick={randomize} style={{ ...chip(false), marginLeft: "auto" }}>🎲 Shuffle rest</button>
-            <button onClick={clearAll} style={chip(false)}>Clear</button>
+          <div className="bld-row">
+            {(["male", "female"] as G[]).map((g) => <button key={g} className={"bld-chip" + (gender === g ? " on" : "")} onClick={() => switchGender(g)}>{g}</button>)}
+            <button className="bld-chip" onClick={randomize} style={{ marginLeft: "auto" }}>🎲 Shuffle rest</button>
+            <button className="bld-chip" onClick={clearAll}>Clear</button>
           </div>
-          <div style={{ fontSize: 11, color: "#6f6d66", wordBreak: "break-all", background: "#0d0e12", border: "1px solid #26283340", borderRadius: 10, padding: "8px 10px" }}>
-            <span style={{ textTransform: "uppercase", letterSpacing: ".05em" }}>Uniqueness key</span><br />
-            <code style={{ color: "#c9a24b" }}>{res?.key.slice(0, 40)}…</code>
+          <div className="bld-key">
+            <span>Uniqueness key</span><br />
+            <code>{res?.key.slice(0, 40)}…</code>
           </div>
           {MINT_LIVE ? (<>
             {/* wallet */}
             {wallet ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                <span style={{ ...pill, borderColor: "#5ac47e55", color: "#5ac47e" }}>● {short(wallet)}</span>
-                <span style={{ color: "#6f6d66" }}>Robinhood testnet · {DON_NET.chainId}</span>
+              <div className="bld-wallet">
+                <span className="ok">● {short(wallet)}</span>
+                <span>Robinhood testnet · {DON_NET.chainId}</span>
               </div>
             ) : (
-              <button onClick={connectClick} style={{ ...chip(false), padding: "11px", fontSize: 13 }}>Connect wallet</button>
+              <button className="bld-chip" style={{ padding: 11, fontSize: 13 }} onClick={connectClick}>Connect wallet</button>
             )}
 
             {/* soft hold — optional, never blocks the mint */}
             <button onClick={reserve} disabled={rsv.status === "busy" || rsv.status === "reserved"}
-              style={{ ...chip(false), padding: "11px", fontSize: 13,
-                background: rsv.status === "reserved" ? "linear-gradient(90deg,#5ac47e,#2f9e57)" : rsv.status === "taken" ? "#3a2326" : "#16171f",
-                color: rsv.status === "reserved" ? "#0b0c10" : rsv.status === "taken" ? "#e06a97" : "#c9c6bd",
-                cursor: rsv.status === "busy" || rsv.status === "reserved" ? "default" : "pointer" }}>
+              className={"bld-chip" + (rsv.status === "reserved" ? " good" : rsv.status === "taken" ? " taken" : "")}
+              style={{ padding: 11, fontSize: 13 }}>
               {rsv.status === "reserved" ? "✓ Held for 30 min — mint below"
-                : rsv.status === "taken" ? "✗ Held by someone — tweak a trait"
+                : rsv.status === "taken" ? "✗ Held by someone — change a trait"
                 : rsv.status === "busy" ? "Holding…"
                 : rsv.status === "offline" ? "Holds offline — mint is still first-come"
                 : "Hold this combo (optional, 30 min)"}
             </button>
-            {rsv.status === "taken" && <div style={hint}>This exact combination is on hold or already minted. Change any trait for a fresh 1-of-1.</div>}
-            {rsv.status === "offline" && <div style={hint}>The soft-hold service is offline right now — nothing is lost, minting stays first-come-first-served on-chain.</div>}
+            {rsv.status === "taken" && <div className="bld-hint">This exact combination is on hold or already minted. Change any trait for a fresh 1-of-1.</div>}
+            {rsv.status === "offline" && <div className="bld-hint">The soft-hold service is offline — nothing is lost; minting stays first-come-first-served on-chain.</div>}
 
             {/* custom mint */}
-            <div style={hint}>
+            <div className="bld-hint">
               This exact combination is checked against the on-chain uniqueness ledger — once you mint it, no other Don
               can ever share it. Custom mint costs {fmtEth(fees.customFee)} ETH, and 100% of the fee buys stock for staked holders.
             </div>
             <button onClick={doMint} disabled={busyAny}
-              style={{ ...chip(true), padding: "13px", fontSize: 14,
-                background: mint.status === "success" ? "linear-gradient(90deg,#5ac47e,#2f9e57)" : "linear-gradient(90deg,#e6c877,#c9a24b)",
-                color: "#0b0c10", cursor: busyAny ? "default" : "pointer", opacity: busyAny ? 0.7 : 1 }}>
+              className={"btn bld-mint " + (mint.status === "success" ? "bld-chip good" : "btn-gold")}
+              style={{ opacity: busyAny ? 0.7 : 1, borderRadius: 999 }}>
               {mint.status === "busy" ? (mint.note || "Preparing…")
                 : mint.status === "pending" ? "Minting — confirm in wallet / waiting for chain…"
                 : mint.status === "success" ? `✓ Minted${mint.id !== undefined ? ` Don #${mint.id}` : ""}`
                 : wallet ? `Mint this 1-of-1 — ${fmtEth(fees.customFee)} ETH`
                 : "Connect & mint this 1-of-1"}
             </button>
-            {fees.publicOpen === false && mint.status === "idle" && <div style={hint}>Public custom minting isn't open yet — the button will preflight again when you try.</div>}
+            {fees.publicOpen === false && mint.status === "idle" && <div className="bld-hint">Public custom minting isn't open yet — the button will preflight again when you try.</div>}
             {(mint.status === "pending" || mint.status === "success") && (
-              <div style={hint}>
+              <div className="bld-hint">
                 {mint.status === "success" && mint.id !== undefined && <>Don #{mint.id} is yours — this combo is retired forever. </>}
-                <a href={txUrl(mint.hash)} target="_blank" rel="noreferrer" style={{ color: "#c9a24b" }}>View on explorer ↗</a>
+                <a href={txUrl(mint.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a>
               </div>
             )}
-            {mint.status === "error" && <div style={{ ...hint, color: "#e06a97" }}>{mint.msg}</div>}
+            {mint.status === "error" && <div className="bld-hint err">{mint.msg}</div>}
 
             {/* WL claim */}
             {wallet && wl && (
-              <div style={panel}>
-                <div style={panelTitle}>Allowlist</div>
+              <div className="bld-panel">
+                <div className="bld-panel-h">Allowlist</div>
                 {wl.claimed ? (
-                  <div style={hint}>✓ This wallet already claimed its {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}.</div>
+                  <div className="bld-hint">✓ This wallet already claimed its {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}.</div>
                 ) : !wl.rootLive || !wl.open ? (
-                  <div style={hint}>
+                  <div className="bld-hint">
                     You're on the list — {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}. Claims open once the
                     allowlist root commits on-chain{wlEtaHrs > 0 ? ` (~${wlEtaHrs}h, after the 2-day timelock)` : " (any moment now)"}.
                   </div>
                 ) : (<>
-                  <div style={hint}>
+                  <div className="bld-hint">
                     You're on the list — {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}. Your whitelist allocation mints
                     for gas only — the first uses your crafted combo, the rest roll random traits. You can reroll the look as
                     many times as you like before you stake; staking locks it forever.
                   </div>
                   <button onClick={doClaimWl} disabled={wlTx.status === "busy" || wlTx.status === "pending" || wlTx.status === "success"}
-                    style={{ ...chip(true), padding: "11px", fontSize: 13,
-                      background: wlTx.status === "success" ? "linear-gradient(90deg,#5ac47e,#2f9e57)" : "linear-gradient(90deg,#e6c877,#c9a24b)", color: "#0b0c10" }}>
+                    className={"bld-chip " + (wlTx.status === "success" ? "good" : "on")} style={{ padding: 11, fontSize: 13 }}>
                     {wlTx.status === "busy" ? (wlTx.note || "Preparing…")
                       : wlTx.status === "pending" ? "Claiming — waiting for chain…"
                       : wlTx.status === "success" ? `✓ ${wlTx.note}${wlTx.id !== undefined ? ` — first is #${wlTx.id}` : ""}`
                       : `Claim ${wl.allocation} free Don${wl.allocation > 1 ? "s" : ""} (gas only)`}
                   </button>
                   {(wlTx.status === "pending" || wlTx.status === "success") && (
-                    <div style={hint}><a href={txUrl(wlTx.hash)} target="_blank" rel="noreferrer" style={{ color: "#c9a24b" }}>View on explorer ↗</a></div>
+                    <div className="bld-hint"><a href={txUrl(wlTx.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a></div>
                   )}
-                  {wlTx.status === "error" && <div style={{ ...hint, color: "#e06a97" }}>{wlTx.msg}</div>}
+                  {wlTx.status === "error" && <div className="bld-hint err">{wlTx.msg}</div>}
                 </>)}
               </div>
             )}
 
             {/* reroll an owned Don */}
             {wallet && owned.length > 0 && (
-              <div style={panel}>
-                <div style={panelTitle}>Reroll one of your Dons</div>
-                <div style={hint}>
+              <div className="bld-panel">
+                <div className="bld-panel-h">Reroll one of your Dons</div>
+                <div className="bld-hint">
                   Re-randomize this Don's traits for {fmtEth(fees.rerollFee)} ETH — unlimited, until it's staked. Your old
                   combo is released back to the pool and the fee buys stock for staked holders, all of it. The current
                   preview becomes the Don's new look.
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                <div className="bld-opts">
                   {owned.map((id) => (
-                    <button key={id} onClick={() => setRerollSel(rerollSel === id ? null : id)} style={optChip(rerollSel === id)}>#{id}</button>
+                    <button key={id} className={"bld-opt" + (rerollSel === id ? " on" : "")} onClick={() => setRerollSel(rerollSel === id ? null : id)}>#{id}</button>
                   ))}
                 </div>
                 {rerollSel !== null && (<>
                   <button onClick={doReroll} disabled={rerollTx.status === "busy" || rerollTx.status === "pending"}
-                    style={{ ...chip(true), padding: "11px", fontSize: 13, marginTop: 8,
-                      background: rerollTx.status === "success" ? "linear-gradient(90deg,#5ac47e,#2f9e57)" : "linear-gradient(90deg,#e6c877,#c9a24b)", color: "#0b0c10" }}>
+                    className={"bld-chip " + (rerollTx.status === "success" ? "good" : "on")} style={{ padding: 11, fontSize: 13, marginTop: 8 }}>
                     {rerollTx.status === "busy" ? (rerollTx.note || "Preparing…")
                       : rerollTx.status === "pending" ? "Rerolling — waiting for chain…"
                       : rerollTx.status === "success" ? `✓ ${rerollTx.note}`
                       : `Reroll Don #${rerollSel} to this preview — ${fmtEth(fees.rerollFee)} ETH`}
                   </button>
                   {(rerollTx.status === "pending" || rerollTx.status === "success") && (
-                    <div style={hint}><a href={txUrl(rerollTx.hash)} target="_blank" rel="noreferrer" style={{ color: "#c9a24b" }}>View on explorer ↗</a></div>
+                    <div className="bld-hint"><a href={txUrl(rerollTx.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a></div>
                   )}
-                  {rerollTx.status === "error" && <div style={{ ...hint, color: "#e06a97" }}>{rerollTx.msg}</div>}
+                  {rerollTx.status === "error" && <div className="bld-hint err">{rerollTx.msg}</div>}
                 </>)}
               </div>
             )}
           </>) : (
-            <button disabled title="Minting opens with the on-chain drop"
-              style={{ ...chip(false), padding: "13px", fontSize: 14, cursor: "default", opacity: 0.9,
-                border: "1px solid #c9a24b55", color: "#e6c877", background: "#17140c" }}>
+            <button disabled title="Minting opens with the on-chain drop" className="bld-soon">
               ✦ Minting soon — this 1-of-1 will be claimable
             </button>
           )}
         </div>
         {/* category pickers */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="bld-cats">
           {SELECT[gender].map(([cat, label, opt]) => {
             const isBlocked = blocked.has(cat);
             const options = (opts[cat] || []).filter((o) => o && o.toLowerCase() !== "none");
             const cur = picks[cat];
             return (
-              <div key={cat} style={{ background: "#12131a", border: "1px solid #26283340", borderRadius: 12, padding: "10px 12px", opacity: isBlocked ? 0.4 : 1, pointerEvents: isBlocked ? "none" : "auto" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
-                  <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".07em", color: "#c9a24b", fontWeight: 700 }}>{label}</span>
-                  {isBlocked && <span style={{ fontSize: 10, color: "#6f6d66" }}>blocked by another pick</span>}
-                  {!isBlocked && cat === "13 Hair" && res?.drivers.hat && <span style={{ fontSize: 10, color: "#6f6d66" }}>under hat — sets beard/brows</span>}
+              <div key={cat} className={"bld-cat" + (isBlocked ? " blocked" : "")}>
+                <div className="bld-cat-top">
+                  <span className="cn">{label}</span>
+                  {isBlocked && <span className="cs">blocked by another pick</span>}
+                  {!isBlocked && cat === "13 Hair" && res?.drivers.hat && <span className="cs">under hat — sets beard/brows</span>}
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {opt && <button onClick={() => setPick(cat, "none")} style={optChip(cur === "none")}>∅ None</button>}
-                  {options.map((o) => <button key={o} onClick={() => setPick(cat, o)} style={optChip(cur ? cur === o : false)}>{clean(o)}</button>)}
+                <div className="bld-opts">
+                  {opt && <button className={"bld-opt" + (cur === "none" ? " on" : "")} onClick={() => setPick(cat, "none")}>∅ None</button>}
+                  {options.map((o) => <button key={o} className={"bld-opt" + ((cur ? cur === o : false) ? " on" : "")} onClick={() => setPick(cat, o)}>{clean(o)}</button>)}
                 </div>
               </div>
             );
@@ -515,16 +508,4 @@ export function BuilderPage() {
       </div>
     </div>
   );
-}
-
-const hint: React.CSSProperties = { fontSize: 11, color: "#6f6d66", lineHeight: 1.5 };
-const pill: React.CSSProperties = { border: "1px solid #26283340", borderRadius: 999, padding: "4px 10px", fontWeight: 700 };
-const panel: React.CSSProperties = { background: "#0d0e12", border: "1px solid #26283340", borderRadius: 12, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 };
-const panelTitle: React.CSSProperties = { fontSize: 11, textTransform: "uppercase", letterSpacing: ".07em", color: "#c9a24b", fontWeight: 700 };
-
-function chip(active: boolean): React.CSSProperties {
-  return { border: "1px solid " + (active ? "transparent" : "#26283340"), background: active ? "linear-gradient(90deg,#e6c877,#c9a24b)" : "#16171f", color: active ? "#0b0c10" : "#c9c6bd", padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: ".02em" };
-}
-function optChip(active: boolean): React.CSSProperties {
-  return { border: "1px solid " + (active ? "#c9a24b" : "#26283340"), background: active ? "#c9a24b22" : "#16171f", color: active ? "#e6c877" : "#9a978d", padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" };
 }

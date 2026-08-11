@@ -22,23 +22,46 @@ import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 const REPO = "https://github.com/erikastramecki/essey";
 const GROUPS = ["The Market", "Essey Private", "The engine", "Audits"];
 
-// Action-clear nav (founder: a tester must know where each flow lives). The landing tells the story;
-// each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
-const NAV = [
-  ["/builder", "Build"],
-  ["/how-it-works", "How it works"],
-  ["/market", "Exchange"],
-  ["/bell", "Bell"],
-  ["/cases", "Cases"],
-  ["/lend", "Lend"],
-  ["/launch", "Launch"],
-  ["/explorer", "Scan"],
-  ["/tape", "Tape"],
-  ["/portfolio", "Portfolio"],
-  ["/private", "Private"],
-  ["/faucet", "Faucet"],
-  ["/docs", "Docs"],
-] as const;
+// The nav is five doors, not thirteen tabs. A first-timer reads it left to right as the product:
+// Mint a Don → Trade it → Earn with it → Learn why it holds → everything else. Portfolio is pinned
+// by the wallet. Every old route still resolves — only the doors moved.
+type NavLeaf = { to: string; label: string; desc: string };
+type NavItem = { to: string; label: string } | { label: string; items: NavLeaf[] };
+const NAV: NavItem[] = [
+  { to: "/builder", label: "Mint" },
+  { to: "/market", label: "Trade" },
+  { label: "Earn", items: [
+    { to: "/bell", label: "The Bell", desc: "Stake your Don, ring, claim stock" },
+    { to: "/lend", label: "Lend", desc: "Supply USDG · borrow against stock" },
+    { to: "/cases", label: "Cases", desc: "Multiplier draws — odds on-chain" },
+  ]},
+  { label: "Learn", items: [
+    { to: "/how-it-works", label: "How it works", desc: "The whole loop, start to finish" },
+    { to: "/provable", label: "Provable", desc: "Fair draws, solvent books" },
+    { to: "/engine", label: "The engine", desc: "The lending machinery underneath" },
+    { to: "/docs", label: "Docs", desc: "The repo's own files, rendered" },
+  ]},
+  { label: "More", items: [
+    { to: "/faucet", label: "Faucet", desc: "Free testnet $ESSEY, USDG + gas" },
+    { to: "/tape", label: "The Tape", desc: "Every event, with its receipt" },
+    { to: "/explorer", label: "Explorer", desc: "Contracts, blocks, balances" },
+    { to: "/private", label: "Private", desc: "Shielded balances and transfers" },
+    { to: "/launch", label: "Launch", desc: "Operator console" },
+  ]},
+];
+// The mobile sheet flattens the same IA under three headers.
+const MOBILE_NAV: [string, NavLeaf[]][] = [
+  ["The floor", [
+    { to: "/builder", label: "Mint", desc: "build your Don" },
+    { to: "/market", label: "Trade", desc: "buy · snipe · sell" },
+    { to: "/bell", label: "The Bell", desc: "stake · ring · claim" },
+    { to: "/lend", label: "Lend", desc: "supply · borrow" },
+    { to: "/cases", label: "Cases", desc: "multiplier draws" },
+    { to: "/portfolio", label: "Portfolio", desc: "everything you hold" },
+  ]],
+  ["Learn", (NAV[3] as { items: NavLeaf[] }).items],
+  ["More", (NAV[4] as { items: NavLeaf[] }).items],
+];
 
 /// Thin wrapper for app pages: sets the document title. Each page's own band-head carries its
 /// title + description.
@@ -86,19 +109,57 @@ function ScrollToTop() {
   return null;
 }
 
+/// One dropdown door in the masthead. Opens on click, closes on route change, Escape,
+/// or a click anywhere else (the parent owns which group is open, so only one ever is).
+function NavGroup({ label, items, open, setOpen }: { label: string; items: NavLeaf[]; open: boolean; setOpen: (l: string | null) => void }) {
+  const { pathname } = useLocation();
+  const active = items.some((i) => pathname.startsWith(i.to));
+  return (
+    <div className="nav-group">
+      <button className={"nav-group-btn" + (active ? " on" : "")} aria-expanded={open} aria-haspopup="menu"
+        onClick={(e) => { e.stopPropagation(); setOpen(open ? null : label); }}>
+        {label} <i aria-hidden>▼</i>
+      </button>
+      {open && (
+        <div className="nav-menu" role="menu">
+          {items.map((i) => (
+            <NavLink key={i.to} to={i.to} role="menuitem" className={({ isActive }) => (isActive ? "on" : "")}>
+              <b>{i.label}</b><span>{i.desc}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const { pathname } = useLocation();
+  useEffect(() => { setOpenGroup(null); setMenuOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!openGroup) return;
+    const close = () => setOpenGroup(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenGroup(null); };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("click", close); window.removeEventListener("keydown", onKey); };
+  }, [openGroup]);
   return (
     <>
       <header className="nav">
         <div className="wrap nav-in">
           <Link className="brand" to="/"><EMonogram /> <span><b>Essey</b></span></Link>
           <nav className="nav-links">
-            {NAV.map(([to, label]) => (
-              <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>
-            ))}
+            {NAV.map((item) =>
+              "to" in item
+                ? <NavLink key={item.label} to={item.to} className={({ isActive }) => (isActive ? "on" : "")}>{item.label}</NavLink>
+                : <NavGroup key={item.label} label={item.label} items={item.items} open={openGroup === item.label} setOpen={setOpenGroup} />
+            )}
           </nav>
           <div className="nav-right">
+            <NavLink to="/portfolio" className={({ isActive }) => "nav-pf" + (isActive ? " on" : "")}>Portfolio</NavLink>
             <ThemeToggle />
             <ConnectButton />
             <button className="nav-burger" aria-label="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>{menuOpen ? "✕" : "☰"}</button>
@@ -106,7 +167,12 @@ function Layout() {
         </div>
         {menuOpen && (
           <nav className="nav-mobile" onClick={() => setMenuOpen(false)}>
-            {NAV.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
+            {MOBILE_NAV.map(([h, leaves]) => (
+              <div key={h}>
+                <div className="nm-h">{h}</div>
+                {leaves.map((l) => <NavLink key={l.to} to={l.to}>{l.label}<i>{l.desc}</i></NavLink>)}
+              </div>
+            ))}
           </nav>
         )}
       </header>
@@ -137,27 +203,21 @@ function Landing() {
     <>
       <ExchangeHero />
       <ClubFlow />
-      {/* The one funnel: the landing points everyone at the Don builder. */}
+      {/* The doors — the same five-door IA as the masthead, with one line of truth each. */}
       <section className="band" style={{ paddingTop: 8 }}>
         <div className="wrap">
-          <div className="start-cta">
-            <div>
-              <span className="eyebrow">The Dons · take a seat at the table</span>
-              <h2>Build your Don</h2>
-              <p>Mint your Don, stake it to take a seat, and earn tokenized stock every time the Bell rings —
-                a seat, a stock, and a margin account in one NFT. Customize every trait, or roll a random one.
-                Every mechanic below is live to explore.</p>
-            </div>
-            <Link className="btn btn-gold start-cta-btn" to="/builder">Build your Don →</Link>
-          </div>
-          <div className="dest-grid" style={{ marginTop: 22 }}>
+          <div className="band-head"><div>
+            <span className="eyebrow">The floor</span>
+            <h2>Six rooms. Start at the builder.</h2>
+          </div></div>
+          <div className="dest-grid">
             {[
-              ["/market", "⬡", "Exchange", "Buy, snipe, or sell a Seat on the live Exchange."],
-              ["/bell", "🔔", "The Bell", "Stake a Tier, ring the Bell, claim a Payout into your Vault."],
-              ["/cases", "🎁", "Cases", "Open a Case — a provably-fair multiplier draw that pays out in real stock."],
-              ["/lend", "⚖", "Lend", "Supply USDG to earn, or borrow against the stock you win."],
-              ["/private", "🛡", "Private", "Hide your balance, send privately, and earn yield unseen."],
-              ["/portfolio", "◈", "Portfolio", "Everything you hold — Seats, Tiers, Vaults, loans."],
+              ["/builder", "◇", "Mint", "Build your Don trait by trait (~$10), reroll a random one (~$3), or claim free on the whitelist."],
+              ["/market", "⇄", "Trade", "Buy, snipe, or sell Dons at the floor-pinned price. 70% of every fee pays staked holders."],
+              ["/bell", "🔔", "The Bell", "Stake your Don, ring when the pot fills, claim your cut as tokenized stock."],
+              ["/lend", "⚖", "Lend", "Supply USDG to earn interest, or borrow against the stock you hold."],
+              ["/cases", "🎁", "Cases", "Open a multiplier draw — 0.65× to 50×, odds published on-chain, paid in stock."],
+              ["/portfolio", "◈", "Portfolio", "Everything you hold: Dons, tiers, Vaults, loans — and every action on them."],
             ].map(([to, icon, h, p]) => (
               <Link key={to} className="dest-card" to={to}>
                 <span className="dest-icon" aria-hidden>{icon}</span>
@@ -168,7 +228,7 @@ function Landing() {
             ))}
           </div>
           <div className="learn-row">
-            Curious how it holds together? <Link to="/provable">Provable</Link> · <Link to="/engine">The engine</Link> · <Link to="/docs">Docs</Link>
+            Why it holds: <Link to="/provable">Provable</Link> · <Link to="/engine">The engine</Link> · <Link to="/docs">Docs</Link>
           </div>
         </div>
       </section>
@@ -176,19 +236,15 @@ function Landing() {
       {/* Essey Private — the privacy layer. */}
       <section className="band" style={{ paddingTop: 8 }}>
         <div className="wrap">
-          <div className="start-cta">
+          <div className="start-cta plate">
             <div>
-              <span className="eyebrow">🛡 Essey Private · experimental · testnet</span>
-              <h2>Hold, move, and earn — without being watched</h2>
-              <p>A privacy layer on Robinhood Chain: stealth-address payments, a shielded pool that hides your
-                balance and amounts, private transfers that recover on any device, a trustless relayer for gasless
-                private withdrawals, and private <b>yield-bearing</b> lending supply. Proofs run in your browser;
-                your keys never leave your device.</p>
+              <span className="eyebrow">Essey Private · experimental · testnet</span>
+              <h2>Hold, move, and earn — unseen</h2>
+              <p>Stealth-address payments, a shielded pool that hides balances and amounts, gasless private
+                withdrawals through a trustless relayer, and private yield-bearing lending supply. Proofs run
+                in your browser; keys never leave your device.</p>
             </div>
             <Link className="btn btn-gold start-cta-btn" to="/private">Open Essey Private →</Link>
-          </div>
-          <div className="learn-row">
-            How it works, plainly: <Link to="/docs">Essey Private — the privacy layer →</Link>
           </div>
         </div>
       </section>
@@ -199,6 +255,18 @@ function Landing() {
 function Footer() {
   return (
     <footer>
+      <div className="wrap foot-cols">
+        {([
+          ["The floor", [["/builder", "Mint"], ["/market", "Trade"], ["/bell", "The Bell"], ["/lend", "Lend"], ["/cases", "Cases"], ["/portfolio", "Portfolio"]]],
+          ["Learn", [["/how-it-works", "How it works"], ["/provable", "Provable"], ["/engine", "The engine"], ["/docs", "Docs"]]],
+          ["More", [["/faucet", "Faucet"], ["/tape", "The Tape"], ["/explorer", "Explorer"], ["/private", "Private"], ["/launch", "Launch"]]],
+        ] as const).map(([h, links]) => (
+          <div className="foot-col" key={h}>
+            <span className="fc-h">{h}</span>
+            {links.map(([to, label]) => <Link key={to} to={to}>{label}</Link>)}
+          </div>
+        ))}
+      </div>
       <div className="wrap foot-in">
         <div>
           <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to

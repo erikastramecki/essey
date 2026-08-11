@@ -1,27 +1,9 @@
 // /how-it-works — the full Dons v3 story as a designed scroll page (not a markdown dump).
 // Copy is the approved explainer set (2026-08-11); every number mirrors the deployed contracts and
-// the page says so up front. House style: inline styles, dark #0b0c10, gold accents, mobile-safe
-// (wide tables + diagrams scroll inside their own container — the page never scrolls sideways).
-import type { CSSProperties, ReactNode } from "react";
-
-/* ---------------------------------- palette ---------------------------------- */
-
-const C = {
-  bg: "#0b0c10",
-  panel: "#15161c",
-  panelDeep: "#0d0e12",
-  line: "#26283340",
-  gold: "#c9a24b",
-  goldHi: "#e6c877",
-  goldDim: "#ad8938",
-  text: "#ece9e1",
-  dim: "#b8b3a6",
-  faint: "#9a958a",
-  red: "#c25050",
-  green: "#2f9e6e",
-  blue: "#5b8fd9",
-  purple: "#a06fd0",
-} as const;
+// the page says so up front. Styling: the house design system (styles.css hw-* classes, theme
+// tokens — works in both themes). Wide tables + diagrams scroll inside their own container; the
+// page never scrolls sideways.
+import type { ReactNode } from "react";
 
 /* ------------------------------- tiny primitives ------------------------------ */
 
@@ -29,26 +11,27 @@ const C = {
 function md(s: string): ReactNode {
   const parts = s.split("**");
   if (parts.length === 1) return s;
-  return parts.map((p, i) => (i % 2 ? <b key={i} style={{ color: C.text, fontWeight: 700 }}>{p}</b> : p));
+  return parts.map((p, i) => (i % 2 ? <b key={i}>{p}</b> : p));
 }
 
-function P({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <p style={{ margin: "0 0 14px", fontSize: 15.5, lineHeight: 1.75, color: C.dim, ...style }}>{children}</p>;
+function P({ children }: { children: ReactNode }) {
+  return <p className="hw-p">{children}</p>;
 }
 
 function Section({ id, kicker, title, children }: { id: string; kicker: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} style={{ margin: "0 auto 72px", maxWidth: 880, scrollMarginTop: 80 }}>
-      <div style={{ fontSize: 12, letterSpacing: ".28em", color: C.gold, textTransform: "uppercase", marginBottom: 8 }}>{kicker}</div>
-      <h2 style={{ margin: "0 0 18px", fontSize: "clamp(24px, 4vw, 34px)", fontWeight: 800, color: C.text, letterSpacing: ".01em" }}>{title}</h2>
+    <section id={id} className="hw-sec">
+      <span className="eyebrow">{kicker}</span>
+      <h2>{title}</h2>
       {children}
     </section>
   );
 }
 
-function Card({ children, accent = C.line, style }: { children: ReactNode; accent?: string; style?: CSSProperties }) {
+/// accent: an optional CSS color for the card's top rule (the mint paths use green/blue/brass).
+function Card({ children, accent }: { children: ReactNode; accent?: string }) {
   return (
-    <div style={{ background: C.panel, border: `1px solid ${accent}`, borderRadius: 14, padding: "18px 20px", ...style }}>
+    <div className="hw-card" style={accent ? { borderTop: `2px solid ${accent}` } : undefined}>
       {children}
     </div>
   );
@@ -56,34 +39,25 @@ function Card({ children, accent = C.line, style }: { children: ReactNode; accen
 
 function Warn({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ background: "#1c1113", border: `1px solid ${C.red}66`, borderLeft: `3px solid ${C.red}`, borderRadius: 12, padding: "16px 18px", margin: "18px 0" }}>
-      <div style={{ fontSize: 13, letterSpacing: ".14em", color: "#e08a8a", textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>⚠ {title}</div>
-      <div style={{ fontSize: 15, lineHeight: 1.7, color: C.dim }}>{children}</div>
+    <div className="hw-warn">
+      <div className="hw-warn-h">⚠ {title}</div>
+      <div>{children}</div>
     </div>
   );
 }
 
 function Stat({ big, label }: { big: string; label: string }) {
-  return (
-    <div style={{ flex: "1 1 150px", background: C.panelDeep, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 16px" }}>
-      <div style={{ fontSize: "clamp(18px, 2.6vw, 24px)", fontWeight: 800, color: C.goldHi, whiteSpace: "nowrap" }}>{big}</div>
-      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 4, lineHeight: 1.45 }}>{label}</div>
-    </div>
-  );
+  return <div className="hw-stat"><b>{big}</b><span>{label}</span></div>;
 }
 
 /// Wide content (tables, diagrams) scrolls inside its own box — the page body never scrolls sideways.
 function Scroller({ minWidth, children }: { minWidth: number; children: ReactNode }) {
   return (
-    <div style={{ overflowX: "auto", borderRadius: 14, border: `1px solid ${C.line}`, margin: "16px 0", WebkitOverflowScrolling: "touch" }}>
+    <div className="hw-scroll">
       <div style={{ minWidth }}>{children}</div>
     </div>
   );
 }
-
-const th: CSSProperties = { textAlign: "left", padding: "12px 16px", fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: C.faint, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" };
-const td: CSSProperties = { padding: "12px 16px", fontSize: 15, color: C.dim, borderBottom: `1px solid ${C.line}`, verticalAlign: "top" };
-const tdNum: CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: C.text };
 
 /* ----------------------------------- page ------------------------------------ */
 
@@ -100,36 +74,32 @@ const TOC = [
 
 export function HowItWorksPage() {
   return (
-    <div style={{ background: C.bg, color: C.text, padding: "0 16px 96px" }}>
+    <div className="hw">
       {/* ---- hero ---- */}
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "64px 0 48px", textAlign: "center" }}>
-        <div style={{ fontSize: 12, letterSpacing: ".3em", color: C.gold, textTransform: "uppercase", marginBottom: 14 }}>Essey · Dons v3</div>
-        <h1 style={{ margin: "0 0 16px", fontSize: "clamp(32px, 6vw, 52px)", fontWeight: 800, letterSpacing: ".01em", background: `linear-gradient(90deg, ${C.goldHi}, ${C.gold})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
-          How Essey Works
-        </h1>
-        <p style={{ margin: "0 auto", maxWidth: 620, fontSize: 16, lineHeight: 1.7, color: C.dim }}>
+      <div className="hw-hero">
+        <span className="eyebrow">Essey · Dons v3</span>
+        <h1>How Essey works</h1>
+        <p>
           {md("A Don is a **seat**, a **floor**, and a **margin account** — all in one NFT. Every number on this page is read from the deployed contracts, not a pitch deck. Where a value is admin-tunable, we say so.")}
         </p>
-        <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 28 }}>
-          {TOC.map(([href, label]) => (
-            <a key={href} href={href} style={{ fontSize: 13, color: C.goldHi, textDecoration: "none", border: `1px solid ${C.gold}44`, borderRadius: 999, padding: "7px 14px", background: "#17140c" }}>{label}</a>
-          ))}
+        <nav className="hw-toc">
+          {TOC.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
         </nav>
       </div>
 
       {/* ---- 1 · what is a Don ---- */}
       <Section id="what-is-a-don" kicker="01" title="What is a Don">
         <P>{md("A Don is one of **8,888** NFTs on Robinhood Chain — and it is not just a picture. A Don is three things at once:")}</P>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14, margin: "18px 0" }}>
+        <div className="hw-grid">
           {[
             ["♛", "A seat at the table", "Stake it and it earns a share of every fee the protocol collects, paid out in tokenized Robinhood stock."],
             ["⬢", "A hard floor of $ESSEY", "Every Don is backed by a reserve you can always cash it in against — currently 300,030 $ESSEY per Don, and that number can only go up."],
             ["◈", "A margin account", "Borrow $ESSEY against your Don's floor while it stays in your wallet, still earning."],
           ].map(([icon, t, b]) => (
-            <Card key={t} accent={`${C.gold}33`}>
-              <div style={{ fontSize: 22, color: C.goldHi, marginBottom: 8 }}>{icon}</div>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{t}</div>
-              <div style={{ fontSize: 14, lineHeight: 1.65, color: C.dim }}>{b}</div>
+            <Card key={t}>
+              <div style={{ fontSize: 20, color: "var(--gold-hi)", marginBottom: 7 }}>{icon}</div>
+              <div className="hw-card-h">{t}</div>
+              {b}
             </Card>
           ))}
         </div>
@@ -139,44 +109,36 @@ export function HowItWorksPage() {
       {/* ---- 2 · get one ---- */}
       <Section id="get-one" kicker="02" title="Get one — three ways in">
         <P>{md("All mint fees are paid in ETH, and **100% of every fee buys stock for staked holders** — there is no team cut on mints (the split is configurable on-chain and set to 0).")}</P>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, margin: "18px 0" }}>
-          <Card accent={`${C.green}55`}>
-            <div style={{ fontSize: 12, letterSpacing: ".18em", color: C.green, textTransform: "uppercase", fontWeight: 700 }}>Free · whitelist</div>
-            <div style={{ fontSize: 22, fontWeight: 800, margin: "8px 0 10px" }}>Gas only</div>
-            <div style={{ fontSize: 14, lineHeight: 1.65, color: C.dim }}>
-              {md("If you hold a whitelist allocation, you claim your Dons for gas only. Each comes with a randomly rolled set of traits. The whitelist is a Merkle root committed on-chain behind a **2-day public timelock** — the list is visible before it goes live, and no one can swap it in quietly.")}
-            </div>
+        <div className="hw-grid">
+          <Card accent="var(--good)">
+            <div className="hw-card-k" style={{ color: "var(--good)" }}>Free · whitelist</div>
+            <div className="hw-card-big">Gas only</div>
+            {md("If you hold a whitelist allocation, you claim your Dons for gas only. Each comes with a randomly rolled set of traits. The whitelist is a Merkle root committed on-chain behind a **2-day public timelock** — the list is visible before it goes live, and no one can swap it in quietly.")}
           </Card>
-          <Card accent={`${C.blue}55`}>
-            <div style={{ fontSize: 12, letterSpacing: ".18em", color: C.blue, textTransform: "uppercase", fontWeight: 700 }}>Reroll · unlimited</div>
-            <div style={{ fontSize: 22, fontWeight: 800, margin: "8px 0 10px" }}>0.00075 ETH <span style={{ fontSize: 13, fontWeight: 400, color: C.faint }}>~$3</span></div>
-            <div style={{ fontSize: 14, lineHeight: 1.65, color: C.dim }}>
-              {md("Don't love the roll? Re-randomize any Don you own — as many times as you like, until you stake it. Every reroll frees your old trait combo for someone else and locks in your new one. A random Don stays random: rerolling re-rolls, it never converts to a custom build.")}
-            </div>
+          <Card accent="var(--r-bluechip)">
+            <div className="hw-card-k" style={{ color: "var(--r-bluechip)" }}>Reroll · unlimited</div>
+            <div className="hw-card-big">0.00075 ETH <i>~$3</i></div>
+            {md("Don't love the roll? Re-randomize any Don you own — as many times as you like, until you stake it. Every reroll frees your old trait combo for someone else and locks in your new one. A random Don stays random: rerolling re-rolls, it never converts to a custom build.")}
           </Card>
-          <Card accent={`${C.gold}55`}>
-            <div style={{ fontSize: 12, letterSpacing: ".18em", color: C.goldHi, textTransform: "uppercase", fontWeight: 700 }}>Custom · exact traits</div>
-            <div style={{ fontSize: 22, fontWeight: 800, margin: "8px 0 10px" }}>0.0025 ETH <span style={{ fontSize: 13, fontWeight: 400, color: C.faint }}>~$10</span></div>
-            <div style={{ fontSize: 14, lineHeight: 1.65, color: C.dim }}>
-              {md("Open the builder, choose every trait, and mint exactly that Don. Trait combos are unique by contract — the uniqueness ledger lives on-chain, so no two Dons can ever share a look.")}
-            </div>
+          <Card accent="var(--gold)">
+            <div className="hw-card-k" style={{ color: "var(--gold)" }}>Custom · exact traits</div>
+            <div className="hw-card-big">0.0025 ETH <i>~$10</i></div>
+            {md("Open the builder, choose every trait, and mint exactly that Don. Trait combos are unique by contract — the uniqueness ledger lives on-chain, so no two Dons can ever share a look.")}
           </Card>
         </div>
         <P>{md("The team reserve is hard-capped on-chain at **2,722 Dons**: 2,222 of those are the AMM's trading inventory (protocol-owned, seeded into the exchange — not held by anyone), and up to 500 are for partners and team. The cap is immutable; it cannot be raised.")}</P>
-        <Card accent={`${C.gold}44`} style={{ background: "#17140c" }}>
-          <div style={{ fontSize: 15, lineHeight: 1.7, color: C.dim }}>{md("Your Don's art stays changeable until the moment you stake it. **Staking locks the art forever.**")}</div>
-        </Card>
+        <div className="hw-note">{md("Your Don's art stays changeable until the moment you stake it. **Staking locks the art forever.**")}</div>
       </Section>
 
       {/* ---- 3 · the floor ---- */}
       <Section id="the-floor" kicker="03" title="The Floor">
         <P>{md("Behind every Don sits the **DonReserve**: a pot funded with **2,666,666,666 $ESSEY** — 30% of the total supply — split across the 8,888-Don cap.")}</P>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, margin: "18px 0" }}>
+        <div className="hw-stats">
           <Stat big="2,666,666,666" label="$ESSEY in the reserve — 30% of total supply" />
           <Stat big="÷ 8,888" label="Dons backed — read from the immutable cap" />
           <Stat big="= 300,030" label="$ESSEY floor per Don, today — it only rises" />
         </div>
-        <ul style={{ margin: "0 0 14px", paddingLeft: 22, color: C.dim, fontSize: 15.5, lineHeight: 1.8 }}>
+        <ul className="hw-list">
           <li>{md("**Redemption is always open.** At any moment, any Don's owner can redeem it against the reserve and receive its full floor share in $ESSEY. No permission, no window, no admin.")}</li>
           <li>{md("**The floor only rises.** Anyone can fund the reserve (and the protocol routinely does — 30% of all loan interest goes here), but the only way $ESSEY leaves is a redemption, which pays exactly one Don's pro-rata share. The math guarantees the floor for everyone else never drops.")}</li>
           <li>{md("**Nobody can touch it.** The reserve has no owner, no admin, no upgrade path, and no setter on its accounting. The backed-supply figure is read from the Don contract's own immutable cap. There is nothing to rug.")}</li>
@@ -191,42 +153,20 @@ export function HowItWorksPage() {
       <Section id="trade" kicker="04" title="Trade">
         <P>{md("The **DonExchange** is the broker desk: a vault holding Dons on one side and $ESSEY on the other, trading at one price. That price is pinned on every trade to **the live redemption floor** (never below the 300,000 $ESSEY deploy minimum), read fresh from the reserve — so the desk can never be arbitraged against a risen floor.")}</P>
         <Scroller minWidth={560}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: C.panel }}>
+          <table className="hw-table">
             <thead>
-              <tr>
-                <th style={th}>Action</th>
-                <th style={th}>You pay / receive</th>
-                <th style={{ ...th, textAlign: "right" }}>Fee</th>
-                <th style={{ ...th, textAlign: "right" }}>At today's floor</th>
-              </tr>
+              <tr><th>Action</th><th>You pay / receive</th><th className="n">Fee</th><th className="n">At today's floor</th></tr>
             </thead>
             <tbody>
-              <tr>
-                <td style={{ ...td, color: C.text, fontWeight: 700 }}>Buy</td>
-                <td style={td}>Pay price + fee → next Don from inventory</td>
-                <td style={tdNum}>8%</td>
-                <td style={tdNum}>~324,032 $ESSEY</td>
-              </tr>
-              <tr>
-                <td style={{ ...td, color: C.text, fontWeight: 700 }}>Snipe</td>
-                <td style={td}>Pay price + fee → the exact Don # you want</td>
-                <td style={tdNum}>12%</td>
-                <td style={tdNum}>~336,034 $ESSEY</td>
-              </tr>
-              <tr>
-                <td style={{ ...td, color: C.text, fontWeight: 700, borderBottom: "none" }}>Sell</td>
-                <td style={{ ...td, borderBottom: "none" }}>Send your Don → receive price − fee</td>
-                <td style={{ ...tdNum, borderBottom: "none" }}>8%</td>
-                <td style={{ ...tdNum, borderBottom: "none" }}>~276,028 $ESSEY</td>
-              </tr>
+              <tr><td className="k">Buy</td><td>Pay price + fee → next Don from inventory</td><td className="n">8%</td><td className="n">~324,032 $ESSEY</td></tr>
+              <tr><td className="k">Snipe</td><td>Pay price + fee → the exact Don # you want</td><td className="n">12%</td><td className="n">~336,034 $ESSEY</td></tr>
+              <tr><td className="k">Sell</td><td>Send your Don → receive price − fee</td><td className="n">8%</td><td className="n">~276,028 $ESSEY</td></tr>
             </tbody>
           </table>
         </Scroller>
-        <Card accent={`${C.purple}55`} style={{ background: "#141020", margin: "0 0 14px" }}>
-          <div style={{ fontSize: 15, lineHeight: 1.7, color: C.dim }}>
-            {md("**70% of every trade fee buys tokenized stock for staked Dons.** The remaining 30% goes to the protocol treasury. Every trade — yours or anyone's — pays the people seated at the table.")}
-          </div>
-        </Card>
+        <div className="hw-note">
+          {md("**70% of every trade fee buys tokenized stock for staked Dons.** The remaining 30% goes to the protocol treasury. Every trade — yours or anyone's — pays the people seated at the table.")}
+        </div>
         <P>{md("Every trade takes a slippage bound (max cost on buys, min proceeds on sells): because the floor can rise between your click and your transaction, the trade reverts rather than filling at a worse price than you approved.")}</P>
         <P>{md("The desk is adminless over funds. The only privileged role can *add* Dons to inventory — it can never withdraw the $ESSEY reserve or touch fees.")}</P>
       </Section>
@@ -235,13 +175,9 @@ export function HowItWorksPage() {
       <Section id="earn" kicker="05" title="Activate & Earn">
         <P>{md("Owning a Don gets you the floor. **Staking it gets you paid.** To take your seat, activate a tier by paying a one-time fee in $ESSEY. Higher tiers multiply your share of every payout:")}</P>
         <Scroller minWidth={460}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: C.panel }}>
+          <table className="hw-table">
             <thead>
-              <tr>
-                <th style={th}>Tier</th>
-                <th style={{ ...th, textAlign: "right" }}>Activation fee ($ESSEY)</th>
-                <th style={{ ...th, textAlign: "right" }}>Payout weight</th>
-              </tr>
+              <tr><th>Tier</th><th className="n">Activation fee ($ESSEY)</th><th className="n">Payout weight</th></tr>
             </thead>
             <tbody>
               {([
@@ -250,33 +186,22 @@ export function HowItWorksPage() {
                 ["Tier 2", "366,666", "1.60×"],
                 ["Tier 3", "666,666", "2.00×"],
                 ["Tier 4", "1,666,666", "3.33×"],
-              ] as const).map(([tier, fee, w], i, arr) => {
-                const last = i === arr.length - 1;
-                return (
-                  <tr key={tier}>
-                    <td style={{ ...td, color: C.text, fontWeight: 700, borderBottom: last ? "none" : td.borderBottom }}>{tier}</td>
-                    <td style={{ ...tdNum, borderBottom: last ? "none" : td.borderBottom }}>{fee}</td>
-                    <td style={{ ...tdNum, color: C.goldHi, fontWeight: 700, borderBottom: last ? "none" : td.borderBottom }}>{w}</td>
-                  </tr>
-                );
-              })}
+              ] as const).map(([tier, fee, w]) => (
+                <tr key={tier}><td className="k">{tier}</td><td className="n">{fee}</td><td className="n" style={{ color: "var(--gold-hi)", fontWeight: 700 }}>{w}</td></tr>
+              ))}
             </tbody>
           </table>
         </Scroller>
         <P>{md("Fees are cumulative — upgrading later costs only the difference (Base → Tier 4 is 1,600,000 $ESSEY whether you climb rung by rung or jump).")}</P>
         <P>{md("The activation fee is a **sink, not a deposit**: **50% is burned forever, 50% goes to the treasury.** You don't get it back. What you get is your weight on every payout for as long as you hold the Don. There are no seasons, no vesting, no cooldowns — **activate, and you earn from the next ring onward.**")}</P>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, margin: "18px 0" }}>
-          <Card accent={`${C.green}44`}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>🔔 The Bell</div>
-            <div style={{ fontSize: 14, lineHeight: 1.65, color: C.dim }}>
-              {md("Every fee in the protocol — mint fees, trade fees — flows into one pot. When the pot fills, the Bell rings: the pot is split across all active Dons, pro-rata by weight, in a single on-chain operation. A protocol keeper rings it (there's no ringer tip to race for — the whole pot goes to holders), and anyone may ring it themselves once the pot passes the threshold.")}
-            </div>
+        <div className="hw-grid">
+          <Card accent="var(--good)">
+            <div className="hw-card-h">🔔 The Bell</div>
+            {md("Every fee in the protocol — mint fees, trade fees — flows into one pot. When the pot fills, the Bell rings: the pot is split across all active Dons, pro-rata by weight, in a single on-chain operation. A protocol keeper rings it (there's no ringer tip to race for — the whole pot goes to holders), and anyone may ring it themselves once the pot passes the threshold.")}
           </Card>
-          <Card accent={`${C.purple}44`}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>📈 Paid in stock</div>
-            <div style={{ fontSize: 14, lineHeight: 1.65, color: C.dim }}>
-              {md("Payouts are delivered as **Robinhood tokenized stock**. Elect up to 3 stocks with your own weights (say, 60% AAPL / 40% NVDA) — or elect nothing and receive the default BUNDLE basket. If a conversion can't settle (market closed, stale feed), that payout arrives as USDG instead — your money is never stuck behind a swap.")}
-            </div>
+          <Card accent="var(--r-preferred)">
+            <div className="hw-card-h">📈 Paid in stock</div>
+            {md("Payouts are delivered as **Robinhood tokenized stock**. Elect up to 3 stocks with your own weights (say, 60% AAPL / 40% NVDA) — or elect nothing and receive the default BUNDLE basket. If a conversion can't settle (market closed, stale feed), that payout arrives as USDG instead — your money is never stuck behind a swap.")}
           </Card>
         </div>
         <P>{md("Everything lands in your Don's Vault. Claims are permissionless because they can only ever go one place: the Don's own Vault.")}</P>
@@ -288,12 +213,12 @@ export function HowItWorksPage() {
       {/* ---- 6 · borrow ---- */}
       <Section id="borrow" kicker="06" title="Borrow">
         <P>{md("Your Don is collateral you don't have to give up.")}</P>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, margin: "18px 0" }}>
+        <div className="hw-stats">
           <Stat big="150,015 $ESSEY" label="max borrow per Don today — 50% of the live floor" />
           <Stat big="15% APR" label="simple (non-compounding) interest, accrued per second" />
           <Stat big="70% of floor" label="liquidation threshold — 210,021 $ESSEY today" />
         </div>
-        <ul style={{ margin: "0 0 14px", paddingLeft: 22, color: C.dim, fontSize: 15.5, lineHeight: 1.8 }}>
+        <ul className="hw-list">
           <li>{md("**The Don stays in your wallet — still staked, still earning.** A lien blocks it from being sold, swapped, or redeemed until the debt clears; nothing else changes. Your seat keeps collecting stock the entire time you're borrowed against it.")}</li>
           <li>{md("Repay any amount, any time; anyone may repay on your behalf. Interest settles first, then principal. Full repayment releases the lien on the spot.")}</li>
           <li>{md("**Interest splits 70/30 — stock pot / floor** — borrowing pays staked Dons in stock AND raises the floor under every Don, including yours.")}</li>
@@ -303,11 +228,9 @@ export function HowItWorksPage() {
           {md("A liquidated (or redeemed) Don takes its Vault with it — including every unclaimed dividend inside. Claim regularly, and service your loan.")}
         </Warn>
         <P>{md("The math is deliberately forgiving: at a full 50% borrow, simple interest takes about **2.7 years** to push you from 50% to the 70% threshold — and that assumes the floor never rises, which it does every time interest flows (30% of every payment lands in the reserve — plus anyone may fund it). Funding the reserve heals every open loan.")}</P>
-        <Card accent={`${C.gold}44`} style={{ background: "#17140c" }}>
-          <div style={{ fontSize: 15, lineHeight: 1.7, color: C.dim }}>
-            {md("Because debt and collateral are both in $ESSEY, there is **no price oracle to fail and no keeper to trust** — and every open loan emits a solvency statement that Essey's zero-knowledge prover verifies on-chain: `debt ≤ 50% of floor` at origination, proven cryptographically, not promised.")}
-          </div>
-        </Card>
+        <div className="hw-note">
+          {md("Because debt and collateral are both in $ESSEY, there is **no price oracle to fail and no keeper to trust** — and every open loan emits a solvency statement that Essey's zero-knowledge prover verifies on-chain: `debt ≤ 50% of floor` at origination, proven cryptographically, not promised.")}
+        </div>
       </Section>
 
       {/* ---- 7 · flywheel ---- */}
@@ -317,7 +240,7 @@ export function HowItWorksPage() {
         <Scroller minWidth={860}>
           <div dangerouslySetInnerHTML={{ __html: FEE_MAP_SVG }} style={{ lineHeight: 0 }} />
         </Scroller>
-        <ul style={{ margin: "0 0 14px", paddingLeft: 22, color: C.dim, fontSize: 15.5, lineHeight: 1.8 }}>
+        <ul className="hw-list">
           <li>{md("**Mint & reroll fees (ETH):** 100% → swapped to USDG → the Bell → tokenized stock for staked Dons.")}</li>
           <li>{md("**Trade fees (8% / 12%):** 70% → the Bell → stock for staked Dons; 30% → treasury.")}</li>
           <li>{md("**Activation fees ($ESSEY):** 50% burned (supply shrinks), 50% treasury.")}</li>
@@ -328,20 +251,16 @@ export function HowItWorksPage() {
         <Scroller minWidth={700}>
           <div dangerouslySetInnerHTML={{ __html: FLYWHEEL_SVG }} style={{ lineHeight: 0 }} />
         </Scroller>
-        <p style={{ margin: "24px 0 0", fontSize: 18, fontWeight: 700, color: C.goldHi, textAlign: "center" }}>
-          A seat at this table pays you to sit in it.
-        </p>
+        <p className="hw-close">A seat at this table pays you to sit in it.</p>
       </Section>
 
       {/* ---- 8 · FAQ ---- */}
       <Section id="faq" kicker="08" title="FAQ">
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="hw-faq">
           {FAQ.map(({ q, a }) => (
-            <details key={q} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: "0 18px" }}>
-              <summary style={{ cursor: "pointer", padding: "15px 0", fontSize: 15.5, fontWeight: 700, color: C.text, listStyle: "none", outline: "none" }}>
-                <span style={{ color: C.gold, marginRight: 10 }}>›</span>{q}
-              </summary>
-              <div style={{ padding: "0 0 16px", fontSize: 15, lineHeight: 1.75, color: C.dim }}>{md(a)}</div>
+            <details key={q}>
+              <summary>{q}</summary>
+              <div>{md(a)}</div>
             </details>
           ))}
         </div>

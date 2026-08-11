@@ -150,16 +150,16 @@ export function ExchangeHero() {
       <div className="wrap hero-grid">
         <div>
           <span className="eyebrow">Provably fair · provably solvent</span>
-          <h1>8,888 Dons. The dons have a <em>seat at the table.</em></h1>
-          <p className="lede">A Don is three things in one NFT: a seat that earns a share of every protocol fee,
-            paid in tokenized Robinhood stock; a hard floor of <b className="num">300,030 $ESSEY</b> you can always
-            redeem; and a margin account you can borrow against while it keeps earning. Every ring, every trade,
-            every loan — verifiable on-chain.</p>
+          <h1>8,888 Dons.<br />Each one <em>a seat at the table.</em></h1>
+          <p className="lede">A Don is three instruments in one NFT: a seat that earns a cut of every protocol
+            fee, paid in tokenized Robinhood stock; a <b className="num">300,030 $ESSEY</b> floor you can redeem
+            at any time; and a margin account that borrows against that floor while the seat keeps earning.
+            Every ring, trade, and loan is verifiable on-chain.</p>
           <div className="hero-cta">
-            <Link className="btn btn-gold" to="/builder">Build your Don — mint</Link>
+            <Link className="btn btn-gold" to="/builder">Build your Don</Link>
             <Link className="btn btn-ghost" to="/how-it-works">How it works</Link>
           </div>
-          <div className="proof-strip num">⬡ 8,888 Dons · a 300,030 $ESSEY floor under every one · fees pay out
+          <div className="proof-strip num">⬡ 8,888 Dons · 300,030 $ESSEY floor under each · fees pay out
             as stock · <Link to="/faucet">get testnet funds →</Link></div>
         </div>
         <aside className={"bell-plate" + (rung ? " rung" : "")}>
