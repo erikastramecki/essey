@@ -126,3 +126,12 @@ BundleConverter `0x3c6a…7fb0` (Bell default payout = BUNDLE sentinel `0xB0B1`)
 
 Proven live: mintCustom fee (0.0025 ETH) → flushEth → **Bell pot 11.25 USDG**. FeedKeeper now stamps 7 feeds
 (added ETH/USD). REMINDER: the feed-keeper cron is still not installed — `23 */2 * * * cd ~/Developer/assay/rh-chain && ./feed-keeper.sh`.
+
+### Faucet v3 (2026-08-11) — settable drips, 100k ESSEY
+| Contract | Address |
+|---|---|
+| TestnetFaucet (100k ESSEY + 1k USDG drip, owner-settable) | `0x90312b383Eac08E691c851a7ef866f106E6d9d7d` |
+
+Owner = deployer `0x976EBff4…993D`. Drip retunable via `setDrips(essey, usdg, cooldown)` (caps 10M/1M). Funded 100M ESSEY.
+Supersedes the 5k-drip faucets (0x2ac1…8C91, 0x11c6…ded2). Audit CLEAN (money paths + access + logic). Frontend
+ADDR.faucet + copy update handled with the faucet-UI fix.
