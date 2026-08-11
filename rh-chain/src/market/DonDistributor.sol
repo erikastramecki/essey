@@ -5,6 +5,11 @@ import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProo
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Don} from "./Don.sol";
 
+/// The one thing the art-lock needs from the Bell: whether a Don is activated (tier > 0 = staked).
+interface IBellSeats {
+    function seats(uint256 id) external view returns (uint8 tier, uint248 weight, uint256 rewardDebt, uint256 pendingStored);
+}
+
 /// DonDistributor — the Dons' sole minter and mint-economics engine. Evolves MintDistributor (the Seat
 /// whitelist claimer) into the 3-path Don mint the founder specified:
 ///
@@ -43,7 +48,7 @@ contract DonDistributor is ReentrancyGuard {
 
     address public treasury; // team treasury — receives teamBps of every fee
     address public feeSink; // the fee→stock router — receives the rest, buys stock for staked Dons
-    address public staker; // the AMM/staking contract allowed to trigger a Don's art-lock on activation
+    address public bell; // the Bell — a Don with an active tier there is "staked", which locks its art
     bool public publicOpen; // whether the $10 custom / public mint is live
 
     uint256 public reserveMinted; // running total minted via mintReserved (<= reserveCap)
@@ -62,7 +67,7 @@ contract DonDistributor is ReentrancyGuard {
     event TreasurySet(address indexed treasury);
     event FeesSet(uint256 rerollFee, uint256 customFee);
     event SplitSet(uint256 teamBps);
-    event StakerSet(address indexed staker);
+    event BellSet(address indexed bell);
     event PublicOpenSet(bool open);
     event FeeSplit(uint256 total, uint256 toTeam, uint256 toStock);
     event RootProposed(uint256 indexed stage, bytes32 root, uint256 eta);
@@ -74,7 +79,10 @@ contract DonDistributor is ReentrancyGuard {
     event ReservedMinted(address indexed to, uint256 count);
 
     error NotAdmin();
-    error NotStaker();
+    error BellUnset();
+    error BellAlreadySet();
+    error NotStaked();
+    error StakedNoReroll();
     error ZeroAddress();
     error ZeroTimelock();
     error DonAlreadySet();
@@ -171,6 +179,13 @@ contract DonDistributor is ReentrancyGuard {
         if (address(don) == address(0)) revert DonNotSet();
         if (msg.value != rerollFee) revert WrongFee();
         if (don.ownerOf(id) != msg.sender) revert NotOwner();
+        // "Staking locks the art" holds the instant a Don activates, not only once a keeper finalizes the
+        // on-chain lock via lockOnStake: an activated Don (tier > 0 in the Bell) can't be rerolled, closing
+        // the window between activate and lock. Before the Bell is wired nothing can be staked, so skip.
+        if (bell != address(0)) {
+            (uint8 tier,,,) = IBellSeats(bell).seats(id);
+            if (tier != 0) revert StakedNoReroll();
+        }
         _take(newCombo);
 
         bytes32 old = comboOf[id];
@@ -216,11 +231,16 @@ contract DonDistributor is ReentrancyGuard {
 
     // ---------------------------------------------------------------- staking lock passthrough
 
-    /// Freeze a Don's art when it is staked to activate. Callable only by the wired `staker` (the AMM), so
-    /// the Don's `onlyMinter` lock is reachable exactly once, by exactly the activation path.
+    /// Freeze a Don's art once it is staked (tier-activated in the Bell). Permissionless but CONDITIONED:
+    /// the activation is verified on-chain (`tier > 0` read from the Bell), so no trusted "staker" caller
+    /// exists to compromise — anyone (the mint UI, a keeper, the activation tx itself via multicall) may
+    /// finalize the lock the moment the condition holds. Idempotent: locking an already-locked Don is a
+    /// no-op, so a Don whose tier cleared on transfer and was re-activated by its buyer can't brick.
     function lockOnStake(uint256 id) external {
-        if (msg.sender != staker) revert NotStaker();
-        don.lockTraits(id);
+        if (bell == address(0)) revert BellUnset();
+        (uint8 tier,,,) = IBellSeats(bell).seats(id);
+        if (tier == 0) revert NotStaked();
+        if (!don.locked(id)) don.lockTraits(id);
     }
 
     // ---------------------------------------------------------------- admin: roots (timelocked)
@@ -276,10 +296,15 @@ contract DonDistributor is ReentrancyGuard {
         emit SplitSet(teamBps_);
     }
 
-    function setStaker(address staker_) external onlyAdmin {
-        if (staker_ == address(0)) revert ZeroAddress();
-        staker = staker_;
-        emit StakerSet(staker_);
+    /// Wire the Bell — one-shot, like `Don.setHook`/`setArt`. Because `lockOnStake` trusts the Bell's
+    /// `tier` reading to gate the art-lock, a re-pointable Bell would let a compromised admin install a
+    /// fake Bell reporting `tier > 0` and force-lock every unstaked Don. Pinning it once removes that
+    /// capability entirely — the Bell is fixed the moment it's set.
+    function setBell(address bell_) external onlyAdmin {
+        if (bell_ == address(0)) revert ZeroAddress();
+        if (bell != address(0)) revert BellAlreadySet();
+        bell = bell_;
+        emit BellSet(bell_);
     }
 
     function setPublicOpen(bool open) external onlyAdmin {
@@ -296,6 +321,13 @@ contract DonDistributor is ReentrancyGuard {
     function setDonArt(address art_) external onlyAdmin {
         if (address(don) == address(0)) revert DonNotSet();
         don.setArt(art_);
+    }
+
+    /// Wire the loan facility (DonLoan) via the distributor (the Don's immutable minter). One-shot inside
+    /// Don.setLienManager, contract-only — same trust shape as the hook/art wiring.
+    function setDonLienManager(address manager_) external onlyAdmin {
+        if (address(don) == address(0)) revert DonNotSet();
+        don.setLienManager(manager_);
     }
 
     // ---------------------------------------------------------------- admin: reserved float/partners

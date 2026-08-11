@@ -46,8 +46,18 @@ contract Don is ERC721 {
     /// The metadata renderer, wired once by the minter. Unset = empty URI.
     address public art;
 
+    /// The loan facility (DonLoan) allowed to lien Dons as live-in-wallet collateral. Wired once by the
+    /// minter, like `hook`/`art`. A liened Don cannot be transferred (so it can't be sold, redeemed, or
+    /// moved out from under its debt) but STAYS in the borrower's wallet — still staked, still earning —
+    /// until the lien clears on repayment or the facility seizes it on liquidation.
+    address public lienManager;
+
+    /// Whether a Don is currently pledged as loan collateral (transfer-locked).
+    mapping(uint256 => bool) public liened;
+
     event Rerolled(uint256 indexed id, bytes32 traits);
     event Locked(uint256 indexed id, bytes32 traits);
+    event Lien(uint256 indexed id, bool on);
 
     error NotMinter();
     error SoldOut();
@@ -57,6 +67,10 @@ contract Don is ERC721 {
     error HookNotContract();
     error ArtAlreadySet();
     error ArtNotContract();
+    error LienManagerAlreadySet();
+    error LienManagerNotContract();
+    error NotLienManager();
+    error LienActive();
 
     modifier onlyMinter() {
         if (msg.sender != minter) revert NotMinter();
@@ -126,17 +140,55 @@ contract Don is ERC721 {
         art = art_;
     }
 
+    /// One-time wiring of the loan facility, by the minter. Same trust shape as setHook/setArt: a contract,
+    /// pinned forever — the power to lien (and seize liened) Dons is granted to exactly one audited facility
+    /// and can never be re-pointed.
+    function setLienManager(address manager_) external onlyMinter {
+        if (lienManager != address(0)) revert LienManagerAlreadySet();
+        if (manager_ == address(0) || manager_.code.length == 0) revert LienManagerNotContract();
+        lienManager = manager_;
+    }
+
+    /// Pledge / release a Don as loan collateral. Facility-only. The facility is responsible for only
+    /// liening with the owner's consent (its borrow path) and only releasing on repayment/liquidation.
+    function setLien(uint256 id, bool on) external {
+        if (msg.sender != lienManager) revert NotLienManager();
+        if (_ownerOf(id) == address(0)) revert NonexistentToken();
+        liened[id] = on;
+        emit Lien(id, on);
+    }
+
     function tokenURI(uint256 id) public view override returns (string memory) {
         _requireOwned(id);
         return art == address(0) ? "" : ISeatArt(art).tokenURI(id);
     }
 
+    /// A liened Don is transfer-locked: every exit (sale, AMM, reserve redemption) is blocked until the
+    /// debt clears. Only the lien facility itself may move it — the seizure path of a liquidation.
+    /// The gate runs BEFORE the ownership write; mints (owner == 0) are never liened.
+    ///
     /// Notify the hook on true ownership transfers only — mints (from == 0) stand up fresh state and burns
     /// don't exist in this collection.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
+        if (liened[tokenId] && _ownerOf(tokenId) != address(0) && msg.sender != lienManager) {
+            revert LienActive();
+        }
         from = super._update(to, tokenId, auth);
         if (hook != address(0) && from != address(0) && to != address(0)) {
             ISeatHook(hook).onSeatTransfer(tokenId, from, to);
         }
+    }
+
+    /// The facility may move a LIENED Don without holder approval — that is the seizure half of the lien
+    /// (the transfer-lock above is the other half). Scoped strictly to liened tokens: over an unliened Don
+    /// the facility has no more authority than anyone else.
+    function _isAuthorized(address owner, address spender, uint256 tokenId)
+        internal
+        view
+        override
+        returns (bool)
+    {
+        if (liened[tokenId] && spender == lienManager) return true;
+        return super._isAuthorized(owner, spender, tokenId);
     }
 }

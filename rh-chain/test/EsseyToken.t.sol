@@ -22,8 +22,8 @@ contract EsseyTokenTest is Test {
 
     /// Fixed supply, minted once to the treasury; zero-address treasury rejected.
     function test_FixedSupplyToTreasury() public {
-        assertEq(essey.totalSupply(), 2_222_222_222e18);
-        assertEq(essey.balanceOf(treasury), 2_222_222_222e18, "entire supply at the treasury");
+        assertEq(essey.totalSupply(), 8_888_888_888e18);
+        assertEq(essey.balanceOf(treasury), 8_888_888_888e18, "entire supply at the treasury");
         assertEq(essey.decimals(), 18);
 
         vm.expectRevert(EsseyToken.TreasuryZero.selector);
@@ -35,14 +35,14 @@ contract EsseyTokenTest is Test {
     function test_BurnReducesSupplyForever() public {
         vm.prank(treasury);
         essey.burn(1_000_000e18);
-        assertEq(essey.totalSupply(), 2_222_222_222e18 - 1_000_000e18);
+        assertEq(essey.totalSupply(), 8_888_888_888e18 - 1_000_000e18);
 
         // burnFrom respects allowances.
         vm.prank(treasury);
         essey.approve(alice, 5e18);
         vm.prank(alice);
         essey.burnFrom(treasury, 5e18);
-        assertEq(essey.totalSupply(), 2_222_222_222e18 - 1_000_005e18);
+        assertEq(essey.totalSupply(), 8_888_888_888e18 - 1_000_005e18);
     }
 
     /// Permit: gasless approval by signature (EIP-2612), so Tier activation can be one transaction.
@@ -91,6 +91,6 @@ contract EsseyTokenTest is Test {
         vm.stopPrank();
 
         assertEq(essey.balanceOf(0x000000000000000000000000000000000000dEaD), 50e18, "half sunk");
-        assertEq(essey.balanceOf(treasury), 2_222_222_222e18 - 1_000e18 + 50e18, "half to treasury");
+        assertEq(essey.balanceOf(treasury), 8_888_888_888e18 - 1_000e18 + 50e18, "half to treasury");
     }
 }

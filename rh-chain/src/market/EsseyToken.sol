@@ -19,7 +19,7 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 ///     works for any ERC-20; burn() lets integrators reduce totalSupply outright when preferred.)
 ///   - ERC20Permit: gasless approvals, so activating a Tier or buying a Case is one transaction.
 contract EsseyToken is ERC20, ERC20Burnable, ERC20Permit {
-    uint256 public constant TOTAL_SUPPLY = 2_222_222_222e18;
+    uint256 public constant TOTAL_SUPPLY = 8_888_888_888e18;
 
     error TreasuryZero();
 

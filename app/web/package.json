@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@noble/ciphers": "1.3.0",
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
+    "@upstash/redis": "^1.38.2",
     "circomlibjs": "0.1.7",
     "dompurify": "^3.4.12",
     "marked": "^12.0.2",
@@ -19,8 +21,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.2",
     "snarkjs": "0.7.6",
-    "viem": "^2.55.10",
-    "@noble/ciphers": "1.3.0"
+    "viem": "^2.55.10"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
