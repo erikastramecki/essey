@@ -52,6 +52,8 @@ Status legend: ✅ enforced · 🔬 under QA review · ⬜ proposed/not yet code
 | Hat present | Ceasar (laurel crown) | ✅ |
 | Hair vs Hat Hair | hat→hide full Hair; no hat→hide Hat Hair | ✅ |
 | Body = Zombie/Golden/Glitch (1/1) | all face/head parts | ✅ |
+| Female Hat + hair ∈ {Gem, Updo, Lush} | crops `9 Hair` at the hat's crown line (Carmen 207 / Arlington 177 / Labrea 256 — the PSD's own hat-hair cut) so spikes/curls never poke above the crown (art defect, no designer) | ✅ |
+| Female hair = **Medusa** | **blocks all hats** — the snake-crown pierces every brim (art defect, no designer; narrowest exclusion) | ✅ |
 
 ---
 
@@ -85,6 +87,8 @@ Rule: keep the Hand Grip; **two objects may co-render UNLESS their opaque areas 
 | Ceasar / Hawk / Phoenix eyes | rare 1/1-ish | ✅ |
 | AR | ~16% | ✅ |
 | **Swollen** eye variant | **SUPPRESSED** (bruised/red-rim eye removed from pool) | ✅ |
+| **Bar** ring (F) | **SUPPRESSED** (broken oversized gold-bird asset) | ✅ |
+| **Bowler Red** hat | **RESTORED** — the "incomplete crown" was the cream `Bowler Shadow` layer, converted to a neutral overlay by `art_mitigations.py`; suppression removed | ✅ |
 
 ---
 
@@ -180,3 +184,22 @@ run repeated agent QA passes over the images, fixing/tuning until they're pixel-
 - `Carmen` hat **stray brim wisp** (#7673) — leftover vector stroke at the brim tip.
 
 _Round 5 (confirm AR + Bar fixes) running._
+
+### NO-DESIGNER mitigation pass (2026-08-11) — art is FINAL
+The founder has **no art designer**; every remaining "designer" item was neutralized in code.
+Pixel fixes = `art_mitigations.py` (idempotent, originals in `{SP}/art_originals_backup/`);
+full item-by-item ledger + proof images = `DESIGNER-ART-FIXES.md` (now the **ART-DEFECT LEDGER**).
+
+| Item | Resolution |
+|---|---|
+| Red-hair lavender strands (34 files) | pixel hue-remap → warm red | ✅ |
+| Bowler Shadow cream wash (16 files) | converted to neutral shade/highlight overlay; **Bowler Red un-suppressed** | ✅ |
+| Cane floating shard (8 files) | orphan components pruned | ✅ |
+| Thirsty droplet speck (8 files) | orphan specks pruned (vampire drip kept) | ✅ |
+| Carmen brim wisp + rear slivers (3 files) | thin-stroke erase + prune | ✅ |
+| Female Gem/Updo/Lush under hats | `FEMALE_HAT_HAIR_CROP` (crown-line crop) | ✅ |
+| Female Medusa × hats | `FEMALE_HAT_BLOCK` exclusion | ✅ |
+| Jester temple wedge · Cthulu-over-cigar · Snake+Joker patch | ACCEPTED (reads as style / unreproducible) | ✅ |
+
+⚠ The two new `FEMALE_*` tables are exported in the builder data but the TS resolver does not
+enforce them yet (site out of scope for the mitigation pass) — ~5-line client wiring pending.

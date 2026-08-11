@@ -169,8 +169,17 @@ OPTIONAL = {"16 Neko": 0.05}  # Neko fox mask = rare accessory
 SUPPRESS = ("swollen",)       # user-flagged variants removed from every pool (bruised/red-rimmed eye)
 # ---- engine-side art-as-is fixes (no source edits): suppress a variant / hide a broken sub-leaf / crop.
 # variant suppression (drop from the pick pool -> a good sibling renders instead):
-SUPPRESS_IN = {"14 Ring": {"bar"},          # female 'Bar' ring = oversized gold bird over the glass
-               "22 Hat": {"bowler red"}}     # Bowler 'Red' crown fill is incomplete -> use Black/Grey/White
+SUPPRESS_IN = {"14 Ring": {"bar"}}          # female 'Bar' ring = oversized gold bird over the glass
+# (Bowler Red restored: its 'incomplete crown' was the cream-opaque Bowler Shadow layer, now
+#  converted to a neutral overlay by art_mitigations.py -> all bowler colours render clean.)
+# NO-DESIGNER female hair-vs-hat rules (art is final; female hats keep the full '9 Hair'):
+# 1) Medusa's snake-crown pierces every hat brim -> hats are blocked for Medusa (art defect,
+#    no designer; narrowest possible exclusion - all other styles keep all hats).
+FEMALE_HAT_BLOCK = {"Medusa"}
+# 2) Gem's spikes / Updo's top curls / Lush's crown tip poke above the hat. Crop those styles'
+#    hair at the same crown line the PSD's own per-hat 'Hat Hair' variants are cut at.
+FEMALE_HAT_HAIR_CROP = {"Carmen": 207, "Arlington": 177, "Labrea": 256}   # per-hat crown line
+FEMALE_HAT_HAIR_CROP_STYLES = {"Gem", "Updo", "Lush"}
 # sub-leaf hide (a broken always-drawn layer inside an otherwise-good trait):
 HIDE_LEAF = ("Devilish Rear",   # the disconnected floating devil tail (keep the horn)
              "Hair Fade")       # tan hat-hair base bleeds through light hair colours
@@ -191,6 +200,8 @@ def generate(tree, rng):
                 continue  # optional category rolled absent this token
             if s.couple_pick(cats[name]["children"]) is None:
                 continue  # coupled optional (Neko) with no variant for this hairstyle -> absent
+        if name == "10 Hat" and s.drivers.get("hair_style") in FEMALE_HAT_BLOCK:
+            continue  # art defect, no designer: Medusa's snake-crown pierces every female hat
         top = s.select_category(cats[name])
         r = roles[name]
         if r == "body" and top:
@@ -307,6 +318,14 @@ def apply_conflicts(s, leafmeta):
             return False
         return True
     s.leaves = [lf for lf in s.leaves if keep(lf)] + add_leaves
+    # NO-DESIGNER: female hats keep the full '9 Hair'; Gem/Updo/Lush poke above the crown ->
+    # crop those styles' hair at the hat's own crown line (same cut the PSD's per-hat 'Hat Hair'
+    # variants use). Leaf dicts are COPIED so the shared tree nodes stay untouched.
+    _fhat = drivers.get("hat")
+    if _fhat in FEMALE_HAT_HAIR_CROP and drivers.get("hair_style") in FEMALE_HAT_HAIR_CROP_STYLES:
+        _fc = FEMALE_HAT_HAIR_CROP[_fhat]
+        s.leaves = [dict(lf, _ct=_fc) if leafmeta.get(lf["z"], {}).get("category") == "9 Hair" else lf
+                    for lf in s.leaves]
     s.hidden = {"cats": sorted(hide_cats), "paths": hide_paths, "facemod": fm, "cover": cover}
     return s
 
@@ -346,8 +365,8 @@ def composite(leaves, leafmeta, gender):
             a = np.where(a < 0.9, 0.0, a)                       # (semi-transparent stray pixels -> gone)
         l, t = m["bbox"][0] + POS_OFFSET.get(m.get("category", ""), 0), m["bbox"][1]; h, w = a.shape
         x0, y0 = max(l, 0), max(t, 0); x1, y1 = min(l + w, 900), min(t + h, 900)
-        _ct = next((v for k, v in CROP_TOP.items() if k in m.get("path", "")), None)
-        if _ct is not None: y0 = max(y0, _ct)   # clip the runaway smoke plume above this row
+        _ct = lf.get("_ct") or next((v for k, v in CROP_TOP.items() if k in m.get("path", "")), None)
+        if _ct is not None: y0 = max(y0, _ct)   # clip runaway rows (smoke plume / hair above a hat crown)
         _cb = next((v for k, v in CROP_BOTTOM.items() if k in m.get("path", "")), None)
         if _cb is not None: y1 = min(y1, _cb)    # drop a disconnected lower element (Devilish tail)
         if x0 >= x1 or y0 >= y1: continue

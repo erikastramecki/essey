@@ -16,6 +16,7 @@ library to render.
 | `compute_conflicts.py` | Precomputes pairwise hand-object overlap (which held items may co-render). |
 | `verify.py` / `verify_f.py` / `structcheck.py` / `overlapcheck.py` | Invariant checkers (eyes/nose present once, couplings hold, no region crowding). |
 | `render_review_batch.py` | Renders a risk-oversampled batch for the visual-QA fleet. |
+| `art_mitigations.py` | **No-designer pass:** deterministic, idempotent pixel fixes for the final layer art (violet red-hair strands, cream bowler shadow, floating cane/mouth/brim fragments). See `DESIGNER-ART-FIXES.md` (ART-DEFECT LEDGER). |
 | `extract_leaves.py` / `extract_structure.py` | Extract the trait library + z-ordered structure from the source PSDs. |
 
 ## Quality campaign (summary)
