@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Don} from "./Don.sol";
 import {DonReserve} from "./DonReserve.sol";
+import {Guarded} from "./Guarded.sol";
 
 /// DonLoan — borrow $ESSEY against your Don, the proven NFT-loan desk mechanic rebuilt on Essey's
 /// provable floor. 15% APR, 50% LTV — proven desk numbers.
@@ -42,7 +43,7 @@ import {DonReserve} from "./DonReserve.sol";
 /// TRUST SURFACE: adminless over user funds. `treasury` may withdraw only IDLE funding (protocol seed
 /// sitting unlent) — outstanding debt is owed to the facility and returns on repay; no role can touch a
 /// borrower's collateral except through the public liquidation path.
-contract DonLoan is ReentrancyGuard {
+contract DonLoan is ReentrancyGuard, Guarded {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable essey;
@@ -109,8 +110,9 @@ contract DonLoan is ReentrancyGuard {
         uint256 liqThresholdBps_,
         uint256 rateBps_,
         uint256 liqTipBps_,
-        uint256 stockShareBps_
-    ) {
+        uint256 stockShareBps_,
+        address guardian_
+    ) Guarded(guardian_) {
         if (
             address(essey_) == address(0) || address(don_) == address(0) || address(reserve_) == address(0)
                 || feeSink_ == address(0) || treasury_ == address(0) || ltvBps_ == 0
@@ -223,7 +225,7 @@ contract DonLoan is ReentrancyGuard {
     /// Open a loan against a Don you own: up to `ltvBps` of the live floor, in $ESSEY. The Don is liened
     /// in place — it stays in your wallet, stays staked, keeps earning — but cannot move until the debt
     /// clears. One open loan per Don; no top-ups (repay and re-borrow to re-lever).
-    function borrow(uint256 donId, uint256 amount) external nonReentrant {
+    function borrow(uint256 donId, uint256 amount) external nonReentrant whenNotFrozen {
         if (amount == 0) revert ZeroAmount();
         if (don.ownerOf(donId) != msg.sender) revert NotDonOwner();
         if (loans[donId].borrower != address(0)) revert LoanExists();

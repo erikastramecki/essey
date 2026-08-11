@@ -39,8 +39,7 @@ contract DonExchangeTest is Test, IERC721Receiver {
         reserve = new DonReserve(IERC20(address(essey)), IERC721(address(don)));
         ex = new DonExchange(
             IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)),
-            feeSink, treasury, address(this), PRICE, SWAP_BPS, SNIPE_BPS, STOCK_BPS
-        );
+            feeSink, treasury, address(this), PRICE, SWAP_BPS, SNIPE_BPS, STOCK_BPS, address(this));
 
         essey.mint(alice, 10_000_000e18);
         essey.mint(bob, 10_000_000e18);
@@ -69,13 +68,13 @@ contract DonExchangeTest is Test, IERC721Receiver {
 
     function test_ConstructorGuards() public {
         vm.expectRevert(DonExchange.BadConfig.selector); // zero floor source
-        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(0)), feeSink, treasury, address(this), PRICE, SWAP_BPS, SNIPE_BPS, STOCK_BPS);
+        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(0)), feeSink, treasury, address(this), PRICE, SWAP_BPS, SNIPE_BPS, STOCK_BPS, address(this));
         vm.expectRevert(DonExchange.BadConfig.selector); // snipe below swap breaks the premium ordering
-        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)), feeSink, treasury, address(this), PRICE, 1200, 800, STOCK_BPS);
+        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)), feeSink, treasury, address(this), PRICE, 1200, 800, STOCK_BPS, address(this));
         vm.expectRevert(DonExchange.BadConfig.selector); // fee over 100%
-        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)), feeSink, treasury, address(this), PRICE, 800, 10_001, STOCK_BPS);
+        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)), feeSink, treasury, address(this), PRICE, 800, 10_001, STOCK_BPS, address(this));
         vm.expectRevert(DonExchange.BadConfig.selector); // zero price
-        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)), feeSink, treasury, address(this), 0, SWAP_BPS, SNIPE_BPS, STOCK_BPS);
+        new DonExchange(IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)), feeSink, treasury, address(this), 0, SWAP_BPS, SNIPE_BPS, STOCK_BPS, address(this));
     }
 
     // ---------------------------------------------------------------- dynamic price

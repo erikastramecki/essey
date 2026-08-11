@@ -37,7 +37,7 @@ contract DonLoanTest is Test {
         essey = new ERC20Mock();
         don = new Don("Essey Don", "DON", CAP, address(this)); // test = minter
         reserve = new DonReserve(IERC20(address(essey)), IERC721(address(don)));
-        loan = new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, RATE, TIP, STOCK_SHARE);
+        loan = new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, RATE, TIP, STOCK_SHARE, address(this));
         don.setLienManager(address(loan));
 
         // Seed the floor (300k/Don over the full cap) and the lending pot.
@@ -64,19 +64,19 @@ contract DonLoanTest is Test {
 
     function test_ConstructorGuards() public {
         vm.expectRevert(DonLoan.BadConfig.selector); // gap below 20pp
-        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 6900, RATE, TIP, STOCK_SHARE);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 6900, RATE, TIP, STOCK_SHARE, address(this));
         vm.expectRevert(DonLoan.BadConfig.selector); // threshold above 90%
-        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 9100, RATE, TIP, STOCK_SHARE);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 9100, RATE, TIP, STOCK_SHARE, address(this));
         vm.expectRevert(DonLoan.BadConfig.selector); // tip above cap
-        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, RATE, 501, STOCK_SHARE);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, RATE, 501, STOCK_SHARE, address(this));
         vm.expectRevert(DonLoan.BadConfig.selector); // zero rate
-        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, 0, TIP, STOCK_SHARE);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, 0, TIP, STOCK_SHARE, address(this));
 
         // reserve/don pairing must match - a foreign reserve can't price this collection
         Don other = new Don("Other", "OTH", CAP, address(this));
         DonReserve otherReserve = new DonReserve(IERC20(address(essey)), IERC721(address(other)));
         vm.expectRevert(DonLoan.BadConfig.selector);
-        new DonLoan(IERC20(address(essey)), don, otherReserve, feeSink, treasury, LTV, LIQ, RATE, TIP, STOCK_SHARE);
+        new DonLoan(IERC20(address(essey)), don, otherReserve, feeSink, treasury, LTV, LIQ, RATE, TIP, STOCK_SHARE, address(this));
     }
 
     // ---------------------------------------------------------------- borrow

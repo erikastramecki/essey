@@ -68,6 +68,7 @@ contract DeployDons is Script {
         address admin;
         address treasury;
         address seeder;
+        address guardian;
         IERC20 essey;
         IERC20 usdg;
         IConverter converter;
@@ -98,6 +99,7 @@ contract DeployDons is Script {
         c.admin = vm.envOr("ADMIN", msg.sender);
         c.treasury = vm.envOr("TREASURY", c.admin);
         c.seeder = vm.envOr("SEEDER", c.admin);
+        c.guardian = vm.envOr("GUARDIAN", c.admin); // the freeze-only multisig; 0 = deploy immutable
         c.essey = IERC20(vm.envOr("ESSEY", address(0))); // 0 = deploy a FRESH 8.888B EsseyToken (the Dons-era supply)
         c.usdg = IERC20(vm.envAddress("USDG"));
         c.converter = IConverter(vm.envOr("CONVERTER", address(0)));
@@ -153,9 +155,9 @@ contract DeployDons is Script {
 
         d.exchange = new DonExchange(
             IERC721(address(d.don)), c.essey, IDonFloor(address(d.reserve)), sink, c.treasury, c.seeder,
-            c.donPrice, SWAP_FEE_BPS, SNIPE_FEE_BPS, STOCK_SHARE_BPS
+            c.donPrice, SWAP_FEE_BPS, SNIPE_FEE_BPS, STOCK_SHARE_BPS, c.guardian
         );
-        d.loan = new DonLoan(c.essey, d.don, d.reserve, sink, c.treasury, LTV_BPS, LIQ_THRESHOLD_BPS, RATE_BPS, LIQ_TIP_BPS, LOAN_STOCK_SHARE_BPS);
+        d.loan = new DonLoan(c.essey, d.don, d.reserve, sink, c.treasury, LTV_BPS, LIQ_THRESHOLD_BPS, RATE_BPS, LIQ_TIP_BPS, LOAN_STOCK_SHARE_BPS, c.guardian);
 
         // One-shot wiring (broadcaster must be admin; on a multisig deploy these are ITS txs).
         d.distributor.initDon(d.don);

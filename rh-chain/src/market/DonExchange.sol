@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Guarded} from "./Guarded.sol";
 
 /// The DonReserve's live floor — the redemption price the exchange must never undercut.
 interface IDonFloor {
@@ -30,9 +31,11 @@ interface IDonFloor {
 /// redeem), so a flat price would eventually sit BELOW it and buy→redeem arbitrage would drain the whole
 /// inventory for profit; tracking the live floor (plus the 8% fee) makes that loop strictly unprofitable.
 /// `donPrice` (the 300k floor at deploy) survives as a lower bound so the desk never quotes below its
-/// seeded economics even if the reserve is briefly thin. Adminless over funds — the only role is `seeder`,
+/// seeded economics even if the reserve is briefly thin. GUARDED (freeze-only): the desk is a market
+/// venue, so all four activity paths (seed/buy/snipe/sell) freeze in an incident — holders' guaranteed
+/// exit is DonReserve.redeem, which is adminless and can never be frozen. Adminless over funds — the only role is `seeder`,
 /// which can ONLY pull pre-owned Dons into inventory (float), never touch the reserve or fees.
-contract DonExchange is IERC721Receiver, ReentrancyGuard {
+contract DonExchange is IERC721Receiver, ReentrancyGuard, Guarded {
     using SafeERC20 for IERC20;
 
     IERC721 public immutable don;
@@ -74,8 +77,9 @@ contract DonExchange is IERC721Receiver, ReentrancyGuard {
         uint256 donPrice_,
         uint256 swapFeeBps_,
         uint256 snipeFeeBps_,
-        uint256 stockShareBps_
-    ) {
+        uint256 stockShareBps_,
+        address guardian_
+    ) Guarded(guardian_) {
         if (
             address(don_) == address(0) || address(essey_) == address(0) || address(floorSource_) == address(0)
                 || feeSink_ == address(0) || treasury_ == address(0) || seeder_ == address(0) || donPrice_ == 0
@@ -124,7 +128,7 @@ contract DonExchange is IERC721Receiver, ReentrancyGuard {
     // ---------------------------------------------------------------- float (seeder)
 
     /// Pull pre-owned Dons into inventory. Seeder-only (owns the ids + approved). Only ADDS float — never funds.
-    function seed(uint256[] calldata ids) external nonReentrant {
+    function seed(uint256[] calldata ids) external nonReentrant whenNotFrozen {
         if (msg.sender != seeder) revert NotSeeder();
         for (uint256 i = 0; i < ids.length; i++) {
             don.transferFrom(msg.sender, address(this), ids[i]);
@@ -139,7 +143,7 @@ contract DonExchange is IERC721Receiver, ReentrancyGuard {
     /// $ESSEY pulled (price + fee): the live `price()` tracks the DonReserve floor, which anyone may raise
     /// permissionlessly, so the caller passes the most they're willing to pay and the trade reverts rather
     /// than over-charging if the floor rose after they signed.
-    function buy(uint256 maxCost) external nonReentrant returns (uint256 id) {
+    function buy(uint256 maxCost) external nonReentrant whenNotFrozen returns (uint256 id) {
         uint256 n = _inv.length;
         if (n == 0) revert EmptyInventory();
         id = _inv[n - 1]; // LIFO — "next" Don
@@ -155,7 +159,7 @@ contract DonExchange is IERC721Receiver, ReentrancyGuard {
 
     /// Snipe a specific Don # from inventory at the live price + the 12% premium fee. `maxCost` caps the
     /// total $ESSEY pulled (see `buy`).
-    function snipe(uint256 id, uint256 maxCost) external nonReentrant {
+    function snipe(uint256 id, uint256 maxCost) external nonReentrant whenNotFrozen {
         if (!inInventory(id)) revert NotInInventory(id);
         _remove(id);
         uint256 p = price();
@@ -170,7 +174,7 @@ contract DonExchange is IERC721Receiver, ReentrancyGuard {
     /// Sell a Don back to inventory: receive the live price minus the 8% fee. The fee is split from the
     /// proceeds (the exchange's reserve funds both), so the seller sends only the Don. `minOut` is the
     /// least net $ESSEY the seller will accept — reverts rather than under-paying if the quote moved.
-    function sell(uint256 id, uint256 minOut) external nonReentrant {
+    function sell(uint256 id, uint256 minOut) external nonReentrant whenNotFrozen {
         don.transferFrom(msg.sender, address(this), id); // seller owns + approved
         _add(id);
         uint256 p = price();

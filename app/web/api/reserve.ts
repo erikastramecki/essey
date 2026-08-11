@@ -15,6 +15,7 @@
 import { Redis } from "@upstash/redis";
 import { createPublicClient, http, defineChain, parseAbi, keccak256, toHex } from "viem";
 import { resolveSelection } from "../src/pfp-resolve";
+import { persistPreimage } from "./_don-lib";
 
 const HOLD_TTL_S = 30 * 60; // a builder session's soft hold
 
@@ -87,6 +88,11 @@ export default async function handler(req: Request): Promise<Response> {
     const data = await builderData(String(gender));
     const r = resolveSelection(data, forced || {}, (Number(seed) >>> 0) || 0); // authoritative key
     const combo = comboHash(r.key);
+
+    // PERMANENT preimage registry (no TTL, NX — first record wins): hash -> the builder inputs that
+    // resolve to it. This is what lets /api/don/[id] decode a minted Don's on-chain combo hash back
+    // into traits forever. Best-effort: a registry hiccup must not block the reservation.
+    await persistPreimage(redis, combo, { gender: data.gender, forced: forced || {}, seed: (Number(seed) >>> 0) || 0, key: r.key }).catch(() => {});
 
     const minted = await mintedOnChain(combo);
     if (minted) return json(200, { ok: false, taken: true, minted: true, key: r.key, combo });
