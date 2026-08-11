@@ -36,3 +36,4 @@ app/web/public/traits/
 app/web/public/builder/
 app/web/.reservations.json
 .vercel
+app/web/public/allowlist/

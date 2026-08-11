@@ -99,7 +99,7 @@ contract Don is ERC721 {
         emit Rerolled(id, traits_);
     }
 
-    /// Re-randomize / re-select a Don's traits (the $1 reroll or the custom build), while still mutable.
+    /// Re-randomize / re-select a Don's traits (the paid reroll or the custom build), while still mutable.
     /// Minter-gated: the distributor validates the fee + uniqueness before calling. Reverts once locked.
     function reroll(uint256 id, bytes32 traits_) external onlyMinter {
         if (_ownerOf(id) == address(0)) revert NonexistentToken();

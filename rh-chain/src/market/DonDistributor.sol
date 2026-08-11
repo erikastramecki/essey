@@ -32,7 +32,7 @@ interface IBellSeats {
 /// client picks an unused combo); on-chain we guarantee uniqueness, not the roll's entropy. (A future rev can
 /// seed the roll from the chain's entropy/Dice for trustless fairness — noted, not v1.)
 ///
-/// All mint FEES (USDG) flow to `feeSink` — the fee→auto-stock router (task #75) that DCA-buys Robinhood stock
+/// All mint FEES (native ETH) flow to `feeSink` — the fee→auto-stock router (task #75) that DCA-buys Robinhood stock
 /// for the Bell. Trust model mirrors MintDistributor: timelocked roots, a bounded admin reserve, the Don's
 /// own maxSupply as the hard ceiling, no way to move a minted Don or reset a claim.
 contract DonDistributor is ReentrancyGuard {
@@ -171,7 +171,7 @@ contract DonDistributor is ReentrancyGuard {
         emit ClaimedWL(stage, msg.sender, allocation, firstId);
     }
 
-    // ---------------------------------------------------------------- $1 REROLL (owned, unlocked)
+    // ---------------------------------------------------------------- ~$3 REROLL (owned, unlocked)
 
     /// Re-randomize a Don you own that isn't staked yet. Pays `rerollFee` in ETH (split team/stock); frees the
     /// old combo and reserves the new one. `Don.reroll` reverts if the Don's traits are already locked.
@@ -197,7 +197,7 @@ contract DonDistributor is ReentrancyGuard {
         emit Rerolled(id, old, newCombo, msg.value);
     }
 
-    // ---------------------------------------------------------------- $5 CUSTOM mint (public)
+    // ---------------------------------------------------------------- ~$10 CUSTOM mint (public)
 
     /// Mint a Don with an EXACT chosen `combo`. Pays `customFee` in ETH. Open only when `publicOpen`.
     function mintCustom(bytes32 combo) external payable nonReentrant returns (uint256 id) {
@@ -289,7 +289,7 @@ contract DonDistributor is ReentrancyGuard {
         emit FeesSet(rerollFee_, customFee_);
     }
 
-    /// Change the team/stock split (bps to treasury; rest to the stock feeSink). Default 4000 = 40%.
+    /// Change the team/stock split (bps to treasury; rest to the stock feeSink). Deployed at 0 = 100% stock.
     function setTeamBps(uint256 teamBps_) external onlyAdmin {
         if (teamBps_ > 10_000) revert BadSplit();
         teamBps = teamBps_;
