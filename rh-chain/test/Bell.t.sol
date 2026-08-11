@@ -22,7 +22,7 @@ contract BellTest is Test {
 
     address constant BURN = 0x000000000000000000000000000000000000dEaD;
 
-    // Tiers: fees 100/250/500/1500 $ESSEY, weights 100/160/200/333 (StonkBrokers-shaped).
+    // Tiers: fees 100/250/500/1500 $ESSEY, weights 100/160/200/333 (broker-desk-shaped).
     uint256[] fees = [100e18, 250e18, 500e18, 1500e18];
     uint256[] weights = [100, 160, 200, 333];
 
