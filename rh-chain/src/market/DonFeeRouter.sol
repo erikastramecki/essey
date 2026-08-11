@@ -15,7 +15,6 @@ interface ISwapRouter {
         address tokenOut;
         uint24 fee;
         address recipient;
-        uint256 deadline;
         uint256 amountIn;
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
@@ -92,6 +91,7 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
     event KeeperSet(address indexed keeper);
 
     error NotAdmin();
+    error Expired();
     error NotKeeper();
     error ZeroAddress();
     error BadBps();
@@ -136,6 +136,8 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
     /// the ETH/USD and USDG/USD oracles, not the caller, so triggering it can only ever help the pot.
     /// Fails closed — a stale/silent feed reverts and the ETH simply waits.
     function flushEth(uint256 deadline) external nonReentrant returns (uint256 usdgOut) {
+        // Router02 carries no deadline field — the staleness bound is OURS to enforce.
+        if (block.timestamp > deadline) revert Expired();
         uint256 ethBal = address(this).balance;
         if (ethBal > 0) {
             uint256 minOut = (_ethFairUsdgOut(ethBal) * minOutBps) / BPS;
@@ -147,7 +149,6 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
                     tokenOut: address(usdg),
                     fee: ethPoolFee,
                     recipient: address(this),
-                    deadline: deadline,
                     amountIn: ethBal,
                     amountOutMinimum: minOut,
                     sqrtPriceLimitX96: 0
@@ -162,6 +163,7 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
     /// fair-value quote (expected USDG out for the WHOLE held balance) must come from a caller we trust
     /// not to low-ball it; the swap still enforces `quote × minOutBps / 10000`.
     function flushEssey(uint256 deadline, uint256 usdgQuote) external nonReentrant returns (uint256 usdgOut) {
+        if (block.timestamp > deadline) revert Expired();
         if (msg.sender != keeper) revert NotKeeper();
         uint256 esseyBal = essey.balanceOf(address(this));
         if (esseyBal > 0) {
@@ -173,7 +175,6 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
                     tokenOut: address(usdg),
                     fee: esseyPoolFee,
                     recipient: address(this),
-                    deadline: deadline,
                     amountIn: esseyBal,
                     amountOutMinimum: (usdgQuote * minOutBps) / BPS,
                     sqrtPriceLimitX96: 0

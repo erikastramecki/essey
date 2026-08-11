@@ -19,14 +19,16 @@ interface IConverter {
         returns (uint256 amountOut);
 }
 
-/// Minimal Uniswap V3-style swap router surface (the shape live on Robinhood Chain).
+/// Minimal Uniswap V3-style swap router surface — the SwapRouter02 struct shape (NO deadline field),
+/// which is the only router deployed on Robinhood Chain mainnet (verified on-chain 2026-08-11: the
+/// classic deadline-carrying selector is absent from its bytecode; encoding it reverts every swap).
+/// Callers needing deadline protection enforce it in their own contract before calling.
 interface ISwapRouter {
     struct ExactInputSingleParams {
         address tokenIn;
         address tokenOut;
         uint24 fee;
         address recipient;
-        uint256 deadline;
         uint256 amountIn;
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;

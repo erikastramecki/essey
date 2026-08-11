@@ -119,7 +119,6 @@ contract StockConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
                 tokenOut: targetToken,
                 fee: cfg.uniFee,
                 recipient: recipient, // straight to the Vault — no custody here
-                deadline: block.timestamp,
                 amountIn: amountIn,
                 amountOutMinimum: minOut,
                 sqrtPriceLimitX96: 0
