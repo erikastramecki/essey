@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {BundleConverter} from "../src/market/BundleConverter.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
@@ -72,7 +72,7 @@ contract BundleConverterTest is Test {
 
         seat = new Seat("Essey Seat", "SEAT", 4444, address(this));
         // defaultPayout = BUNDLE: an unset Seat is paid the basket.
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, conv, conv.BUNDLE());
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, conv, conv.BUNDLE());
         seat.setHook(address(bell));
         conv.initBell(address(bell)); // gate convert() to this Bell — the only legitimate caller
 
@@ -187,7 +187,7 @@ contract BundleConverterTest is Test {
         thin.seedReserve(address(nvda), 1e18); // only 1 NVDA share — a bundle needs 3.96
 
         Seat s = new Seat("S", "S", 10, address(this));
-        Bell b = new Bell(s, essey, usdg, treasury, 100e18, 100, fees, weights, thin, thin.BUNDLE());
+        Bell b = new Bell(ISeatLike(address(s)), essey, usdg, treasury, 100e18, 100, fees, weights, thin, thin.BUNDLE());
         s.setHook(address(b));
         thin.initBell(address(b));
         uint256 id = s.mint(alice);
@@ -320,10 +320,10 @@ contract BundleConverterTest is Test {
         address bundle = conv.BUNDLE(); // hoist before expectRevert
         // converter set, but 0xDECAF is neither a listed stock nor the bundle sentinel
         vm.expectRevert(Bell.BadConfig.selector);
-        new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, conv, address(0xDECAF));
+        new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, conv, address(0xDECAF));
         // non-zero defaultPayout with no converter to route it through
         vm.expectRevert(Bell.BadConfig.selector);
-        new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), bundle);
+        new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), bundle);
     }
 
     /// The preference is per-owner: transferring the Seat clears it → buyer gets the default bundle.

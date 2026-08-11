@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {TravelVoucher} from "../src/travel/TravelVoucher.sol";
 import {TravelCase} from "../src/travel/TravelCase.sol";
@@ -64,7 +64,7 @@ contract TravelCaseTest is Test, IERC721Receiver {
         uint256[] memory weights = new uint256[](1);
         fees[0] = 1e18;
         weights[0] = 1;
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
         feeSink = address(bell);
 
         // issuer = this, admin = this, spread 5%, spread sink = the Bell (TravelSwap's fee farm)

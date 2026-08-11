@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {EsseyExchange} from "../src/market/EsseyExchange.sol";
 import {EsseyToken} from "../src/market/EsseyToken.sol";
 import {IConverter} from "../src/market/IConverter.sol";
@@ -40,7 +40,7 @@ contract EsseyExchangeTest is Test, IERC721Receiver {
         fees[0] = 100e18;
         uint256[] memory weights = new uint256[](1);
         weights[0] = 100;
-        bell = new Bell(seat, essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
         seat.setHook(address(bell));
 
         ex = new EsseyExchange(
@@ -189,7 +189,7 @@ contract EsseyExchangeTest is Test, IERC721Receiver {
             f[0] = 1e18;
             uint256[] memory w = new uint256[](1);
             w[0] = 1;
-            esseyRewardBell = new Bell(seat, usdg, essey, treasury, 1e18, 100, f, w, IConverter(address(0)), address(0));
+            esseyRewardBell = new Bell(ISeatLike(address(seat)), usdg, essey, treasury, 1e18, 100, f, w, IConverter(address(0)), address(0));
         }
         vm.expectRevert(EsseyExchange.BadConfig.selector);
         new EsseyExchange(
@@ -205,7 +205,7 @@ contract EsseyExchangeTest is Test, IERC721Receiver {
             f[0] = 1e18;
             uint256[] memory w = new uint256[](1);
             w[0] = 1;
-            otherBell = new Bell(otherSeat, essey, usdg, treasury, 1e18, 100, f, w, IConverter(address(0)), address(0));
+            otherBell = new Bell(ISeatLike(address(otherSeat)), essey, usdg, treasury, 1e18, 100, f, w, IConverter(address(0)), address(0));
         }
         vm.expectRevert(EsseyExchange.BadConfig.selector);
         new EsseyExchange(

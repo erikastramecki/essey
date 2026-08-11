@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {SeatArt} from "../src/market/SeatArt.sol";
 import {MintDistributor} from "../src/market/MintDistributor.sol";
 import {IConverter} from "../src/market/IConverter.sol";
@@ -38,7 +38,7 @@ contract SeatArtTest is Test, IERC721Receiver {
         weights[0] = 160;
         weights[1] = 200;
         weights[2] = 333;
-        bell = new Bell(seat, essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
         seat.setHook(address(bell));
         art = new SeatArt(seat, bell);
         seat.setArt(address(art));

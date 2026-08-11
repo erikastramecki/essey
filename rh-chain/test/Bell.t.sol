@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
 import {SeatVault} from "../src/market/SeatVault.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
@@ -30,7 +30,7 @@ contract BellTest is Test {
         seat = new Seat("Essey Seat", "SEAT", 4444, address(this));
         essey = new ERC20Mock();
         usdg = new ERC20Mock();
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0)); // minRing 100, tip 1%
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0)); // minRing 100, tip 1%
         seat.setHook(address(bell));
 
         for (uint256 i = 0; i < 3; i++) {

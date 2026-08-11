@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {EsseyToken} from "../src/market/EsseyToken.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
@@ -79,7 +79,7 @@ contract EsseyTokenTest is Test {
         fees[0] = 100e18;
         uint256[] memory weights = new uint256[](1);
         weights[0] = 100;
-        Bell bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
+        Bell bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
         seat.setHook(address(bell));
 
         vm.prank(treasury);

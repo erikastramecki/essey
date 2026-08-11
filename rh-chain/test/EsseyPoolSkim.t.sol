@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {EsseyPool} from "../src/EsseyPool.sol";
 import {EsseyPoolTest} from "./EsseyPool.t.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -38,7 +38,7 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
         weights[0] = 100;
         // Bell rewards in USDG — the same asset the pool lends, so the skim is a plain pot-growing
         // transfer (the coherence the pool constructor enforces).
-        bell = new Bell(seat, essey, usdg, TREASURY, 1e4, 100, fees, weights, IConverter(address(0)), address(0)); // minRing 0.01 USDG
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, TREASURY, 1e4, 100, fees, weights, IConverter(address(0)), address(0)); // minRing 0.01 USDG
 
         // A second pool alongside the parent's zero-rate one (so inherited tests still pass
         // untouched): 10% APR base PLUS a real slope — a flat curve would make the rate-invariance
@@ -158,7 +158,7 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
             f[0] = 1e18;
             uint256[] memory w = new uint256[](1);
             w[0] = 1;
-            wrongReward = new Bell(seat, usdg, essey, TREASURY, 1e18, 100, f, w, IConverter(address(0)), address(0));
+            wrongReward = new Bell(ISeatLike(address(seat)), usdg, essey, TREASURY, 1e18, 100, f, w, IConverter(address(0)), address(0));
         }
         vm.expectRevert(EsseyPool.BadSink.selector);
         new EsseyPool(usdg, mk, 0, 0, 0, 0, address(wrongReward), TREASURY, BELL_SHARE);

@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {EsseyCases} from "../src/market/EsseyCases.sol";
 import {StaleFeedGuard} from "../src/StaleFeedGuard.sol";
 import {IConverter} from "../src/market/IConverter.sol";
@@ -59,7 +59,7 @@ contract EsseyCasesTest is Test {
         fees[0] = 100e18;
         uint256[] memory weights = new uint256[](1);
         weights[0] = 100;
-        bell = new Bell(seat, essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 1e18, 100, fees, weights, IConverter(address(0)), address(0));
 
         baseFeed = new MockFeed(1e8, 8); // USDG = $1
         aaplFeed = new MockFeed(200e8, 8); // AAPL = $200
@@ -495,7 +495,7 @@ contract EsseyCasesTest is Test {
             f[0] = 1e18;
             uint256[] memory w = new uint256[](1);
             w[0] = 1;
-            esseyRewardBell = new Bell(seat, usdg, essey, treasury, 1e18, 100, f, w, IConverter(address(0)), address(0));
+            esseyRewardBell = new Bell(ISeatLike(address(seat)), usdg, essey, treasury, 1e18, 100, f, w, IConverter(address(0)), address(0));
         }
         vm.expectRevert(EsseyCases.BadConfig.selector);
         new EsseyCases(

@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {EsseyCasesDegen, IEntropy, IEntropyConsumer} from "../src/market/EsseyCasesDegen.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
@@ -75,7 +75,7 @@ contract EsseyCasesDegenTest is Test {
         oracle = new MockEntropy(ENTROPY_FEE);
 
         seat = new Seat("Essey Seat", "SEAT", 4444, address(this));
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
 
         degen = new EsseyCasesDegen(_cfg());
 

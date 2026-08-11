@@ -7,7 +7,7 @@ import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {TravelVoucher} from "../src/travel/TravelVoucher.sol";
 import {TravelCase} from "../src/travel/TravelCase.sol";
 import {BackedAssetFactory} from "../src/travel/BackedAssetFactory.sol";
@@ -41,7 +41,7 @@ contract BackedAssetFactoryTest is Test {
         uint256[] memory weights = new uint256[](1);
         fees[0] = 1e18;
         weights[0] = 1;
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), address(0));
 
         factory = new BackedAssetFactory(IERC20(address(usdg)), IERC20(address(essey)), bell, treasury);
     }

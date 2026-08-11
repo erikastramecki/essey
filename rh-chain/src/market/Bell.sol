@@ -4,9 +4,16 @@ pragma solidity ^0.8.28;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Seat} from "./Seat.sol";
 import {ISeatHook} from "./ISeatHook.sol";
 import {IConverter} from "./IConverter.sol";
+
+/// The membership NFT the Bell rewards — everything the Bell needs from it. BOTH `Seat` and `Don` satisfy this
+/// (ERC721 `ownerOf` + a token-bound `vaultOf`), so one Bell serves either collection. Generalized from the
+/// concrete `Seat` type so the Dons era reuses the audited reward engine unchanged (Dons replace Seats).
+interface ISeatLike {
+    function ownerOf(uint256 id) external view returns (address);
+    function vaultOf(uint256 id) external view returns (address);
+}
 
 /// The Bell — Essey's fee → reward engine, the StonkBrokers "Clock In" mechanic rebuilt on a strictly
 /// better distribution pattern.
@@ -26,7 +33,7 @@ contract Bell is ISeatHook, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ---------------------------------------------------------------- config
-    Seat public immutable seat;
+    ISeatLike public immutable seat;
     IERC20 public immutable essey; // Tier activation fees (burned/treasury)
     IERC20 public immutable reward; // the pot asset distributed at each ring
     address public immutable treasury;
@@ -57,10 +64,16 @@ contract Bell is ISeatHook, ReentrancyGuard {
     }
 
     mapping(uint256 => SeatState) public seats;
-    /// Per-Seat payout choice: address(0) = the base reward asset; otherwise a converter-supported
-    /// stock. Owner-set, cleared on transfer (per-owner, like the Tier). Accounting never sees this —
-    /// preferences only matter at the claim edge.
-    mapping(uint256 => address) public payoutTokenOf;
+    /// Per-Don payout election (Clock-In 2.0): up to 3 converter-supported stocks with weights (bps summing
+    /// to 10000). Empty = fall to `defaultPayout` (the BUNDLE), else the base asset. Owner-set, cleared on
+    /// transfer (per-owner, like the Tier). Accounting never sees this — elections only matter at the claim edge.
+    struct Election {
+        address token;
+        uint16 bps;
+    }
+
+    mapping(uint256 => Election[]) public payoutElections;
+    uint256 public constant MAX_ELECTIONS = 3;
     uint256 public totalWeight;
     uint256 public accPerWeight;
     /// Rewards already credited to seats but not yet claimed — the part of our balance that is owed,
@@ -72,7 +85,7 @@ contract Bell is ISeatHook, ReentrancyGuard {
     event TierCleared(uint256 indexed id, address from, address to);
     event Rang(address indexed ringer, uint256 pot, uint256 tip, uint256 distributed);
     event Claimed(uint256 indexed id, uint256 amount, address vault);
-    event PayoutTokenSet(uint256 indexed id, address token);
+    event PayoutSet(uint256 indexed id, uint256 count);
     event ClaimConverted(uint256 indexed id, address token, uint256 amountOut);
     event ClaimFellBack(uint256 indexed id, address token);
 
@@ -85,9 +98,11 @@ contract Bell is ISeatHook, ReentrancyGuard {
     error NoActiveSeats();
     error CannotSweepReward();
     error UnsupportedPayoutToken();
+    error TooManyElections();
+    error BadElectionWeights();
 
     constructor(
-        Seat seat_,
+        ISeatLike seat_,
         IERC20 essey_,
         IERC20 reward_,
         address treasury_,
@@ -142,6 +157,11 @@ contract Bell is ISeatHook, ReentrancyGuard {
         return tierFees.length;
     }
 
+    /// How many payout stocks a Don has elected (0 = falls back to defaultPayout / base).
+    function electionCount(uint256 id) external view returns (uint256) {
+        return payoutElections[id].length;
+    }
+
     // ---------------------------------------------------------------- tiers
 
     /// Stake $ESSEY to put a Seat on the payout roll at `tier` (1-based). Owner-only: the fee is the
@@ -183,16 +203,50 @@ contract Bell is ISeatHook, ReentrancyGuard {
         emit Upgraded(id, cur, newTier, fee);
     }
 
-    /// Choose the asset this Seat's claims are delivered in: address(0) for the base reward asset, or
-    /// any converter-supported stock. Owner-only (it changes what lands in the Vault they own); the
-    /// preference is per-owner and clears on transfer, like the Tier.
-    function setPayoutToken(uint256 id, address token) external {
+    /// Elect up to 3 converter-supported stocks (with weights in bps summing to 10000) that this Don's claims
+    /// are delivered in — "build your own dividend basket" (Clock-In 2.0). An empty election falls back to
+    /// `defaultPayout` (the BUNDLE), else the base asset. Owner-only (it changes what lands in the Vault they
+    /// own); per-owner, cleared on transfer, like the Tier. Each claim still fails open to base per slice.
+    function setPayout(uint256 id, address[] memory tokens, uint16[] memory bps) public {
         if (seat.ownerOf(id) != msg.sender) revert NotSeatOwner();
-        if (token != address(0)) {
-            if (address(converter) == address(0) || !converter.isSupported(token)) revert UnsupportedPayoutToken();
+        uint256 n = tokens.length;
+        if (n != bps.length || n > MAX_ELECTIONS) revert TooManyElections();
+        delete payoutElections[id];
+        if (n == 0) {
+            emit PayoutSet(id, 0); // cleared → defaultPayout / base
+            return;
         }
-        payoutTokenOf[id] = token;
-        emit PayoutTokenSet(id, token);
+        if (address(converter) == address(0)) revert UnsupportedPayoutToken();
+        uint256 sum;
+        for (uint256 i = 0; i < n; i++) {
+            if (!converter.isSupported(tokens[i])) revert UnsupportedPayoutToken();
+            if (bps[i] == 0) revert BadElectionWeights();
+            sum += bps[i];
+            payoutElections[id].push(Election({token: tokens[i], bps: bps[i]}));
+        }
+        if (sum != BPS) revert BadElectionWeights();
+        emit PayoutSet(id, n);
+    }
+
+    /// Convenience: elect a SINGLE stock at 100% (or clear the election with address(0)). Wraps `setPayout`,
+    /// so the single-payout ergonomics are preserved while power users can elect up to 3.
+    function setPayoutToken(uint256 id, address token) external {
+        if (token == address(0)) {
+            if (seat.ownerOf(id) != msg.sender) revert NotSeatOwner();
+            delete payoutElections[id];
+            emit PayoutSet(id, 0);
+            return;
+        }
+        address[] memory toks = new address[](1);
+        toks[0] = token;
+        uint16[] memory bpsArr = new uint16[](1);
+        bpsArr[0] = uint16(BPS);
+        setPayout(id, toks, bpsArr);
+    }
+
+    /// Back-compat view: the Don's first elected stock, or address(0) if it has no election.
+    function payoutTokenOf(uint256 id) external view returns (address) {
+        return payoutElections[id].length == 0 ? address(0) : payoutElections[id][0].token;
     }
 
     /// Seat transfer hook: the Tier and payout preference are per-owner, so both clear on every true
@@ -200,7 +254,7 @@ contract Bell is ISeatHook, ReentrancyGuard {
     /// they belong to the Seat (they land in its Vault), not the departing owner.
     function onSeatTransfer(uint256 id, address from, address to) external {
         if (msg.sender != address(seat)) revert NotSeatContract();
-        delete payoutTokenOf[id];
+        delete payoutElections[id];
         SeatState storage s = seats[id];
         if (s.tier == 0) return;
         _checkpoint(s);
@@ -250,29 +304,42 @@ contract Bell is ISeatHook, ReentrancyGuard {
         reserved -= amount;
         address vault = seat.vaultOf(id);
 
-        // Hybrid payout: an explicit choice wins; an unset Seat falls to `defaultPayout` (the bundle),
-        // so "pay me in stock" is the default without every holder having to opt in. Either way the
-        // convert path below fails open to the base asset if it can't settle.
-        address pref = payoutTokenOf[id];
-        if (pref == address(0)) pref = defaultPayout;
-        if (pref != address(0) && address(converter) != address(0)) {
-            reward.forceApprove(address(converter), amount);
-            try converter.convert(amount, pref, vault) returns (uint256 out) {
-                // Reset the allowance on BOTH paths. The honest converter pulls exactly `amount`
-                // (allowance already 0), but resetting unconditionally means even a converter that
-                // returns success while under-pulling cannot leave a standing allowance over the
-                // Bell's balance — the reset is symmetric with the catch path by design.
-                reward.forceApprove(address(converter), 0);
-                emit ClaimConverted(id, pref, out);
-                emit Claimed(id, amount, vault);
-                return amount;
-            } catch {
-                reward.forceApprove(address(converter), 0);
-                emit ClaimFellBack(id, pref);
+        // Payout election (Clock-In 2.0): split the claim across up to 3 elected stocks by weight; an empty
+        // election falls to `defaultPayout` (the BUNDLE), so "pay me in stock" stays the default. Each slice
+        // converts independently and fails open to the base asset if it can't settle — a payout can never be
+        // blocked by the swap leg. The last slice takes the remainder, so slices always sum to `amount` exactly.
+        Election[] storage els = payoutElections[id];
+        uint256 n = els.length;
+        if (n == 0) {
+            _deliver(id, amount, defaultPayout, vault);
+        } else {
+            uint256 remaining = amount;
+            for (uint256 i = 0; i < n; i++) {
+                uint256 slice = (i == n - 1) ? remaining : (amount * els[i].bps) / BPS;
+                remaining -= slice;
+                if (slice != 0) _deliver(id, slice, els[i].token, vault);
             }
         }
-        reward.safeTransfer(vault, amount);
         emit Claimed(id, amount, vault);
+    }
+
+    /// Deliver one slice of a claim: convert `amt` to `token` straight into the Vault, or fall open to the base
+    /// reward asset if conversion can't settle (or there's no token/converter). Same per-slice safety the single
+    /// payout had — the allowance is reset on BOTH the success and catch paths so a mis-behaving converter can
+    /// never leave a standing allowance over the Bell's balance.
+    function _deliver(uint256 id, uint256 amt, address token, address vault) internal {
+        if (token != address(0) && address(converter) != address(0)) {
+            reward.forceApprove(address(converter), amt);
+            try converter.convert(amt, token, vault) returns (uint256 out) {
+                reward.forceApprove(address(converter), 0);
+                emit ClaimConverted(id, token, out);
+                return;
+            } catch {
+                reward.forceApprove(address(converter), 0);
+                emit ClaimFellBack(id, token);
+            }
+        }
+        reward.safeTransfer(vault, amt);
     }
 
     /// Recover tokens mis-sent to the Bell — "rescue without trust". StonkBrokers solves this with an

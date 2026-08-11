@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Seat} from "../src/market/Seat.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {StockConverter} from "../src/market/StockConverter.sol";
 import {IConverter, ISwapRouter} from "../src/market/IConverter.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
@@ -102,7 +102,7 @@ contract StockConverterTest is Test {
         conv.listStock(address(stock), AggregatorV3Interface(address(stockFeed)), 3000);
 
         seat = new Seat("Essey Seat", "SEAT", 4444, address(this));
-        bell = new Bell(seat, essey, usdg, treasury, 100e18, 100, fees, weights, conv, address(0));
+        bell = new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, conv, address(0));
         seat.setHook(address(bell));
 
         essey.mint(alice, 10_000e18);
@@ -247,7 +247,7 @@ contract StockConverterTest is Test {
     function test_NoDanglingAllowanceOnUnderpullingConverter() public {
         UnderpullingConverter rogue = new UnderpullingConverter(usdg);
         Seat freshSeat = new Seat("S", "S", 10, address(this)); // its own hook slot
-        Bell rogueBell = new Bell(freshSeat, essey, usdg, treasury, 100e18, 100, fees, weights, rogue, address(0));
+        Bell rogueBell = new Bell(ISeatLike(address(freshSeat)), essey, usdg, treasury, 100e18, 100, fees, weights, rogue, address(0));
         freshSeat.setHook(address(rogueBell));
 
         uint256 id = freshSeat.mint(alice);

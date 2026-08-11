@@ -7,7 +7,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {Seat} from "../src/market/Seat.sol";
 import {SeatArt} from "../src/market/SeatArt.sol";
-import {Bell} from "../src/market/Bell.sol";
+import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {EsseyToken} from "../src/market/EsseyToken.sol";
 import {EsseyExchange} from "../src/market/EsseyExchange.sol";
 import {EsseyCases} from "../src/market/EsseyCases.sol";
@@ -123,7 +123,7 @@ contract DeployMarket is Script {
         d.seat = new Seat("Essey Seat", "SEAT", MAX_SUPPLY, address(d.distributor));
         d.essey = new EsseyToken(c.treasury);
         (uint256[] memory fees, uint256[] memory weights) = _ladder();
-        d.bell = new Bell(d.seat, d.essey, c.usdg, c.treasury, c.minRing, TIP_BPS, fees, weights, c.converter, c.defaultPayout);
+        d.bell = new Bell(ISeatLike(address(d.seat)), d.essey, c.usdg, c.treasury, c.minRing, TIP_BPS, fees, weights, c.converter, c.defaultPayout);
         // FeeRouter (B1 fix): 60% Bell revenue-share / 20% bankroll / 20% ops, on USDG only. Deployed after
         // the Bell (it references it). Its token MUST equal bell.reward() (USDG) for the routed cut to grow
         // the pot — c.usdg is that stable, checked by the Exchange/Bell constructors downstream.
