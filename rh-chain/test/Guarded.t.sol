@@ -11,7 +11,6 @@ import {DonReserve} from "../src/market/DonReserve.sol";
 import {DonExchange, IDonFloor} from "../src/market/DonExchange.sol";
 import {DonLoan} from "../src/market/DonLoan.sol";
 import {Guarded} from "../src/market/Guarded.sol";
-import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 
 /// The freeze-only guardian (founder-approved): freezing stops NEW activity on the loan facility and
 /// the desk — and provably cannot touch a single exit. Proven on the real contracts, mid-flight.
@@ -51,12 +50,10 @@ contract GuardedTest is Test, IERC721Receiver {
                 treasury: treasury,
                 ltvBps: 5000,
                 liqThresholdBps: 7000,
-                rateBps: 1500,
-                penaltyRateBps: 3000,
                 defaultGraceSeconds: 30 days,
                 liqTipBps: 100,
-                stockShareBps: 7000,
-                ethUsdFeed: AggregatorV3Interface(address(0)),
+                ethPerFloorPerYearWad: 0,
+                ethFeeStockShareBps: 7000,
                 guardian: guardian
             })
         );

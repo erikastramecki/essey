@@ -10,8 +10,8 @@ import {DonLoan} from "../src/market/DonLoan.sol";
 import {Don} from "../src/market/Don.sol";
 
 /// RehearseDons — one broadcast run proving every live mechanic on the deployed stack:
-///   custom-mint (ETH fee) -> AMM buy (price+8%) -> borrow 50% LTV against the bought Don ->
-///   repay in full (interest -> reserve, lien released) -> AMM sell (price-8%).
+///   custom-mint (ETH fee) -> AMM buy (price+8%) -> borrow 50% LTV against the bought Don (prepaid ETH
+///   interest, 70/30) -> repay in full 1:1 (lien released) -> AMM sell (price-8%).
 /// Reverts loudly if any leg misbehaves; logs the numbers for the ops record.
 contract RehearseDons is Script {
     function run() external {
@@ -36,13 +36,13 @@ contract RehearseDons is Script {
         uint256 boughtId = exchange.buy(cost);
 
         // 3. Fixed-draw borrow against the bought Don at the minimum term - it stays in the wallet,
-        //    liened; the floor-priced term interest comes out of the disbursement (discount note).
+        //    liened; the whole draw is disbursed, the term's interest is prepaid IN ETH (0 by default).
         uint256 principal = loan.maxBorrow(); // the draw every loan takes
-        loan.borrow(boughtId, loan.MIN_TERM());
+        loan.borrow{value: loan.prepaidEth(loan.MIN_TERM())}(boughtId, loan.MIN_TERM());
         require(don.liened(boughtId), "not liened");
         require(don.ownerOf(boughtId) == msg.sender, "left wallet");
 
-        // 4. Repay in full - the full principal is owed (interest was prepaid), lien releases.
+        // 4. Repay in full - the full principal is owed 1:1 (interest was prepaid in ETH), lien releases.
         essey.approve(address(loan), principal * 101 / 100);
         loan.repay(boughtId, type(uint256).max);
         require(!don.liened(boughtId), "lien stuck");
