@@ -32,8 +32,9 @@ import {EsseyToken} from "../src/market/EsseyToken.sol";
 /// ENV (testnet defaults in brackets): ADMIN [broadcaster], TREASURY [admin], SEEDER [admin], ESSEY (req),
 /// USDG (req), CONVERTER [0 = base-only], DEFAULT_PAYOUT [0], MIN_RING [10 USDG in reward decimals],
 /// RESERVE_CAP [2722], REROLL_FEE_WEI [~$3], CUSTOM_FEE_WEI [~$10], DON_PRICE [300_000e18],
-/// WETH/ETH_FEED/USDG_FEED [0 = skip DonFeeRouter, feeSink=treasury interim], SWAP_ROUTER [0 = ditto],
-/// SEQUENCER_FEED [0 — none on RH-chain].
+/// WETH/ETH_FEED/USDG_FEED [0 = skip DonFeeRouter, feeSink=treasury interim; ETH_FEED also prices the
+/// DonLoan origination fee — fee only], SWAP_ROUTER [0 = ditto], SEQUENCER_FEED [0 — none on RH-chain],
+/// ORIGINATION_USD_CENTS [0 = treasury sets the USD fee later].
 contract DeployDons is Script {
     uint256 constant MAX_SUPPLY = 8888;
     uint256 constant ROOT_TIMELOCK = 2 days;
@@ -44,10 +45,14 @@ contract DeployDons is Script {
     uint256 constant SNIPE_FEE_BPS = 1200;
     uint256 constant STOCK_SHARE_BPS = 7000;
 
-    // Borrow: the proven desk numbers on Essey's provable floor.
+    // Borrow: the proven desk numbers on Essey's provable floor. Interest is prepaid over the chosen
+    // term; past expiry the late phase runs at 2x base until repay or the 30-day default clock opens
+    // calendar liquidation.
     uint256 constant LTV_BPS = 5000;
     uint256 constant LIQ_THRESHOLD_BPS = 7000;
     uint256 constant RATE_BPS = 1500;
+    uint256 constant PENALTY_RATE_BPS = 3000;
+    uint256 constant DEFAULT_GRACE = 30 days;
     uint256 constant LIQ_TIP_BPS = 100;
     uint256 constant LOAN_STOCK_SHARE_BPS = 7000; // interest: 70% -> feeSink (stock), 30% -> floor
 
@@ -79,7 +84,8 @@ contract DeployDons is Script {
         uint256 customFee; // wei, ~$10
         uint256 donPrice; // exchange price minimum (= the 300k floor at full funding)
         address weth; // 0 = skip the fee router for now
-        address ethFeed;
+        address ethFeed; // also DonLoan's origination-fee pricer (fee only; 0 = flat-only)
+        uint256 originationUsdCents; // 0 = leave unset (treasury picks the USD price later)
         address usdgFeed;
         address swapRouter;
         address sequencerFeed;
@@ -111,6 +117,7 @@ contract DeployDons is Script {
         c.donPrice = vm.envOr("DON_PRICE", uint256(300_000e18));
         c.weth = vm.envOr("WETH", address(0));
         c.ethFeed = vm.envOr("ETH_FEED", address(0));
+        c.originationUsdCents = vm.envOr("ORIGINATION_USD_CENTS", uint256(0));
         c.usdgFeed = vm.envOr("USDG_FEED", address(0));
         c.swapRouter = vm.envOr("SWAP_ROUTER", address(0));
         c.sequencerFeed = vm.envOr("SEQUENCER_FEED", address(0));
@@ -157,7 +164,27 @@ contract DeployDons is Script {
             IERC721(address(d.don)), c.essey, IDonFloor(address(d.reserve)), sink, c.treasury, c.seeder,
             c.donPrice, SWAP_FEE_BPS, SNIPE_FEE_BPS, STOCK_SHARE_BPS, c.guardian
         );
-        d.loan = new DonLoan(c.essey, d.don, d.reserve, sink, c.treasury, LTV_BPS, LIQ_THRESHOLD_BPS, RATE_BPS, LIQ_TIP_BPS, LOAN_STOCK_SHARE_BPS, c.guardian);
+        d.loan = new DonLoan(
+            DonLoan.Config({
+                essey: c.essey,
+                don: d.don,
+                reserve: d.reserve,
+                feeSink: sink,
+                treasury: c.treasury,
+                ltvBps: LTV_BPS,
+                liqThresholdBps: LIQ_THRESHOLD_BPS,
+                rateBps: RATE_BPS,
+                penaltyRateBps: PENALTY_RATE_BPS,
+                defaultGraceSeconds: DEFAULT_GRACE,
+                liqTipBps: LIQ_TIP_BPS,
+                stockShareBps: LOAN_STOCK_SHARE_BPS,
+                ethUsdFeed: AggregatorV3Interface(c.ethFeed),
+                guardian: c.guardian
+            })
+        );
+        // USD fee pricing is treasury-gated: only settable in-script when the broadcaster IS the
+        // treasury (the testnet default). Otherwise leave 0 — the multisig sets it post-deploy.
+        if (c.originationUsdCents > 0) d.loan.setOriginationFeeUsdCents(c.originationUsdCents);
 
         // One-shot wiring (broadcaster must be admin; on a multisig deploy these are ITS txs).
         d.distributor.initDon(d.don);

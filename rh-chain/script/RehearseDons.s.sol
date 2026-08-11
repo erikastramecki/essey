@@ -35,13 +35,14 @@ contract RehearseDons is Script {
         essey.approve(address(exchange), cost);
         uint256 boughtId = exchange.buy(cost);
 
-        // 3. Borrow 50% LTV against the bought Don - it stays in the wallet, liened.
-        uint256 principal = loan.maxBorrow();
-        loan.borrow(boughtId, principal);
+        // 3. Fixed-draw borrow against the bought Don at the minimum term - it stays in the wallet,
+        //    liened; the floor-priced term interest comes out of the disbursement (discount note).
+        uint256 principal = loan.maxBorrow(); // the draw every loan takes
+        loan.borrow(boughtId, loan.MIN_TERM());
         require(don.liened(boughtId), "not liened");
         require(don.ownerOf(boughtId) == msg.sender, "left wallet");
 
-        // 4. Repay in full - lien releases, interest (0 same-block) to the reserve.
+        // 4. Repay in full - the full principal is owed (interest was prepaid), lien releases.
         essey.approve(address(loan), principal * 101 / 100);
         loan.repay(boughtId, type(uint256).max);
         require(!don.liened(boughtId), "lien stuck");

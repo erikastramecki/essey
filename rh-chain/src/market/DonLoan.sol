@@ -7,9 +7,22 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Don} from "./Don.sol";
 import {DonReserve} from "./DonReserve.sol";
 import {Guarded} from "./Guarded.sol";
+import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
 
-/// DonLoan — borrow $ESSEY against your Don, the proven NFT-loan desk mechanic rebuilt on Essey's
-/// provable floor. 15% APR, 50% LTV — proven desk numbers.
+/// DonLoan — fixed-TERM borrowing against your Don, the proven NFT-desk mechanic rebuilt on Essey's
+/// provable floor: the desk's revenue is banked the moment the loan is written — interest for the whole
+/// term is charged UP FRONT (a discount note), plus an ETH origination fee (USD-priced by the ETH/USD
+/// feed when wired, flat wei otherwise — the fee is the ONLY thing the feed prices).
+///
+/// THE TERM LOAN, FIXED-DRAW: `borrow(donId, term)` draws exactly `ltvBps` of the live floor — every
+/// loan is a full draw against the value line, which tracks the rising floor. The term's interest is
+/// priced on that same VALUE, not the principal: `prepaidInterest = floorPerDon * rateBps * term /
+/// (BPS * YEAR)`, deducted from the disbursement (a discount note) and routed 70/30 (stock pot /
+/// floor) IN THE BORROW TX. The borrower owes back exactly the principal, any time up to expiry — no
+/// main-phase accrual bookkeeping, and NO REFUND on early repay: the prepaid interest bought the right
+/// to hold the money for the term. The constructor invariant `rateBps * MAX_TERM / YEAR < ltvBps`
+/// guarantees the fee can never swallow the draw. Past expiry the loan goes LATE: principal accrues
+/// per-second at `penaltyRateBps` (2x the base rate at deploy) until repaid or liquidated.
 ///
 /// WHY ESSEY-DENOMINATED: the proven NFT-desk mechanic lends the asset its floor is priced
 /// in, with no external oracle — the protocol's own floor IS the price. Essey's Don floor is
@@ -24,21 +37,26 @@ import {Guarded} from "./Guarded.sol";
 /// real margin account. Escrow would fire the Bell's transfer hook and clear the tier; the lien doesn't.
 /// Every exit (sale, AMM, reserve redemption) is blocked until the debt clears.
 ///
-/// LIQUIDATION NEEDS NO LIQUIDATOR CAPITAL: past the threshold, anyone triggers it; the facility seizes
-/// the liened Don and redeems it at the DonReserve floor — the Don's own backing repays the debt. A
-/// small tip pays the caller, the surplus returns to the borrower, and the Don is consumed (locked in
-/// the reserve, membership forfeited). WARNING to borrowers (surface in UI): the Don's Vault — with any
-/// unclaimed dividends — travels with the redeemed Don and is forfeited too; service your loan.
+/// TWO LIQUIDATION TRIGGERS, both permissionless and capital-free: (a) the RATIO — debt above
+/// `liqThresholdBps` of the LIVE floor (only late-phase accrual can push a loan there; during the term
+/// debt is flat) — and (b) the CALENDAR — `expiry + defaultGraceSeconds` has passed, whatever the
+/// ratio. Settlement is one waterfall either way: the facility seizes the liened Don, redeems it at
+/// the DonReserve floor, tips the caller, routes late interest 70/30, restores principal to the pot,
+/// and returns the SURPLUS TO THE BORROWER — a defaulter loses the Don and the late interest, not the
+/// equity above the debt. WARNING to borrowers (surface in UI): the Don's Vault — with any unclaimed
+/// dividends — travels with the redeemed Don and is forfeited too; service your loan.
 ///
-/// THE FLYWHEEL: interest (on repay and on liquidation recovery) is SPLIT — `stockShareBps` (70%) to
-/// `feeSink`, the fee->stock router that buys Robinhood stock for staked Dons, and the remainder (30%)
-/// to the DonReserve, raising the floor for every Don. Borrowing activity visibly pays the room AND
-/// hardens everyone's collateral — the same 70/30 shape the AMM's fees already follow.
+/// THE FLYWHEEL: all interest — prepaid at borrow, late-phase on repay and on liquidation recovery —
+/// is SPLIT `stockShareBps` (70%) to `feeSink`, the fee->stock router that buys Robinhood stock for
+/// staked Dons, and the remainder (30%) to the DonReserve, raising the floor for every Don. Borrowing
+/// activity visibly pays the room AND hardens everyone's collateral — the same 70/30 shape the AMM's
+/// fees already follow.
 ///
 /// PROVABLE SOLVENCY (dregg): every loan stores its canonical solvency tuple — (facility, borrower,
 /// debt, floor, ltvBps, nonce), amounts in WHOLE ESSEY so they fit the circuit's 64-bit bounds — which
 /// the dregg prover commits with Poseidon and proves `debt * 10000 <= floor * ltvBps` under the
-/// existing Groth16 verifier. The circuit's collateral-type binding generalizes; no circuit change.
+/// existing Groth16 verifier. Debt is principal-or-more (never less), so the ceiled tuple can only
+/// overstate risk. The circuit's collateral-type binding generalizes; no circuit change.
 ///
 /// TRUST SURFACE: adminless over user funds. `treasury` may withdraw only IDLE funding (protocol seed
 /// sitting unlent) — outstanding debt is owed to the facility and returns on repay; no role can touch a
@@ -54,30 +72,50 @@ contract DonLoan is ReentrancyGuard, Guarded {
 
     uint256 public immutable ltvBps; // 5000 = borrow up to 50% of the floor
     uint256 public immutable liqThresholdBps; // 7000 = liquidatable once debt > 70% of the LIVE floor
-    uint256 public immutable rateBps; // 1500 = 15% APR, simple (non-compounding) interest
+    uint256 public immutable rateBps; // 1500 = 15% APR on the FLOOR VALUE, charged up front over the term
+    uint256 public immutable penaltyRateBps; // 3000 = late-phase APR on principal past expiry (> rateBps)
+    uint256 public immutable defaultGraceSeconds; // past expiry + this, liquidation opens whatever the ratio
     uint256 public immutable liqTipBps; // caller's cut of liquidation proceeds (e.g. 100 = 1%)
     uint256 public immutable stockShareBps; // 7000 = 70% of interest -> feeSink; remainder -> the floor
 
-    /// Flat ETH fee charged at borrow (the upfront-revenue mechanic, done oracle-free: a flat wei amount
-    /// needs no market price, and every Don's max borrow is identical so flat is fair). 100% -> feeSink,
-    /// the same proven ETH->USDG->Bell pipe the mint fees ride. Treasury-tunable (to track a ~$ figure as
-    /// ETH moves), hard-capped so a hostile setter can't price-brick borrowing beyond the cap.
-    uint256 public originationFeeWei;
-    uint256 public constant MAX_ORIGINATION_FEE = 0.05 ether;
+    /// The ETH origination fee — the second upfront-revenue leg — is USD-priced when the ETH/USD feed
+    /// is wired, flat-wei otherwise. HARD BOUNDARY: this feed prices ONLY the fee. It must never
+    /// appear anywhere near maxBorrow/debtOf/liquidation/loanTuple — the loan book stays entirely
+    /// floor-priced and oracle-free, so a compromised feed can only misprice a capped toll, never a
+    /// loan. 100% of the fee -> feeSink, the same proven ETH->USDG->Bell pipe the mint fees ride.
+    AggregatorV3Interface public immutable ethUsdFeed; // address(0) = oracle mode off, flat-only
+    uint8 public immutable feedDecimals;
+    uint256 public originationFeeUsdCents; // treasury-tunable USD price, 1000 = $10.00; 0 = oracle mode off
+    uint256 public originationFeeWei; // the flat FALLBACK (and the only price when no feed is wired)
+    uint256 public constant MAX_ORIGINATION_FEE = 0.05 ether; // clamps BOTH modes — no config or feed can exceed it
+    uint256 public constant MAX_ORIGINATION_FEE_USD_CENTS = 10_000; // $100
+    uint256 internal constant FEED_MAX_AGE = 90_000; // ~25h: one heartbeat + grace, same budget as the fee router
+
+    /// Term bounds: long enough that prepaid interest is real revenue, short enough that the calendar
+    /// trigger (expiry + grace) keeps every loan on a bounded clock.
+    uint256 public constant MIN_TERM = 7 days;
+    uint256 public constant MAX_TERM = 365 days;
 
     uint256 internal constant BPS = 10_000;
     uint256 internal constant YEAR = 365 days;
-    /// Same risk discipline as EsseyMarkets: the liquidation threshold must sit a full 20pp above LTV,
-    /// so a loan has years of accrual (and a rising floor) between origination and the trigger.
+    /// Same risk discipline as EsseyMarkets: the liquidation threshold must sit a full 20pp above LTV.
+    /// During the prepaid term debt is FLAT at principal (<= ltvBps of the origination floor), so only
+    /// late-phase accrual can close the gap — and under the grace bounds below the calendar trigger
+    /// always opens before the ratio can.
     uint256 internal constant MIN_RISK_GAP_BPS = 2_000;
     uint256 internal constant MAX_LIQ_THRESHOLD_BPS = 9_000;
     uint256 internal constant MAX_TIP_BPS = 500;
+    /// Grace bounds: at least a week to cure a missed expiry, at most a quarter before the pot's
+    /// capital can be recycled.
+    uint256 internal constant MIN_GRACE = 7 days;
+    uint256 internal constant MAX_GRACE = 90 days;
 
     struct Loan {
         address borrower;
-        uint256 principal; // outstanding principal, 18-dec ESSEY
-        uint256 accrued; // interest checkpointed but unpaid
-        uint64 lastAccrual;
+        uint256 principal; // owed back in full — the term's interest was already collected at borrow
+        uint256 lateAccrued; // late-phase interest checkpointed but unpaid
+        uint64 expiry; // end of the prepaid term; the late phase starts here
+        uint64 lateAccrual; // late-phase checkpoint; initialized to expiry, only moves once past it
         uint64 nonce; // this loan's slot in the dregg proof stream
     }
 
@@ -86,7 +124,14 @@ contract DonLoan is ReentrancyGuard, Guarded {
     uint64 public loanNonce; // monotone loan counter (proof-tuple nonce)
 
     event Funded(address indexed from, uint256 amount);
-    event Borrowed(uint256 indexed donId, address indexed borrower, uint256 amount, uint64 nonce);
+    event Borrowed(
+        uint256 indexed donId,
+        address indexed borrower,
+        uint256 amount,
+        uint64 termSeconds,
+        uint256 prepaidInterest,
+        uint64 nonce
+    );
     event Repaid(uint256 indexed donId, address indexed payer, uint256 interestPaid, uint256 principalPaid, bool closed);
     event Liquidated(
         uint256 indexed donId,
@@ -98,52 +143,71 @@ contract DonLoan is ReentrancyGuard, Guarded {
     );
     event IdleWithdrawn(address indexed to, uint256 amount);
     event OriginationFeeSet(uint256 wei_);
+    event OriginationFeeUsdSet(uint256 cents);
     event OriginationPaid(uint256 indexed donId, uint256 fee);
 
     error BadConfig();
     error ZeroAmount();
+    error BadTerm();
+    error PrepaidExceedsPrincipal();
     error NotDonOwner();
     error LoanExists();
     error NoLoan();
-    error ExceedsLtv(uint256 requested, uint256 maxBorrowable);
     error NotLiquidatable(uint256 debt, uint256 threshold);
     error NotTreasury();
     error WrongFee();
     error FeeTooHigh();
     error FeeForwardFailed();
+    error RefundFailed();
 
-    constructor(
-        IERC20 essey_,
-        Don don_,
-        DonReserve reserve_,
-        address feeSink_,
-        address treasury_,
-        uint256 ltvBps_,
-        uint256 liqThresholdBps_,
-        uint256 rateBps_,
-        uint256 liqTipBps_,
-        uint256 stockShareBps_,
-        address guardian_
-    ) Guarded(guardian_) {
+    /// One constructor argument — the config as a struct (the DonFeeRouter shape; fourteen loose
+    /// params overflow the legacy pipeline's stack).
+    struct Config {
+        IERC20 essey;
+        Don don;
+        DonReserve reserve;
+        address feeSink;
+        address treasury;
+        uint256 ltvBps;
+        uint256 liqThresholdBps;
+        uint256 rateBps;
+        uint256 penaltyRateBps;
+        uint256 defaultGraceSeconds;
+        uint256 liqTipBps;
+        uint256 stockShareBps;
+        AggregatorV3Interface ethUsdFeed; // address(0) = flat-only origination fee
+        address guardian;
+    }
+
+    constructor(Config memory c) Guarded(c.guardian) {
         if (
-            address(essey_) == address(0) || address(don_) == address(0) || address(reserve_) == address(0)
-                || feeSink_ == address(0) || treasury_ == address(0) || ltvBps_ == 0
-                || ltvBps_ + MIN_RISK_GAP_BPS > liqThresholdBps_ || liqThresholdBps_ > MAX_LIQ_THRESHOLD_BPS
-                || rateBps_ == 0 || rateBps_ > BPS || liqTipBps_ > MAX_TIP_BPS || stockShareBps_ > BPS
+            address(c.essey) == address(0) || address(c.don) == address(0) || address(c.reserve) == address(0)
+                || c.feeSink == address(0) || c.treasury == address(0) || c.ltvBps == 0
+                || c.ltvBps + MIN_RISK_GAP_BPS > c.liqThresholdBps || c.liqThresholdBps > MAX_LIQ_THRESHOLD_BPS
+                // The value-basis fee must never swallow the draw: the worst-case prepaid (a full
+                // MAX_TERM at rateBps of the floor) has to stay strictly below ltvBps of that floor.
+                || c.rateBps == 0 || (c.rateBps * MAX_TERM) / YEAR >= c.ltvBps
+                || c.penaltyRateBps <= c.rateBps || c.penaltyRateBps > BPS
+                || c.defaultGraceSeconds < MIN_GRACE || c.defaultGraceSeconds > MAX_GRACE
+                || c.liqTipBps > MAX_TIP_BPS || c.stockShareBps > BPS
         ) revert BadConfig();
         // The reserve must actually be the floor of THIS Don — a mismatched pairing would let borrowing
         // against one collection be priced by another's reserve.
-        if (address(reserve_.don()) != address(don_)) revert BadConfig();
-        essey = essey_;
-        don = don_;
-        reserve = reserve_;
-        feeSink = feeSink_;
-        treasury = treasury_;
-        ltvBps = ltvBps_;
-        liqThresholdBps = liqThresholdBps_;
-        rateBps = rateBps_;
-        liqTipBps = liqTipBps_;
-        stockShareBps = stockShareBps_;
+        if (address(c.reserve.don()) != address(c.don)) revert BadConfig();
+        essey = c.essey;
+        don = c.don;
+        reserve = c.reserve;
+        feeSink = c.feeSink;
+        treasury = c.treasury;
+        ltvBps = c.ltvBps;
+        liqThresholdBps = c.liqThresholdBps;
+        rateBps = c.rateBps;
+        penaltyRateBps = c.penaltyRateBps;
+        defaultGraceSeconds = c.defaultGraceSeconds;
+        liqTipBps = c.liqTipBps;
+        stockShareBps = c.stockShareBps;
+        ethUsdFeed = c.ethUsdFeed;
+        feedDecimals = address(c.ethUsdFeed) == address(0) ? 0 : c.ethUsdFeed.decimals();
     }
 
     // ---------------------------------------------------------------- views
@@ -153,20 +217,52 @@ contract DonLoan is ReentrancyGuard, Guarded {
         return essey.balanceOf(address(this));
     }
 
-    /// The most a Don can borrow right now: half (ltvBps) of the live floor.
+    /// The fixed draw every loan takes right now: half (ltvBps) of the live floor.
     function maxBorrow() public view returns (uint256) {
         return (reserve.floorPerDon() * ltvBps) / BPS;
     }
 
-    /// A loan's debt right now: principal + checkpointed interest + interest since the checkpoint.
-    /// Simple (non-compounding) interest on principal, per second.
+    /// What a term of `termSeconds` costs up front, priced on the LIVE FLOOR (the value basis): the
+    /// interest deducted from the disbursement. The borrower still owes back the full draw.
+    function prepaidInterest(uint256 termSeconds) public view returns (uint256) {
+        return (reserve.floorPerDon() * rateBps * termSeconds) / (BPS * YEAR);
+    }
+
+    /// A loan's debt right now: exactly the principal until expiry (the term's interest was prepaid),
+    /// then principal + late interest — simple (non-compounding), per second at `penaltyRateBps`.
+    /// No interest ever refunds.
     function debtOf(uint256 donId) public view returns (uint256) {
         Loan storage l = loans[donId];
         if (l.borrower == address(0)) return 0;
-        return l.principal + l.accrued + _pendingInterest(l);
+        return l.principal + l.lateAccrued + _pendingLate(l);
+    }
+
+    /// The ETH owed at borrow, right now. USD mode when the feed is wired AND a USD price is set: the
+    /// feed converts `originationFeeUsdCents` to wei, guarded by a self-contained staleness check —
+    /// positive answer, updated within FEED_MAX_AGE, round complete. ANY failed check (or a reverting
+    /// feed) falls back to the flat `originationFeeWei`: borrowing must never brick on a dead feed,
+    /// and the worst a hostile feed can do is move a toll inside [flat-fallback, MAX_ORIGINATION_FEE].
+    /// Both configs zero = free.
+    function originationFee() public view returns (uint256) {
+        uint256 cents = originationFeeUsdCents;
+        if (address(ethUsdFeed) != address(0) && cents > 0) {
+            try ethUsdFeed.latestRoundData() returns (
+                uint80 roundId, int256 answer, uint256, uint256 updatedAt, uint80 answeredInRound
+            ) {
+                if (
+                    answer > 0 && updatedAt <= block.timestamp && block.timestamp - updatedAt <= FEED_MAX_AGE
+                        && answeredInRound >= roundId
+                ) {
+                    uint256 fee = (cents * 10 ** (18 + feedDecimals)) / (uint256(answer) * 100);
+                    return fee > MAX_ORIGINATION_FEE ? MAX_ORIGINATION_FEE : fee;
+                }
+            } catch {}
+        }
+        return originationFeeWei;
     }
 
     /// Debt above this is liquidatable. Reads the LIVE floor, so funding the reserve heals loans.
+    /// (The calendar trigger — expiry + grace — is independent of this and never heals.)
     function liquidationThreshold() public view returns (uint256) {
         return (reserve.floorPerDon() * liqThresholdBps) / BPS;
     }
@@ -185,7 +281,8 @@ contract DonLoan is ReentrancyGuard, Guarded {
             address(this),
             l.borrower,
             // Debt rounds UP, floor rounds DOWN — both in the conservative direction, so the whole-token
-            // tuple can only ever overstate risk to the prover, never understate it.
+            // tuple can only ever overstate risk to the prover, never understate it. Debt is
+            // principal-or-more under the term model, so the tuple stays conservative.
             uint64((debtOf(donId) + 1e18 - 1) / 1e18),
             uint64(reserve.floorPerDon() / 1e18),
             uint16(ltvBps),
@@ -193,8 +290,11 @@ contract DonLoan is ReentrancyGuard, Guarded {
         );
     }
 
-    function _pendingInterest(Loan storage l) internal view returns (uint256) {
-        return (l.principal * rateBps * (block.timestamp - l.lastAccrual)) / (BPS * YEAR);
+    /// Late interest since the last late checkpoint. Zero for the whole prepaid term: the checkpoint
+    /// starts AT expiry and only ever moves forward from there.
+    function _pendingLate(Loan storage l) internal view returns (uint256) {
+        if (block.timestamp <= l.lateAccrual) return 0;
+        return (l.principal * penaltyRateBps * (block.timestamp - l.lateAccrual)) / (BPS * YEAR);
     }
 
     /// Route settled interest: `stockShareBps` to the feeSink (stock for staked Dons — borrowing pays
@@ -208,9 +308,10 @@ contract DonLoan is ReentrancyGuard, Guarded {
         if (toFloor > 0) essey.safeTransfer(address(reserve), toFloor);
     }
 
-    function _accrue(Loan storage l) internal {
-        l.accrued += _pendingInterest(l);
-        l.lastAccrual = uint64(block.timestamp);
+    function _accrueLate(Loan storage l) internal {
+        if (block.timestamp <= l.lateAccrual) return; // still inside the prepaid term
+        l.lateAccrued += _pendingLate(l);
+        l.lateAccrual = uint64(block.timestamp);
     }
 
     // ---------------------------------------------------------------- funding
@@ -223,12 +324,22 @@ contract DonLoan is ReentrancyGuard, Guarded {
         emit Funded(msg.sender, amount);
     }
 
-    /// Tune the flat ETH origination fee (treasury = the multisig; capped). 0 = free borrowing.
+    /// Tune the flat ETH origination fee — the fallback under a wired feed, the whole price without
+    /// one (treasury = the multisig; capped). 0 = free borrowing (when USD mode is off too).
     function setOriginationFee(uint256 wei_) external {
         if (msg.sender != treasury) revert NotTreasury();
         if (wei_ > MAX_ORIGINATION_FEE) revert FeeTooHigh();
         originationFeeWei = wei_;
         emit OriginationFeeSet(wei_);
+    }
+
+    /// Tune the USD origination price (treasury = the multisig; capped). Only takes effect while the
+    /// feed is wired and healthy; 0 = USD mode off, flat fee governs.
+    function setOriginationFeeUsdCents(uint256 cents) external {
+        if (msg.sender != treasury) revert NotTreasury();
+        if (cents > MAX_ORIGINATION_FEE_USD_CENTS) revert FeeTooHigh();
+        originationFeeUsdCents = cents;
+        emit OriginationFeeUsdSet(cents);
     }
 
     /// Reclaim IDLE capital only. Outstanding principal has already left the balance, and repayments
@@ -242,88 +353,112 @@ contract DonLoan is ReentrancyGuard, Guarded {
 
     // ---------------------------------------------------------------- borrow / repay
 
-    /// Open a loan against a Don you own: up to `ltvBps` of the live floor, in $ESSEY. The Don is liened
-    /// in place — it stays in your wallet, stays staked, keeps earning — but cannot move until the debt
-    /// clears. One open loan per Don; no top-ups (repay and re-borrow to re-lever).
-    function borrow(uint256 donId, uint256 amount) external payable nonReentrant whenNotFrozen {
-        if (msg.value != originationFeeWei) revert WrongFee();
-        if (amount == 0) revert ZeroAmount();
+    /// Open a fixed-term, FIXED-DRAW loan against a Don you own: exactly `ltvBps` of the live floor,
+    /// in $ESSEY, for `termSeconds` in [MIN_TERM, MAX_TERM]. The term's interest — priced on the same
+    /// floor read (the value basis) — is deducted from the disbursement and routed 70/30 in this same
+    /// tx; the borrower owes back the full draw. `msg.value` must cover `originationFee()` — exactly
+    /// the fee forwards to the feeSink, any excess refunds at the end. The Don is liened in place — it
+    /// stays in your wallet, stays staked, keeps earning — but cannot move until the debt clears. One
+    /// open loan per Don; no top-ups (repay and re-borrow to re-lever onto a risen floor).
+    function borrow(uint256 donId, uint256 termSeconds) external payable nonReentrant whenNotFrozen {
+        uint256 fee = originationFee();
+        if (msg.value < fee) revert WrongFee();
+        if (termSeconds < MIN_TERM || termSeconds > MAX_TERM) revert BadTerm();
         if (don.ownerOf(donId) != msg.sender) revert NotDonOwner();
         if (loans[donId].borrower != address(0)) revert LoanExists();
 
-        uint256 cap = maxBorrow();
-        if (amount > cap) revert ExceedsLtv(amount, cap);
+        // One floor read prices both legs: the draw (ltvBps of it) and the discount-note interest
+        // (rateBps of it, scaled by the term), collected NOW out of the disbursement. The constructor
+        // invariant keeps prepaid strictly below principal — guarded anyway so a degenerate state
+        // fails closed rather than underflowing.
+        uint256 floorNow = reserve.floorPerDon();
+        uint256 principal = (floorNow * ltvBps) / BPS;
+        if (principal == 0) revert ZeroAmount(); // an unfunded floor lends nothing
+        uint256 prepaid = (floorNow * rateBps * termSeconds) / (BPS * YEAR);
+        if (prepaid >= principal) revert PrepaidExceedsPrincipal();
 
         uint64 n = ++loanNonce;
+        uint64 expiry = uint64(block.timestamp + termSeconds);
         loans[donId] = Loan({
             borrower: msg.sender,
-            principal: amount,
-            accrued: 0,
-            lastAccrual: uint64(block.timestamp),
+            principal: principal,
+            lateAccrued: 0,
+            expiry: expiry,
+            lateAccrual: expiry,
             nonce: n
         });
-        totalPrincipal += amount;
+        totalPrincipal += principal;
 
         don.setLien(donId, true); // transfer-locked in the borrower's wallet
-        if (msg.value > 0) {
-            (bool ok,) = feeSink.call{value: msg.value}(""); // joins the mint-fee ETH->stock pipe
+        if (fee > 0) {
+            (bool ok,) = feeSink.call{value: fee}(""); // exactly the fee joins the mint-fee ETH->stock pipe
             if (!ok) revert FeeForwardFailed();
-            emit OriginationPaid(donId, msg.value);
+            emit OriginationPaid(donId, fee);
         }
-        essey.safeTransfer(msg.sender, amount);
-        emit Borrowed(donId, msg.sender, amount, n);
+        _routeInterest(prepaid); // banked up front — 70% stock pot, 30% floor, in the borrow tx
+        essey.safeTransfer(msg.sender, principal - prepaid);
+        emit Borrowed(donId, msg.sender, principal, uint64(termSeconds), prepaid, n);
+        if (msg.value > fee) {
+            // Overpayment (a fee quote can move between quote and inclusion) returns to the payer,
+            // last — state fully settled, still under the reentrancy guard.
+            (bool ok,) = msg.sender.call{value: msg.value - fee}("");
+            if (!ok) revert RefundFailed();
+        }
     }
 
-    /// Pay a loan down (anyone may pay — paying someone's debt is a gift). Interest settles first and is
-    /// routed 70/30 (stock pot / floor); principal re-enters the lendable balance.
+    /// Pay a loan down (anyone may pay — paying someone's debt is a gift). Late interest settles first
+    /// and is routed 70/30 (stock pot / floor); principal re-enters the lendable balance. The prepaid
+    /// term interest is never part of debt — it was collected at borrow and never refunds.
     /// Full repayment releases the lien. Overpayment is not pulled: at most the outstanding debt moves.
     function repay(uint256 donId, uint256 amount) external nonReentrant returns (uint256 paid) {
         Loan storage l = loans[donId];
         if (l.borrower == address(0)) revert NoLoan();
         if (amount == 0) revert ZeroAmount();
-        _accrue(l);
+        _accrueLate(l);
 
-        uint256 interestDue = l.accrued;
-        uint256 interestPaid = amount < interestDue ? amount : interestDue;
-        uint256 principalPaid = amount - interestPaid;
+        uint256 lateDue = l.lateAccrued;
+        uint256 latePaid = amount < lateDue ? amount : lateDue;
+        uint256 principalPaid = amount - latePaid;
         if (principalPaid > l.principal) principalPaid = l.principal;
-        paid = interestPaid + principalPaid;
+        paid = latePaid + principalPaid;
 
-        l.accrued = interestDue - interestPaid;
+        l.lateAccrued = lateDue - latePaid;
         l.principal -= principalPaid;
         totalPrincipal -= principalPaid;
 
         essey.safeTransferFrom(msg.sender, address(this), paid);
-        _routeInterest(interestPaid); // 70% stock for staked Dons / 30% floor for everyone
+        _routeInterest(latePaid); // 70% stock for staked Dons / 30% floor for everyone
 
-        bool closed = l.principal == 0 && l.accrued == 0;
+        bool closed = l.principal == 0 && l.lateAccrued == 0;
         if (closed) {
             delete loans[donId];
             don.setLien(donId, false); // the Don walks free
         }
-        emit Repaid(donId, msg.sender, interestPaid, principalPaid, closed);
+        emit Repaid(donId, msg.sender, latePaid, principalPaid, closed);
     }
 
     // ---------------------------------------------------------------- liquidation
 
-    /// Liquidate an underwater loan (debt above `liqThresholdBps` of the LIVE floor). Permissionless and
+    /// Liquidate a defaulted loan — either trigger opens it: debt above `liqThresholdBps` of the LIVE
+    /// floor (the ratio), or `expiry + defaultGraceSeconds` passed (the calendar). Permissionless and
     /// capital-free: the facility seizes the liened Don, redeems it at the DonReserve floor, and settles
-    /// from the proceeds — tip to the caller, interest split 70/30 (stock/floor), principal back to the lendable
-    /// balance, surplus to the borrower. The Don is consumed by the redemption (locked in the reserve,
-    /// Vault and membership forfeited). If proceeds somehow fall short (they cannot while the floor is
-    /// monotone and the 20pp gap holds), the shortfall is written off against the facility — borrowers
-    /// and the reserve are never owed by anyone else.
+    /// from the proceeds — tip to the caller, late interest split 70/30 (stock/floor), principal back to
+    /// the lendable balance, surplus to the borrower. The Don is consumed by the redemption (locked in
+    /// the reserve, Vault and membership forfeited). If proceeds somehow fall short (they cannot while
+    /// the floor is monotone and the 20pp gap holds at the calendar trigger), the shortfall is written
+    /// off against the facility — borrowers and the reserve are never owed by anyone else.
     function liquidate(uint256 donId) external nonReentrant {
         Loan storage l = loans[donId];
         address borrower = l.borrower;
         if (borrower == address(0)) revert NoLoan();
-        _accrue(l);
+        _accrueLate(l);
 
-        uint256 debt = l.principal + l.accrued;
+        uint256 debt = l.principal + l.lateAccrued;
         uint256 threshold = liquidationThreshold();
-        if (debt <= threshold) revert NotLiquidatable(debt, threshold);
+        bool pastDefault = block.timestamp > uint256(l.expiry) + defaultGraceSeconds;
+        if (debt <= threshold && !pastDefault) revert NotLiquidatable(debt, threshold);
 
-        uint256 interestDue = l.accrued;
+        uint256 lateDue = l.lateAccrued;
         uint256 principalDue = l.principal;
         totalPrincipal -= principalDue;
         delete loans[donId]; // effects fully settled before any external call
@@ -335,18 +470,18 @@ contract DonLoan is ReentrancyGuard, Guarded {
         don.approve(address(reserve), donId);
         uint256 proceeds = reserve.redeem(donId);
 
-        // Waterfall: caller tip -> interest (split stock/floor) -> principal (stays lendable) -> borrower.
+        // Waterfall: caller tip -> late interest (split stock/floor) -> principal (stays lendable) -> borrower.
         uint256 tip = (proceeds * liqTipBps) / BPS;
         uint256 available = proceeds - tip;
-        uint256 interestRecovered = available < interestDue ? available : interestDue;
-        available -= interestRecovered;
+        uint256 lateRecovered = available < lateDue ? available : lateDue;
+        available -= lateRecovered;
         uint256 principalRecovered = available < principalDue ? available : principalDue;
         available -= principalRecovered;
 
         if (tip > 0) essey.safeTransfer(msg.sender, tip);
-        _routeInterest(interestRecovered); // same 70/30 split as a voluntary repay
+        _routeInterest(lateRecovered); // same 70/30 split as a voluntary repay
         if (available > 0) essey.safeTransfer(borrower, available); // surplus is the borrower's
 
-        emit Liquidated(donId, msg.sender, proceeds, interestRecovered + principalRecovered, available, tip);
+        emit Liquidated(donId, msg.sender, proceeds, lateRecovered + principalRecovered, available, tip);
     }
 }

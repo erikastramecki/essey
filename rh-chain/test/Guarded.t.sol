@@ -11,6 +11,7 @@ import {DonReserve} from "../src/market/DonReserve.sol";
 import {DonExchange, IDonFloor} from "../src/market/DonExchange.sol";
 import {DonLoan} from "../src/market/DonLoan.sol";
 import {Guarded} from "../src/market/Guarded.sol";
+import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 
 /// The freeze-only guardian (founder-approved): freezing stops NEW activity on the loan facility and
 /// the desk — and provably cannot touch a single exit. Proven on the real contracts, mid-flight.
@@ -41,7 +42,24 @@ contract GuardedTest is Test, IERC721Receiver {
             IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)),
             feeSink, treasury, address(this), FLOOR, 800, 1200, 7000, guardian
         );
-        loan = new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 7000, 1500, 100, 7000, guardian);
+        loan = new DonLoan(
+            DonLoan.Config({
+                essey: IERC20(address(essey)),
+                don: don,
+                reserve: reserve,
+                feeSink: feeSink,
+                treasury: treasury,
+                ltvBps: 5000,
+                liqThresholdBps: 7000,
+                rateBps: 1500,
+                penaltyRateBps: 3000,
+                defaultGraceSeconds: 30 days,
+                liqTipBps: 100,
+                stockShareBps: 7000,
+                ethUsdFeed: AggregatorV3Interface(address(0)),
+                guardian: guardian
+            })
+        );
         don.setLienManager(address(loan));
 
         essey.mint(address(this), CAP * FLOOR + 2_000_000e18);
@@ -80,9 +98,8 @@ contract GuardedTest is Test, IERC721Receiver {
         vm.prank(alice);
         uint256 boughtId = ex.buy(type(uint256).max); // desk reserve now holds the price
         uint256 loanId = don.mint(alice, keccak256("collateral"));
-        uint256 borrowCap = loan.maxBorrow(); // hoisted: a view call would consume the prank
         vm.prank(alice);
-        loan.borrow(loanId, borrowCap);
+        loan.borrow(loanId, 30 days); // fixed draw: ltvBps of the live floor
 
         vm.prank(guardian);
         loan.freeze();
@@ -92,7 +109,7 @@ contract GuardedTest is Test, IERC721Receiver {
         // NEW ACTIVITY: all blocked.
         vm.prank(alice);
         vm.expectRevert(Guarded.IsFrozen.selector);
-        loan.borrow(boughtId, 1e18);
+        loan.borrow(boughtId, 30 days);
         vm.prank(alice);
         vm.expectRevert(Guarded.IsFrozen.selector);
         ex.buy(type(uint256).max);
@@ -128,10 +145,9 @@ contract GuardedTest is Test, IERC721Receiver {
     /// Liquidation is a settlement, not new activity — it must work while frozen (recovery can't wait).
     function test_LiquidationWorksWhileFrozen() public {
         uint256 id = don.mint(alice, keccak256("borrower"));
-        uint256 cap = loan.maxBorrow();
         vm.prank(alice);
-        loan.borrow(id, cap);
-        vm.warp(block.timestamp + 3650 days); // deep underwater
+        loan.borrow(id, 30 days);
+        vm.warp(block.timestamp + 3650 days); // deep past expiry + grace, deep late accrual
 
         vm.prank(guardian);
         loan.freeze();
