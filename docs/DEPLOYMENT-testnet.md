@@ -115,3 +115,14 @@ State: reserve funded (floor 300,030), loan pot 100M, AMM seeded 50 (rehearsal f
 Rehearsal proven on-chain: mint #51 (ETH fee) → buy #50 → borrow 150,015 → repay+lien-release → sell @276,027 net.
 Interim: feeSink=treasury (DonFeeRouter awaits WETH/ETH-feed mocks); reuses mock USDG `0x7461…5De2` +
 BundleConverter `0x3c6a…7fb0` (Bell default payout = BUNDLE sentinel `0xB0B1`).
+
+### Dons fee route (2026-08-11, testnet mocks)
+| Contract | Address |
+|---|---|
+| DonFeeRouter (feeSink; ETH+ESSEY → USDG → Bell) | `0x6EC22ab8442de2F780477d9A56926e0BA0382032` |
+| Mock WETH | `0x731cEb38B15B98F624609e318e3168F292068C09` |
+| Mock ETH/USD feed ($4,500) | `0x64c3599454FE31A14814ab86C3f0863dE990fe36` |
+| Mock swap router (4,500 USDG/WETH) | `0xFD919Ddea044bab5BC3026EA0A2386fD202b602d` |
+
+Proven live: mintCustom fee (0.0025 ETH) → flushEth → **Bell pot 11.25 USDG**. FeedKeeper now stamps 7 feeds
+(added ETH/USD). REMINDER: the feed-keeper cron is still not installed — `23 */2 * * * cd ~/Developer/assay/rh-chain && ./feed-keeper.sh`.
