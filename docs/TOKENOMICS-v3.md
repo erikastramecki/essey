@@ -72,7 +72,7 @@ contract's immutable 8,888 cap:
   the exchange's deploy-time **price minimum**; the desk trades at `max(live floor, 300,000)`.
 - **Redemption is always open** — any Don's owner can redeem for the full pro-rata floor share, no window, no
   admin. Redemption consumes the Don (locked in the reserve permanently, Vault included).
-- **Monotone by construction.** Funding raises the floor (all loan interest flows here); redemptions are
+- **Monotone by construction.** Funding raises the floor (30% of loan interest flows here); redemptions are
   pro-rata and can never lower it for anyone else. **Anti-dump = the floor itself** — a Don can never trade
   below it (arbitrage), so no vesting or cooldown is needed.
 - **Nothing to trust:** `DonReserve` is immutable — no admin, no upgrade path, no `backedSupply` setter; the
@@ -153,7 +153,7 @@ Don plugs in as a new collateral type:
   the debt clears; dividends keep accruing to the Don's Vault throughout.
 - **Repayment is manual** (`repay`, callable by anyone on the borrower's behalf): interest settles first,
   then principal; full repayment releases the lien immediately. There is no auto-sweep from Vault to debt.
-- **100% of interest → `DonReserve`** — borrowing activity raises the floor under every Don, which in turn
+- **Interest splits 70/30**: 70% → `feeSink` (stock for staked Dons — borrowing pays the room, same split as AMM fees), 30% → `DonReserve` — which in turn
   heals every open loan (liquidation reads the *live* floor).
 - **Liquidation waterfall:** the Don is seized and redeemed at the floor; proceeds pay the caller tip →
   accrued interest → principal → **surplus returned to the borrower**. The Don itself is consumed (locked in

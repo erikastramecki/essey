@@ -84,11 +84,11 @@ export const EXPLAINERS: Record<ExplainerKey, Explainer> = {
   },
   borrow: {
     title: "Borrow",
-    body: "Borrow up to {maxBorrow} $ESSEY — 50% of this Don's floor — at 15% APR, simple interest. The Don stays in your wallet, still staked and earning, but can't be sold, swapped, or redeemed until the debt clears. All interest you pay raises the floor for every Don, including this one.",
+    body: "Borrow up to {maxBorrow} $ESSEY — 50% of this Don's floor — at 15% APR, simple interest. The Don stays in your wallet, still staked and earning, but can't be sold, swapped, or redeemed until the debt clears. Interest you pay is split like every Essey fee: 70% buys stock for staked Dons, 30% raises the floor for every Don — including this one.",
   },
   repay: {
     title: "Repay",
-    body: "Payments settle interest first, then principal; interest goes straight to the reserve and raises everyone's floor. Repay in full and the lien releases immediately — your Don walks free. Overpaying is safe: only what you owe is taken.",
+    body: "Payments settle interest first, then principal; interest splits 70% to the stock pot for staked Dons, 30% to the reserve — everyone's floor rises. Repay in full and the lien releases immediately — your Don walks free. Overpaying is safe: only what you owe is taken.",
   },
   "liquidation-risk": {
     title: "Liquidation risk",

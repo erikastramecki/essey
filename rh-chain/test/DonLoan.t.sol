@@ -20,6 +20,7 @@ contract DonLoanTest is Test {
     DonLoan loan;
 
     address treasury = address(0x7EA);
+    address feeSink = address(0x51CC); // the fee->stock router stand-in
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
     address keeper = address(0xC0FFEE);
@@ -30,12 +31,13 @@ contract DonLoanTest is Test {
     uint256 constant LIQ = 7000; // 70% of the live floor
     uint256 constant RATE = 1500; // 15% APR simple
     uint256 constant TIP = 100; // 1% of liquidation proceeds
+    uint256 constant STOCK_SHARE = 7000; // interest: 70% -> feeSink, 30% -> floor
 
     function setUp() public {
         essey = new ERC20Mock();
         don = new Don("Essey Don", "DON", CAP, address(this)); // test = minter
         reserve = new DonReserve(IERC20(address(essey)), IERC721(address(don)));
-        loan = new DonLoan(IERC20(address(essey)), don, reserve, treasury, LTV, LIQ, RATE, TIP);
+        loan = new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, RATE, TIP, STOCK_SHARE);
         don.setLienManager(address(loan));
 
         // Seed the floor (300k/Don over the full cap) and the lending pot.
@@ -62,19 +64,19 @@ contract DonLoanTest is Test {
 
     function test_ConstructorGuards() public {
         vm.expectRevert(DonLoan.BadConfig.selector); // gap below 20pp
-        new DonLoan(IERC20(address(essey)), don, reserve, treasury, 5000, 6900, RATE, TIP);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 6900, RATE, TIP, STOCK_SHARE);
         vm.expectRevert(DonLoan.BadConfig.selector); // threshold above 90%
-        new DonLoan(IERC20(address(essey)), don, reserve, treasury, 5000, 9100, RATE, TIP);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, 5000, 9100, RATE, TIP, STOCK_SHARE);
         vm.expectRevert(DonLoan.BadConfig.selector); // tip above cap
-        new DonLoan(IERC20(address(essey)), don, reserve, treasury, LTV, LIQ, RATE, 501);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, RATE, 501, STOCK_SHARE);
         vm.expectRevert(DonLoan.BadConfig.selector); // zero rate
-        new DonLoan(IERC20(address(essey)), don, reserve, treasury, LTV, LIQ, 0, TIP);
+        new DonLoan(IERC20(address(essey)), don, reserve, feeSink, treasury, LTV, LIQ, 0, TIP, STOCK_SHARE);
 
         // reserve/don pairing must match - a foreign reserve can't price this collection
         Don other = new Don("Other", "OTH", CAP, address(this));
         DonReserve otherReserve = new DonReserve(IERC20(address(essey)), IERC721(address(other)));
         vm.expectRevert(DonLoan.BadConfig.selector);
-        new DonLoan(IERC20(address(essey)), don, otherReserve, treasury, LTV, LIQ, RATE, TIP);
+        new DonLoan(IERC20(address(essey)), don, otherReserve, feeSink, treasury, LTV, LIQ, RATE, TIP, STOCK_SHARE);
     }
 
     // ---------------------------------------------------------------- borrow
@@ -163,8 +165,11 @@ contract DonLoanTest is Test {
 
         assertEq(loan.debtOf(id), principal, "interest settled first");
         assertTrue(don.liened(id), "still in debt -> still liened");
-        assertGt(reserve.floorPerDon(), floorBefore, "interest went to the reserve: EVERY Don's floor rose");
-        assertEq(reserve.floorPerDon() - floorBefore, interest / CAP, "pro-rata across the cap");
+        uint256 toStock = (interest * STOCK_SHARE) / 10_000;
+        uint256 toFloor = interest - toStock;
+        assertEq(essey.balanceOf(feeSink), toStock, "70% of interest -> the stock pot (borrowing pays the room)");
+        assertGt(reserve.floorPerDon(), floorBefore, "30% went to the reserve: EVERY Don's floor rose");
+        assertEq(reserve.floorPerDon() - floorBefore, toFloor / CAP, "floor share pro-rata across the cap");
     }
 
     function test_FullRepayReleasesTheLien() public {
@@ -249,8 +254,10 @@ contract DonLoanTest is Test {
         assertEq(loan.totalPrincipal(), 0);
         assertEq(essey.balanceOf(alice) - aliceBefore, surplus, "surplus returns to the borrower");
         assertEq(loan.lendable() - potBefore, principal, "principal restored to the pot");
-        // Reserve: -proceeds (redeem) +interest (flywheel). Net change = interest - proceeds.
-        assertEq(reserveBefore - essey.balanceOf(address(reserve)), proceeds - interest, "interest re-funds the floor");
+        uint256 interestToFloor = interest - (interest * STOCK_SHARE) / 10_000;
+        assertEq(essey.balanceOf(feeSink), (interest * STOCK_SHARE) / 10_000, "70% of recovered interest -> stock pot");
+        // Reserve: -proceeds (redeem) +30% of interest. Net change = proceeds - interestToFloor.
+        assertEq(reserveBefore - essey.balanceOf(address(reserve)), proceeds - interestToFloor, "floor share re-funds the reserve");
     }
 
     /// Deep insolvency (nobody liquidated for years): waterfall saturates, facility eats the loss,
@@ -272,6 +279,7 @@ contract DonLoanTest is Test {
         uint256 available = FLOOR - tip; // 297k
         assertEq(essey.balanceOf(keeper), tip);
         assertEq(essey.balanceOf(alice), aliceBefore, "no surplus for the borrower");
+        assertEq(essey.balanceOf(feeSink), (interest * STOCK_SHARE) / 10_000, "recovered interest still split 70/30");
         assertEq(loan.lendable() - potBefore, available - interest, "partial principal recovery, loss absorbed");
         assertEq(loan.debtOf(id), 0, "written off - nobody is chased for the shortfall");
     }
@@ -363,7 +371,8 @@ contract DonLoanTest is Test {
         uint256 hold = bound(uint256(dt), 1 hours, 3650 days);
 
         uint256 total0 = essey.balanceOf(address(loan)) + essey.balanceOf(address(reserve))
-            + essey.balanceOf(alice) + essey.balanceOf(keeper) + essey.balanceOf(treasury);
+            + essey.balanceOf(alice) + essey.balanceOf(keeper) + essey.balanceOf(treasury)
+            + essey.balanceOf(feeSink);
 
         vm.prank(alice);
         loan.borrow(id, borrowed);
@@ -383,7 +392,8 @@ contract DonLoanTest is Test {
         }
 
         uint256 total1 = essey.balanceOf(address(loan)) + essey.balanceOf(address(reserve))
-            + essey.balanceOf(alice) + essey.balanceOf(keeper) + essey.balanceOf(treasury);
+            + essey.balanceOf(alice) + essey.balanceOf(keeper) + essey.balanceOf(treasury)
+            + essey.balanceOf(feeSink);
         assertEq(total1, total0, "conservation: the facility neither prints nor burns ESSEY");
         assertEq(loan.debtOf(id), 0, "loan settled either way");
     }

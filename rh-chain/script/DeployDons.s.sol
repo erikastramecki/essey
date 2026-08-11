@@ -49,6 +49,7 @@ contract DeployDons is Script {
     uint256 constant LIQ_THRESHOLD_BPS = 7000;
     uint256 constant RATE_BPS = 1500;
     uint256 constant LIQ_TIP_BPS = 100;
+    uint256 constant LOAN_STOCK_SHARE_BPS = 7000; // interest: 70% -> feeSink (stock), 30% -> floor
 
     uint256 constant MIN_OUT_BPS = 9700; // DonFeeRouter slippage floor (>= 9000 enforced)
 
@@ -154,7 +155,7 @@ contract DeployDons is Script {
             IERC721(address(d.don)), c.essey, IDonFloor(address(d.reserve)), sink, c.treasury, c.seeder,
             c.donPrice, SWAP_FEE_BPS, SNIPE_FEE_BPS, STOCK_SHARE_BPS
         );
-        d.loan = new DonLoan(c.essey, d.don, d.reserve, c.treasury, LTV_BPS, LIQ_THRESHOLD_BPS, RATE_BPS, LIQ_TIP_BPS);
+        d.loan = new DonLoan(c.essey, d.don, d.reserve, sink, c.treasury, LTV_BPS, LIQ_THRESHOLD_BPS, RATE_BPS, LIQ_TIP_BPS, LOAN_STOCK_SHARE_BPS);
 
         // One-shot wiring (broadcaster must be admin; on a multisig deploy these are ITS txs).
         d.distributor.initDon(d.don);
@@ -189,7 +190,7 @@ contract DeployDons is Script {
         console.log(" 5. distributor.setPublicOpen(true) when the mint goes live");
         if (address(d.feeRouter) == address(0)) {
             console.log("NOTE: fee route env unset -> feeSink=TREASURY (interim). Wire DonFeeRouter, then");
-            console.log("      distributor.setFeeSink(router). The exchange feeSink is IMMUTABLE = treasury");
+            console.log("      distributor.setFeeSink(router). The exchange AND loan feeSinks are IMMUTABLE = treasury");
             console.log("      until a redeploy - wire WETH/ETH_FEED/USDG_FEED/SWAP_ROUTER before mainnet.");
         }
     }

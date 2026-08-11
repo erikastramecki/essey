@@ -178,7 +178,7 @@ export function HowItWorksPage() {
         </div>
         <ul style={{ margin: "0 0 14px", paddingLeft: 22, color: C.dim, fontSize: 15.5, lineHeight: 1.8 }}>
           <li>{md("**Redemption is always open.** At any moment, any Don's owner can redeem it against the reserve and receive its full floor share in $ESSEY. No permission, no window, no admin.")}</li>
-          <li>{md("**The floor only rises.** Anyone can fund the reserve (and the protocol routinely does — all loan interest goes here), but the only way $ESSEY leaves is a redemption, which pays exactly one Don's pro-rata share. The math guarantees the floor for everyone else never drops.")}</li>
+          <li>{md("**The floor only rises.** Anyone can fund the reserve (and the protocol routinely does — 30% of all loan interest goes here), but the only way $ESSEY leaves is a redemption, which pays exactly one Don's pro-rata share. The math guarantees the floor for everyone else never drops.")}</li>
           <li>{md("**Nobody can touch it.** The reserve has no owner, no admin, no upgrade path, and no setter on its accounting. The backed-supply figure is read from the Don contract's own immutable cap. There is nothing to rug.")}</li>
         </ul>
         <Warn title="Redeeming is a one-way door">
@@ -296,13 +296,13 @@ export function HowItWorksPage() {
         <ul style={{ margin: "0 0 14px", paddingLeft: 22, color: C.dim, fontSize: 15.5, lineHeight: 1.8 }}>
           <li>{md("**The Don stays in your wallet — still staked, still earning.** A lien blocks it from being sold, swapped, or redeemed until the debt clears; nothing else changes. Your seat keeps collecting stock the entire time you're borrowed against it.")}</li>
           <li>{md("Repay any amount, any time; anyone may repay on your behalf. Interest settles first, then principal. Full repayment releases the lien on the spot.")}</li>
-          <li>{md("**Every wei of interest is paid into the DonReserve** — borrowing activity literally raises the floor under every Don, including yours.")}</li>
+          <li>{md("**Interest splits 70/30 — stock pot / floor** — borrowing pays staked Dons in stock AND raises the floor under every Don, including yours.")}</li>
         </ul>
         <P>{md("**Liquidation.** If your debt exceeds **70% of the live floor**, anyone can trigger liquidation: the facility seizes the Don and redeems it at the floor. The debt is settled from the proceeds, a 1% tip pays the caller, and **any surplus is returned to you**. But the Don itself is consumed — locked in the reserve, seat gone.")}</P>
         <Warn title="The Vault goes down with the ship">
           {md("A liquidated (or redeemed) Don takes its Vault with it — including every unclaimed dividend inside. Claim regularly, and service your loan.")}
         </Warn>
-        <P>{md("The math is deliberately forgiving: at a full 50% borrow, simple interest takes about **2.7 years** to push you from 50% to the 70% threshold — and that assumes the floor never rises, which it does every time anyone anywhere pays interest. Funding the reserve heals every open loan.")}</P>
+        <P>{md("The math is deliberately forgiving: at a full 50% borrow, simple interest takes about **2.7 years** to push you from 50% to the 70% threshold — and that assumes the floor never rises, which it does every time interest flows (30% of every payment lands in the reserve — plus anyone may fund it). Funding the reserve heals every open loan.")}</P>
         <Card accent={`${C.gold}44`} style={{ background: "#17140c" }}>
           <div style={{ fontSize: 15, lineHeight: 1.7, color: C.dim }}>
             {md("Because debt and collateral are both in $ESSEY, there is **no price oracle to fail and no keeper to trust** — and every open loan emits a solvency statement that Essey's zero-knowledge prover verifies on-chain: `debt ≤ 50% of floor` at origination, proven cryptographically, not promised.")}
@@ -321,7 +321,7 @@ export function HowItWorksPage() {
           <li>{md("**Mint & reroll fees (ETH):** 100% → swapped to USDG → the Bell → tokenized stock for staked Dons.")}</li>
           <li>{md("**Trade fees (8% / 12%):** 70% → the Bell → stock for staked Dons; 30% → treasury.")}</li>
           <li>{md("**Activation fees ($ESSEY):** 50% burned (supply shrinks), 50% treasury.")}</li>
-          <li>{md("**Loan interest ($ESSEY):** 100% → the DonReserve → the floor rises for all 8,888.")}</li>
+          <li>{md("**Loan interest ($ESSEY):** 70% → stock for staked Dons / 30% → the DonReserve floor — the same split as AMM fees.")}</li>
         </ul>
         <P>{md("More minting means more stock for seats. More trading means more stock for seats. More borrowing means a higher floor — which means a higher trade price, a bigger max borrow, and a stronger backstop under everything. There is no fee in the system that leaks out of it.")}</P>
         {/* Flywheel loop — from the fee-flow diagram set (2026-08-11) */}
@@ -367,7 +367,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What exactly is the floor and can it go down?",
-    a: "Floor = reserve balance ÷ Dons still backed. It's funded with 2,666,666,666 $ESSEY against 8,888 Dons — 300,030 $ESSEY per Don today. It cannot go down: funding raises it, redemptions are pro-rata (neutral, with rounding dust left in the reserve), and all loan interest flows into it. It only rises.",
+    a: "Floor = reserve balance ÷ Dons still backed. It's funded with 2,666,666,666 $ESSEY against 8,888 Dons — 300,030 $ESSEY per Don today. It cannot go down: funding raises it, redemptions are pro-rata (neutral, with rounding dust left in the reserve), and 30% of all loan interest flows into it. It only rises.",
   },
   {
     q: "What's \"provable solvency\"?",
@@ -411,7 +411,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How close is liquidation, really?",
-    a: "You're liquidatable only when debt exceeds 70% of the live floor. Borrowing the full 50% at 15% simple APR takes about 2.7 years to drift to 70% — assuming the floor never rises, which it does every time anyone pays interest anywhere in the system. Liquidation checks the live floor, so a rising floor actively heals every open loan.",
+    a: "You're liquidatable only when debt exceeds 70% of the live floor. Borrowing the full 50% at 15% simple APR takes about 2.7 years to drift to 70% — assuming the floor never rises, which it does as interest and fees flow into the reserve. Liquidation checks the live floor, so a rising floor actively heals every open loan.",
   },
   {
     q: "What do I lose if I do get liquidated?",

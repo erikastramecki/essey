@@ -29,8 +29,10 @@ import {DonReserve} from "./DonReserve.sol";
 /// the reserve, membership forfeited). WARNING to borrowers (surface in UI): the Don's Vault — with any
 /// unclaimed dividends — travels with the redeemed Don and is forfeited too; service your loan.
 ///
-/// THE FLYWHEEL: every wei of interest (on repay and on liquidation recovery) is sent to the
-/// DonReserve, raising the floor for every Don. Borrowing activity strengthens the collateral of all.
+/// THE FLYWHEEL: interest (on repay and on liquidation recovery) is SPLIT — `stockShareBps` (70%) to
+/// `feeSink`, the fee->stock router that buys Robinhood stock for staked Dons, and the remainder (30%)
+/// to the DonReserve, raising the floor for every Don. Borrowing activity visibly pays the room AND
+/// hardens everyone's collateral — the same 70/30 shape the AMM's fees already follow.
 ///
 /// PROVABLE SOLVENCY (dregg): every loan stores its canonical solvency tuple — (facility, borrower,
 /// debt, floor, ltvBps, nonce), amounts in WHOLE ESSEY so they fit the circuit's 64-bit bounds — which
@@ -45,13 +47,15 @@ contract DonLoan is ReentrancyGuard {
 
     IERC20 public immutable essey;
     Don public immutable don;
-    DonReserve public immutable reserve; // floor source, redemption sink for seizures, interest sink
+    DonReserve public immutable reserve; // floor source, redemption sink for seizures, floor-share sink
+    address public immutable feeSink; // stockShareBps of interest -> the fee->stock router (pays staked Dons)
     address public immutable treasury; // may reclaim idle (unlent) funding only
 
     uint256 public immutable ltvBps; // 5000 = borrow up to 50% of the floor
     uint256 public immutable liqThresholdBps; // 7000 = liquidatable once debt > 70% of the LIVE floor
     uint256 public immutable rateBps; // 1500 = 15% APR, simple (non-compounding) interest
     uint256 public immutable liqTipBps; // caller's cut of liquidation proceeds (e.g. 100 = 1%)
+    uint256 public immutable stockShareBps; // 7000 = 70% of interest -> feeSink; remainder -> the floor
 
     uint256 internal constant BPS = 10_000;
     uint256 internal constant YEAR = 365 days;
@@ -99,17 +103,19 @@ contract DonLoan is ReentrancyGuard {
         IERC20 essey_,
         Don don_,
         DonReserve reserve_,
+        address feeSink_,
         address treasury_,
         uint256 ltvBps_,
         uint256 liqThresholdBps_,
         uint256 rateBps_,
-        uint256 liqTipBps_
+        uint256 liqTipBps_,
+        uint256 stockShareBps_
     ) {
         if (
             address(essey_) == address(0) || address(don_) == address(0) || address(reserve_) == address(0)
-                || treasury_ == address(0) || ltvBps_ == 0 || ltvBps_ + MIN_RISK_GAP_BPS > liqThresholdBps_
-                || liqThresholdBps_ > MAX_LIQ_THRESHOLD_BPS || rateBps_ == 0 || rateBps_ > BPS
-                || liqTipBps_ > MAX_TIP_BPS
+                || feeSink_ == address(0) || treasury_ == address(0) || ltvBps_ == 0
+                || ltvBps_ + MIN_RISK_GAP_BPS > liqThresholdBps_ || liqThresholdBps_ > MAX_LIQ_THRESHOLD_BPS
+                || rateBps_ == 0 || rateBps_ > BPS || liqTipBps_ > MAX_TIP_BPS || stockShareBps_ > BPS
         ) revert BadConfig();
         // The reserve must actually be the floor of THIS Don — a mismatched pairing would let borrowing
         // against one collection be priced by another's reserve.
@@ -117,11 +123,13 @@ contract DonLoan is ReentrancyGuard {
         essey = essey_;
         don = don_;
         reserve = reserve_;
+        feeSink = feeSink_;
         treasury = treasury_;
         ltvBps = ltvBps_;
         liqThresholdBps = liqThresholdBps_;
         rateBps = rateBps_;
         liqTipBps = liqTipBps_;
+        stockShareBps = stockShareBps_;
     }
 
     // ---------------------------------------------------------------- views
@@ -173,6 +181,17 @@ contract DonLoan is ReentrancyGuard {
 
     function _pendingInterest(Loan storage l) internal view returns (uint256) {
         return (l.principal * rateBps * (block.timestamp - l.lastAccrual)) / (BPS * YEAR);
+    }
+
+    /// Route settled interest: `stockShareBps` to the feeSink (stock for staked Dons — borrowing pays
+    /// the room), the remainder to the DonReserve (every Don's floor rises). Conservation is exact:
+    /// the two legs always sum to `amount`.
+    function _routeInterest(uint256 amount) internal {
+        if (amount == 0) return;
+        uint256 toStock = (amount * stockShareBps) / BPS;
+        uint256 toFloor = amount - toStock;
+        if (toStock > 0) essey.safeTransfer(feeSink, toStock);
+        if (toFloor > 0) essey.safeTransfer(address(reserve), toFloor);
     }
 
     function _accrue(Loan storage l) internal {
@@ -228,7 +247,7 @@ contract DonLoan is ReentrancyGuard {
     }
 
     /// Pay a loan down (anyone may pay — paying someone's debt is a gift). Interest settles first and is
-    /// forwarded to the DonReserve, raising every Don's floor; principal re-enters the lendable balance.
+    /// routed 70/30 (stock pot / floor); principal re-enters the lendable balance.
     /// Full repayment releases the lien. Overpayment is not pulled: at most the outstanding debt moves.
     function repay(uint256 donId, uint256 amount) external nonReentrant returns (uint256 paid) {
         Loan storage l = loans[donId];
@@ -247,7 +266,7 @@ contract DonLoan is ReentrancyGuard {
         totalPrincipal -= principalPaid;
 
         essey.safeTransferFrom(msg.sender, address(this), paid);
-        if (interestPaid > 0) essey.safeTransfer(address(reserve), interestPaid); // floor rises for everyone
+        _routeInterest(interestPaid); // 70% stock for staked Dons / 30% floor for everyone
 
         bool closed = l.principal == 0 && l.accrued == 0;
         if (closed) {
@@ -261,7 +280,7 @@ contract DonLoan is ReentrancyGuard {
 
     /// Liquidate an underwater loan (debt above `liqThresholdBps` of the LIVE floor). Permissionless and
     /// capital-free: the facility seizes the liened Don, redeems it at the DonReserve floor, and settles
-    /// from the proceeds — tip to the caller, interest to the reserve, principal back to the lendable
+    /// from the proceeds — tip to the caller, interest split 70/30 (stock/floor), principal back to the lendable
     /// balance, surplus to the borrower. The Don is consumed by the redemption (locked in the reserve,
     /// Vault and membership forfeited). If proceeds somehow fall short (they cannot while the floor is
     /// monotone and the 20pp gap holds), the shortfall is written off against the facility — borrowers
@@ -288,7 +307,7 @@ contract DonLoan is ReentrancyGuard {
         don.approve(address(reserve), donId);
         uint256 proceeds = reserve.redeem(donId);
 
-        // Waterfall: caller tip -> interest (to the reserve) -> principal (stays lendable) -> borrower.
+        // Waterfall: caller tip -> interest (split stock/floor) -> principal (stays lendable) -> borrower.
         uint256 tip = (proceeds * liqTipBps) / BPS;
         uint256 available = proceeds - tip;
         uint256 interestRecovered = available < interestDue ? available : interestDue;
@@ -297,7 +316,7 @@ contract DonLoan is ReentrancyGuard {
         available -= principalRecovered;
 
         if (tip > 0) essey.safeTransfer(msg.sender, tip);
-        if (interestRecovered > 0) essey.safeTransfer(address(reserve), interestRecovered);
+        _routeInterest(interestRecovered); // same 70/30 split as a voluntary repay
         if (available > 0) essey.safeTransfer(borrower, available); // surplus is the borrower's
 
         emit Liquidated(donId, msg.sender, proceeds, interestRecovered + principalRecovered, available, tip);
