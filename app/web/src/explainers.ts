@@ -84,15 +84,15 @@ export const EXPLAINERS: Record<ExplainerKey, Explainer> = {
   },
   borrow: {
     title: "Borrow",
-    body: "Borrow up to {maxBorrow} $ESSEY — 50% of this Don's floor — at 15% APR, simple interest. The Don stays in your wallet, still staked and earning, but can't be sold, swapped, or redeemed until the debt clears. Interest you pay is split like every Essey fee: 70% buys stock for staked Dons, 30% raises the floor for every Don — including this one.",
+    body: "Draw {maxBorrow} $ESSEY in one shot — a fixed 50% of this Don's floor, with no amount to dial. Choose a term of 7–365 days; the interest is a separate ETH fee, prepaid at signing and split 70% to stock for staked Dons / 30% treasury. The debt itself is flat: you owe back exactly {maxBorrow}, 1:1, and it never grows. The Don stays in your wallet, still staked and earning, but can't be sold, swapped, or redeemed until the debt clears. There is a due date — miss it by the 30-day grace and anyone can liquidate.",
   },
   repay: {
     title: "Repay",
-    body: "Payments settle interest first, then principal; interest splits 70% to the stock pot for staked Dons, 30% to the reserve — everyone's floor rises. Repay in full and the lien releases immediately — your Don walks free. Overpaying is safe: only what you owe is taken.",
+    body: "Repay in $ESSEY, 1:1 — the debt is flat, so you owe exactly what you drew, with nothing accrued (interest was prepaid in ETH at borrow and isn't part of this). Pay any amount, any time; anyone may repay on your behalf. Clear it in full and the lien releases immediately — your Don walks free. Overpaying is safe: only the outstanding principal is taken.",
   },
   "liquidation-risk": {
     title: "Liquidation risk",
-    body: "Debt: {debt} / liquidation at {threshold} $ESSEY (70% of the live floor). Cross the line and anyone can liquidate: the Don is redeemed at the floor to settle the debt — surplus comes back to you, but the Don and everything in its Vault are gone. Repaying, or the floor rising, moves you back to safety.",
+    body: "The trigger is the calendar, not a price: this loan is liquidatable only after it expires plus a 30-day grace. Your debt is flat at {debt} $ESSEY, and because it's a fixed 50% of a floor that only rises, it can never reach the {threshold} $ESSEY ratio backstop — so watch the due date, not the ratio. Past due + grace, anyone can liquidate: the Don is redeemed at the floor to clear the debt, a 1% tip pays the caller, and any surplus comes back to you — but the Don and everything in its Vault are gone. Repay before the grace clock ends to stay safe.",
   },
   claim: {
     title: "Claim",

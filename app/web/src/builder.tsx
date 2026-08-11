@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import type { BuilderData, Resolved } from "./pfp-resolve";
-import { resolveSelection, catOptions, blockedCats } from "./pfp-resolve";
+import { resolveSelection, catOptions, blockedCats, unavailableOptions } from "./pfp-resolve";
 import { composite } from "./pfp-compositor";
 import {
   createPublicClient, createWalletClient, custom, http, keccak256, toHex, formatEther,
@@ -15,14 +15,14 @@ const SELECT: Record<G, [string, string, boolean][]> = {
     ["4 Body", "Bloodline", false], ["5 Suit", "Suit", false], ["13 Hair", "Hair", false],
     ["17 Face Mod", "Face Mod", true], ["15 Eye Mod", "Eye Mod", true], ["16 Glasses", "Glasses", true],
     ["22 Hat", "Hat", true], ["23 Ceasar", "Crown", true], ["24 Laser Eye", "Laser", true],
-    ["19 Hand Grip", "Hand", false], ["18 Canes", "Cane", true], ["25 Snake", "Snake", true],
+    ["19 Hand Grip", "Hand", true], ["18 Canes", "Cane", true], ["25 Snake", "Snake", true],
     ["20 Rings", "Ring", false], ["21 Wrist", "Wrist", false], ["26 AR", "AR Screen", true],
     ["2 The hawk", "Hawk", true], ["1 Background", "Background", false], ["3 Chair", "Chair", false],
   ],
   female: [
     ["3 Body", "Bloodline", false], ["4 Suits", "Suit", false], ["9 Hair", "Hair", false],
     ["8 Necklace", "Necklace", false], ["10 Hat", "Hat", true], ["11 Devilish", "Devilish", true],
-    ["16 Neko", "Neko Mask", true], ["15 Earing", "Earring", false], ["13 Hand Grip", "Hand", false],
+    ["16 Neko", "Neko Mask", true], ["15 Earing", "Earring", false], ["13 Hand Grip", "Hand", true],
     ["14 Ring", "Ring", false], ["12 Wrist dec", "Wrist", false], ["17 AR", "AR Screen", true],
     ["18 phoenix eyes", "Phoenix Eyes", true], ["1 Chairs", "Chair", false],
   ],
@@ -125,6 +125,31 @@ export function BuilderPage() {
     for (const [k, v] of Object.entries(picks)) if (!blocked.has(k)) e[k] = v;
     return e;
   }, [picks, blocked]);
+
+  // Per-option availability, computed by the SAME resolver the preview uses (eff + seed): every option
+  // here would be suppressed/conflicted-away if picked, so it's greyed out. Never drifts from the render.
+  const unavail = useMemo(() => (d ? unavailableOptions(d, eff, seed) : new Map<string, Map<string, string>>()), [d, eff, seed]);
+  // A category is fully dead when every selectable (non-None) option is inert -> collapse its row.
+  const deadCats = useMemo(() => {
+    const s = new Map<string, string>(); // cat -> representative reason
+    for (const [cat] of SELECT[gender]) {
+      const sel = (opts[cat] || []).filter((o) => o && o.toLowerCase() !== "none");
+      const u = unavail.get(cat);
+      if (sel.length > 0 && u && sel.every((o) => u.has(o))) s.set(cat, u.get(sel[0]) || "");
+    }
+    return s;
+  }, [unavail, opts, gender]);
+  // Manual expand-overrides survive only while a row stays dead; once it's live again it auto-expands.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = new Set([...prev].filter((c) => deadCats.has(c)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [deadCats]);
+  const toggleExpand = useCallback((cat: string) => {
+    setExpanded((prev) => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n; });
+  }, []);
 
   const genRef = useRef(0);
   useEffect(() => {
@@ -489,19 +514,43 @@ export function BuilderPage() {
         {/* category pickers */}
         <div className="bld-cats">
           {SELECT[gender].map(([cat, label, opt]) => {
-            const isBlocked = blocked.has(cat);
             const options = (opts[cat] || []).filter((o) => o && o.toLowerCase() !== "none");
             const cur = picks[cat];
+            const catUnavail = unavail.get(cat);
+            const deadReason = deadCats.get(cat);
+            // Fully-dead rows collapse to a compact header (auto-expand when live again; manual peek allowed).
+            const collapsed = deadReason !== undefined && !expanded.has(cat);
+            const pickHidden = cur !== undefined && cur !== "none" && !!catUnavail?.has(cur);
+            if (collapsed) {
+              return (
+                <div key={cat} className="bld-cat collapsed" onClick={() => toggleExpand(cat)} title="Click to view options">
+                  <div className="bld-cat-top">
+                    <span className="cn">{label}</span>
+                    <span className="cs">{deadReason}{pickHidden ? " · your pick is hidden" : ""} <span className="bld-exp">＋</span></span>
+                  </div>
+                </div>
+              );
+            }
             return (
-              <div key={cat} className={"bld-cat" + (isBlocked ? " blocked" : "")}>
+              <div key={cat} className="bld-cat">
                 <div className="bld-cat-top">
                   <span className="cn">{label}</span>
-                  {isBlocked && <span className="cs">blocked by another pick</span>}
-                  {!isBlocked && cat === "13 Hair" && res?.drivers.hat && <span className="cs">under hat — sets beard/brows</span>}
+                  {deadReason !== undefined
+                    ? <span className="cs bld-exp-btn" onClick={() => toggleExpand(cat)}>{deadReason} <span className="bld-exp">－</span></span>
+                    : cat === "13 Hair" && res?.drivers.hat ? <span className="cs">under hat — sets beard/brows</span>
+                    : catUnavail && catUnavail.size > 0 ? <span className="cs">some options unavailable</span>
+                    : null}
                 </div>
                 <div className="bld-opts">
                   {opt && <button className={"bld-opt" + (cur === "none" ? " on" : "")} onClick={() => setPick(cat, "none")}>∅ None</button>}
-                  {options.map((o) => <button key={o} className={"bld-opt" + ((cur ? cur === o : false) ? " on" : "")} onClick={() => setPick(cat, o)}>{clean(o)}</button>)}
+                  {options.map((o) => {
+                    const reason = o === cur ? undefined : catUnavail?.get(o); // keep the current pick clickable
+                    return (
+                      <button key={o} disabled={reason !== undefined} title={reason}
+                        className={"bld-opt" + ((cur ? cur === o : false) ? " on" : "") + (reason !== undefined ? " unavail" : "")}
+                        onClick={reason !== undefined ? undefined : () => setPick(cat, o)}>{clean(o)}</button>
+                    );
+                  })}
                 </div>
               </div>
             );

@@ -140,7 +140,7 @@ export function HowItWorksPage() {
         </div>
         <ul className="hw-list">
           <li>{md("**Redemption is always open.** At any moment, any Don's owner can redeem it against the reserve and receive its full floor share in $ESSEY. No permission, no window, no admin.")}</li>
-          <li>{md("**The floor only rises.** Anyone can fund the reserve (and the protocol routinely does — 30% of all loan interest goes here), but the only way $ESSEY leaves is a redemption, which pays exactly one Don's pro-rata share. The math guarantees the floor for everyone else never drops.")}</li>
+          <li>{md("**The floor only rises.** Anyone can fund the reserve — the protocol routes proceeds here, and any well-wisher can top it up — but the only way $ESSEY leaves is a redemption, which pays exactly one Don's pro-rata share. The math guarantees the floor for everyone else never drops.")}</li>
           <li>{md("**Nobody can touch it.** The reserve has no owner, no admin, no upgrade path, and no setter on its accounting. The backed-supply figure is read from the Don contract's own immutable cap. There is nothing to rug.")}</li>
         </ul>
         <Warn title="Redeeming is a one-way door">
@@ -212,24 +212,25 @@ export function HowItWorksPage() {
 
       {/* ---- 6 · borrow ---- */}
       <Section id="borrow" kicker="06" title="Borrow">
-        <P>{md("Your Don is collateral you don't have to give up.")}</P>
+        <P>{md("Your Don is collateral you don't have to give up. Borrowing is a **fixed-term, fixed-draw** line against your Don's floor — a pawn-style loan with a due date, not a revolving margin balance.")}</P>
         <div className="hw-stats">
-          <Stat big="150,015 $ESSEY" label="max borrow per Don today — 50% of the live floor" />
-          <Stat big="15% APR" label="simple (non-compounding) interest, accrued per second" />
-          <Stat big="70% of floor" label="liquidation threshold — 210,021 $ESSEY today" />
+          <Stat big="150,015 $ESSEY" label="the full draw today — a fixed 50% of your Don's floor" />
+          <Stat big="7 – 365 days" label="you choose the term; interest is prepaid in ETH at signing" />
+          <Stat big="Flat, 1:1" label="the debt never grows — repay exactly what you drew, any time" />
         </div>
         <ul className="hw-list">
-          <li>{md("**The Don stays in your wallet — still staked, still earning.** A lien blocks it from being sold, swapped, or redeemed until the debt clears; nothing else changes. Your seat keeps collecting stock the entire time you're borrowed against it.")}</li>
-          <li>{md("Repay any amount, any time; anyone may repay on your behalf. Interest settles first, then principal. Full repayment releases the lien on the spot.")}</li>
-          <li>{md("**Interest splits 70/30 — stock pot / floor** — borrowing pays staked Dons in stock AND raises the floor under every Don, including yours.")}</li>
+          <li>{md("**You draw exactly half your floor — no dial to set.** Open a loan and you receive the full **150,015 $ESSEY** (50% of the live floor), disbursed in one shot. The floor can only rise, so a fresh loan is always ~2× over-collateralized on day one.")}</li>
+          <li>{md("**Interest is paid once, up front, in ETH — never in $ESSEY.** The fee scales with your Don's floor and the term you pick, and is split the moment you borrow: **70% buys stock for staked Dons, 30% to the treasury** — the same 70/30 shape the trade fees follow. The rate is a treasury-set coefficient, currently **0 (borrowing is free on this deployment)**, and is hard-capped so a full-term loan can never cost more than **1 ETH** up front.")}</li>
+          <li>{md("**The debt is flat — it does not accrue.** You owe back exactly the $ESSEY you drew, 1:1, with nothing added over time. Repay any amount, any time; anyone may repay on your behalf. Full repayment releases the lien on the spot.")}</li>
+          <li>{md("**The Don stays in your wallet — still staked, still earning.** A lien blocks it from being sold, swapped, or redeemed until the debt clears; nothing else changes. Your seat keeps collecting stock into its Vault the entire time you're borrowed against it.")}</li>
         </ul>
-        <P>{md("**Liquidation.** If your debt exceeds **70% of the live floor**, anyone can trigger liquidation: the facility seizes the Don and redeems it at the floor. The debt is settled from the proceeds, a 1% tip pays the caller, and **any surplus is returned to you**. But the Don itself is consumed — locked in the reserve, seat gone.")}</P>
-        <Warn title="The Vault goes down with the ship">
-          {md("A liquidated (or redeemed) Don takes its Vault with it — including every unclaimed dividend inside. Claim regularly, and service your loan.")}
+        <P>{md("**There is a due date.** Each loan expires at the end of its term. Miss it, and a **30-day grace period** starts; once that runs out, **anyone can liquidate** — the trigger is the calendar, not a price. Because the debt is a flat 50% of a floor that only rises, it can never climb to the 70%-of-floor ratio backstop, so the clock is the thing to watch. Repaying, or the floor being funded higher, never changes your due date — only paying the loan off does.")}</P>
+        <P>{md("**Liquidation.** Once you're past due plus grace, the facility seizes the Don and redeems it at the floor. The proceeds clear your debt, a **1% tip** pays whoever triggered it, and **any surplus is returned to you**. But the Don itself is consumed — locked in the reserve, seat gone.")}</P>
+        <Warn title="Miss the due date and you lose the Don — and its Vault">
+          {md("Liquidation (like redemption) takes the Don's Vault with it, including every unclaimed dividend inside. There is no partial or soft default: past due + 30 days, the whole Don can be redeemed out from under you. **Claim your Vault regularly, and repay before the grace clock runs out.**")}
         </Warn>
-        <P>{md("The math is deliberately forgiving: at a full 50% borrow, simple interest takes about **2.7 years** to push you from 50% to the 70% threshold — and that assumes the floor never rises, which it does every time interest flows (30% of every payment lands in the reserve — plus anyone may fund it). Funding the reserve heals every open loan.")}</P>
         <div className="hw-note">
-          {md("Because debt and collateral are both in $ESSEY, there is **no price oracle to fail and no keeper to trust** — and every open loan emits a solvency statement that Essey's zero-knowledge prover verifies on-chain: `debt ≤ 50% of floor` at origination, proven cryptographically, not promised.")}
+          {md("Because debt and collateral are both in $ESSEY, there is **no price oracle to fail and no keeper to trust** — and every open loan emits a solvency statement that Essey's zero-knowledge prover verifies on-chain: `debt ≤ 50% of floor` at origination, proven cryptographically, not promised. A loan cannot go underwater: the floor never falls, and the draw is capped at half of it.")}
         </div>
       </Section>
 
@@ -242,11 +243,12 @@ export function HowItWorksPage() {
         </Scroller>
         <ul className="hw-list">
           <li>{md("**Mint & reroll fees (ETH):** 100% → swapped to USDG → the Bell → tokenized stock for staked Dons.")}</li>
-          <li>{md("**Trade fees (8% / 12%):** 70% → the Bell → stock for staked Dons; 30% → treasury.")}</li>
+          <li>{md("**Trade fees (8% / 12%, $ESSEY):** 70% → the Bell → stock for staked Dons; 30% → treasury.")}</li>
           <li>{md("**Activation fees ($ESSEY):** 50% burned (supply shrinks), 50% treasury.")}</li>
-          <li>{md("**Loan interest ($ESSEY):** 70% → stock for staked Dons / 30% → the DonReserve floor — the same split as AMM fees.")}</li>
+          <li>{md("**Loan interest (ETH, prepaid at borrow):** 70% → stock for staked Dons / 30% → treasury — the same split as trade fees. Interest is an ETH fee, not $ESSEY, and it does **not** flow to the floor.")}</li>
+          <li>{md("**Royalties (5% of secondary sales):** → the treasury.")}</li>
         </ul>
-        <P>{md("More minting means more stock for seats. More trading means more stock for seats. More borrowing means a higher floor — which means a higher trade price, a bigger max borrow, and a stronger backstop under everything. There is no fee in the system that leaks out of it.")}</P>
+        <P>{md("More minting means more stock for seats. More trading means more stock for seats. More borrowing means more prepaid ETH buying stock for seats. And the floor rises whenever the protocol funds it from proceeds — a higher floor means a higher trade price, a bigger draw, and a stronger backstop under everything. There is no fee in the system that leaks out of it.")}</P>
         {/* Flywheel loop — from the fee-flow diagram set (2026-08-11) */}
         <Scroller minWidth={700}>
           <div dangerouslySetInnerHTML={{ __html: FLYWHEEL_SVG }} style={{ lineHeight: 0 }} />
@@ -286,7 +288,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What exactly is the floor and can it go down?",
-    a: "Floor = reserve balance ÷ Dons still backed. It's funded with 2,666,666,666 $ESSEY against 8,888 Dons — 300,030 $ESSEY per Don today. It cannot go down: funding raises it, redemptions are pro-rata (neutral, with rounding dust left in the reserve), and 30% of all loan interest flows into it. It only rises.",
+    a: "Floor = reserve balance ÷ Dons still backed. It's funded with 2,666,666,666 $ESSEY against 8,888 Dons — 300,030 $ESSEY per Don today. It cannot go down: funding raises it (anyone may fund; the protocol routes proceeds here), and redemptions are pro-rata (neutral, with rounding dust left in the reserve). Note loan interest does NOT feed the floor — that's a prepaid ETH fee that buys stock and funds the treasury, not the reserve. The floor only rises.",
   },
   {
     q: "What's \"provable solvency\"?",
@@ -329,16 +331,16 @@ const FAQ: { q: string; a: string }[] = [
     a: "No — that's the point. The loan is a lien, not an escrow: the Don never leaves your wallet, stays staked, and keeps collecting stock the whole time. The only restriction is that it can't be transferred (sold, swapped, or redeemed) until the debt clears.",
   },
   {
-    q: "How close is liquidation, really?",
-    a: "You're liquidatable only when debt exceeds 70% of the live floor. Borrowing the full 50% at 15% simple APR takes about 2.7 years to drift to 70% — assuming the floor never rises, which it does as interest and fees flow into the reserve. Liquidation checks the live floor, so a rising floor actively heals every open loan.",
+    q: "How close is liquidation, really — what actually triggers it?",
+    a: "It's a due date, not a ratio drift. Each loan runs for the term you picked (7–365 days); when it expires a 30-day grace period starts, and only after that does anyone become able to liquidate. There is no interest piling up to push you underwater — the debt is flat at exactly what you drew. The old 70%-of-floor ratio backstop still exists in the contract but can never actually fire: a flat 50%-of-floor debt against a floor that only rises can't reach 70%. So the one thing that matters is the calendar. Repay before grace ends and nothing happens; funding the floor higher does not change your due date.",
   },
   {
     q: "What do I lose if I do get liquidated?",
-    a: "The Don is seized and redeemed at its floor; the proceeds pay a 1% caller tip, then your interest, then principal — and any surplus is returned to you. What's gone is the Don itself and its Vault, including unclaimed dividends. Claim often and repay early; anyone (a friend, a bot you run) may repay on your behalf.",
+    a: "The Don is seized and redeemed at its floor; the proceeds pay a 1% caller tip, then clear your principal — and any surplus is returned to you. There's no interest leg in the waterfall because interest was prepaid in ETH at borrow. What's gone is the Don itself and its Vault, including unclaimed dividends. Claim often and repay before your grace period ends; anyone (a friend, a bot you run) may repay on your behalf.",
   },
   {
     q: "Where does each fee actually go?",
-    a: "Mint and reroll fees (ETH): 100% converted and sent to the Bell — stock for staked Dons. Trade fees: 70% to the Bell, 30% treasury. Activation fees: 50% burned, 50% treasury. Loan interest: 100% to the reserve — the floor rises for all 8,888. Nothing leaks out of the loop.",
+    a: "Mint and reroll fees (ETH): 100% converted and sent to the Bell — stock for staked Dons. Trade fees ($ESSEY): 70% to the Bell, 30% treasury. Activation fees ($ESSEY): 50% burned, 50% treasury. Loan interest (ETH, prepaid at borrow): 70% to the Bell for stock, 30% treasury — NOT to the floor. Secondary-sale royalties (5%): treasury. The floor is funded separately, from protocol proceeds and anyone who chooses to fund it. Nothing leaks out of the loop.",
   },
   {
     q: "How many Dons does the team keep?",
@@ -385,9 +387,9 @@ const FEE_MAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBo
     <text x="44" y="318" font-size="20" font-weight="700" fill="#ece9e1">TIER STAKING <tspan fill="#ad8938">· $ESSEY</tspan></text>
     <text x="44" y="344" font-size="15" fill="#b8b3a6">the 666 ladder: 66,666 → 1,666,666</text>
 
-    <rect x="28" y="374" width="316" height="70" rx="10" fill="#15161c" stroke="#ad8938" stroke-width="2"/>
-    <text x="44" y="402" font-size="20" font-weight="700" fill="#ece9e1">LOAN INTEREST <tspan fill="#ad8938">· $ESSEY</tspan></text>
-    <text x="44" y="428" font-size="15" fill="#b8b3a6">15% APR on Don-backed loans</text>
+    <rect x="28" y="374" width="316" height="70" rx="10" fill="#15161c" stroke="#5b8fd9" stroke-width="2"/>
+    <text x="44" y="402" font-size="20" font-weight="700" fill="#ece9e1">LOAN INTEREST <tspan fill="#5b8fd9">· ETH</tspan></text>
+    <text x="44" y="428" font-size="15" fill="#b8b3a6">prepaid at borrow · fixed 7–365d term</text>
 
     <rect x="28" y="458" width="316" height="70" rx="10" fill="#15161c" stroke="#ad8938" stroke-width="2"/>
     <text x="44" y="486" font-size="20" font-weight="700" fill="#ece9e1">LIQUIDATION PROCEEDS</text>
@@ -440,10 +442,10 @@ const FEE_MAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBo
   <text x="404" y="336" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">50%</text>
   <path d="M344 341 C 416 352, 400 386, 462 392" fill="none" stroke="#c25050" stroke-width="2.5" marker-end="url(#aR)"/>
   <text x="410" y="382" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">50% burned</text>
-  <path d="M344 409 C 420 420, 400 492, 462 500" fill="none" stroke="#ad8938" stroke-width="3" marker-end="url(#aG)"/>
-  <text x="402" y="466" font-size="15" font-weight="700" fill="#e6c877" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">100%</text>
-  <path d="M344 493 C 410 493, 404 522, 462 528" fill="none" stroke="#ad8938" stroke-width="2" marker-end="url(#aG)"/>
-  <text x="404" y="520" font-size="14" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">interest</text>
+  <path d="M344 396 C 418 392, 432 240, 462 210" fill="none" stroke="#5b8fd9" stroke-width="2.5" marker-end="url(#aB)"/>
+  <text x="398" y="300" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">70% ETH</text>
+  <path d="M344 426 C 418 430, 432 318, 462 308" fill="none" stroke="#5b8fd9" stroke-width="2" marker-end="url(#aB)"/>
+  <text x="404" y="372" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">30%</text>
   <path d="M750 178 C 810 178, 812 175, 872 175" fill="none" stroke="#2f9e6e" stroke-width="3" marker-end="url(#aU)"/>
   <text x="812" y="168" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">USDG</text>
   <path d="M1026 218 L 1026 290" fill="none" stroke="#a06fd0" stroke-width="3.5" marker-end="url(#aP)"/>
@@ -452,7 +454,7 @@ const FEE_MAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBo
 
   <text x="880" y="466" font-size="14.5" fill="#b8b3a6">Mint fees: <tspan fill="#e6c877" font-weight="700">100% to holders' stock</tspan></text>
   <text x="880" y="486" font-size="14.5" fill="#b8b3a6">— the team takes 0%.</text>
-  <text x="880" y="510" font-size="14.5" fill="#b8b3a6">Borrow up to <tspan fill="#ece9e1" font-weight="700">50%</tspan> of the floor · liq at <tspan fill="#ece9e1" font-weight="700">70%</tspan>.</text>
+  <text x="880" y="510" font-size="14.5" fill="#b8b3a6">Borrow a fixed <tspan fill="#ece9e1" font-weight="700">50%</tspan> of the floor · <tspan fill="#ece9e1" font-weight="700">7–365d</tspan> term · liq if unpaid past due.</text>
   <text x="880" y="532" font-size="14.5" fill="#b8b3a6">AMM price = max(300,000, live floor).</text>
 
   <text x="1170" y="652" font-size="15" font-weight="700" fill="#c9a24b" text-anchor="end">essey.xyz</text>
@@ -479,12 +481,12 @@ const FLYWHEEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewB
   <text x="1007" y="298" font-size="23" font-weight="700" fill="#ece9e1" text-anchor="middle">FEES <tspan fill="#ad8938">· ETH + $ESSEY</tspan></text>
   <text x="1007" y="325" font-size="15.5" fill="#b8b3a6" text-anchor="middle">100% of mint fees · 8–12% AMM fees</text>
   <text x="1007" y="347" font-size="15.5" fill="#b8b3a6" text-anchor="middle">tier ladder 66,666 → 1,666,666</text>
-  <text x="1007" y="369" font-size="15.5" fill="#b8b3a6" text-anchor="middle">15% APR loan interest</text>
+  <text x="1007" y="369" font-size="15.5" fill="#b8b3a6" text-anchor="middle">prepaid-ETH borrow fee (70/30)</text>
 
   <rect x="368" y="524" width="464" height="120" rx="12" fill="#181222" stroke="#a06fd0" stroke-width="3"/>
   <text x="600" y="556" font-size="23" font-weight="700" fill="#a06fd0" text-anchor="middle">STOCK + FLOOR + BURN</text>
   <text x="600" y="583" font-size="15.5" fill="#ece9e1" text-anchor="middle">fees buy tokenized stock for staked Dons</text>
-  <text x="600" y="605" font-size="15.5" fill="#ece9e1" text-anchor="middle">interest lifts the 300,030 $ESSEY floor — it only rises</text>
+  <text x="600" y="605" font-size="15.5" fill="#ece9e1" text-anchor="middle">protocol proceeds fund the 300,030 $ESSEY floor — it only rises</text>
   <text x="600" y="627" font-size="15.5" fill="#ece9e1" text-anchor="middle">half of every tier fee is burned forever</text>
 
   <rect x="22" y="266" width="342" height="130" rx="12" fill="#1a1710" stroke="#c9a24b" stroke-width="3"/>

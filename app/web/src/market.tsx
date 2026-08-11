@@ -393,28 +393,31 @@ function PayoutToy() {
 }
 
 function BorrowToy() {
-  // The loan meter: 50% LTV, 15% APR simple, liquidation at 70% of the live floor.
-  const MAX = Math.floor(FLOOR * 0.5); // 150,015
-  const LIQ = Math.floor(FLOOR * 0.7); // 210,021
-  const [debt, setDebt] = useState(MAX);
-  const years = debt > 0 ? (LIQ - debt) / (debt * 0.15) : Infinity;
+  // The term-loan model: a fixed draw = 50% of the floor, a chosen term, interest prepaid in ETH,
+  // debt flat, default by the calendar (term + a 30-day grace), surplus back on liquidation.
+  const DRAW = Math.floor(FLOOR * 0.5); // 150,015 — every Don draws the same line
+  const GRACE = 30;
+  const [term, setTerm] = useState(90);
   return (
     <div className="toy">
-      <input type="range" min={0} max={MAX} step={5_001} value={debt} onChange={(e) => setDebt(+e.target.value)} aria-label="Borrowed $ESSEY" />
+      <input type="range" min={7} max={365} step={1} value={term} onChange={(e) => setTerm(+e.target.value)} aria-label="Loan term in days" />
       <div className="ex-stats num">
-        <span>debt: {debt.toLocaleString()} $ESSEY</span>
-        <span>liquidation at {LIQ.toLocaleString()} (70% of the floor)</span>
+        <span>term: {term} days</span>
+        <span>liquidatable after day {term + GRACE}</span>
       </div>
-      <div className="bell-gauge" style={{ margin: "8px 0" }}><div className="bell-fill" style={{ width: `${(debt / LIQ) * 100}%` }} /></div>
-      <div className="toy-note">Borrow <b className="num">up to {MAX.toLocaleString()} $ESSEY</b> — 50% of the floor —
-        at <b>15% APR, simple interest</b>. The Don stays in your wallet, <b>still staked, still earning stock</b>;
-        a lien just blocks selling, swapping, or redeeming it until the debt clears. Repay any amount, any time.
-        {debt > 0 && <> At this debt, interest alone takes <b className="num">~{years.toFixed(1)} years</b> to reach
-        the line — and that assumes the floor never rises, which it does every time anyone pays interest.</>}</div>
-      <div className="toy-note"><b>Say it plainly: cross the line and the Don is gone.</b> Past 70% of the live
-        floor, anyone can liquidate: the Don is redeemed at the floor to settle the debt, a 1% tip pays the caller,
-        and the surplus comes back to you — but the Don is consumed, and <b>every unclaimed dividend in its Vault is
-        forfeited with it</b>. Claim regularly, and service your loan.</div>
+      <div className="bell-gauge" style={{ margin: "8px 0" }}>
+        <div className="bell-fill" style={{ width: `${(term / (365 + GRACE)) * 100}%` }} />
+      </div>
+      <div className="toy-note">Every Don borrows the same line — <b className="num">{DRAW.toLocaleString()} $ESSEY</b>,
+        50% of the floor — for a term you pick (<b>7–365 days</b>). Interest is <b>prepaid once, in ETH</b>, scaled
+        to the Don's value and split 70% to the stock pot / 30% to the treasury (the launch rate is <b>0 — free</b>,
+        tunable later). You receive the full {DRAW.toLocaleString()} $ESSEY and owe exactly that back, <b>1:1</b> —
+        the debt never grows. The Don stays in your wallet, <b>still staked, still earning stock</b>, the whole time.</div>
+      <div className="toy-note"><b>There is a due date.</b> Repay the {DRAW.toLocaleString()} anytime before
+        <b> day {term + GRACE}</b> (your {term}-day term + a {GRACE}-day grace) and the lien lifts. Miss it and anyone
+        can liquidate: the Don is redeemed at the floor to clear the debt, a 1% tip pays the caller, and any surplus
+        comes back to you — but <b>the Don is consumed, and every unclaimed dividend in its Vault is forfeited with it</b>.
+        The loan can never go underwater (the floor can't fall), so nothing but the calendar liquidates you.</div>
     </div>
   );
 }

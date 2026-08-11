@@ -144,6 +144,58 @@ header.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: saturate(1.
 .ex-adv-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .ex-input { width: 96px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--s2); color: var(--tx); font-family: var(--mono); }
 @media (max-width: 620px) { .ex-adv { grid-template-columns: 1fr; } .ex-adv-row { flex-wrap: wrap; } }
+
+/* ---- the visual AMM: see the Dons, click one, confirm (sudoswap-style) ---- */
+.amm { gap: 14px; }
+.amm-stats { margin-bottom: 4px; }
+.amm-stats i { color: var(--tx-faint); font-style: normal; }
+.amm-toggle { width: fit-content; }
+/* the low-fee path — always visible, plainly distinct from a snipe */
+.amm-next { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 14px 16px; border: 1px solid var(--gold-line); border-radius: var(--r); background: var(--gold-dim); }
+.amm-next-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.amm-next-copy b { font-size: 14px; color: var(--tx); }
+.amm-next-copy .live-note { max-width: 52ch; }
+.amm-next-btn { white-space: nowrap; padding: 11px 18px; }
+/* the pool / wallet grid of faces */
+.amm-grid-h { margin-top: 2px; }
+.amm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.amm-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; text-align: left; cursor: pointer;
+  background: var(--s2); border: 1px solid var(--line-2); border-radius: var(--r); transition: border-color .12s, transform .06s; }
+.amm-card:hover:not(:disabled) { border-color: var(--gold-line); transform: translateY(-1px); }
+.amm-card.on { border-color: var(--gold); outline: 1px solid var(--gold-line); outline-offset: -3px; background: var(--gold-dim); }
+.amm-card-off, .amm-card:disabled { opacity: .5; cursor: not-allowed; filter: saturate(.5); }
+.amm-id { font-size: 12.5px; color: var(--tx); font-weight: 600; }
+.amm-price { font-size: 11.5px; color: var(--gold); }
+.amm-badge { font-size: 10px; color: var(--tx-mut); font-family: var(--mono); letter-spacing: .04em; }
+.amm-badge-lien { color: var(--warn); }
+/* the Don face — branded hexagon plate BEHIND the image, so art-less/dev degrades to an intentional plate */
+.amm-thumb { position: relative; aspect-ratio: 1; border-radius: var(--r-sm); overflow: hidden; background: radial-gradient(120% 100% at 50% 28%, var(--s3), var(--ink)); }
+.amm-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.amm-ph span { font-size: 10px; color: var(--tx-faint); letter-spacing: .06em; }
+.amm-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* the confirm plate — the certificate flourish, reserved for a committed trade */
+.amm-confirm { display: grid; grid-template-columns: 88px 1fr auto; gap: 16px; align-items: center;
+  padding: 14px 16px; border: 1px solid var(--line-2); outline: 1px solid var(--gold-line); outline-offset: -5px;
+  border-radius: var(--r); background: var(--s1); }
+.amm-confirm .amm-thumb { width: 88px; }
+.amm-confirm-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.amm-confirm-h { font-family: var(--serif); font-size: 19px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.amm-confirm-sub { font-size: 13.5px; color: var(--tx-mut); }
+.amm-confirm-sub b { color: var(--tx); } .amm-confirm-sub i { color: var(--tx-faint); font-style: normal; }
+.amm-confirm-act { display: flex; flex-direction: column; gap: 8px; }
+.amm-confirm-act .btn { white-space: nowrap; }
+.amm-fee-pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold);
+  border: 1px solid var(--gold-line); background: var(--gold-dim); padding: 2px 7px; border-radius: 5px; }
+.amm-empty { padding: 22px 4px; }
+@media (max-width: 560px) {
+  .amm-confirm { grid-template-columns: 64px 1fr; }
+  .amm-confirm .amm-thumb { width: 64px; }
+  .amm-confirm-act { grid-column: 1 / -1; flex-direction: row; }
+  .amm-confirm-act .btn { flex: 1; }
+  .amm-next-btn { width: 100%; }
+  .amm-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+}
 /* Bell — guided 1 / 2 / 3 steps */
 .bell-step { margin-bottom: 14px; }
 .bell-step-h { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--tx); margin-bottom: 8px; }
@@ -708,3 +760,13 @@ main#top { padding-bottom: 44px; }
 .bld-opt { border: 1px solid var(--line-2); background: var(--s2); color: var(--tx-mut); padding: 5px 10px; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--sans); }
 .bld-opt:hover { border-color: var(--gold-line); }
 .bld-opt.on { border-color: var(--gold); background: var(--gold-dim); color: var(--gold-hi); }
+/* inert option: the engine would suppress/conflict it away, so it can't be picked */
+.bld-opt.unavail { opacity: .32; cursor: not-allowed; text-decoration: line-through; text-decoration-thickness: 1px; }
+.bld-opt.unavail:hover { border-color: var(--line-2); }
+/* a fully-dead category collapses to a compact one-line header */
+.bld-cat { transition: padding .18s ease, background .18s ease; }
+.bld-cat.collapsed { padding: 8px 12px; cursor: pointer; opacity: .78; }
+.bld-cat.collapsed:hover { opacity: 1; border-color: var(--gold-line); }
+.bld-cat.collapsed .bld-cat-top { margin-bottom: 0; align-items: center; }
+.bld-cat .bld-exp-btn { cursor: pointer; }
+.bld-exp { font-family: var(--mono); color: var(--gold); font-weight: 700; padding-left: 2px; }

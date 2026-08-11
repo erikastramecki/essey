@@ -72,7 +72,8 @@ contract's immutable 8,888 cap:
   the exchange's deploy-time **price minimum**; the desk trades at `max(live floor, 300,000)`.
 - **Redemption is always open** — any Don's owner can redeem for the full pro-rata floor share, no window, no
   admin. Redemption consumes the Don (locked in the reserve permanently, Vault included).
-- **Monotone by construction.** Funding raises the floor (30% of loan interest flows here); redemptions are
+- **Monotone by construction.** Funding raises the floor (protocol proceeds routed in via `fund()`, or anyone
+  may fund it — loan interest does **not** flow here; it's a prepaid ETH fee); redemptions are
   pro-rata and can never lower it for anyone else. **Anti-dump = the floor itself** — a Don can never trade
   below it (arbitrage), so no vesting or cooldown is needed.
 - **Nothing to trust:** `DonReserve` is immutable — no admin, no upgrade path, no `backedSupply` setter; the
@@ -142,22 +143,32 @@ for its floor, so it never trades below, and the desk can never be arbitraged ag
 Essey **is** a provably-solvent RWA lending protocol (AAPL/NVDA borrow markets already built + audited). A
 Don plugs in as a new collateral type:
 
+- **Fixed-term, fixed-draw.** `borrow(donId, termSeconds)` draws **exactly `ltvBps` of the live floor** — no
+  amount is chosen — disbursed IN FULL in $ESSEY. Term is bounded **7–365 days** (`MIN_TERM`/`MAX_TERM`).
 - **Loans are denominated in $ESSEY** — the floor's own unit. With debt and collateral in the same unit
   there is **no price oracle, no trading-session gate, no keeper** — none of the usual failure points.
 - **Collateral = exactly `DonReserve.floorPerDon()`** — nothing else. Vault contents are **not** counted as
   collateral (and are **forfeited with the Don on liquidation** — the UI must warn: claim regularly).
 - Deployed params: **LTV 50%** (5,000 bps → max borrow 150,015 $ESSEY at today's floor) · **liquidation at
-  70% of the live floor** (7,000 bps) · **15% APR simple interest** (1,500 bps, per-second accrual) ·
-  **liquidation tip 1%** (100 bps, capped at 5%).
+  70% of the live floor** (7,000 bps, a *dead-but-present* ratio backstop — structurally unreachable) ·
+  **calendar default** (`DEFAULT_GRACE = 30 days` past expiry) · **liquidation tip 1%** (100 bps, capped at 5%).
+- **Interest is prepaid in ETH, never in $ESSEY.** `prepaidEth = ethPerFloorPerYearWad · floorPerDon() · term
+  / YEAR`, clamped to **`MAX_PREPAID_ETH = 1 ETH`**. It is forwarded at borrow, split **70% → `feeSink`
+  (stock for staked Dons) / 30% → `treasury`** (`ethFeeStockShareBps = 7000`) — the same 70/30 shape as AMM
+  fees. The coefficient `ethPerFloorPerYearWad` is treasury-tunable (deployed at **0 = free borrowing**);
+  any `msg.value` above the prepaid is refunded.
+- **Debt is flat = principal forever** — no accrual. `debtOf` returns exactly the principal; past expiry it is
+  still just the principal. You owe back the full draw **1:1**.
 - The Don **stays in your wallet — still staked, still earning.** A lien blocks transfer/swap/redeem until
   the debt clears; dividends keep accruing to the Don's Vault throughout.
-- **Repayment is manual** (`repay`, callable by anyone on the borrower's behalf): interest settles first,
-  then principal; full repayment releases the lien immediately. There is no auto-sweep from Vault to debt.
-- **Interest splits 70/30**: 70% → `feeSink` (stock for staked Dons — borrowing pays the room, same split as AMM fees), 30% → `DonReserve` — which in turn
-  heals every open loan (liquidation reads the *live* floor).
+- **Repayment is 1:1 in $ESSEY** (`repay`, callable by anyone on the borrower's behalf): the prepaid ETH
+  interest is never part of debt and never refunds; full repayment releases the lien immediately.
+- **Default is a calendar event.** Liquidation opens when `block.timestamp > expiry + defaultGraceSeconds`
+  (30 days) — permissionless. Because debt is a flat 50% of a non-decreasing floor, the 70% ratio trigger can
+  never fire; the calendar is the live trigger.
 - **Liquidation waterfall:** the Don is seized and redeemed at the floor; proceeds pay the caller tip →
-  accrued interest → principal → **surplus returned to the borrower**. The Don itself is consumed (locked in
-  the reserve, Vault and all).
+  principal (back to the lendable pool) → **surplus returned to the borrower**. No interest leg (it was
+  prepaid). The Don itself is consumed (locked in the reserve, Vault and all).
 - **The dregg ZK circuit proves solvency**: every loan emits an on-chain tuple (`DonLoan.loanTuple`) proven
   under a Groth16 verifier — `debt ≤ 50% of floor` at origination with conservative rounding (debt rounds
   up, floor rounds down), so the proof can only overstate risk, never hide it.

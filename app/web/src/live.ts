@@ -535,6 +535,16 @@ export const reads = {
       pub.readContract({ address: ADDR.exchange, abi: exchangeAbi, functionName: "inventoryAt", args: [BigInt(i)] })));
   },
 
+  /// The Exchange pool inventory as token ids — batched inventoryAt() reads for the visual grid. Bounded
+  /// to `max` so a large float never fans out into hundreds of reads; the grid shows the first page and
+  /// the header reports the true total (reads.floatCount) so nothing is misrepresented.
+  poolIds: async (max = 48): Promise<bigint[]> => {
+    const n = await reads.floatCount();
+    const count = Number(n > BigInt(max) ? BigInt(max) : n);
+    return Promise.all(Array.from({ length: count }, (_, i) =>
+      pub.readContract({ address: ADDR.exchange, abi: exchangeAbi, functionName: "inventoryAt", args: [BigInt(i)] }) as Promise<bigint>));
+  },
+
   /// Dons the address currently owns — computed from Transfer events (Don isn't Enumerable), which
   /// is exact and honest: in minus out. Bounded to the collection's lifetime so the scan stays cheap.
   ownedDons: async (a: Address): Promise<bigint[]> => {
@@ -552,6 +562,19 @@ export const reads = {
       if (dir === "in") owned.add(id); else owned.delete(id);
     }
     return [...owned].map(BigInt).sort((x, y) => (x < y ? -1 : 1));
+  },
+
+  /// Owned Dons with the two flags the Sell grid needs: `liened` (loan collateral — can't be sold, the
+  /// card is disabled with a reason) and `locked` (art frozen by staking — sellable, shown as a badge).
+  ownedDonsFlagged: async (a: Address): Promise<{ id: bigint; liened: boolean; locked: boolean }[]> => {
+    const ids = await reads.ownedDons(a);
+    return Promise.all(ids.map(async (id) => {
+      const [liened, locked] = await Promise.all([
+        pub.readContract({ address: ADDR.don, abi: donAbi, functionName: "liened", args: [id] }) as Promise<boolean>,
+        pub.readContract({ address: ADDR.don, abi: donAbi, functionName: "locked", args: [id] }) as Promise<boolean>,
+      ]);
+      return { id, liened, locked };
+    }));
   },
 
   donState: async (id: bigint): Promise<{ tier: number; pending: bigint; vault: Address; locked: boolean; liened: boolean }> => {

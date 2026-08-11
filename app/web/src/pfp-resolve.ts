@@ -85,7 +85,14 @@ class Sel {
       // longer forced name collapse onto a shorter sibling.
       const c = rest.find((x) => (x.name || "").toLowerCase() === want)
         ?? rest.find((x) => (x.name || "").toLowerCase().includes(want));
-      if (c) { this.picks[path] = c.name; this.emit(c, path + "/" + c.name); return; }
+      if (c) {
+        // The category-wrapper node carries the category's own name, which can substring-contain a
+        // forced option ("20 Rings" ⊃ "Ring", "2 The hawk" ⊃ "Hawk", "24 Laser Eye" ⊃ "Laser Eye").
+        // Matching it here would consume the forced pick at the wrapper and random-pick a child. Instead
+        // descend at the SAME path so the still-live forced key resolves against the real options below.
+        if (c.name === path) { this.emit(c, path); return; }
+        this.picks[path] = c.name; this.emit(c, path + "/" + c.name); return;
+      }
     }
     const [dim, hit] = coupleDim(rest, this.R);
     if (dim && this.drivers[dim]) {
@@ -269,6 +276,85 @@ export function catOptions(data: BuilderData): Record<string, string[]> {
       if (si.includes(nl)) return false;
       return true;
     });
+  }
+  return out;
+}
+
+// -----------------------------------------------------------------------------
+// AVAILABILITY PREDICATE — the single source of truth for which picker options are
+// INERT (a click would select a trait the engine then suppresses/conflicts away, so
+// it never renders). Rather than re-derive the conflict rules (which would drift from
+// applyConflicts), we RE-RESOLVE: pin every category to its current rendered value so
+// the RNG-chosen context (grip, family, hair, …) can't shift, then flip the single
+// option under test and ask the resolver whether that option's category actually
+// paints. Available <=> renders in the current preview; unavailable <=> never does.
+const stripName = (v: string) => v.replace(/#\d+/g, "").replace(/^[\d.]+\s+/, "").trim();
+
+function availReason(
+  data: BuilderData, male: boolean, cat: string, cx: {
+    grip: string | null; cane: string | null; family: string; cover?: string;
+    facemod: string; laser: boolean; hat: boolean; medusa: boolean; SG: Set<string>;
+  }): string {
+  const HAT = male ? "22 Hat" : "10 Hat";
+  const ZH = new Set(["13 Hair", "15 Eye Mod", "16 Glasses", "17 Face Mod", "22 Hat", "23 Ceasar", "24 Laser Eye"]);
+  if (["Zombie", "Golden", "Glitch"].includes(cx.family) && ZH.has(cat))
+    return `${cx.family} bodies show no face or head accessories`;
+  if (cat === "18 Canes") return cx.grip ? `needs a free hand — you're holding the ${stripName(cx.grip)}` : `needs a free hand`;
+  if (cat === "25 Snake") {
+    if (cx.grip && cx.SG.has(cx.grip)) return `won't drape over the ${stripName(cx.grip)} in your hand`;
+    if (cx.cane) return `can't share the hand with your ${stripName(cx.cane)} cane`;
+    return `unavailable with your current hand`;
+  }
+  if (cat === "16 Glasses" || cat === "15 Eye Mod") {
+    if (cx.laser) return `hidden behind your laser eyes`;
+    if (cx.cover === "full" || cx.cover === "eyes") return `covered by the ${stripName(cx.facemod)} face mod`;
+  }
+  if (cat === HAT) {
+    if (cx.facemod === "Doom") return `the Doom helmet covers your whole head`;
+    if (cx.medusa) return `Medusa's snake-crown pierces every hat`;
+  }
+  if (cat === "23 Ceasar") {
+    if (cx.facemod === "Doom") return `the Doom helmet leaves no room for a crown`;
+    if (cx.hat) return `can't wear a laurel crown under a hat`;
+  }
+  return `unavailable with your current traits`;
+}
+
+// cat -> (option name -> short reason) for every option that would NOT render if picked now.
+// `forced`/`seed` must match what the live preview resolves with, so availability == the preview.
+export function unavailableOptions(
+  data: BuilderData, forced: Record<string, string>, seed: number): Map<string, Map<string, string>> {
+  const out = new Map<string, Map<string, string>>();
+  const male = data.gender === "male";
+  const base = resolveSelection(data, forced, seed);
+  const rc = new Set(base.render.map((l) => l.category));
+  const gripCat = male ? "19 Hand Grip" : "13 Hand Grip";
+  const grip = rc.has(gripCat) ? (base.picks[gripCat] || null) : null;
+  const cane = rc.has("18 Canes") ? (base.picks["18 Canes"] || null) : null;
+  const family = (base.drivers.family as string) || "";
+  const fmFull = base.picks["17 Face Mod"] || "None";
+  const facemod = fmFull.split(/\s+/)[0];
+  const cover = fmFull.toLowerCase() !== "none" ? data.rules.FACEMOD_COVER[facemod] : undefined;
+  const laser = (base.picks["24 Laser Eye"] || "None").toLowerCase() !== "none";
+  const hat = !!base.drivers.hat;
+  const hairStyle = (base.drivers.hair_style as string) || "";
+  const medusa = !male && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle);
+  const SG = new Set(data.hand_conflicts?.snake_grip || []);
+  const cx = { grip, cane, family, cover, facemod, laser, hat, medusa, SG };
+
+  const opts = catOptions(data);
+  // Pin every category to its current rendered value; flipping one option can't perturb the context.
+  const pinned: Record<string, string> = {};
+  for (const cat of Object.keys(opts)) pinned[cat] = base.picks[cat] ?? "none";
+
+  for (const cat of Object.keys(opts)) {
+    for (const opt of opts[cat]) {
+      if (!opt || opt.toLowerCase() === "none") continue; // ∅ None is always a valid choice
+      const test = resolveSelection(data, { ...pinned, [cat]: opt }, seed);
+      if (new Set(test.render.map((l) => l.category)).has(cat)) continue; // it renders -> available
+      let m = out.get(cat); if (!m) { m = new Map(); out.set(cat, m); }
+      m.set(opt, availReason(data, male, cat, cx));
+    }
   }
   return out;
 }

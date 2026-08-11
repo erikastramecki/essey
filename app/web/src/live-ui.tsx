@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { ADDR, BUNDLE, MAX_DONS, NET, TIERS, flows, reads, fmt, niceError } from "./live";
+import { EMonogram } from "./market";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 // Stock payouts light up once the converter is wired at the redeploy; until then claims pay USDG and
@@ -40,105 +41,207 @@ function useBalances() {
 }
 
 type Quote = Awaited<ReturnType<typeof reads.quote>>;
+type OwnedDon = { id: bigint; liened: boolean; locked: boolean };
 
-/// The live Exchange: real float, real fees feeding the real pot.
+/// One Don's face for the AMM grids. The branded hexagon placeholder sits BEHIND the image, so an
+/// art-less pool Don (or the dev server, which doesn't run /api) degrades to an intentional plate —
+/// never a broken-image glyph. The image endpoint itself already serves a branded SVG for unrevealed
+/// Dons, so both the missing-endpoint and the unrevealed cases read as deliberate.
+function DonThumb({ id }: { id: bigint }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [id]);
+  return (
+    <div className="amm-thumb">
+      <div className="amm-ph" aria-hidden><EMonogram size={40} /><span className="num">#{id.toString()}</span></div>
+      {!failed && (
+        <img className="amm-img" src={`/api/don-img/${id}`} alt={`Don #${id}`} loading="lazy" decoding="async"
+          onError={() => setFailed(true)} />
+      )}
+    </div>
+  );
+}
+
+/// The live Exchange, sudoswap-style: SEE the Dons in the pool (Buy) or in your wallet (Sell), click one,
+/// confirm. Real float, real fees feeding the real pot. The two buy paths are made explicit — buy the next
+/// Don at 8%, or snipe an exact one at the 12% premium — so the trade-off is never hidden behind a click.
 export function LiveExchange() {
   const w = useWallet();
   const { bal, refresh } = useBalances();
+  const [tab, setTab] = useState<"buy" | "sell">("buy");
   const [float_, setFloat] = useState<bigint | null>(null);
-  const [ids, setIds] = useState<bigint[]>([]);
+  const [poolIds, setPoolIds] = useState<bigint[] | null>(null);
+  const [owned, setOwned] = useState<OwnedDon[] | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [pick, setPick] = useState<bigint | null>(null);   // selected pool Don → snipe confirm
+  const [sellPick, setSellPick] = useState<bigint | null>(null); // selected owned Don → sell confirm
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [snipeId, setSnipeId] = useState("");
-  const [sellId, setSellId] = useState("");
-  const [adv, setAdv] = useState(false); // "More options" (snipe / sell) collapsed by default
 
-  const load = useCallback(() => {
+  const a = w.address as Address | null;
+  const ready = !!a && w.chainOk;
+
+  const loadPool = useCallback(() => {
     reads.floatCount().then(setFloat).catch(() => {});
-    reads.floatIds().then(setIds).catch(() => {});
     reads.quote().then(setQuote).catch(() => {});
+    reads.poolIds().then(setPoolIds).catch(() => setPoolIds([]));
   }, []);
-  useEffect(() => { load(); const t = setInterval(load, 15_000); return () => clearInterval(t); }, [load]);
+  const loadOwned = useCallback(() => {
+    if (!a) { setOwned(null); return; }
+    reads.ownedDonsFlagged(a).then(setOwned).catch(() => setOwned([]));
+  }, [a]);
+
+  useEffect(() => { loadPool(); const t = setInterval(loadPool, 15_000); return () => clearInterval(t); }, [loadPool]);
+  useEffect(() => { loadOwned(); }, [loadOwned]);
 
   const act = async (label: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(label); setMsg(null);
-    try { await fn(); setMsg(ok); load(); refresh(); }
+    try { await fn(); setMsg(ok); loadPool(); loadOwned(); refresh(); }
     catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
   };
 
-  const a = w.address as Address | null;
-  const ready = !!a && w.chainOk;
-  const short = !!bal && !!quote && bal.essey < quote.buyTotal;
+  const shortBuy = !!bal && !!quote && bal.essey < quote.buyTotal;
+  const shortSnipe = !!bal && !!quote && bal.essey < quote.snipeTotal;
+  const sellDon = owned?.find((d) => d.id === sellPick) ?? null;
 
   return (
     <section className="band" style={{ paddingTop: 0 }}>
       <div className="wrap">
-        <div className="live-card">
-          <div className="live-h">BUY A DON <span className="preview-chip">testnet</span></div>
-          <p className="ex-intro">A <b>Don</b> is your seat at the table — 1 of only {MAX_DONS.toLocaleString()}. Own one and <b>stake a Tier
-            at the Bell</b> to earn a cut of every fee the club collects — trades, Cases, loan interest. (Owning holds
-            your spot; staking is what earns.)</p>
-          <div className="ex-stats num">
-            <span><b>{float_ !== null ? float_.toString() : "…"}</b> Dons available</span>
-            <span className="ex-price"><b>{quote ? fmt(quote.price) : "…"}</b> $ESSEY <i>+ {quote ? fmt(quote.buyFee) : "…"} $ESSEY fee (8%)</i></span>
+        <div className="live-card amm">
+          <div className="live-h">TRADE DONS <span className="preview-chip">testnet</span></div>
+
+          {/* live desk header — pool size + floor price + your position */}
+          <div className="ex-stats num amm-stats">
+            <span><b>{float_ !== null ? float_.toString() : "…"}</b> in the pool</span>
+            <span className="ex-price"><b>{quote ? fmt(quote.price) : "…"}</b> $ESSEY <i>live floor</i></span>
+            <span>next at 8% <b>{quote ? fmt(quote.buyTotal) : "…"}</b> · snipe at 12% <b>{quote ? fmt(quote.snipeTotal) : "…"}</b></span>
             {bal && <span>you own <b>{bal.dons.toString()}</b></span>}
           </div>
 
-          {!ready ? (
-            <div className="live-row"><span className="live-note">Connect on Robinhood Chain testnet to buy a Don.</span><ConnectButton /></div>
-          ) : (
-            <>
-              {/* the one obvious action */}
-              <button className="btn btn-gold ex-buy"
-                disabled={!!busy || float_ === 0n || !quote || short}
-                onClick={() => act("buy", () => flows.buyDon(a!).then(({ id }) => setMsg(`✓ Don #${id} is yours! Your fee just fed the club. Next: stake a Tier at the Bell to start earning.`)), "✓ Don purchased")}>
-                {busy === "buy" ? "buying your Don…"
-                  : float_ === 0n ? "No Dons for sale right now"
-                  : short ? "Need more $ESSEY — top up on the Faucet"
-                  : quote ? `Buy a Don  ·  ${fmt(quote.buyTotal)} $ESSEY all-in` : "quoting…"}
-              </button>
-              {float_ === 0n && <div className="live-note ex-help">Every Don is held right now — check back, or watch the <Link to="/tape">Tape</Link> for one returning to the Exchange (holders can sell back anytime).</div>}
-              <div className="live-note ex-help">You'll get the next available Don. The price is the <b>live floor</b> (never below 300,000 $ESSEY) plus the 8% fee — the total above includes ~1% headroom in case the floor rises mid-trade; you're only ever charged the on-chain quote. Need funds? Grab them on the <Link to="/faucet">Faucet</Link> page.</div>
-              <div className="live-note ex-help">🛡 Every Don has a hard <b>$ESSEY floor</b> — redeem it for its share of the reserve anytime (see <Link to="/portfolio">Portfolio</Link>). The floor only ever rises.</div>
+          {/* buy / sell toggle */}
+          <div className="seg amm-toggle" role="tablist">
+            <button role="tab" aria-selected={tab === "buy"} onClick={() => { setTab("buy"); setSellPick(null); }}>Buy from pool</button>
+            <button role="tab" aria-selected={tab === "sell"} onClick={() => { setTab("sell"); setPick(null); }}>Sell yours</button>
+          </div>
 
-              {/* advanced, hidden by default */}
-              <button className="ex-more" onClick={() => setAdv((v) => !v)}>
-                {adv ? "▾  Hide options" : "▸  More options — pick an exact Don, or sell one"}
-              </button>
-              {adv && (
-                <div className="ex-adv">
-                  <div className="ex-adv-block">
-                    <div className="ex-adv-h">Pick an exact Don number</div>
-                    <div className="ex-adv-row">
-                      <input className="num ex-input" type="text" inputMode="numeric" placeholder="Don #" value={snipeId}
-                        onChange={(e) => setSnipeId(e.target.value.replace(/\D/g, ""))} aria-label="Don number to buy" />
-                      <button className="btn btn-ghost" disabled={!!busy || !snipeId || !quote}
-                        onClick={() => act("snipe", () => flows.snipeDon(a!, BigInt(snipeId)), `✓ Don #${snipeId} is yours`)}>
-                        {busy === "snipe" ? "buying…" : `Buy #${snipeId || "?"} · ${quote ? fmt(quote.snipeTotal) : "…"} $ESSEY (12% fee)`}
-                      </button>
-                    </div>
-                    {ids.length > 0 && <div className="live-note num">available now: {ids.map((i) => `#${i}`).join(", ")}{float_ !== null && float_ > 12n ? ", …" : ""}</div>}
+          {tab === "buy" && (
+            <>
+              {/* the low-fee path, always visible and distinct from a snipe */}
+              <div className="amm-next">
+                <div className="amm-next-copy">
+                  <b>Buy the next Don</b>
+                  <span className="live-note">Takes whichever Don is next off the shelf — the cheapest way in at the <b>8%</b> fee. Don't care which #? Use this.</span>
+                </div>
+                {ready ? (
+                  <button className="btn btn-gold amm-next-btn" disabled={!!busy || float_ === 0n || !quote || shortBuy}
+                    onClick={() => act("buy", () => flows.buyDon(a!).then(({ id }) => setMsg(`✓ Don #${id} is yours — your 8% fee just fed the club. Next: stake a Tier at the Bell to start earning.`)), "✓ Don purchased")}>
+                    {busy === "buy" ? "buying…"
+                      : float_ === 0n ? "Pool is empty"
+                      : shortBuy ? "Need more $ESSEY"
+                      : quote ? `Buy next · ${fmt(quote.buyTotal)} $ESSEY` : "quoting…"}
+                  </button>
+                ) : <ConnectButton />}
+              </div>
+
+              {/* snipe-confirm for the clicked Don */}
+              {pick !== null && (
+                <div className="amm-confirm">
+                  <DonThumb id={pick} />
+                  <div className="amm-confirm-body">
+                    <div className="amm-confirm-h">Snipe Don #{pick.toString()} <span className="amm-fee-pill">12% premium</span></div>
+                    <div className="amm-confirm-sub num">{quote ? fmt(quote.price) : "…"} + 12% fee ({quote ? fmt(quote.snipeFee) : "…"}) = <b>{quote ? fmt(quote.snipeTotal) : "…"} $ESSEY</b></div>
+                    <div className="live-note">Picking an <b>exact</b> Don pays the 12% snipe fee — {quote ? fmt(quote.snipeFee - quote.buyFee) : "…"} $ESSEY more than buying the next one at 8%. Same live floor either way.</div>
                   </div>
-                  <div className="ex-adv-block">
-                    <div className="ex-adv-h">Sell a Don you own</div>
-                    <div className="ex-adv-row">
-                      <input className="num ex-input" type="text" inputMode="numeric" placeholder="your Don #" value={sellId}
-                        onChange={(e) => setSellId(e.target.value.replace(/\D/g, ""))} aria-label="Don number to sell" />
-                      <button className="btn btn-ghost" disabled={!!busy || !sellId || !quote}
-                        onClick={() => act("sell", () => flows.sellDon(a!, BigInt(sellId)), `✓ sold #${sellId} back for ~${quote ? fmt(quote.sellNet) : "…"} $ESSEY`)}>
-                        {busy === "sell" ? "selling…" : `Sell back · get ~${quote ? fmt(quote.sellNet) : "…"} $ESSEY`}
+                  <div className="amm-confirm-act">
+                    {ready ? (
+                      <button className="btn btn-gold" disabled={!!busy || !quote || shortSnipe}
+                        onClick={() => act("snipe", () => flows.snipeDon(a!, pick).then(() => { setMsg(`✓ Don #${pick} is yours — the 12% snipe fee fed the club. Stake it at the Bell to earn.`); setPick(null); }), "✓ sniped")}>
+                        {busy === "snipe" ? "sniping…" : shortSnipe ? "Need more $ESSEY" : `Confirm snipe · ${quote ? fmt(quote.snipeTotal) : "…"}`}
                       </button>
-                    </div>
-                    <div className="live-note">Returns a Don to the Exchange at the live price minus the 8% fee. Your Don numbers are on the Portfolio tab.</div>
+                    ) : <ConnectButton />}
+                    <button className="btn btn-ghost" onClick={() => setPick(null)}>Cancel</button>
                   </div>
                 </div>
               )}
-              {busy && <div className="live-note ex-help">This can take a couple of wallet confirmations — your wallet will walk you through each one.</div>}
-              {msg && <div className="live-msg">{msg}</div>}
+
+              {/* the pool, as faces */}
+              {poolIds === null ? (
+                <div className="amm-empty live-note">Reading the pool…</div>
+              ) : poolIds.length === 0 ? (
+                <div className="amm-empty live-note">Every Don is held right now — nothing on the shelf. Watch the <Link to="/tape">Tape</Link> for one returning (holders can sell back anytime).</div>
+              ) : (
+                <>
+                  <div className="amm-grid-h live-note">Tap a Don to snipe that exact # (12%){float_ !== null && poolIds.length < Number(float_) ? ` · showing ${poolIds.length} of ${float_.toString()}` : ""}</div>
+                  <div className="amm-grid">
+                    {poolIds.map((id) => (
+                      <button key={id.toString()} className={"amm-card" + (pick === id ? " on" : "")}
+                        onClick={() => { setPick(id); setMsg(null); }} aria-pressed={pick === id}>
+                        <DonThumb id={id} />
+                        <span className="amm-id num">#{id.toString()}</span>
+                        <span className="amm-price num">{quote ? fmt(quote.snipeTotal) : "…"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="live-note ex-help">🛡 Every Don carries a hard <b>$ESSEY floor</b> — redeem it for its share of the reserve anytime (see <Link to="/portfolio">Portfolio</Link>). The floor only ever rises. Totals carry ~1% slippage headroom; you're only charged the on-chain quote. Need funds? <Link to="/faucet">Faucet →</Link></div>
             </>
           )}
+
+          {tab === "sell" && (
+            !ready ? (
+              <div className="amm-empty">
+                <div className="live-note" style={{ marginBottom: 10 }}>Connect on Robinhood Chain testnet to see your Dons and sell one back.</div>
+                <ConnectButton />
+              </div>
+            ) : owned === null ? (
+              <div className="amm-empty live-note">Reading your Dons…</div>
+            ) : owned.length === 0 ? (
+              <div className="amm-empty live-note">You don't own a Don yet. <button className="linklike" onClick={() => setTab("buy")}>Buy one from the pool →</button></div>
+            ) : (
+              <>
+                {sellPick !== null && sellDon && (
+                  <div className="amm-confirm">
+                    <DonThumb id={sellPick} />
+                    <div className="amm-confirm-body">
+                      <div className="amm-confirm-h">Sell Don #{sellPick.toString()} <span className="amm-fee-pill">−8% fee</span></div>
+                      <div className="amm-confirm-sub num">receive <b>{quote ? fmt(quote.sellNet) : "…"} $ESSEY</b> <i>({quote ? fmt(quote.price) : "…"} floor − 8%)</i></div>
+                      <div className="live-note">Returns the Don to the pool at the live floor minus the 8% fee. Its Vault contents travel with it — <b>claim and empty the Vault first</b> (see <Link to="/portfolio">Portfolio</Link>).</div>
+                    </div>
+                    <div className="amm-confirm-act">
+                      <button className="btn btn-gold" disabled={!!busy || !quote}
+                        onClick={() => act("sell", () => flows.sellDon(a!, sellPick).then(() => { setMsg(`✓ sold Don #${sellPick} back for ~${quote ? fmt(quote.sellNet) : ""} $ESSEY`); setSellPick(null); }), "✓ sold")}>
+                        {busy === "sell" ? "selling…" : `Confirm sell · get ~${quote ? fmt(quote.sellNet) : "…"}`}
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setSellPick(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+                <div className="amm-grid-h live-note">Tap one of your Dons to sell it back at the live floor −8%.</div>
+                <div className="amm-grid">
+                  {owned.map((d) => (
+                    <button key={d.id.toString()} className={"amm-card" + (sellPick === d.id ? " on" : "") + (d.liened ? " amm-card-off" : "")}
+                      disabled={d.liened} aria-pressed={sellPick === d.id}
+                      title={d.liened ? "Loan collateral — repay the loan to unlock" : undefined}
+                      onClick={() => { if (!d.liened) { setSellPick(d.id); setMsg(null); } }}>
+                      <DonThumb id={d.id} />
+                      <span className="amm-id num">#{d.id.toString()}</span>
+                      {d.liened
+                        ? <span className="amm-badge amm-badge-lien">📜 liened</span>
+                        : d.locked
+                          ? <span className="amm-badge">🔒 staked</span>
+                          : <span className="amm-price num">{quote ? fmt(quote.sellNet) : "…"}</span>}
+                    </button>
+                  ))}
+                </div>
+                <div className="live-note ex-help">A <b>liened</b> Don is loan collateral — repay the loan (Portfolio) to unlock it before selling. A <b>staked</b> Don sells fine; its Bell tier just clears on transfer.</div>
+              </>
+            )
+          )}
+
+          {busy && <div className="live-note ex-help">This can take a couple of wallet confirmations — your wallet will walk you through each one.</div>}
+          {msg && <div className="live-msg">{msg}</div>}
         </div>
       </div>
     </section>
