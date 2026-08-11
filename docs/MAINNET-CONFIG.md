@@ -113,3 +113,117 @@ check (keeper substitute), the adminBurn/multiplier EOA hazard, early-close (#6)
 **Remaining = deploy-time config (Phase 6, not code)** + **human gates:** Degen real-stock seeding, the mainnet
 rate curve, the real Dice `ENTROPY_PROVIDER`, feeds-as-proxy — all baked into the `Deploy-mainnet` script; then
 Phase 4 (multisig) + Phase 3 (keepers) + securities-counsel sign-off → Phase 6 deploy + smoke-test.
+
+## Dons v3 mainnet config (verified 2026-08-11)
+
+Every address below was re-verified against live mainnet (`https://rpc.mainnet.chain.robinhood.com`,
+`cast chain-id` → **4663**) on 2026-08-11, read-only. Nothing was trusted from memory or docs alone.
+Both mainnet `broadcast/*/4663/` dirs contain **dry-run only** — nothing of ours is deployed on mainnet;
+the whole Dons stack (incl. $ESSEY and the converter) deploys greenfield.
+
+### Env block for `DeployDons.s.sol` (paste + fill the two placeholders)
+
+```bash
+# --- identities (FOUNDER MUST SUPPLY — placeholders) ---
+export ADMIN=<MULTISIG>          # broadcaster must equal ADMIN (one-shot wiring runs in-script)
+export TREASURY=<MULTISIG>       # receives the fresh 8.888B $ESSEY mint
+export SEEDER=<MULTISIG>         # receives the 2,222 AMM-float mintReserved
+
+# --- tokens ---
+export ESSEY=0                   # 0 = deploy a FRESH 8,888,888,888e18 EsseyToken (verified: no prior mainnet deploy — broadcast/ has dry-runs only)
+export USDG=0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168   # verified: decimals()=6, symbol=USDG, name="Global Dollar", code present; matches docs.robinhood.com/chain/contracts
+export WETH=0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73   # canonical per docs.robinhood.com/chain/contracts; verified: symbol=WETH, 18-dec, totalSupply≈29,336 ETH, AND SwapRouter02.WETH9() returns this exact address
+
+# --- converter (deploy the mainnet BundleConverter FIRST, then fill these) ---
+export CONVERTER=<from mainnet BundleConverter deploy>    # no mainnet converter exists (dry-run only) — deploys fresh, USDG passthrough + defaultPayout=BUNDLE per the decided config
+export DEFAULT_PAYOUT=<conv.BUNDLE() from that deploy>
+
+# --- USDG-denominated params (6 decimals CONFIRMED on-chain) ---
+export MIN_RING=10000000         # 10e6 = 10 USDG in reward (USDG) decimals — matches the script default; the ONLY USDG-denominated env (ladder fees + DON_PRICE are 18-dec $ESSEY, unaffected)
+
+# --- Chainlink feeds (both from Chainlink's own directory JSON, both verified live) ---
+export ETH_FEED=0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9   # "ETH / USD", dec=8, $1,880.45, updatedAt 643s before check (heartbeat 86400s)
+export USDG_FEED=0x61B7e5650328764B076A108EFF5fa7282a1B9aD2  # "USDG / USD", dec=8, $1.00005587, updatedAt ~4.8h before check
+export SEQUENCER_FEED=0          # re-confirmed 2026-08-11: Robinhood Chain is NOT on Chainlink's L2 sequencer-uptime list, and the RH feed directory (56 feeds) has no uptime feed
+
+# --- Uniswap v3 (official Uniswap deployment for chainId 4663) ---
+export SWAP_ROUTER=0xcaf681a66d020601342297493863e78c959e5cb2  # SwapRouter02 — verified: code present, factory()=0x1f7d…2EfA, WETH9()=canonical WETH.  ⚠️ ABI BLOCKER below.
+
+# --- ETH-denominated fees (RESIZED for real ETH price — see Gas/params) ---
+export REROLL_FEE_WEI=1600000000000000    # 0.0016 ETH ≈ $3.01 @ $1,880.45 (script default 0.00075 = $1.41 — 53% under the ~$3 target)
+export CUSTOM_FEE_WEI=5300000000000000    # 0.0053 ETH ≈ $9.97 @ $1,880.45 (script default 0.0025 = $4.70 — 53% under the ~$10 target)
+
+# --- defaults confirmed fine as-is ---
+# RESERVE_CAP=2722, DON_PRICE=300000e18 ($ESSEY, 18-dec) — script defaults hold
+```
+
+### Verification table
+
+| Item | Address | Proof run (all `cast … --rpc-url https://rpc.mainnet.chain.robinhood.com`) | Result |
+|---|---|---|---|
+| Chain | — | `cast chain-id` | 4663 |
+| USDG | `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` | `decimals()` / `symbol()` / `name()` / `cast code` | **6**, USDG, "Global Dollar", code present |
+| WETH | `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73` | `symbol()`/`decimals()`/`totalSupply()` + cross-check `SwapRouter02.WETH9()` | WETH, 18, ≈29,336 ETH wrapped; router agrees → canonical |
+| ETH/USD feed | `0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9` | `decimals()`, `description()`, `latestRoundData()` | dec=8, "ETH / USD", $1,880.45, 643s fresh |
+| USDG/USD feed | `0x61B7e5650328764B076A108EFF5fa7282a1B9aD2` | same | dec=8, "USDG / USD", $1.00006, ~4.8h fresh |
+| UniswapV3Factory | `0x1f7d7550b1b028f7571e69a784071f0205fd2efa` | `cast code` + `SwapRouter02.factory()` | code present; router agrees |
+| SwapRouter02 | `0xcaf681a66d020601342297493863e78c959e5cb2` | `cast code` + bytecode selector scan | code present; has `0x04e45aaf` (Router02 `exactInputSingle`), **lacks `0x414bf389`** (classic) |
+| WETH/USDG 500-tier pool | `0x69BfaF19C9f377BB306a89aEd9F6B07e2c1a8d9a` | `factory.getPool` + `liquidity()` + token balances | live; ≈820 WETH + ≈1,004,441 USDG (deepest) |
+| WETH/USDG 3000-tier pool | `0xa9188730Fe85Be88ad499D7d52B099e800fB0334` | same + `slot0()` | live; ≈248 WETH + ≈221,649 USDG; slot0 price ≈ $1,878 ≈ feed ✓ |
+| Sequencer uptime feed | none | Chainlink L2-uptime list + full RH feed directory (56 feeds) | Robinhood Chain absent from both → `SEQUENCER_FEED=0` stance holds |
+
+**Mainnet stock-token registry for the converter `listStock` sequence** — canonicity proven on-chain, not
+by explorer labels: every token below is a beacon proxy whose EIP-1967 beacon slot reads the SAME beacon
+`0xe10b6f6b275de231345c20d14ab812db62151b00` (the registry the already-verified AAPL points to), all
+`decimals()=18`, `uiMultiplier()=1e18`, `paused()=false`, checked 2026-08-11. Every paired feed read
+dec=8 + fresh-within-heartbeat via `latestRoundData()` the same day:
+
+| Stock | Token (verified) | Feed (verified fresh) |
+|---|---|---|
+| AAPL | `0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9` | `0x6B22A786bAa607d76728168703a39Ea9C99f2cD0` ($304.92) |
+| NVDA | `0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC` | `0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15` ($218.00) |
+| TSLA | `0x322F0929c4625eD5bAd873c95208D54E1c003b2d` | `0x4A1166a659A55625345e9515b32adECea5547C38` ($332.61) |
+| SPY | `0x117cc2133c37B721F49dE2A7a74833232B3B4C0C` | `0x319724394D3A0e3669269846abE664Cd621f9f6A` ($772.32, 20.1h — inside the 24h heartbeat) |
+| MSFT | `0xe93237C50D904957Cf27E7B1133b510C669c2e74` | `0x45C3C877C15E6BA2EBB19eA114Ea508d14C1Af2E` ($502.55) |
+| GOOGL | `0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3` | `0xF6f373a037c30F0e5010d854385cA89185AE638b` ($343.73) |
+| AMZN | `0x12f190a9F9d7D37a250758b26824B97CE941bF54` | `0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C` ($272.28) |
+| META | `0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35` | `0x7C38C00C30BEe9378381E7B6135d7283356D71b1` ($599.46) |
+| QQQ | `0xD5f3879160bc7c32ebb4dC785F8a4F505888de68` | `0x80901d846d5D7B030F26B480776EE3b29374C2ae` ($718.93) |
+
+All 9 `RobinhoodFeeds.sol` addresses also match Chainlink's directory JSON exactly (proxy addresses,
+86400s heartbeat, 0.5% deviation — the feeds-as-proxy rule holds).
+
+### Gas/params sanity
+
+On-chain ETH/USD is **$1,880.45** (not the ~$4,500 assumed when the script defaults were set; the
+3000-tier pool's own slot0 price cross-checks at ≈$1,878). Script defaults therefore undershoot ~53%:
+`REROLL_FEE_WEI=0.00075 ether` = **$1.41** (target ~$3) and `CUSTOM_FEE_WEI=0.0025 ether` = **$4.70**
+(target ~$10). The env block resizes them to 0.0016 / 0.0053 ether (≈$3.01 / ≈$9.97). Re-price on
+deploy day — these track ETH.
+
+### BLOCKERS / DECISIONS
+
+1. **BLOCKER — SwapRouter ABI mismatch (code change required).** Mainnet has only **SwapRouter02**
+   (+ UniversalRouter); no classic SwapRouter is deployed. `DonFeeRouter.ISwapRouter` **and**
+   `StockConverter` encode the classic `ExactInputSingleParams` **with `deadline`** (selector
+   `0x414bf389`) — proven absent from the deployed router bytecode (which carries Router02's
+   `0x04e45aaf`). As written, **every `flushEth`/`flushEssey`/converter swap reverts on mainnet.**
+   Fix: drop `deadline` from the struct (Router02 shape) in both contracts — and if deadline
+   enforcement is wanted, wrap via Router02 `multicall(deadline, …)`. Re-audit the touched surface.
+2. **FOUNDER — admin/treasury/seeder multisig address** (placeholders in the env block). Broadcaster
+   must be ADMIN for the one-shot wiring.
+3. **OPS — ESSEY/USDG pool cannot pre-exist** ($ESSEY deploys fresh). Post-deploy go-live step: create
+   the ESSEY/USDG **3000-tier** V3 pool (the `esseyPoolFee=3000` the DonFeeRouter is configured for)
+   and seed protocol-owned liquidity **before** the keeper's `flushEssey` leg can function; until then
+   $ESSEY fees simply accumulate in the router (safe, no loss).
+4. **DECISION — ETH leg pool tier.** Script wires `ethPoolFee=3000`, but the **500-tier** WETH/USDG
+   pool is ~4.5× deeper (≈$1.0M vs ≈$0.22M USDG-side). Recommend `ethPoolFee=500` (admin-retunable
+   post-deploy, but better set right at deploy).
+5. **OPS — mainnet converter deploy.** `DeployBundleConverter.s.sol` is testnet-shaped (mints mock
+   stock, deploys MockFeeds). The mainnet run needs: real token+feed pairs from the registry table
+   above, the USDG passthrough, `spreadBps` decision, and **real stock acquired to `seedReserve`**
+   (the standing B2 finding). Deploy converter first → its `CONVERTER`/`BUNDLE` fill the Dons env.
+6. **Sequencer feed: still none** (re-checked Chainlink's L2-uptime list + the full 56-feed RH
+   directory on 2026-08-11) — ship `SEQUENCER_FEED=0` with the disclosed keeper substitute. Re-check
+   on deploy day; if one has appeared, StaleFeedGuard supports it and mainnet should use it.
+7. **Fee resize** (item above) — founder sign-off on 0.0016/0.0053 ether; re-price on deploy day.
