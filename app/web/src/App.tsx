@@ -7,7 +7,6 @@ import { DOCS, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, ExchangeHero, ClubFlow, Mechanics, ProvableTwist, EngineSection } from "./market";
 import { CasesPage } from "./cases";
 import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
-import { StartPage, JourneyStrip, captureRef, type StepId } from "./journey";
 import { PortfolioPage } from "./portfolio";
 import { PrivatePage } from "./private";
 import { LendPage } from "./lend-ui";
@@ -15,7 +14,6 @@ import { OperatorPage } from "./operator";
 import { ExplorerPage } from "./explorer";
 import { BuilderPage } from "./builder";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
-import { LeaderboardPage } from "./leaderboard";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -24,7 +22,7 @@ const GROUPS = ["The Market", "Essey Private", "The engine", "Audits"];
 // Action-clear nav (founder: a tester must know where each flow lives). The landing tells the story;
 // each app page does exactly one thing, led by the journey strip so "what do I do next" is answered.
 const NAV = [
-  ["/start", "Quest"],
+  ["/builder", "Build"],
   ["/market", "Exchange"],
   ["/bell", "Bell"],
   ["/cases", "Cases"],
@@ -32,23 +30,16 @@ const NAV = [
   ["/launch", "Launch"],
   ["/explorer", "Scan"],
   ["/tape", "Tape"],
-  ["/leaderboard", "Leaders"],
   ["/portfolio", "Portfolio"],
   ["/private", "Private"],
   ["/docs", "Docs"],
 ] as const;
 
-/// Every app page opens with the journey strip — the shared "where am I / what's next" affordance.
-/// Each page's own band-head carries its title + description, so the strip stays thin (no double
-/// header). `here` pins the strip to this page's step even if an earlier one is unfinished.
-function AppPage({ title, here, children }: { title: string; here?: StepId; children: ReactNode }) {
+/// Thin wrapper for app pages: sets the document title. Each page's own band-head carries its
+/// title + description.
+function AppPage({ title, children }: { title: string; children: ReactNode }) {
   useEffect(() => { document.title = `${title} · Essey`; }, [title]);
-  return (
-    <>
-      <JourneyStrip here={here} />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -60,16 +51,14 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
-            <Route path="/start" element={<StartPage />} />
-            <Route path="/market" element={<AppPage title="The Exchange" here="seat"><LiveExchange /><Mechanics /></AppPage>} />
-            <Route path="/bell" element={<AppPage title="The Bell" here="stake"><LiveBell /></AppPage>} />
-            <Route path="/cases" element={<AppPage title="Cases" here="case"><CasesPage /></AppPage>} />
-            <Route path="/lend" element={<AppPage title="Lend" here="supply"><LendPage /></AppPage>} />
+            <Route path="/market" element={<AppPage title="The Exchange"><LiveExchange /><Mechanics /></AppPage>} />
+            <Route path="/bell" element={<AppPage title="The Bell"><LiveBell /></AppPage>} />
+            <Route path="/cases" element={<AppPage title="Cases"><CasesPage /></AppPage>} />
+            <Route path="/lend" element={<AppPage title="Lend"><LendPage /></AppPage>} />
             <Route path="/launch" element={<AppPage title="Launch"><OperatorPage /></AppPage>} />
             <Route path="/explorer" element={<ExplorerPage />} />
             <Route path="/builder" element={<AppPage title="PFP Builder"><BuilderPage /></AppPage>} />
             <Route path="/tape" element={<AppPage title="The Tape"><TapeRoom /></AppPage>} />
-            <Route path="/leaderboard" element={<AppPage title="Leaderboard"><LeaderboardPage /></AppPage>} />
             <Route path="/portfolio" element={<AppPage title="Portfolio"><PortfolioPage /></AppPage>} />
             <Route path="/private" element={<AppPage title="Private"><PrivatePage /></AppPage>} />
             <Route path="/provable" element={<PageShell title="Provable"><ProvableTwist /></PageShell>} />
@@ -87,7 +76,6 @@ export default function App() {
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
-  useEffect(() => { captureRef(); }, []); // stash any ?ref= referral on first load
   return null;
 }
 
@@ -142,19 +130,18 @@ function Landing() {
     <>
       <ExchangeHero />
       <ClubFlow />
-      {/* The one funnel: the landing points everyone at the guided journey. */}
+      {/* The one funnel: the landing points everyone at the Don builder. */}
       <section className="band" style={{ paddingTop: 8 }}>
         <div className="wrap">
           <div className="start-cta">
             <div>
-              <span className="eyebrow">Live on testnet · earn a whitelist spot</span>
-              <h2>Test the club, earn your whitelist</h2>
-              <p>Every mechanic is live on testnet with play money. Do the core loop — register, own a Seat, win
-                stock from a Case, and supply liquidity — and you're on-chain-qualified for one of 2,222 mainnet
-                whitelist spots. Stake a Tier, ring the Bell, and invite friends to boost your odds. No risk,
-                real contracts.</p>
+              <span className="eyebrow">The Dons · take a seat at the table</span>
+              <h2>Build your Don</h2>
+              <p>Mint your Don, stake it to take a seat, and earn tokenized stock every time the Bell rings —
+                a seat, a stock, and a margin account in one NFT. Customize every trait, or roll a random one.
+                Every mechanic below is live to explore.</p>
             </div>
-            <Link className="btn btn-gold start-cta-btn" to="/start">Start the quest →</Link>
+            <Link className="btn btn-gold start-cta-btn" to="/builder">Build your Don →</Link>
           </div>
           <div className="dest-grid" style={{ marginTop: 22 }}>
             {[

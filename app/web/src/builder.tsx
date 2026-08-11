@@ -58,6 +58,10 @@ export function BuilderPage() {
   }, [d, eff, seed]);
   useEffect(() => { setRsv({ status: "idle" }); }, [res?.key]); // token changed -> reset reservation
 
+  // Mint/reservation goes live with the on-chain contract + a durable reservation store. Until then the
+  // builder is a public PLAYGROUND: customize + preview freely; the reserve/mint CTA reads "coming soon".
+  const MINT_LIVE = false;
+
   const reserve = useCallback(async () => {
     if (!res) return; setRsv({ status: "busy" });
     try {
@@ -79,7 +83,7 @@ export function BuilderPage() {
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "20px 16px", color: "#ece9e1" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <h1 style={{ margin: 0, letterSpacing: ".18em", fontWeight: 800, background: "linear-gradient(90deg,#e6c877,#c9a24b)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>PFP BUILDER</h1>
-        <span style={{ fontSize: 13, color: "#9a978d" }}>pick traits · rules keep it valid · reserve your 1-of-1</span>
+        <span style={{ fontSize: 13, color: "#9a978d" }}>pick traits · rules keep it valid · {MINT_LIVE ? "reserve your 1-of-1" : "your 1-of-1 · minting soon"}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,440px) 1fr", gap: 22, alignItems: "start" }}>
         {/* preview + actions (sticky) */}
@@ -96,18 +100,26 @@ export function BuilderPage() {
             <span style={{ textTransform: "uppercase", letterSpacing: ".05em" }}>Uniqueness key</span><br />
             <code style={{ color: "#c9a24b" }}>{res?.key.slice(0, 40)}…</code>
           </div>
-          <button onClick={reserve} disabled={rsv.status === "busy" || rsv.status === "reserved"}
-            style={{ ...chip(rsv.status !== "taken"), padding: "13px", fontSize: 14,
-              background: rsv.status === "reserved" ? "linear-gradient(90deg,#5ac47e,#2f9e57)" : rsv.status === "taken" ? "#3a2326" : "linear-gradient(90deg,#e6c877,#c9a24b)",
-              color: rsv.status === "taken" ? "#e06a97" : "#0b0c10",
-              cursor: rsv.status === "busy" || rsv.status === "reserved" ? "default" : "pointer" }}>
-            {rsv.status === "reserved" ? "✓ Reserved — yours to mint"
-              : rsv.status === "taken" ? "✗ Taken — tweak a trait"
-              : rsv.status === "busy" ? "Reserving…"
-              : rsv.status === "error" ? "Error — retry"
-              : "Reserve this 1-of-1"}
-          </button>
-          {rsv.status === "taken" && <div style={{ fontSize: 11, color: "#6f6d66" }}>This exact combination is already reserved. Change any trait for a fresh 1-of-1.</div>}
+          {MINT_LIVE ? (<>
+            <button onClick={reserve} disabled={rsv.status === "busy" || rsv.status === "reserved"}
+              style={{ ...chip(rsv.status !== "taken"), padding: "13px", fontSize: 14,
+                background: rsv.status === "reserved" ? "linear-gradient(90deg,#5ac47e,#2f9e57)" : rsv.status === "taken" ? "#3a2326" : "linear-gradient(90deg,#e6c877,#c9a24b)",
+                color: rsv.status === "taken" ? "#e06a97" : "#0b0c10",
+                cursor: rsv.status === "busy" || rsv.status === "reserved" ? "default" : "pointer" }}>
+              {rsv.status === "reserved" ? "✓ Reserved — yours to mint"
+                : rsv.status === "taken" ? "✗ Taken — tweak a trait"
+                : rsv.status === "busy" ? "Reserving…"
+                : rsv.status === "error" ? "Error — retry"
+                : "Reserve this 1-of-1"}
+            </button>
+            {rsv.status === "taken" && <div style={{ fontSize: 11, color: "#6f6d66" }}>This exact combination is already reserved. Change any trait for a fresh 1-of-1.</div>}
+          </>) : (
+            <button disabled title="Minting opens with the on-chain drop"
+              style={{ ...chip(false), padding: "13px", fontSize: 14, cursor: "default", opacity: 0.9,
+                border: "1px solid #c9a24b55", color: "#e6c877", background: "#17140c" }}>
+              ✦ Minting soon — this 1-of-1 will be claimable
+            </button>
+          )}
         </div>
         {/* category pickers */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

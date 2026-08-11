@@ -14,13 +14,14 @@ export type Rules = {
   SUPPRESS: string[]; OPTIONAL: Record<string, number>;
   POS_OFFSET: Record<string, number>; Z_UNDER: Record<string, string>;
   SUPPRESS_IN?: Record<string, string[]>;
+  HIDE_LEAF?: string[]; CROP_TOP?: Record<string, number>; CROP_BOTTOM?: Record<string, number>;
 };
 export type BuilderData = {
   gender: string; leaves: Leaf[]; tree: TreeNode[];
   cats: Record<string, { group: boolean; role: string | null }>;
   rules: Rules; hand_conflicts: { cane_grip?: [string, string][]; snake_grip?: string[]; cane_snake?: [string, string][] };
 };
-export type RenderLeaf = { file: string; bbox: number[]; blend: string; category: string; zEff: number };
+export type RenderLeaf = { file: string; bbox: number[]; blend: string; category: string; zEff: number; cropTop?: number; cropBottom?: number };
 export type Resolved = { render: RenderLeaf[]; picks: Record<string, string>; drivers: Record<string, string | null>; key: string };
 
 // ---- seeded RNG (choices/choice/random) ----
@@ -189,7 +190,8 @@ function applyConflicts(data: BuilderData, s: Sel) {
   }
   if (fam !== "Zombie" && fam !== "Golden" && fam !== "Glitch") hideCats.add(hat ? "13 Hair" : "13.5 Hat Hair");
 
-  const keep = (lf: TreeNode) => { const m = meta[lf.z!]; if (!m) return true; if (hideCats.has(m.category)) return false; if (hidePaths.some((hp) => m.path.includes(hp))) return false; return true; };
+  const HL = R.HIDE_LEAF || [];
+  const keep = (lf: TreeNode) => { const m = meta[lf.z!]; if (!m) return true; if (hideCats.has(m.category)) return false; if (hidePaths.some((hp) => m.path.includes(hp))) return false; if (HL.some((h) => m.path.includes(h))) return false; return true; };
   const kept = [...s.leaves.filter(keep), ...addLeaves];
 
   // effective z: earrings under hair (Z_UNDER); order + attach render info
@@ -198,11 +200,18 @@ function applyConflicts(data: BuilderData, s: Sel) {
     const zs = kept.map((lf) => meta[lf.z!]).filter((m) => m && m.category === under).map((m) => m.z);
     if (zs.length) tz[cat] = Math.min(...zs) - 0.5;
   }
-  const render: RenderLeaf[] = kept.map((lf) => {
+  const render: RenderLeaf[] = [];
+  for (const lf of kept) {
     const m = meta[lf.z!];
-    if (!m || !m.file) return null;
-    return { file: m.file, bbox: m.bbox.slice(), blend: m.blend, category: m.category, zEff: tz[m.category] ?? (lf.z as number) };
-  }).filter((r): r is RenderLeaf => !!r).sort((a, b) => a.zEff - b.zEff);
+    if (!m || !m.file) continue;
+    const rl: RenderLeaf = { file: m.file, bbox: m.bbox.slice(), blend: m.blend, category: m.category, zEff: tz[m.category] ?? (lf.z as number) };
+    const ct = R.CROP_TOP ? Object.entries(R.CROP_TOP).find(([k]) => m.path.includes(k))?.[1] : undefined;
+    if (ct !== undefined) rl.cropTop = ct;
+    const cb = R.CROP_BOTTOM ? Object.entries(R.CROP_BOTTOM).find(([k]) => m.path.includes(k))?.[1] : undefined;
+    if (cb !== undefined) rl.cropBottom = cb;
+    render.push(rl);
+  }
+  render.sort((a, b) => a.zEff - b.zEff);
 
   const visiblePaths = kept.map((lf) => meta[lf.z!]?.path).filter(Boolean).sort();
   const key = bytesToHex(sha256(data.gender + "\n" + visiblePaths.join("\n")));

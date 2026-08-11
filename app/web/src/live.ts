@@ -37,8 +37,6 @@ export const ADDR = {
   // Lending stack (unchanged)
   pool: "0x283a4891458180f502E82E40470d3e06321ba748" as Address,
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
-  quest: "0x3DD40673665e13bD4A8A7B1D6e27Cb43EDfE0427" as Address,
-  lens: "0xD673a14f96ad94f37f91373a8d17Acc3E30bd23f" as Address, // QuestLens v2: qualify = register + Seat + hold-stock + supply
   // Stock-payout converter (Bell claim-edge → real stock into the Vault).
   converter: "0x3c6a57b21c000caecc61655568eabb6cfbb67fb0" as Address,
   // Degen (multiplier) case + its testnet entropy keeper.
@@ -160,18 +158,6 @@ export const marketsAbi = parseAbi([
   "function maxBorrow(address token, uint256 rawAmount) view returns (uint256)",
 ]);
 export const noteAbi = parseAbi(["function ownerOf(uint256) view returns (address)"]);
-export const questAbi = parseAbi([
-  "function registered(address) view returns (bool)",
-  "function referralCount(address) view returns (uint256)",
-  "function totalRegistered() view returns (uint256)",
-  "function register(address referrer)",
-  "event Registered(address indexed participant, address indexed referrer)",
-]);
-export const lensAbi = parseAbi([
-  "function qualified(address) view returns (bool)",
-  "function qualifiedMany(address[]) view returns (bool[])",
-  "function status(address) view returns ((bool registered, bool ownsSeat, bool supplied, bool wonStock, uint256 referrals))",
-]);
 // Cases sell-back — approve the stock unit, then sell it back at oracle value minus the spread.
 export const casesSellAbi = parseAbi([
   "function sellBack(address token) returns (uint256 paid)",
@@ -617,38 +603,6 @@ export const reads = {
     return out;
   },
 
-  /// The referral leaderboard, scored on-chain. Reads the quest's Registered events (bounded window,
-  /// like the Tape), then ONE qualifiedMany call scores every referred wallet — so this scales to
-  /// hundreds of testers in a couple of RPC round-trips, not hundreds of reads.
-  leaderboard: async (): Promise<{ board: { addr: Address; qualified: number; total: number }[]; totalQuesters: number }> => {
-    const head = await pub.getBlockNumber();
-    const from = head > 400_000n ? head - 400_000n : 0n;
-    const logs = await pub.getLogs({ address: ADDR.quest, event: questAbi[4], fromBlock: from, toBlock: head }).catch(() => []);
-    const referredBy = new Map<string, string[]>(); // referrer -> [referred]
-    const questers = new Set<string>();
-    for (const l of logs) {
-      const p = (l.args as { participant?: string }).participant;
-      const r = (l.args as { referrer?: string }).referrer;
-      if (p) questers.add(p.toLowerCase());
-      if (p && r && r !== "0x0000000000000000000000000000000000000000") {
-        const key = r.toLowerCase();
-        (referredBy.get(key) ?? referredBy.set(key, []).get(key)!).push(p);
-      }
-    }
-    const referrers = [...referredBy.keys()];
-    if (referrers.length === 0) return { board: [], totalQuesters: questers.size };
-    // Batch-qualify every referred wallet in one call.
-    const allReferred = [...new Set([...referredBy.values()].flat())] as Address[];
-    const flags = await pub.readContract({ address: ADDR.lens, abi: lensAbi, functionName: "qualifiedMany", args: [allReferred] }) as boolean[];
-    const isQual = new Map(allReferred.map((w, i) => [w.toLowerCase(), flags[i]]));
-    const board = referrers.map((r) => {
-      const refs = referredBy.get(r)!;
-      return { addr: r as Address, total: refs.length, qualified: refs.filter((w) => isQual.get(w.toLowerCase())).length };
-    }).filter((row) => row.qualified > 0 || row.total > 0)
-      .sort((x, y) => y.qualified - x.qualified || y.total - x.total);
-    return { board, totalQuesters: questers.size };
-  },
-
   /// Degen case: the disclosed ladder + the caller's account (owed winnings, reserve, entropy fee).
   degen: async (a: Address | null) => {
     const n = Number(await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "tierCount" }));
@@ -667,21 +621,11 @@ export const reads = {
     return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed };
   },
 
-  quest: async (a: Address | null) => {
-    const total = await pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "totalRegistered" }) as bigint;
-    if (!a) return { registered: false, referrals: 0n, total };
-    const [registered, referrals] = await Promise.all([
-      pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "registered", args: [a] }) as Promise<boolean>,
-      pub.readContract({ address: ADDR.quest, abi: questAbi, functionName: "referralCount", args: [a] }) as Promise<bigint>,
-    ]);
-    return { registered, referrals, total };
-  },
-
-  /// Everything the Portfolio and the guided journey need, in one pass: balances, each owned Seat
-  /// with its tier + claimable + Vault balance, Case winnings, pool position, and quest status.
+  /// Everything the Portfolio needs, in one pass: balances, each owned Seat with its tier + claimable
+  /// + Vault balance, Case winnings, pool position, and shielded status.
   portfolio: async (a: Address) => {
-    const [gas, bal, ids, wins, pool, loans, quest, shielded] = await Promise.all([
-      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a), reads.quest(a),
+    const [gas, bal, ids, wins, pool, loans, shielded] = await Promise.all([
+      reads.gasBalance(a), reads.balances(a), reads.ownedSeats(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a),
       reads.hasShielded(a).catch(() => false), // best-effort — a scan hiccup must never break the whole portfolio
     ]);
     const seats = await Promise.all(ids.map(async (id) => {
@@ -689,7 +633,7 @@ export const reads = {
       const [vaultUsdg, vaultStock] = await Promise.all([reads.vaultBalance(st.vault), reads.vaultStocks(st.vault)]);
       return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda };
     }));
-    return { gas, ...bal, seats, wins, pool, loans, quest, shielded };
+    return { gas, ...bal, seats, wins, pool, loans, shielded };
   },
 
   /// Has this wallet ever shielded into Essey Private? Detected from the PUBLIC deposit leg — a USDG transfer
@@ -780,9 +724,6 @@ export const flows = {
   },
 
   ringBell: (a: Address): Promise<Hex> => send(a, ADDR.bell, bellAbi, "ring"),
-
-  /// Join the quest, crediting a referrer (0x0 if none). One-shot per wallet.
-  registerQuest: (a: Address, referrer: Address): Promise<Hex> => send(a, ADDR.quest, questAbi, "register", [referrer]),
 
   /// Sell a won stock unit back to the Cases contract for USDG (oracle value minus the spread).
   /// Approves the exact unit size, then sells. Session-gated on chain (US market hours + fresh feed).
@@ -1258,8 +1199,8 @@ export function niceError(e: unknown): string {
   const m = String((e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? e);
   const s = m.toLowerCase();
   if (s.includes("user rejected") || s.includes("user denied") || s.includes("rejected the request")) return "You cancelled the transaction.";
-  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH — grab some from the faucet on the Quest page (the ⚡ button on /start).";
-  if (s.includes("erc20insufficientbalance") || s.includes("transfer amount exceeds balance") || s.includes("exceeds balance")) return "Not enough $ESSEY or USDG — grab play money from the faucet on the Quest page (/start).";
+  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH — grab some from the Robinhood Chain faucet.";
+  if (s.includes("erc20insufficientbalance") || s.includes("transfer amount exceeds balance") || s.includes("exceeds balance")) return "Not enough $ESSEY or USDG for this action.";
   if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown — 8h between drips.";
   if (s.includes("chain") && s.includes("match")) return "Wrong network — switch to Robinhood Chain testnet.";
   if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first — try again and confirm both wallet popups.";

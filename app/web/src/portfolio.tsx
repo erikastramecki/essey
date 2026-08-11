@@ -5,14 +5,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { useJourney, ReferralCard } from "./journey";
+import { usePortfolio } from "./usePortfolio";
 import { NET, ADDR, TIERS, flows, reads, fmt, niceError } from "./live";
 
 export function PortfolioPage() {
   const w = useWallet();
-  const { portfolio: p, connected, doneCount, steps, allRequiredDone, refresh } = useJourney();
+  const { portfolio: p, connected, refresh } = usePortfolio();
   useEffect(() => { document.title = "Portfolio · Essey"; }, []);
-  const next = steps.find((s) => !s.complete);
   const a = w.address as Address | null;
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -35,7 +34,6 @@ export function PortfolioPage() {
           <p>Everything you hold on testnet — balances, Seats and their Tiers, the Payouts sitting in each
             Vault, and the stock you've drawn from Cases. Come back here to do it all again.</p>
         </div>
-          {connected && <span className="preview-chip live">{doneCount}/{steps.length} tested</span>}
         </div>
 
         {!connected ? (
@@ -64,18 +62,7 @@ export function PortfolioPage() {
               <Link className="pf-quick-btn" to="/tape">📈 The Tape</Link>
             </div>
 
-            {next
-              ? (
-                <div className="pf-next">
-                  <span>{allRequiredDone ? <>Bonus step: <b>{next.title}</b> — {next.what}</> : <>Next step in the tour: <b>{next.title}</b> — {next.what}</>}</span>
-                  <Link className="btn btn-gold" to={next.to}>{next.cta} →</Link>
-                </div>
-              )
-              : <div className="pf-next"><span>✓ You've tested every flow. Play freely — everything above is live.</span></div>}
             {msg && <div className="live-msg" style={{ marginBottom: 14 }}>{msg}</div>}
-
-            {/* Invites — your referral link + who you've brought in (boosts whitelist odds). */}
-            <ReferralCard address={a!} quest={p.quest} />
 
             {/* Seats */}
             <div className="pf-block">

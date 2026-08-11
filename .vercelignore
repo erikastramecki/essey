@@ -1,0 +1,13 @@
+# Vercel Root Directory is app/web, but the build (gen-docs.mjs) reads repo-root docs/ via ../../docs,
+# so the upload must include the repo root — just not the heavy dirs that blew the upload (~1.5GB).
+# Exclude only large/irrelevant trees; keep docs/ and other small files the build may read.
+# NOTE: app/web/public/traits (the gitignored art) IS uploaded on purpose.
+.git
+.DS_Store
+node_modules
+dist
+.vercel
+.reservations.json
+circuit
+move
+rh-chain

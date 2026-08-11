@@ -167,8 +167,17 @@ _PRI = {"body": 0, "suit": 1, "hair": 2, "eyemod": 3, "hat": 4}  # drivers resol
 # Categories the PSD gives no "None"/rarity, so we make them OPTIONAL: P(present) below (absent otherwise).
 OPTIONAL = {"16 Neko": 0.05}  # Neko fox mask = rare accessory
 SUPPRESS = ("swollen",)       # user-flagged variants removed from every pool (bruised/red-rimmed eye)
-# category-specific: drop a broken/mismatched variant from ONE category until the art is re-cut.
-SUPPRESS_IN = {"14 Ring": {"bar"}}   # female 'Bar' ring renders as an oversized gold bird over the glass
+# ---- engine-side art-as-is fixes (no source edits): suppress a variant / hide a broken sub-leaf / crop.
+# variant suppression (drop from the pick pool -> a good sibling renders instead):
+SUPPRESS_IN = {"14 Ring": {"bar"},          # female 'Bar' ring = oversized gold bird over the glass
+               "22 Hat": {"bowler red"}}     # Bowler 'Red' crown fill is incomplete -> use Black/Grey/White
+# sub-leaf hide (a broken always-drawn layer inside an otherwise-good trait):
+HIDE_LEAF = ("Devilish Rear",   # the disconnected floating devil tail (keep the horn)
+             "Hair Fade")       # tan hat-hair base bleeds through light hair colours
+# crop a leaf's runaway top rows in canvas space (kills the orphaned corner smoke plume):
+CROP_TOP = {"19 Hand Grip/Cigar": 300, "13 Hand Grip/Havannah": 300}
+# crop a leaf's bottom rows (keep the top of a layer, drop a disconnected lower element):
+CROP_BOTTOM = {"11 Devilish/Devilish": 400}   # keep the horn (y<400), drop the floating tail below the gap
 
 def generate(tree, rng):
     s = Sel(rng)
@@ -294,6 +303,8 @@ def apply_conflicts(s, leafmeta):
             return False
         if any(hp in m["path"] for hp in hide_paths):
             return False
+        if any(h in m["path"] for h in HIDE_LEAF):   # art-as-is: drop broken always-drawn sub-leaves
+            return False
         return True
     s.leaves = [lf for lf in s.leaves if keep(lf)] + add_leaves
     s.hidden = {"cats": sorted(hide_cats), "paths": hide_paths, "facemod": fm, "cover": cover}
@@ -335,6 +346,10 @@ def composite(leaves, leafmeta, gender):
             a = np.where(a < 0.9, 0.0, a)                       # (semi-transparent stray pixels -> gone)
         l, t = m["bbox"][0] + POS_OFFSET.get(m.get("category", ""), 0), m["bbox"][1]; h, w = a.shape
         x0, y0 = max(l, 0), max(t, 0); x1, y1 = min(l + w, 900), min(t + h, 900)
+        _ct = next((v for k, v in CROP_TOP.items() if k in m.get("path", "")), None)
+        if _ct is not None: y0 = max(y0, _ct)   # clip the runaway smoke plume above this row
+        _cb = next((v for k, v in CROP_BOTTOM.items() if k in m.get("path", "")), None)
+        if _cb is not None: y1 = min(y1, _cb)    # drop a disconnected lower element (Devilish tail)
         if x0 >= x1 or y0 >= y1: continue
         sy, sx = y0 - t, x0 - l
         sr = rgb[sy:sy + (y1 - y0), sx:sx + (x1 - x0)]; sa = a[sy:sy + (y1 - y0), sx:sx + (x1 - x0)]

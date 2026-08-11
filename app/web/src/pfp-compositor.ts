@@ -45,7 +45,14 @@ export async function composite(canvas: HTMLCanvasElement, data: BuilderData, re
     const r = render[i]; const x = r.bbox[0] + posOffset(data, r.category); const y = r.bbox[1];
     if (r.category === "26 AR" || r.category === "17 AR") { drawAR(ctx, img, x, y); continue; }
     ctx.globalCompositeOperation = blendMap[r.blend] || "source-over"; ctx.globalAlpha = 1;
-    ctx.drawImage(img, x, y);
+    // clip runaway rows: cropTop drops rows above the line (smoke plume), cropBottom drops rows
+    // below it (disconnected lower element, e.g. Devilish floating tail). Both are canvas-space y.
+    const top = r.cropTop != null ? Math.max(y, r.cropTop) : y;
+    const bot = r.cropBottom != null ? Math.min(y + img.height, r.cropBottom) : y + img.height;
+    if (top !== y || bot !== y + img.height) {
+      const sy = top - y, sh = bot - top;
+      if (sh > 0) ctx.drawImage(img, 0, sy, img.width, sh, x, top, img.width, sh);
+    } else ctx.drawImage(img, x, y);
   }
   ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
 }
