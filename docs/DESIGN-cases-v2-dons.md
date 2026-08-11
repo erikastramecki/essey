@@ -421,6 +421,24 @@ already sweeps whatever ESSEY balance arrives; `DonDistributor.setFeeSink` is un
 
 ---
 
+## 8b. Change management — the founder's constraint (2026-08-11, REQUIRED)
+
+Founder: cases ship behind **"coming soon" until change-management is ironed out** — the concern is a
+discovered issue with no fix path and loss of funds. The design answers with a LIFECYCLE, not mutability:
+
+- **Odds stay immutable** (the trust story: EV can never be changed under a spinner). Inventory depth was
+  always mutable (top-ups). What's added:
+- **`close()` — REQUIRED**: curator-gated, single power = stop selling NEW spins. Cannot touch odds, owed
+  prizes, or in-flight draws; winners claim forever. A discovered issue -> close same-day.
+- **Post-drain recovery — REQUIRED**: once all sold spins are settled (openSpins == 0 and no pending
+  entropy), the UNRESERVED inventory remainder sweeps to the bankroll for the next case generation.
+  Reserved/owed amounts are untouchable by construction (Bell-style reserved accounting).
+- **Generational deploys**: fixes and new prize types ship as Case N+1, never as edits to a live case.
+- **SHIP GATE**: /cases presents the gacha as "coming soon" until the founder signs off that this
+  lifecycle satisfies the change-management concern. User funds are protected regardless by the three
+  standing properties: worst-case solvency reservation before any spin sells, pull-claims, and the
+  permissionless entropy-failure refund.
+
 ## 9. Risks & decisions for the founder
 
 | # | Topic | The call | Recommendation |
