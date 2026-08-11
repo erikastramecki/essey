@@ -60,7 +60,7 @@ contract SeedTestnet is Script {
         cases_.fundBuyback(50_000e18);
 
         // 4. The faucet: fund it with $ESSEY from the treasury (the broadcaster holds it on testnet).
-        TestnetFaucet faucet = new TestnetFaucet(IERC20(address(essey)), IMintableMock(address(usdg)));
+        TestnetFaucet faucet = new TestnetFaucet(IERC20(address(essey)), IMintableMock(address(usdg)), msg.sender, 100_000e18, 1_000e18, 8 hours);
         essey.transfer(address(faucet), FAUCET_ESSEY);
 
         vm.stopBroadcast();
