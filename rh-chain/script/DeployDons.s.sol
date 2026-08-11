@@ -13,6 +13,7 @@ import {DonFeeRouter, ISwapRouter, IWETH} from "../src/market/DonFeeRouter.sol";
 import {DonLoan} from "../src/market/DonLoan.sol";
 import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
+import {EsseyToken} from "../src/market/EsseyToken.sol";
 
 /// DeployDons — the full Dons v3 market layer, in dependency order:
 ///
@@ -96,7 +97,7 @@ contract DeployDons is Script {
         c.admin = vm.envOr("ADMIN", msg.sender);
         c.treasury = vm.envOr("TREASURY", c.admin);
         c.seeder = vm.envOr("SEEDER", c.admin);
-        c.essey = IERC20(vm.envAddress("ESSEY"));
+        c.essey = IERC20(vm.envOr("ESSEY", address(0))); // 0 = deploy a FRESH 8.888B EsseyToken (the Dons-era supply)
         c.usdg = IERC20(vm.envAddress("USDG"));
         c.converter = IConverter(vm.envOr("CONVERTER", address(0)));
         c.defaultPayout = vm.envOr("DEFAULT_PAYOUT", address(0));
@@ -114,6 +115,8 @@ contract DeployDons is Script {
 
     /// The whole sequence, callable from tests for a broadcast-free dry run.
     function deployAll(Config memory c) public returns (Deployed memory d) {
+        // The Dons era ships its own token generation: fresh 8,888,888,888e18 supply, minted to treasury.
+        if (address(c.essey) == address(0)) c.essey = IERC20(address(new EsseyToken(c.treasury)));
         d.distributor = new DonDistributor(c.admin, c.reserveCap, ROOT_TIMELOCK, c.rerollFee, c.customFee, 0);
         d.don = new Don("Essey Dons", "DON", MAX_SUPPLY, address(d.distributor));
         d.reserve = new DonReserve(c.essey, IERC721(address(d.don)));
@@ -169,6 +172,7 @@ contract DeployDons is Script {
         Deployed memory d = deployAll(c);
         vm.stopBroadcast();
 
+        console.log("essey       ", address(c.essey));
         console.log("distributor ", address(d.distributor));
         console.log("don         ", address(d.don));
         console.log("reserve     ", address(d.reserve));

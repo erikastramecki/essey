@@ -97,3 +97,21 @@ gate, the session flag, is satisfied once the market feed is refreshed after the
 same keeper that keeps the converter/degen feeds fresh.)
 
 **Not yet on testnet:** StockConverter (stock-denominated payouts), whitelist roots, CoinVoyage onramp.
+
+## Dons v3 market layer (2026-08-11) — audited (2 clean 3-agent rounds), rehearsed live
+
+| Contract | Address |
+|---|---|
+| EsseyToken v2 ($ESSEY, 8.888B supply) | `0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F` |
+| DonDistributor (mint: free WL / reroll / $10 custom) | `0x2Bbc39AcB8A1A76909759f7B2f31D57f1535601d` |
+| Don (8,888 PFP, lien-capable) | `0x0C30ccbf727c5f9803A81e64873C6898a1e15771` |
+| DonReserve (300,030 $ESSEY floor, funded 2.667B) | `0xD4aC7ADD2A790B9916367c35F9F892b6D92F24D6` |
+| Bell (Dons era: 5-tier 666-ladder, elect-3, BUNDLE default) | `0x5f2Df783437b5383f8E96196Bb92A0c22527a289` |
+| DonExchange (8%/12%, price=max(300k floor, live)) | `0x10c22bC22B4deE66a7DE2f790a2678e622441753` |
+| DonLoan (50% LTV / 70% liq / 15% APR, ESSEY-denominated) | `0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7` |
+
+State: reserve funded (floor 300,030), loan pot 100M, AMM seeded 50 (rehearsal float), WL root
+`0x836f5ce5…5634` PROPOSED stage 0 (commitRoot after the 2-day timelock), publicOpen=true.
+Rehearsal proven on-chain: mint #51 (ETH fee) → buy #50 → borrow 150,015 → repay+lien-release → sell @276,027 net.
+Interim: feeSink=treasury (DonFeeRouter awaits WETH/ETH-feed mocks); reuses mock USDG `0x7461…5De2` +
+BundleConverter `0x3c6a…7fb0` (Bell default payout = BUNDLE sentinel `0xB0B1`).
