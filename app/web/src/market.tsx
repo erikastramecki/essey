@@ -4,7 +4,7 @@
 // and live on Robinhood Chain testnet; the toys here are sandboxes and say so on the surface itself,
 // not in a footnote. Numbers mirror the deployed config (floor 300,030 $ESSEY; AMM 8%/12%; the
 // 666 tier ladder; loan 50% LTV / 15% APR / 70% liquidation).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -515,7 +515,10 @@ export function Mechanics() {
                   <span className={"mech-status " + c.status}>{c.status === "audited" ? "built · audited" : "scoped"}</span>
                 </button>
                 <p className="mech-line">{c.oneLiner}</p>
-                {isOpen && c.toy()}
+                {/* render as an element (not an inline call) so each toy's hooks get their own
+                    component scope — calling c.toy() inline inlined them into Mechanics and
+                    crashed on expand (hook-count changes between which card is open). */}
+                {isOpen && createElement(c.toy)}
               </article>
             );
           })}

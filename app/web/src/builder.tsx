@@ -27,7 +27,9 @@ const SELECT: Record<G, [string, string, boolean][]> = {
     ["18 phoenix eyes", "Phoenix Eyes", true], ["1 Chairs", "Chair", false],
   ],
 };
-const clean = (v: string) => v.replace(/#\d+/g, "").replace(/^[\d.]+\s*/, "").trim();
+// Strip a rarity suffix (#13.3) and a category-number prefix ("16 Glasses" -> "Glasses").
+// Require whitespace after the prefix number so option names like "3D" keep their leading digit.
+const clean = (v: string) => v.replace(/#\d+/g, "").replace(/^[\d.]+\s+/, "").trim();
 
 // ---------------------------------------------------------------------------- chain plumbing
 // Self-contained on don-config (live.ts is owned by a parallel workstream). One public client per page.

@@ -15,6 +15,7 @@ export type Rules = {
   POS_OFFSET: Record<string, number>; Z_UNDER: Record<string, string>;
   SUPPRESS_IN?: Record<string, string[]>;
   HIDE_LEAF?: string[]; CROP_TOP?: Record<string, number>; CROP_BOTTOM?: Record<string, number>;
+  FEMALE_HAT_BLOCK?: string[]; FEMALE_HAT_HAIR_CROP?: Record<string, number>; FEMALE_HAT_HAIR_CROP_STYLES?: string[];
 };
 export type BuilderData = {
   gender: string; leaves: Leaf[]; tree: TreeNode[];
@@ -77,7 +78,13 @@ class Sel {
     if (this.forced[path] !== undefined) {
       const want = this.forced[path].toLowerCase();
       if (want === "none" || want === "__none__") { this.picks[path] = "None"; return; } // explicit absent
-      const c = rest.find((x) => { const n = (x.name || "").toLowerCase(); return n === want || n.includes(want) || want.includes(n); });
+      // EXACT-first: a forced value is a bare option name, so an exact leaf-name match must win over
+      // any substring sibling ("MVHQ Martini" must beat "Martini"; "Knowledge Throne" beat "Throne";
+      // female ring "Bar" beat a longer "Bar…"). Only fall back to a one-directional substring match
+      // (option name contains the forced value) — never `want.includes(name)`, which is what let a
+      // longer forced name collapse onto a shorter sibling.
+      const c = rest.find((x) => (x.name || "").toLowerCase() === want)
+        ?? rest.find((x) => (x.name || "").toLowerCase().includes(want));
       if (c) { this.picks[path] = c.name; this.emit(c, path + "/" + c.name); return; }
     }
     const [dim, hit] = coupleDim(rest, this.R);
@@ -99,7 +106,14 @@ class Sel {
     }
     const vis = rest.filter((c) => c.vis);
     if (vis.length === rest.length) { for (const c of rest) this.emit(c, path); }
-    else { const pick = vis.length ? vis[0] : this.rng.choice(rest); this.picks[path] = pick.name; this.emit(pick, path + "/" + pick.name); }
+    else {
+      const pick = vis.length ? vis[0] : this.rng.choice(rest);
+      // Category-wrapper node (a vis=false top-level category whose sole `rest` member is itself):
+      // when the user has FORCED this category, descend at the SAME path so the forced key (the bare
+      // category name) still matches the real options one level down. Gated on forced -> random untouched.
+      if (pick.name === path && this.forced[path] !== undefined) { this.emit(pick, path); }
+      else { this.picks[path] = pick.name; this.emit(pick, path + "/" + pick.name); }
+    }
   }
   selectCategory(cat: TreeNode): string | null { this.select([cat], cat.name); return this.picks[cat.name] ?? null; }
 }
@@ -128,6 +142,10 @@ function generate(data: BuilderData, rng: RNG, forced: Record<string, string> = 
       if (rng.random() >= R.OPTIONAL[name]) continue;
       if (s.couplePick(cats[name].children || []) === null) continue;
     }
+    // FEMALE_HAT_BLOCK (engine.py): Medusa's snake-crown pierces every female hat -> skip the hat
+    // category entirely for a blocked hair style, so preview + uniqueness key match the engine.
+    if (name === "10 Hat" && R.FEMALE_HAT_BLOCK && typeof s.drivers.hair_style === "string"
+      && R.FEMALE_HAT_BLOCK.includes(s.drivers.hair_style)) continue;
     const top = s.selectCategory(cats[name]); const r = roles[name];
     if (r === "body" && top) {
       const fam = fw(top); s.drivers.family = fam;
@@ -200,6 +218,13 @@ function applyConflicts(data: BuilderData, s: Sel) {
     const zs = kept.map((lf) => meta[lf.z!]).filter((m) => m && m.category === under).map((m) => m.z);
     if (zs.length) tz[cat] = Math.min(...zs) - 0.5;
   }
+  // FEMALE_HAT_HAIR_CROP (engine.py): female hats keep the full '9 Hair'; Gem/Updo/Lush poke above
+  // the crown -> crop those styles' hair at the chosen hat's crown line (same cut the PSD's per-hat
+  // 'Hat Hair' variants use), so the preview + uniqueness key match the engine.
+  const FHC = R.FEMALE_HAT_HAIR_CROP, FHCS = R.FEMALE_HAT_HAIR_CROP_STYLES;
+  const femHairCrop = (FHC && FHCS && typeof dr.hat === "string" && FHC[dr.hat] !== undefined
+    && typeof dr.hair_style === "string" && FHCS.includes(dr.hair_style)) ? FHC[dr.hat] : undefined;
+
   const render: RenderLeaf[] = [];
   for (const lf of kept) {
     const m = meta[lf.z!];
@@ -207,6 +232,7 @@ function applyConflicts(data: BuilderData, s: Sel) {
     const rl: RenderLeaf = { file: m.file, bbox: m.bbox.slice(), blend: m.blend, category: m.category, zEff: tz[m.category] ?? (lf.z as number) };
     const ct = R.CROP_TOP ? Object.entries(R.CROP_TOP).find(([k]) => m.path.includes(k))?.[1] : undefined;
     if (ct !== undefined) rl.cropTop = ct;
+    if (femHairCrop !== undefined && m.category === "9 Hair") rl.cropTop = femHairCrop;
     const cb = R.CROP_BOTTOM ? Object.entries(R.CROP_BOTTOM).find(([k]) => m.path.includes(k))?.[1] : undefined;
     if (cb !== undefined) rl.cropBottom = cb;
     render.push(rl);
@@ -228,10 +254,22 @@ export function resolveSelection(data: BuilderData, forced: Record<string, strin
 }
 export function posOffset(data: BuilderData, category: string): number { return data.rules.POS_OFFSET[category] || 0; }
 
-// top-level variant options per category (for the picker panels)
+// top-level variant options per category (for the picker panels). Mirror the resolver's own pool
+// filtering so the picker never offers a trait the engine suppresses (else a forced click on it
+// silently falls back to a random sibling): SUPPRESS (substring, everywhere) + SUPPRESS_IN
+// (exact option names per category, e.g. female "14 Ring" -> "Bar", a broken art variant).
 export function catOptions(data: BuilderData): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const cat of data.tree) if (cat.group) out[cat.name] = (cat.children || []).map((c) => c.name);
+  const S = data.rules.SUPPRESS || [];
+  for (const cat of data.tree) if (cat.group) {
+    const si = data.rules.SUPPRESS_IN?.[cat.name] || [];
+    out[cat.name] = (cat.children || []).map((c) => c.name).filter((n) => {
+      const nl = n.toLowerCase();
+      if (S.some((x) => nl.includes(x))) return false;
+      if (si.includes(nl)) return false;
+      return true;
+    });
+  }
   return out;
 }
 
@@ -249,5 +287,10 @@ export function blockedCats(data: BuilderData, forced: Record<string, string>): 
   const hat = forced[HAT]; if (hat && hat.toLowerCase() !== "none") b.add(CEASAR);
   const fam = (forced[male ? "4 Body" : "3 Body"] || "").split(/\s+/)[0];
   if (["Zombie", "Golden", "Glitch"].includes(fam)) [FACEMOD, HAT, CEASAR, GLASSES, EYEMOD, LASER].forEach((x) => b.add(x));
+  // FEMALE_HAT_BLOCK: a blocked hair style (Medusa) pierces every female hat -> the hat won't render.
+  if (!male) {
+    const hairStyle = (forced["9 Hair"] || "").split(/\s+/)[0];
+    if (hairStyle && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle)) b.add(HAT);
+  }
   return b;
 }
