@@ -352,6 +352,42 @@ contract DonLoanTest is Test {
         assertEq(debtWhole, 150_001, "fractional debt rounds UP - conservative for the prover");
     }
 
+    /// The upfront-revenue mechanic: flat ETH origination fee, forwarded whole to the feeSink's
+    /// ETH->stock pipe; exact-fee enforced; treasury-tunable under a hard cap; 0 = free (the default).
+    function test_OriginationFeeInEth() public {
+        uint256 id = _donFor(alice);
+        uint256 cap = loan.maxBorrow();
+        assertEq(loan.originationFeeWei(), 0, "free by default");
+
+        vm.prank(treasury);
+        loan.setOriginationFee(0.0053 ether);
+
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        vm.expectRevert(DonLoan.WrongFee.selector);
+        loan.borrow(id, cap); // fee now required
+
+        uint256 sinkEthBefore = feeSink.balance;
+        vm.prank(alice);
+        loan.borrow{value: 0.0053 ether}(id, cap);
+        assertEq(feeSink.balance - sinkEthBefore, 0.0053 ether, "100% of the ETH fee -> the stock pipe");
+        assertEq(loan.debtOf(id), cap, "fee is not debt - principal unchanged");
+
+        vm.prank(alice);
+        vm.expectRevert(DonLoan.NotTreasury.selector);
+        loan.setOriginationFee(0);
+        vm.prank(treasury);
+        vm.expectRevert(DonLoan.FeeTooHigh.selector);
+        loan.setOriginationFee(0.051 ether); // capped - a hostile setter can't price-brick borrows
+
+        vm.prank(treasury);
+        loan.setOriginationFee(0);
+        uint256 id2 = _donFor(bob);
+        uint256 cap2 = loan.maxBorrow();
+        vm.prank(bob);
+        loan.borrow(id2, cap2); // free again, no value needed
+    }
+
     function test_WithdrawIdleTreasuryOnly() public {
         vm.prank(alice);
         vm.expectRevert(DonLoan.NotTreasury.selector);

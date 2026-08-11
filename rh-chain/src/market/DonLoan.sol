@@ -58,6 +58,13 @@ contract DonLoan is ReentrancyGuard, Guarded {
     uint256 public immutable liqTipBps; // caller's cut of liquidation proceeds (e.g. 100 = 1%)
     uint256 public immutable stockShareBps; // 7000 = 70% of interest -> feeSink; remainder -> the floor
 
+    /// Flat ETH fee charged at borrow (the upfront-revenue mechanic, done oracle-free: a flat wei amount
+    /// needs no market price, and every Don's max borrow is identical so flat is fair). 100% -> feeSink,
+    /// the same proven ETH->USDG->Bell pipe the mint fees ride. Treasury-tunable (to track a ~$ figure as
+    /// ETH moves), hard-capped so a hostile setter can't price-brick borrowing beyond the cap.
+    uint256 public originationFeeWei;
+    uint256 public constant MAX_ORIGINATION_FEE = 0.05 ether;
+
     uint256 internal constant BPS = 10_000;
     uint256 internal constant YEAR = 365 days;
     /// Same risk discipline as EsseyMarkets: the liquidation threshold must sit a full 20pp above LTV,
@@ -90,6 +97,8 @@ contract DonLoan is ReentrancyGuard, Guarded {
         uint256 tip
     );
     event IdleWithdrawn(address indexed to, uint256 amount);
+    event OriginationFeeSet(uint256 wei_);
+    event OriginationPaid(uint256 indexed donId, uint256 fee);
 
     error BadConfig();
     error ZeroAmount();
@@ -99,6 +108,9 @@ contract DonLoan is ReentrancyGuard, Guarded {
     error ExceedsLtv(uint256 requested, uint256 maxBorrowable);
     error NotLiquidatable(uint256 debt, uint256 threshold);
     error NotTreasury();
+    error WrongFee();
+    error FeeTooHigh();
+    error FeeForwardFailed();
 
     constructor(
         IERC20 essey_,
@@ -211,6 +223,14 @@ contract DonLoan is ReentrancyGuard, Guarded {
         emit Funded(msg.sender, amount);
     }
 
+    /// Tune the flat ETH origination fee (treasury = the multisig; capped). 0 = free borrowing.
+    function setOriginationFee(uint256 wei_) external {
+        if (msg.sender != treasury) revert NotTreasury();
+        if (wei_ > MAX_ORIGINATION_FEE) revert FeeTooHigh();
+        originationFeeWei = wei_;
+        emit OriginationFeeSet(wei_);
+    }
+
     /// Reclaim IDLE capital only. Outstanding principal has already left the balance, and repayments
     /// re-enter it — so this can never touch a borrower's position or the interest owed to the reserve;
     /// it only shrinks how much NEW lending the facility can write.
@@ -225,7 +245,8 @@ contract DonLoan is ReentrancyGuard, Guarded {
     /// Open a loan against a Don you own: up to `ltvBps` of the live floor, in $ESSEY. The Don is liened
     /// in place — it stays in your wallet, stays staked, keeps earning — but cannot move until the debt
     /// clears. One open loan per Don; no top-ups (repay and re-borrow to re-lever).
-    function borrow(uint256 donId, uint256 amount) external nonReentrant whenNotFrozen {
+    function borrow(uint256 donId, uint256 amount) external payable nonReentrant whenNotFrozen {
+        if (msg.value != originationFeeWei) revert WrongFee();
         if (amount == 0) revert ZeroAmount();
         if (don.ownerOf(donId) != msg.sender) revert NotDonOwner();
         if (loans[donId].borrower != address(0)) revert LoanExists();
@@ -244,6 +265,11 @@ contract DonLoan is ReentrancyGuard, Guarded {
         totalPrincipal += amount;
 
         don.setLien(donId, true); // transfer-locked in the borrower's wallet
+        if (msg.value > 0) {
+            (bool ok,) = feeSink.call{value: msg.value}(""); // joins the mint-fee ETH->stock pipe
+            if (!ok) revert FeeForwardFailed();
+            emit OriginationPaid(donId, msg.value);
+        }
         essey.safeTransfer(msg.sender, amount);
         emit Borrowed(donId, msg.sender, amount, n);
     }
