@@ -34,12 +34,16 @@ contract DonTest is Test {
 
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
+    address treasury = address(0x7EE);
+
+    uint96 constant ROYALTY_BPS = 500; // 5%
 
     bytes32 constant COMBO_A = keccak256("fedora/cigar/pinstripe");
     bytes32 constant COMBO_B = keccak256("homburg/ring/trench");
 
     function setUp() public {
-        don = new Don("Essey Don", "DON", 3, address(this)); // tiny cap to exercise SoldOut
+        // test = minter; treasury is the royalty receiver at 5%. Tiny cap to exercise SoldOut.
+        don = new Don("Essey Don", "DON", 3, address(this), treasury, ROYALTY_BPS);
     }
 
     // ---------------------------------------------------------------- mint
@@ -232,5 +236,62 @@ contract DonTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 99));
         don.tokenURI(99);
+    }
+
+    // ---------------------------------------------------------------- royalties (ERC-2981)
+
+    function test_RoyaltyInfoReturnsTreasuryAndFivePercent() public view {
+        uint256 salePrice = 10 ether;
+        (address receiver, uint256 amount) = don.royaltyInfo(1, salePrice);
+        assertEq(receiver, treasury, "royalty routes to the treasury");
+        assertEq(amount, (salePrice * ROYALTY_BPS) / 10_000, "5% of the sale");
+        assertEq(amount, 0.5 ether, "10 ETH sale -> 0.5 ETH royalty");
+    }
+
+    function test_SupportsInterfaceDiamond() public view {
+        assertTrue(don.supportsInterface(0x80ac58cd), "ERC-721");
+        assertTrue(don.supportsInterface(0x5b5e139f), "ERC-721 Metadata");
+        assertTrue(don.supportsInterface(0x2a55205a), "ERC-2981 royalties");
+        assertTrue(don.supportsInterface(0x01ffc9a7), "ERC-165");
+        assertFalse(don.supportsInterface(0xdeadbeef), "a random id is unsupported");
+    }
+
+    function test_ConstructorRejectsRoyaltyOverCap() public {
+        vm.expectRevert(Don.BadRoyalty.selector);
+        new Don("Essey Don", "DON", 3, address(this), treasury, 1001); // > 10% ceiling
+    }
+
+    function test_SetDefaultRoyaltyMinterGatedAndCapped() public {
+        // minter (this test) may re-point receiver + rate
+        vm.expectEmit(true, false, false, true, address(don));
+        emit Don.DefaultRoyaltySet(bob, 250);
+        don.setDefaultRoyalty(bob, 250);
+        (address receiver, uint256 amount) = don.royaltyInfo(1, 10_000);
+        assertEq(receiver, bob, "receiver re-pointed");
+        assertEq(amount, 250, "2.5% of 10000");
+
+        // capped at 10%
+        vm.expectRevert(Don.BadRoyalty.selector);
+        don.setDefaultRoyalty(bob, 1001);
+
+        // non-minter rejected
+        vm.prank(alice);
+        vm.expectRevert(Don.NotMinter.selector);
+        don.setDefaultRoyalty(alice, 100);
+    }
+
+    // ---------------------------------------------------------------- contractURI (ERC-7572)
+
+    function test_ContractURIDefaultsEmptyAndSetsWithEvent() public {
+        assertEq(don.contractURI(), "", "empty until set post-deploy");
+
+        vm.expectEmit(false, false, false, false, address(don));
+        emit Don.ContractURIUpdated();
+        don.setContractURI("ipfs://collection");
+        assertEq(don.contractURI(), "ipfs://collection");
+
+        vm.prank(alice);
+        vm.expectRevert(Don.NotMinter.selector);
+        don.setContractURI("ipfs://evil");
     }
 }

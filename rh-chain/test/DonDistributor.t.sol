@@ -69,7 +69,7 @@ contract DonDistributorTest is Test {
 
     function setUp() public {
         dist = new DonDistributor(admin, RESERVE_CAP, TIMELOCK, REROLL_FEE, CUSTOM_FEE, 0);
-        don = new Don("Essey Don", "DON", CAP, address(dist));
+        don = new Don("Essey Don", "DON", CAP, address(dist), treasury, 500);
         dist.initDon(don);
         dist.setFeeSink(feeSink);
 
@@ -325,7 +325,7 @@ contract DonDistributorTest is Test {
 
     function test_RevertingSinkHaltsMint() public {
         DonDistributor d2 = new DonDistributor(admin, RESERVE_CAP, TIMELOCK, REROLL_FEE, CUSTOM_FEE, 0);
-        Don don2 = new Don("D", "D", CAP, address(d2));
+        Don don2 = new Don("D", "D", CAP, address(d2), treasury, 500);
         d2.initDon(don2);
         d2.setFeeSink(address(new RevertingSink()));
         d2.setPublicOpen(true);
@@ -427,7 +427,7 @@ contract DonDistributorTest is Test {
 
         // regression: a Don with no Bell wired yet can still be rerolled freely
         DonDistributor d2 = new DonDistributor(admin, RESERVE_CAP, TIMELOCK, REROLL_FEE, CUSTOM_FEE, 0);
-        Don don2 = new Don("D", "D", CAP, address(d2));
+        Don don2 = new Don("D", "D", CAP, address(d2), treasury, 500);
         d2.initDon(don2);
         d2.setFeeSink(feeSink);
         d2.setPublicOpen(true);
@@ -476,5 +476,37 @@ contract DonDistributorTest is Test {
         dist.setFees(1 wei, 2 wei);
         assertEq(dist.rerollFee(), 1 wei);
         assertEq(dist.customFee(), 2 wei);
+    }
+
+    // ---------------------------------------------------------------- marketplace passthroughs
+
+    /// Royalty re-point flows admin -> distributor -> Don (the immutable minter). Non-admin is rejected at
+    /// the distributor, and the Don caps the rate at its 10% ceiling.
+    function test_SetDonRoyaltyPassthrough() public {
+        dist.setDonRoyalty(bob, 300);
+        (address receiver, uint256 amount) = don.royaltyInfo(1, 10_000);
+        assertEq(receiver, bob, "receiver re-pointed via the passthrough");
+        assertEq(amount, 300, "3% of 10000");
+
+        vm.prank(alice);
+        vm.expectRevert(DonDistributor.NotAdmin.selector);
+        dist.setDonRoyalty(alice, 100);
+
+        vm.expectRevert(Don.BadRoyalty.selector);
+        dist.setDonRoyalty(bob, 1001); // Don caps at 10%
+    }
+
+    /// Collection metadata rotates admin -> distributor -> Don, emitting the ERC-7572 signal; non-admin rejected.
+    function test_SetDonContractURIPassthrough() public {
+        assertEq(don.contractURI(), "", "empty until set");
+
+        vm.expectEmit(false, false, false, false, address(don));
+        emit Don.ContractURIUpdated();
+        dist.setDonContractURI("ipfs://dons-collection");
+        assertEq(don.contractURI(), "ipfs://dons-collection");
+
+        vm.prank(alice);
+        vm.expectRevert(DonDistributor.NotAdmin.selector);
+        dist.setDonContractURI("ipfs://evil");
     }
 }

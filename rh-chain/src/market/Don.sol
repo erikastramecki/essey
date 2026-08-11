@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {SeatVault} from "./SeatVault.sol";
 import {ISeatHook} from "./ISeatHook.sol";
@@ -21,7 +22,13 @@ import {ISeatArt} from "./ISeatArt.sol";
 /// Uniqueness (no two Dons share a trait combo) is enforced by the minter's reservation ledger at set-time;
 /// this contract only stores the committed hash and the lock. The minter is the sole entry point for mint /
 /// reroll / lock, exactly as Seat's `minter` is its sole minter — no admin key can change who mints.
-contract Don is ERC721 {
+///
+/// MARKETPLACE READINESS: the Don also carries a collection-wide royalty (a voluntary same-currency signal
+/// marketplaces read) and a rotatable collection-metadata pointer. Both are minter-gated through the
+/// distributor's passthrough — the same trust shape as hook/art/lienManager — so the treasury/rate and the
+/// collection JSON can be tuned post-deploy by the same admin (a multisig in production) without ever
+/// touching the immutable minter or the sealed per-token art.
+contract Don is ERC721, ERC2981 {
     /// The account implementation every Vault clones (reused from the Seat era — same token-bound account).
     address public immutable vaultImplementation;
 
@@ -55,11 +62,23 @@ contract Don is ERC721 {
     /// Whether a Don is currently pledged as loan collateral (transfer-locked).
     mapping(uint256 => bool) public liened;
 
+    /// The hard ceiling on the collection royalty — marketplaces cap creator earnings at 10%, and both the
+    /// constructor and the setter enforce it so no admin can ever set a rate a marketplace would reject.
+    uint96 public constant MAX_ROYALTY_BPS = 1000;
+
+    /// Collection-level metadata (name/description/image/banner_image/external_link JSON), rotatable like
+    /// the renderer's baseURI: a settable pointer or on-chain data string, empty until set post-deploy.
+    string private _contractURI;
+
     event Rerolled(uint256 indexed id, bytes32 traits);
     event Locked(uint256 indexed id, bytes32 traits);
     event Lien(uint256 indexed id, bool on);
+    event DefaultRoyaltySet(address indexed receiver, uint96 bps);
+    /// Signals collection-metadata changes so marketplaces re-pull contractURI() (ERC-7572).
+    event ContractURIUpdated();
 
     error NotMinter();
+    error BadRoyalty();
     error SoldOut();
     error TraitsLocked();
     error NonexistentToken();
@@ -77,12 +96,22 @@ contract Don is ERC721 {
         _;
     }
 
-    constructor(string memory name_, string memory symbol_, uint256 maxSupply_, address minter_)
-        ERC721(name_, symbol_)
-    {
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint256 maxSupply_,
+        address minter_,
+        address royaltyReceiver_,
+        uint96 royaltyBps_
+    ) ERC721(name_, symbol_) {
         vaultImplementation = address(new SeatVault());
         maxSupply = maxSupply_;
         minter = minter_;
+        // Collection-wide default royalty to the treasury, capped at the 10% marketplace ceiling. OZ's
+        // _setDefaultRoyalty additionally rejects a zero receiver, so a royalty is never set to nowhere.
+        if (royaltyBps_ > MAX_ROYALTY_BPS) revert BadRoyalty();
+        _setDefaultRoyalty(royaltyReceiver_, royaltyBps_);
+        emit DefaultRoyaltySet(royaltyReceiver_, royaltyBps_);
     }
 
     /// Mint the next Don with its initial trait commitment, standing up its Vault in the same tx. Ids 1-based.
@@ -161,6 +190,34 @@ contract Don is ERC721 {
     function tokenURI(uint256 id) public view override returns (string memory) {
         _requireOwned(id);
         return art == address(0) ? "" : ISeatArt(art).tokenURI(id);
+    }
+
+    /// Re-point the collection-wide royalty (receiver + rate), minter-gated through the distributor's
+    /// passthrough — the same admin path as hook/art/lienManager. Collection-wide only (no per-token);
+    /// capped at the 10% marketplace ceiling. A voluntary same-currency signal, not enforcement.
+    function setDefaultRoyalty(address receiver, uint96 bps) external onlyMinter {
+        if (bps > MAX_ROYALTY_BPS) revert BadRoyalty();
+        _setDefaultRoyalty(receiver, bps); // OZ rejects a zero receiver
+        emit DefaultRoyaltySet(receiver, bps);
+    }
+
+    /// Collection-level metadata (ERC-7572), read by marketplaces for the collection's name/banner/links.
+    function contractURI() external view returns (string memory) {
+        return _contractURI;
+    }
+
+    /// Rotate the collection metadata, minter-gated through the distributor's passthrough. Emits the
+    /// ERC-7572 signal so marketplaces re-pull. Empty is fine (set post-deploy).
+    function setContractURI(string calldata uri) external onlyMinter {
+        _contractURI = uri;
+        emit ContractURIUpdated();
+    }
+
+    /// The multiple-inheritance diamond: ERC721 answers 0x80ac58cd (+ metadata + ERC-165), ERC2981 answers
+    /// 0x2a55205a. The C3-linearized super chain composes both, so a marketplace sees the collection as both
+    /// an NFT and a royalty source.
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC2981) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 
     /// A liened Don is transfer-locked: every exit (sale, AMM, reserve redemption) is blocked until the

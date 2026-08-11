@@ -330,6 +330,19 @@ contract DonDistributor is ReentrancyGuard {
         don.setLienManager(manager_);
     }
 
+    /// Re-point the Don's collection royalty (marketplace creator earnings) via the distributor (the Don's
+    /// immutable minter). Don.setDefaultRoyalty caps the rate at its 10% ceiling and rejects a zero receiver.
+    function setDonRoyalty(address receiver, uint96 bps) external onlyAdmin {
+        if (address(don) == address(0)) revert DonNotSet();
+        don.setDefaultRoyalty(receiver, bps);
+    }
+
+    /// Rotate the Don's collection-level metadata (ERC-7572) via the distributor (the Don's immutable minter).
+    function setDonContractURI(string calldata uri) external onlyAdmin {
+        if (address(don) == address(0)) revert DonNotSet();
+        don.setContractURI(uri);
+    }
+
     // ---------------------------------------------------------------- admin: reserved float/partners
 
     /// Mint reserved Dons (float, partners) with explicit unique combos. Bounded by the immutable reserveCap.

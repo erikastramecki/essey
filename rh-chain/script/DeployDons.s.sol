@@ -40,6 +40,10 @@ contract DeployDons is Script {
     uint256 constant ROOT_TIMELOCK = 2 days;
     uint256 constant TIP_BPS = 0; // founder: no ring tip — a protocol keeper rings
 
+    // Marketplace creator earnings: 5% (500 bps) to the treasury, under the 10% ceiling. A voluntary
+    // same-currency signal; the treasury may re-point receiver/rate later via distributor.setDonRoyalty.
+    uint96 constant ROYALTY_BPS = 500;
+
     // AMM: softened the reference desk Anvil fees, 70% of every fee -> stock for staked Dons.
     uint256 constant SWAP_FEE_BPS = 800;
     uint256 constant SNIPE_FEE_BPS = 1200;
@@ -127,7 +131,7 @@ contract DeployDons is Script {
         // The Dons era ships its own token generation: fresh 8,888,888,888e18 supply, minted to treasury.
         if (address(c.essey) == address(0)) c.essey = IERC20(address(new EsseyToken(c.treasury)));
         d.distributor = new DonDistributor(c.admin, c.reserveCap, ROOT_TIMELOCK, c.rerollFee, c.customFee, 0);
-        d.don = new Don("Essey Dons", "DON", MAX_SUPPLY, address(d.distributor));
+        d.don = new Don("Essey Dons", "DON", MAX_SUPPLY, address(d.distributor), c.treasury, ROYALTY_BPS);
         d.reserve = new DonReserve(c.essey, IERC721(address(d.don)));
         (uint256[] memory fees, uint256[] memory weights) = _ladder();
         d.bell = new Bell(
