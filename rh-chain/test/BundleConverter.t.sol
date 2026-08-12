@@ -326,6 +326,53 @@ contract BundleConverterTest is Test {
         new Bell(ISeatLike(address(seat)), essey, usdg, treasury, 100e18, 100, fees, weights, IConverter(address(0)), bundle);
     }
 
+    /// PAYOUT EXPANSION IS CONFIG-ONLY: a new stock becomes electable with ZERO code changes and no
+    /// redeploy — the Bell's elect list is converter-driven (`isSupported`), and `listStock` /
+    /// `seedReserve` are append-only bankroll config that still works AFTER the Bell is wired.
+    /// Lists two more mocks (TSLA $330, PLTR $165) on the live converter, elects a 3-way mix
+    /// (50/25/25 with AAPL), and one claim pays all three legs oracle-fair into the Vault.
+    function test_ConfigOnlyStockExpansion() public {
+        uint256 id = _oneSeatRung(); // 990 USDG distributed to this Seat
+        ERC20Mock tsla = new ERC20Mock();
+        ERC20Mock pltr = new ERC20Mock();
+        MockFeed tslaFeed = new MockFeed(330e8, 8); // $330
+        MockFeed pltrFeed = new MockFeed(165e8, 8); // $165
+
+        // Before the config addition, the Bell refuses the election — the converter IS the elect list.
+        address[] memory toks = new address[](3);
+        uint16[] memory bps = new uint16[](3);
+        toks[0] = address(aapl);
+        toks[1] = address(tsla);
+        toks[2] = address(pltr);
+        bps[0] = 5000;
+        bps[1] = 2500;
+        bps[2] = 2500;
+        vm.prank(alice);
+        vm.expectRevert(Bell.UnsupportedPayoutToken.selector);
+        bell.setPayout(id, toks, bps);
+
+        // The config-only addition: list + seed on the already-wired converter. No Bell change.
+        conv.listStock(address(tsla), AggregatorV3Interface(address(tslaFeed)));
+        conv.listStock(address(pltr), AggregatorV3Interface(address(pltrFeed)));
+        tsla.mint(address(this), 10_000e18);
+        pltr.mint(address(this), 10_000e18);
+        tsla.approve(address(conv), type(uint256).max);
+        pltr.approve(address(conv), type(uint256).max);
+        conv.seedReserve(address(tsla), 10_000e18);
+        conv.seedReserve(address(pltr), 10_000e18);
+        assertTrue(conv.isSupported(address(tsla)), "listed -> electable");
+        assertTrue(conv.isSupported(address(pltr)), "listed -> electable");
+
+        vm.prank(alice);
+        bell.setPayout(id, toks, bps);
+        bell.claim(id);
+        address vault = seat.vaultOf(id);
+        assertEq(aapl.balanceOf(vault), 2.475e18, "AAPL leg: 495 USDG @ $200");
+        assertEq(tsla.balanceOf(vault), 0.75e18, "TSLA leg: 247.5 USDG @ $330");
+        assertEq(pltr.balanceOf(vault), 1.5e18, "PLTR leg: 247.5 USDG @ $165 (remainder slice)");
+        assertEq(usdg.balanceOf(vault), 0, "all three legs settled in stock");
+    }
+
     /// The preference is per-owner: transferring the Seat clears it → buyer gets the default bundle.
     function test_TransferClearsPreference() public {
         uint256 id = _oneSeatRung();

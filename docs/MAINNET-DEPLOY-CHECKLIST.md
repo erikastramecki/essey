@@ -199,6 +199,10 @@ The real route infra must exist and be in the env **before** `DeployDons` runs, 
    - [ ] **Run the dregg solvency prover** against a live loan tuple (`DonLoan.loanTuple(donId)`) — prove
          `debt·10000 ≤ floor·ltvBps` under the deployed Groth16 verifier on a real open loan.
    - [ ] **Register the 5% royalty** (`ROYALTY_BPS=500`) on OpenSea / the marketplace collection page.
+   - [ ] **Route royalties to the holder flywheel (FOUNDER-DECIDED 2026-08-12):** the ERC-2981 receiver
+         must be the **fee sink** (fees→stock engine), NOT the treasury — secondary-sale royalties buy
+         stock for staked Dons like every other fee. At deploy: pass `royaltyReceiver_ = feeSink` in the
+         Don constructor (or `setDefaultRoyalty(feeSink, 500)` via the distributor passthrough post-wire).
 
 5. **Operational crons (Section F for the human setup side)**
    - [ ] **Feed-keeper** — refresh ETH/USDG (+ converter) feeds ahead of the ~25h staleness window
