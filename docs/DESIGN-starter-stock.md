@@ -9,21 +9,26 @@
 
 ## 0. Recommendation up front
 
-**GO — at $1 per Don, delivered by a pre-funded keeper drop (zero contract changes), funded from a
-treasury budget line capped at $8,888 all-in.**
+**GO — keeper-delivered starter (zero contract changes), but funded per-path: paid mints self-fund
+their own starter from the fee the minter already paid; free mints get a few-cents keeper dust.**
+This supersedes the original "treasury pre-funds every Don at $8,888" funding in this section — the
+**delivery** mechanic (async keeper drop, Section 2 Option C) is unchanged; only the **funding**
+changed. Full model, farmability proof, and cost math in **§8 (the self-funded variant)**.
 
 | Knob | Recommended value |
 |---|---|
-| Starter value | **$1.00 of tokenized stock** per newly minted Don |
+| Starter value | **Custom (paid ~$10): ~$1.00** (a 10% carve of the fee) · **Reroll (paid ~$3): ~$0.30** top-up · **Free WL: ~$0.05 dust** |
 | Ticker | **Random one of the listed stocks** (AAPL / NVDA today) — the surprise is part of the hook |
-| Delivery | **Async keeper drop** from a pre-funded inventory wallet, target < 30 s after mint |
+| Delivery | **Async keeper drop** from a pre-funded inventory wallet, target < 30 s after mint (unchanged) |
 | Who gets it | WL free claims + custom mints **at mint**; desk-float Dons **at first exchange purchase**; partners/team at seed |
-| Funding | **Treasury budget line** (≤ $8,888 worst case) — do **not** carve the mint fee |
+| Funding | **Self-funded per path** — paid-mint starters come out of the paid fee (via the existing `teamBps→treasury` flow as a budgeting convention); treasury only pays the free-mint dust. See §8. |
 | Lock/vesting | **None** — immediately owned, immediately sellable |
-| Contract changes | **Zero** — fits the #81 window as an independent ops workstream |
+| Contract changes | **Zero** (keeper funding). An on-chain fee-carve is possible but is a **#81-gated** distributor change — see §8.3. |
 
-Total protocol outlay at $1 if literally every one of the 8,888 Dons gets one: **$8,888 — the
-collection number itself.** Realistic launch-phase outlay (WL + early customs): ~$6–7k.
+**New total treasury outlay: a few hundred dollars** (free-mint dust only) — down from the $8,888
+all-prefund ceiling below, because every paid mint now funds its own starter. The all-prefund
+analysis that follows (§1–§7) remains the reference for the *delivery* mechanic and the tranche
+population; §8 revises only the *funding*.
 
 ---
 
@@ -246,8 +251,11 @@ that matters (session dependency, gas, audit round, immutable-minter lock-in).
   ($200–$500 float cap).
 - **Recipients:** WL claims + custom mints at mint; desk-float Dons at first exchange purchase;
   partners/team at seed (founder's call, $500).
-- **Funding:** treasury budget line, hard cap **$8,888** (all 8,888 at $1); no mint-fee carve — the
-  "100% of mint fees → stock for staked Dons" flywheel stays untouched.
+- **Funding:** *(superseded by §8 — the founder's self-funded refinement)* the original plan was a
+  treasury budget line, hard cap **$8,888**, no mint-fee carve. **§8 replaces this**: paid mints
+  self-fund their starter from the fee (a ~10% carve), the treasury only pays the free-mint dust
+  (~$300 total), and the "100% → stakers" flywheel takes a deliberate ~10% haircut on paid mints only,
+  redirected to the minter's own Don. Delivery (keeper drop) is unchanged.
 - **Lock:** none — immediately owned, immediately sellable; extraction is bounded and priced in.
 - **Timing:** parallel to #81, non-blocking; live for the first WL wave. Revisit an on-chain/atomic
   v2 only if the keeper version proves the hook and the founder wants it trust-minimized — that v2 is
@@ -256,3 +264,179 @@ that matters (session dependency, gas, audit round, immutable-minter lock-in).
 If the founder wants a cheaper first probe: run identical config at **$0.50** ($4,444 cap; still
 lands "your Don owns stock", the reveal copy carries the moment more than the amount) — every other
 line of this doc is unchanged.
+
+---
+
+## 8. The self-funded variant (founder proposal — RECOMMENDED)
+
+The problem with §0–§7's funding is that the treasury eats the whole starter bill ($8,888 worst
+case), including for the mints that already send the protocol a fee. The founder's refinement: **carve
+the starter out of the paid mint fees themselves**, so a paid mint funds its own starter and the
+treasury only has to cover the free mints. The *delivery* mechanic is unchanged — it is still the
+async keeper drop of Option C (§2), for every reason given there (no session/feed dependency, zero
+money-path audit surface, immediate ownership). What changes is **where the stock's cost comes from**,
+per mint path.
+
+**Benchmark for scale.** A comparable RH-chain project seeds only **sub-penny "dust" ($0.001–$0.01)**
+into each mint, funded as a fraction of its own inventory rather than a fixed dollar budget. That is
+the reference point for the free-mint tranche below: the "owns stock" *moment* does not require a
+whole dollar — a few cents already lands it — which is exactly what makes self-funding viable.
+
+The three mint paths in `DonDistributor` behave differently, so each gets its own treatment:
+
+| Path | Fee | Creates a Vault? | Starter source |
+|---|---|---|---|
+| `mintCustom` | ~$10 (`0.0053 ETH`) | **Yes** (new Vault) | Carve ~10% of the fee |
+| `reroll` | ~$3 (`0.0016 ETH`) | **No** — tops up the owner's *existing* Vault | Small carve, farmability-bounded |
+| `claimWL` (free) | $0 | **Yes** (new Vault) | Nothing to carve → treasury dust |
+
+### 8.1 Custom mint — self-funds a full $1 starter
+
+The custom minter pays `customFee ≈ $9.97` and receives a brand-new Vault. Carve **10% of the fee →
+buy $1 of stock → the new Vault**; the remaining ~$9 flows onward exactly as today.
+
+| Line | Amount |
+|---|---:|
+| Custom fee paid (in ETH) | **$9.97** |
+| Starter delivered to the new Vault (10% carve) | **$1.00** |
+| Remainder to `feeSink` → stock for staked Dons (at `teamBps=0`) | **$8.97** |
+| Net cost to treasury | **$0.00 — the carve *is* the source** |
+
+This is genuinely self-funding: the dollar of stock the minter sees in their Vault is a dollar they
+themselves just paid. Nothing is pre-funded. The recommended **10%** matches the founder's floated
+~$1 and is the same ratio §3 already validated as "noticeable to the holder, invisible to margins."
+
+### 8.2 Reroll — a small self-funded top-up, farmability-bounded
+
+`reroll` does **not** create a Vault (confirmed in `Don.reroll` — it only rewrites the trait hash);
+it tops up the *existing* Vault of a Don the owner already holds. So the "already owns stock" onboarding
+moment already happened at that Don's mint — a reroll carve is a *nice-to-have drip*, not the hook.
+Model a small carve of **$0.30** (≈ 10% of the `$3.01` reroll fee); $0.50 (16.6%) is the ceiling worth
+considering.
+
+**Farmability check (critical — reroll stock is immediately sellable, no lock).** Could someone reroll
+purely to harvest the carve? Let fee `F = $3.01`, carve `c`. A reroll costs `F` and returns `c` of
+sellable stock to the roller's own Vault, while `F − c` goes to `feeSink` → stock for *staked* Dons.
+The only actor who recaptures any of `F − c` is a staker, in proportion to their stake share `s`:
+
+  net EV per reroll = −F + c + s·(F − c) − gas
+
+- For any ordinary roller `s ≈ 0`: net ≈ `c − F` = `$0.30 − $3.01` = **−$2.71**. Deeply unprofitable.
+- Worst case, a stake **monopolist** `s → 1`: net → `−F + c + (F − c)` = **0**, then minus gas ⇒ still
+  **negative**. Even someone who owns essentially all staked weight cannot make reroll-farming positive
+  **as long as `c < F`** (they'd be paying gas to recycle their own money).
+
+**Max safe carve = strictly `c < F` (100% of the fee); recommend `c ≤ 20%` of the fee for a wide
+margin.** At the recommended **$0.30 (~10%)** the farmer is ~$2.71 underwater per reroll and the
+monopolist edge case is still gas-negative — a full 10× cushion under the hard bound. (Because the
+onboarding value is marginal here, $0 for reroll is also defensible; the carve is optional.)
+
+### 8.3 Free WL mints — nothing to carve, so a few-cents keeper dust
+
+Free `claimWL` mints send no fee, so there is nothing to carve. Three options:
+
+- **(a) Nothing.** The 62%-of-collection WL majority never gets the "owns stock" moment. Kills the hook
+  for exactly the audience being onboarded. **Reject.**
+- **(b) Keeper dust drop (recommend).** Drop a few cents of stock into every free-mint Vault so
+  *everyone* gets the moment, priced near the sub-penny benchmark above. Cost across the ~5,540 WL:
+
+  | Dust size | 5,540 WL cost | Note |
+  |---|---:|---|
+  | $0.01 (benchmark) | **$55** | Matches the comparable project's dust exactly |
+  | **$0.05 (recommend)** | **$277** | Visibly "some stock," still trivially cheap |
+  | $0.10 | $554 | Upper bound if we want a rounder-looking balance |
+
+- **(c) Deferred / earned.** WL holders get their starter only after a first action (elect a payout,
+  stake, first exchange trade). Preserves budget and rewards engagement, but delays the moment past
+  mint — the one place it lands hardest. Hold as a fallback if even the dust line is contested.
+
+**Recommend (b) at $0.05** — every holder gets the moment at mint, the whole free tranche costs
+**~$277**, and it sits comfortably above the sub-penny benchmark while staying budget-noise.
+
+### 8.4 Staker-pot impact — honest framing
+
+The flagship flywheel is "100% of every mint fee → stock for staked Dons." Only **paid** mints feed it,
+so only paid mints are affected by a carve. Diverted from stakers to the minter's own Don:
+
+| Source | Volume | Fee → stakers today | With carve | Diverted to minter |
+|---|---|---:|---:|---:|
+| Custom (doc allocation) | 626 | $6,241 | $5,617 | **$624** |
+| Custom (ceiling) | 3,348 | $33,380 | $30,042 | **$3,338** |
+| Reroll | ongoing, unbounded | 100% of each $3.01 | 90% ($2.71) | 10% ($0.30) each |
+
+So the carve is a flat **~10% haircut on the paid-mint → staker flow**. Is it material? Honestly:
+
+- It is **not** a solvency item — it never touches the Bell pot, reserve floor, or loan pot. It only
+  reslices the mint-fee flywheel.
+- The framing is "**the minter gets 10% of their own fee back as stock in the very Don they just
+  minted**" versus "100% of it goes to *other* (incumbent) stakers." A newly minted Don that later
+  stakes *becomes* a staker — so the 10% is front-loaded into new entrants rather than removed from the
+  system. Arguably fairer onboarding, not a loss.
+- The absolute number is small: ~$624 over the whole doc-allocation mint (or ~$3.3k at the full custom
+  ceiling), plus 10% of ongoing reroll churn. The 90% that still reaches incumbent stakers is the
+  loud number and stays loud.
+
+### 8.5 Implementation fork — and which is #81-time-sensitive
+
+Delivery is the keeper drop either way (§2 Option C). The fork is purely about **how the funding is
+earmarked**:
+
+**A) Keeper policy (recommend) — zero contract change, ships anytime.**
+Fees flow 100% as today. A keeper drops stock into paid-mint Vaults from a pre-funded inventory float,
+and that float is replenished from mint-fee income as a *budgeting convention*. In fact the distributor
+already has the knob: `teamBps` routes a slice of every paid fee to `treasury` (the rest to `feeSink`).
+Setting `teamBps ≈ 10%` and pointing the keeper's inventory top-ups at that treasury inflow makes the
+paid mints self-fund **with no new code** — the 10% the minter paid lands back as their starter, and
+the earmark is an operations convention, not a contract guarantee. This is the same knob §4 flagged;
+here it is used as the *funding rail*, not the delivery. Ships whenever the inventory wallet is funded;
+**not a #81 gate.**
+
+**B) On-chain carve — trustless, but a #81-gated distributor change.**
+Add a dedicated split (a `starterBps → starterSink` leg alongside the existing `teamBps → treasury`
+in `_splitFee`) so the earmark is enforced on-chain rather than by convention. **But:** `DonDistributor`
+is the Don's *immutable* minter, welded at #81 — so this must ship **in the #81 deploy plus a full
+3-agent audit round, or never** (post-#81 it becomes a full-stack redeploy). And it buys little:
+`starterSink` still has to be a keeper that converts ETH→stock and drops it (the converter is
+Bell-gated and session-dependent — the exact Option A wall from §2, unchanged). So the on-chain carve
+makes only the *funding split* trustless, never the *delivery*, at the cost of a pre-#81 audit gate.
+
+**Recommendation: (A) keeper policy.** It is self-funding as a budgeting convention, needs no Solidity,
+adds **no pre-#81 gate**, and can go live with the first WL wave. Choose (B) only if the founder
+specifically wants the funding earmark trust-minimized and is willing to pay a #81-blocking audit
+round for it — and even then delivery stays keeper-side. **Flag: (B) is the only version that adds a
+gate before #81; (A) does not.**
+
+### 8.6 Total cost — all-prefund vs self-funded hybrid
+
+| Tranche | All-prefund (§3, $1 each) | Self-funded hybrid | Treasury cost (hybrid) |
+|---|---:|---|---:|
+| Custom (626) | $626 | 10% carve of own fee | **$0** |
+| Reroll (ongoing) | n/a (no Vault) | ~$0.30 carve of own fee | **$0** |
+| WL free (5,540) | $5,540 | $0.05 keeper dust | **$277** |
+| Desk float (2,222) | $2,222 | drop at first exchange sale, funded by the 30% treasury share of the swap fee (§3) | **$0** |
+| Partners/team (≤500) | $500 | $0.05 dust (or founder's call) | **~$25** |
+| **Total** | **$8,888** | | **≈ $300** (dust only) |
+
+**New treasury outlay ≈ $300** (a few hundred dollars at most, up to ~$580 if the free/partner dust is
+set to $0.10) — versus the **$8,888** all-prefund ceiling. The paid tranches now cost the treasury
+nothing; the only real line item is the free-mint dust.
+
+### 8.7 Updated go / no-go + config
+
+**GO**, self-funded hybrid, with this exact per-path config:
+
+- **Custom (~$10):** carve **10% → ~$1.00** starter into the new Vault; ~$8.97 continues to
+  `feeSink`/stakers. Self-funded from the fee.
+- **Reroll (~$3):** **$0.30** top-up (~10% of the fee) into the owner's existing Vault; optional, since
+  the onboarding moment was at that Don's mint. **Max-safe carve: strictly `< 100%` of the fee; keep
+  `≤ 20%` for margin.** At $0.30 farming is ~$2.71-negative and even a stake monopolist is gas-negative.
+- **Free WL:** **$0.05** keeper dust per Don (~$277 across 5,540), near the sub-penny benchmark, so
+  every holder still gets the "owns stock" moment.
+- **Funding mechanism:** **keeper policy** — inventory float replenished from mint-fee income (via the
+  existing `teamBps→treasury` flow as the budgeting convention). **Zero contract change.**
+- **Free-mint treatment:** keeper dust (option b), not "nothing" and not deferred.
+- **Must anything land before #81?** **No.** The keeper-policy version adds **no pre-#81 gate** and
+  ships with the first WL wave. The only version that *would* gate #81 is the optional on-chain
+  `starterBps` carve (§8.5 B) + its 3-agent audit round — recommended against, because delivery stays
+  keeper-side regardless.
+- **New total treasury cost:** **≈ $300** (free-mint dust), down from the $8,888 all-prefund ceiling.
