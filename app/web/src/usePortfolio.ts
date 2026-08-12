@@ -5,6 +5,9 @@ import type { Address } from "viem";
 import { useWallet } from "./wallet";
 import { reads, type Portfolio } from "./live";
 
+/// One owned Don, with its tier / vault / lien + loan state — the element type of `portfolio.dons`.
+export type PortfolioDon = Portfolio["dons"][number];
+
 /// Live portfolio, polled every 20s. Returns the connected wallet's balances, Dons, Vaults, loans, etc.
 export function usePortfolio() {
   const w = useWallet();

@@ -7,13 +7,13 @@ export const DON_NET = {
   rpc: "https://rpc.testnet.chain.robinhood.com/rpc",
   explorer: "https://explorer.testnet.chain.robinhood.com",
   essey: "0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F",
-  distributor: "0x2Bbc39AcB8A1A76909759f7B2f31D57f1535601d",
-  don: "0x0C30ccbf727c5f9803A81e64873C6898a1e15771",
-  reserve: "0xD4aC7ADD2A790B9916367c35F9F892b6D92F24D6",
-  bell: "0x5f2Df783437b5383f8E96196Bb92A0c22527a289",
-  exchange: "0x10c22bC22B4deE66a7DE2f790a2678e622441753",
-  loan: "0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7",
-  feeRouter: "0x6EC22ab8442de2F780477d9A56926e0BA0382032",
+  distributor: "0x9F9928E1FDa97f67d54A9E7b7fFedC003C669103",
+  don: "0x582E4B8E3A783B1FE09409AEDa3C6533782dB53c",
+  reserve: "0xD54FeD45840FA4E64dC04C36dD119d256BCEd679",
+  bell: "0x8a7749e47E79964B265B6ee6216FD5d017701552",
+  exchange: "0x9Cec219bCdA1a901D4a7154B55648bdAE5433582",
+  loan: "0x764525bE0e90cB02afFB93ccA63bB94333c43EEF",
+  feeRouter: "0x0000000000000000000000000000000000000000",
 } as const;
 
 /// The RH testnet as a viem chain, for createPublicClient/createWalletClient anywhere Don flows run.

@@ -98,23 +98,34 @@ same keeper that keeps the converter/degen feeds fresh.)
 
 **Not yet on testnet:** StockConverter (stock-denominated payouts), whitelist roots, CoinVoyage onramp.
 
-## Dons v3 market layer (2026-08-11) — audited (2 clean 3-agent rounds), rehearsed live
+## Dons market layer — FRESH v3 redeploy (2026-08-11 CURRENT / live on essey.xyz)
+
+The prior Don stack's DonLoan was the pre-v3 model (accruing interest / ratio liquidation). Because
+`Don.setLienManager` is ONE-SHOT, the v3 term-loan could not be swapped in isolation — a fresh, fully
+wired stack was required. Deployed via `DeployDons.s.sol` + seeded via `SeedDons.s.sol`. Contracts are
+the audited sources (DonLoan `R8 3-lens clean`, commit 4dc4a5f).
 
 | Contract | Address |
 |---|---|
-| EsseyToken v2 ($ESSEY, 8.888B supply) | `0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F` |
-| DonDistributor (mint: free WL / reroll / $10 custom) | `0x2Bbc39AcB8A1A76909759f7B2f31D57f1535601d` |
-| Don (8,888 PFP, lien-capable) | `0x0C30ccbf727c5f9803A81e64873C6898a1e15771` |
-| DonReserve (300,030 $ESSEY floor, funded 2.667B) | `0xD4aC7ADD2A790B9916367c35F9F892b6D92F24D6` |
-| Bell (Dons era: 5-tier 666-ladder, elect-3, BUNDLE default) | `0x5f2Df783437b5383f8E96196Bb92A0c22527a289` |
-| DonExchange (8%/12%, price=max(300k floor, live)) | `0x10c22bC22B4deE66a7DE2f790a2678e622441753` |
-| DonLoan (50% LTV / 70% liq / 15% APR, ESSEY-denominated) | `0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7` |
+| EsseyToken v2 ($ESSEY, 8.888B supply) — reused | `0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F` |
+| DonDistributor (mint: free WL / reroll / custom; fees 0 on testnet) | `0x9F9928E1FDa97f67d54A9E7b7fFedC003C669103` |
+| Don (8,888 PFP, lien-capable) | `0x582E4B8E3A783B1FE09409AEDa3C6533782dB53c` |
+| DonReserve (300,030 $ESSEY floor, funded 2.667B) | `0xD54FeD45840FA4E64dC04C36dD119d256BCEd679` |
+| Bell (5-tier 666-ladder, elect-3, BUNDLE default) | `0x8a7749e47E79964B265B6ee6216FD5d017701552` |
+| DonExchange (8%/12%, price=max(300k floor, live)) | `0x9Cec219bCdA1a901D4a7154B55648bdAE5433582` |
+| DonLoan **v3** (50% LTV, prepaid-ETH interest, calendar default) | `0x764525bE0e90cB02afFB93ccA63bB94333c43EEF` |
 
-State: reserve funded (floor 300,030), loan pot 100M, AMM seeded 50 (rehearsal float), WL root
-`0x836f5ce5…5634` PROPOSED stage 0 (commitRoot after the 2-day timelock), publicOpen=true.
-Rehearsal proven on-chain: mint #51 (ETH fee) → buy #50 → borrow 150,015 → repay+lien-release → sell @276,027 net.
-Interim: feeSink=treasury (DonFeeRouter awaits WETH/ETH-feed mocks); reuses mock USDG `0x7461…5De2` +
-BundleConverter `0x3c6a…7fb0` (Bell default payout = BUNDLE sentinel `0xB0B1`).
+State: reserve funded (floor 300,030), loan pot 100M, desk seeded 50 Dons, publicOpen=true, mint/reroll
+fees set to 0 (testnet, so testers/harness mint free). feeSink=treasury interim (DonFeeRouter unwired —
+no RH-testnet WETH/Uniswap; mainnet wires the real route). Reuses mock USDG `0x7461…5De2`.
+
+**E2E PROVEN via agent harness** (`script/DonE2E.s.sol`, 18 wallets / 40 Dons, `docs/TESTNET-E2E.md`):
+**109/109 transactions, 0 failures** — mint · reroll · faucet · stake (tier-1 + upgrade) · borrow (7d & 365d) ·
+repay · desk buy/snipe/sell round-trips · reserve fund/redeem. Liquidation proven in fork sim (needs time-travel).
+
+### SUPERSEDED — prior Don stack (pre-v3 loan, retired 2026-08-11)
+Don `0x0C30…5771` · Distributor `0x2Bbc…601d` · Reserve `0xD4aC…24D6` · Bell `0x5f2D…a289` ·
+Exchange `0x10c2…1753` · Loan (old model) `0x2Fd1…6bC7`. Left on-chain; the site no longer points here.
 
 ### Dons fee route (2026-08-11, testnet mocks)
 | Contract | Address |

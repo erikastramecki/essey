@@ -20,19 +20,23 @@ export const NET = {
 };
 
 export const ADDR = {
-  // Dons stack — deployed + rehearsed 2026-08-11 (see docs/DEPLOYMENT-testnet.md; audited, 2 clean rounds).
-  don: "0x0C30ccbf727c5f9803A81e64873C6898a1e15771" as Address, // the 8,888 PFP membership NFT (lien-capable)
-  distributor: "0x2Bbc39AcB8A1A76909759f7B2f31D57f1535601d" as Address, // mint: free WL / reroll / custom
+  // Dons stack — FRESH v3 redeploy 2026-08-11 (term-loan model; supersedes the pre-v3 stack whose loan
+  // was old-model). Full-stack redeploy was required: Don.lienManager is one-shot, so a new v3 loan needs
+  // a new Don. Funded (300,030 floor), 50 Dons seeded to the desk, public mint open. See docs/DEPLOYMENT-testnet.md.
+  don: "0x582E4B8E3A783B1FE09409AEDa3C6533782dB53c" as Address, // the 8,888 PFP membership NFT (lien-capable)
+  distributor: "0x9F9928E1FDa97f67d54A9E7b7fFedC003C669103" as Address, // mint: free WL / reroll / custom
   essey: "0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F" as Address, // $ESSEY v2 (8.888B supply)
   // Legacy $ESSEY v1 — the Cases/Degen/Faucet stack was deployed against it and still charges in it.
   esseyV1: "0x0659eca47665da545e1157ede11fcb4c8222879f" as Address,
   usdg: "0x7461E670d44FF4397A3E48030C5b06f6163a5De2" as Address,
-  bell: "0x5f2Df783437b5383f8E96196Bb92A0c22527a289" as Address, // Dons-era Bell: 5-tier 666-ladder, elect-3, no ringer tip
-  exchange: "0x10c22bC22B4deE66a7DE2f790a2678e622441753" as Address, // DonExchange AMM: 8%/12% fees, price = max(300k, live floor)
+  bell: "0x8a7749e47E79964B265B6ee6216FD5d017701552" as Address, // Dons-era Bell: 5-tier 666-ladder, elect-3, no ringer tip
+  exchange: "0x9Cec219bCdA1a901D4a7154B55648bdAE5433582" as Address, // DonExchange AMM: 8%/12% fees, price = max(300k, live floor)
   // An $ESSEY reserve that gives every Don a hard, rising floor (redeem a Don for its pro-rata share). Immutable.
-  donReserve: "0xD4aC7ADD2A790B9916367c35F9F892b6D92F24D6" as Address,
-  loan: "0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7" as Address, // DonLoan: 50% LTV, prepaid-ETH interest, calendar-only default, ESSEY-denominated
-  feeRouter: "0x6EC22ab8442de2F780477d9A56926e0BA0382032" as Address, // feeSink: ETH+ESSEY fees → USDG → Bell pot
+  donReserve: "0xD54FeD45840FA4E64dC04C36dD119d256BCEd679" as Address,
+  loan: "0x764525bE0e90cB02afFB93ccA63bB94333c43EEF" as Address, // DonLoan v3: 50% LTV, prepaid-ETH interest, calendar-only default, ESSEY-denominated
+  // feeSink on this testnet stack = treasury (interim): the ETH/Uniswap fee route has no RH-testnet primitives,
+  // so DonFeeRouter is unwired here (exchange+loan feeSinks are immutable=treasury). Mainnet wires the real route.
+  feeRouter: "0x0000000000000000000000000000000000000000" as Address,
   // DCA / Auto-stack: recurring USDG→stock buys, non-custodial, keeper-executed, floored via its converter.
   recurringBuy: "0xF0DCE628d4023cdc8115E6f5998D9279eA06d9ab" as Address,
   cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
@@ -591,9 +595,28 @@ export const reads = {
     return { tier: Number((state as readonly unknown[])[0]), pending: pending as bigint, vault: vault as Address, locked: locked as boolean, liened: liened as boolean };
   },
 
-  /// A liened Don's live loan debt in $ESSEY (0 = no open loan).
-  donDebt: (id: bigint) =>
-    pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "debtOf", args: [id] }) as Promise<bigint>,
+  /// A Don's live loan, in one read: debt in $ESSEY (flat = principal) and the term's expiry (unix
+  /// seconds). Both zero = no open loan. `loans(id)` returns (borrower, principal, expiry, nonce).
+  donLoan: async (id: bigint): Promise<{ debt: bigint; expiry: bigint }> => {
+    const l = await pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "loans", args: [id] }) as readonly [Address, bigint, bigint, bigint];
+    return { debt: l[1], expiry: l[2] };
+  },
+
+  /// The Don loan facility, at a glance: the fixed draw every loan takes (50% of the live floor), the
+  /// $ESSEY currently lendable in the pot, and the LTV in bps. Drives the borrow panel's numbers + guards.
+  donLoanFacility: async (): Promise<{ maxDraw: bigint; lendable: bigint; ltvBps: number }> => {
+    const [maxDraw, lend, ltv] = await Promise.all([
+      pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "maxBorrow" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "lendable" }) as Promise<bigint>,
+      pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "ltvBps" }) as Promise<bigint>,
+    ]);
+    return { maxDraw, lendable: lend, ltvBps: Number(ltv) };
+  },
+
+  /// The ETH interest prepaid up front for a `termSeconds` term (wei), floor-scaled + clamped. 0 = free
+  /// (the launch rate). The UI reads this per term and sends it as msg.value on borrow.
+  donLoanPrepaid: (termSeconds: bigint) =>
+    pub.readContract({ address: ADDR.loan, abi: donLoanAbi, functionName: "prepaidEth", args: [termSeconds] }) as Promise<bigint>,
 
   tierFee: (tierIndex: number) => // cumulative $ESSEY to reach tier (tierIndex is 0-based)
     pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "tierFees", args: [BigInt(tierIndex)] }),
@@ -722,11 +745,11 @@ export const reads = {
     ]);
     const dons = await Promise.all(ids.map(async (id) => {
       const st = await reads.donState(id);
-      const [vaultUsdg, vaultStock, debt] = await Promise.all([
+      const [vaultUsdg, vaultStock, loan] = await Promise.all([
         reads.vaultBalance(st.vault), reads.vaultStocks(st.vault),
-        st.liened ? reads.donDebt(id) : Promise.resolve(0n),
+        st.liened ? reads.donLoan(id) : Promise.resolve({ debt: 0n, expiry: 0n }),
       ]);
-      return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda, debt };
+      return { id, ...st, vaultUsdg, vaultAapl: vaultStock.aapl, vaultNvda: vaultStock.nvda, debt: loan.debt, expiry: loan.expiry };
     }));
     return { gas, ...bal, dons, wins, pool, loans, shielded };
   },
@@ -865,8 +888,15 @@ export const flows = {
   /// staked, keeps earning — but can't move until the debt clears. Default is a CALENDAR event: once the
   /// term's expiry + 30-day grace has passed, anyone can liquidate and the Don is consumed (redeemed into
   /// the reserve), its Vault + membership forfeited.
-  borrowAgainstDon: (a: Address, id: bigint, termSeconds: bigint): Promise<Hex> =>
-    send(a, ADDR.loan, donLoanAbi, "borrow", [id, termSeconds]),
+  borrowAgainstDon: async (a: Address, id: bigint, termSeconds: bigint): Promise<Hex> => {
+    // Price the ETH interest for this term off the live floor and forward it as msg.value. The contract
+    // demands EXACTLY 0 when the rate floors to nothing (the launch case), so omit the value entirely
+    // then; when there IS a fee, add a small cushion for floor drift between quote and inclusion — the
+    // contract refunds any overpayment to the borrower under its reentrancy guard.
+    const prepaid = await reads.donLoanPrepaid(termSeconds);
+    const value = prepaid > 0n ? prepaid + prepaid / 50n : undefined;
+    return send(a, ADDR.loan, donLoanAbi, "borrow", [id, termSeconds], value);
+  },
 
   /// Repay a Don loan in $ESSEY. The debt is flat — interest was prepaid in ETH at borrow, so nothing
   /// accrues; repaying the principal clears it 1:1 and releases the lien. The contract pulls at most the
