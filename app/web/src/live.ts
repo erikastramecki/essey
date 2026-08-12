@@ -1088,7 +1088,16 @@ export const flows = {
     const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
     const { proof, ext } = await buildWithdrawProof(keys.spendKp, keys.encKp, note, amount, recipient, leaves, relayOpts);
     onStage?.(viaRelayer ? "relaying" : "withdrawing");
-    return viaRelayer ? await relaySubmit(proof, ext, pool.address) : await send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    // Self-submitting the relay-bound proof is valid: the fee is bound at RELAYER_FEE (0), so the pool just
+    // transfers 0 to the named relayer and pays the recipient as normal — no re-prove needed.
+    const selfSubmit = () => send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    if (!viaRelayer) return await selfSubmit();
+    try {
+      return await relaySubmit(proof, ext, pool.address);
+    } catch (e) {
+      if (e instanceof RelayUnavailableSignal) throw new RelayerUnavailableError(e.detail, selfSubmit);
+      throw e;
+    }
   },
 
   /// Send `amount` (raw unit) to another registered user IN-POOL — never unshielded. The sent note is encrypted
@@ -1103,7 +1112,15 @@ export const flows = {
     const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
     const { proof, ext } = await buildTransferProof(keys.spendKp, keys.encKp, note, amount, acct.spendPub, acct.encPub, leaves, relayOpts);
     onStage?.(viaRelayer ? "relaying" : "sending");
-    return viaRelayer ? await relaySubmit(proof, ext, pool.address) : await send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    // In-pool transfer never unshields, but the relay-bound proof is likewise safe to self-submit (fee = 0).
+    const selfSubmit = () => send(a, pool.address, shieldedPoolAbi, "transact", [proofToTuple(proof), extToTuple(ext)]);
+    if (!viaRelayer) return await selfSubmit();
+    try {
+      return await relaySubmit(proof, ext, pool.address);
+    } catch (e) {
+      if (e instanceof RelayUnavailableSignal) throw new RelayerUnavailableError(e.detail, selfSubmit);
+      throw e;
+    }
   },
 
   /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
@@ -1333,9 +1350,36 @@ function extToTuple(e: PoolExtData) {
 /// sets a gas-covering fee. The fee is bound into the proof, so the relayer can only take exactly this.
 export const RELAYER_FEE = 0n;
 
+/// Thrown when the gasless relayer can't submit — it's unconfigured (prod without RELAYER_PK → 500
+/// "relayer not configured"), unreachable (network failure), or returned any other non-200. This is NOT a
+/// generic failure: it specifically means the relayed path is currently unavailable, so the UI can offer an
+/// explicit, user-consented fallback. `selfSubmit` re-submits the SAME already-built proof from the user's own
+/// wallet — reusing the proof (no re-prove). That is a real privacy downgrade (the tx then originates from the
+/// user's address, which the relayer existed to hide), so it must only run after explicit consent. `detail`
+/// carries the underlying reason for logs; it is not meant for the end user.
+export class RelayerUnavailableError extends Error {
+  readonly detail: string;
+  readonly selfSubmit: () => Promise<Hex>;
+  constructor(detail: string, selfSubmit: () => Promise<Hex>) {
+    super("relayer unavailable");
+    this.name = "RelayerUnavailableError";
+    this.detail = detail;
+    this.selfSubmit = selfSubmit;
+  }
+}
+
+/// Internal signal raised by `relaySubmit` when the relayer endpoint itself is unavailable (unreachable or
+/// non-200) — as opposed to a submitted tx later reverting on-chain. The flow wrappers catch this and re-raise
+/// a `RelayerUnavailableError` carrying a self-submit closure bound to the already-built proof.
+class RelayUnavailableSignal extends Error {
+  constructor(readonly detail: string) { super(detail); this.name = "RelayUnavailableSignal"; }
+}
+
 /// Submit a pre-built proof through the relayer (POST /api/relay) instead of the user's own wallet — so the tx
 /// originates from the relayer, hiding the user's tx-origin, and needs no gas from the user. Bigints go over
-/// JSON as decimal strings. Returns the relayer's tx hash.
+/// JSON as decimal strings. Returns the relayer's tx hash. If the relayer endpoint is unreachable or answers
+/// non-200 (e.g. RELAYER_PK unset → 500 "relayer not configured"), throws `RelayUnavailableSignal` so the
+/// caller can offer a consented self-submit fallback; a 200 tx that later reverts throws normally instead.
 async function relaySubmit(proof: ProofCalldata, ext: PoolExtData, pool: Address): Promise<Hex> {
   const body = {
     pool,
@@ -1351,9 +1395,18 @@ async function relaySubmit(proof: ProofCalldata, ext: PoolExtData, pool: Address
     },
     extData: { recipient: ext.recipient, extAmount: ext.extAmount.toString(), relayer: ext.relayer, fee: ext.fee.toString(), encryptedOutput1: ext.encryptedOutput1, encryptedOutput2: ext.encryptedOutput2 },
   };
-  const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const j = (await r.json()) as { hash?: Hex; error?: string };
-  if (!r.ok || !j.hash) throw new Error(j.error ? `Relayer: ${j.error}` : "The relayer couldn't submit — try again, or turn off 'via relayer' to submit yourself.");
+  let r: Response;
+  try {
+    r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) {
+    // Couldn't even reach the endpoint (offline, DNS, CORS, blocked). The relayed path is unavailable.
+    throw new RelayUnavailableSignal((e as Error)?.message ?? "network error reaching relayer");
+  }
+  let j: { hash?: Hex; error?: string } = {};
+  try { j = (await r.json()) as { hash?: Hex; error?: string }; } catch { /* non-JSON body — treat as no hash */ }
+  // Non-200 (500 "relayer not configured", 405, 400, …) or a 200 with no hash means the relayer did NOT submit
+  // a tx. Nothing is on-chain, so the built proof is untouched and can be safely self-submitted instead.
+  if (!r.ok || !j.hash) throw new RelayUnavailableSignal(j.error ?? `relay HTTP ${r.status}`);
   await pub.waitForTransactionReceipt({ hash: j.hash, timeout: 120_000 });
   return j.hash;
 }

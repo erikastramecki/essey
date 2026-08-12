@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { parseUnits, isAddress, type Address, type Hex } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, scanPool, lookupPoolAccount, sharesToUsdg, usdgToShares, stockImpaired, SHIELDED_POOLS, type ShieldedPoolCfg, type StealthKeys, type PrivateHolding, type PoolNote, type PoolKeys } from "./live";
+import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, scanPool, lookupPoolAccount, sharesToUsdg, usdgToShares, stockImpaired, SHIELDED_POOLS, RelayerUnavailableError, type ShieldedPoolCfg, type StealthKeys, type PrivateHolding, type PoolNote, type PoolKeys } from "./live";
 
 // Decimals are carried per-token, NOT hardcoded — testnet mocks are all 18-dec, but mainnet USDG is 6-dec,
 // and a hardcoded 18 there would over-send by 1e12x. Update these when the mainnet addresses land.
@@ -58,6 +58,10 @@ export function PrivatePage() {
   const [xferAmt, setXferAmt] = useState("");
   const [viaRelayer, setViaRelayer] = useState(true); // withdraw/transfer through the relayer by default (private, gasless)
   const [stage, setStage] = useState<string | null>(null);
+  // When the gasless relayer is unavailable, we DON'T hard-error and we DON'T silently self-submit: we stash a
+  // consent-gated fallback here. `proceed` re-submits the SAME already-built proof from the user's own wallet
+  // (reusing the proof), and only runs if the user explicitly confirms. `noun` tailors the wording per action.
+  const [relayFallback, setRelayFallback] = useState<{ noun: string; proceed: () => Promise<void> } | null>(null);
   const isSupply = selPool.kind === "supply";
   // the unit users type in: supply talks USDG (notes are shares under the hood); everything else is native.
   const inputUnit = isSupply ? "USDG" : selPool.unit;
@@ -67,7 +71,7 @@ export function PrivatePage() {
   // their trailing state writes if the account has since switched (so account A's balance can't paint under B).
   const scanGen = useRef(0);
   useEffect(() => { if (a && !unshieldTo) setUnshieldTo(a); }, [a, unshieldTo]);
-  useEffect(() => { scanGen.current++; setPoolKeys(null); setPool({ notes: [], balance: 0n }); setUsdgValue(null); setImpaired(false); setMaxNoteUsdg(null); setPoolReg(null); }, [a]); // re-lock on wallet change
+  useEffect(() => { scanGen.current++; setPoolKeys(null); setPool({ notes: [], balance: 0n }); setUsdgValue(null); setImpaired(false); setMaxNoteUsdg(null); setPoolReg(null); setRelayFallback(null); }, [a]); // re-lock on wallet change
 
   // Am I already registered? (cheap read, no signature.)
   useEffect(() => {
@@ -81,6 +85,29 @@ export function PrivatePage() {
     setBusy(label); setMsg(null);
     try { await fn(); setMsg(ok); }
     catch (e) { setMsg(niceError(e)); }
+    finally { setBusy(null); setStage(null); }
+  };
+
+  // Runner for the two relayer-backed actions (unshield / transfer). Like `run`, but if the gasless relayer is
+  // unavailable it does NOT surface an error — it captures a consent-gated fallback (`relayFallback`). The
+  // default path stays relayer-first (viaRelayer is untouched); nothing self-submits until the user confirms.
+  // `submit` builds + submits via the relayer; `tail` is the post-success work (clear input + rescan); `noun`
+  // labels the action in the consent copy. On confirm we call the error's `selfSubmit` (reusing the built
+  // proof) and then run the SAME `tail`, so no proof/note work is thrown away.
+  const runRelayable = async (label: string, noun: string, submit: () => Promise<unknown>, tail: () => Promise<void>, ok: string) => {
+    setBusy(label); setMsg(null); setRelayFallback(null);
+    try { await submit(); await tail(); setMsg(ok); }
+    catch (e) {
+      if (e instanceof RelayerUnavailableError) {
+        const selfSubmit = e.selfSubmit;
+        setRelayFallback({ noun, proceed: async () => {
+          setRelayFallback(null); setBusy(label); setMsg(null);
+          try { await selfSubmit(); await tail(); setMsg(ok); }
+          catch (err) { setMsg(niceError(err)); }
+          finally { setBusy(null); setStage(null); }
+        } });
+      } else { setMsg(niceError(e)); }
+    }
     finally { setBusy(null); setStage(null); }
   };
 
@@ -102,7 +129,7 @@ export function PrivatePage() {
     const p = SHIELDED_POOLS.find((x) => x.key === key)!;
     setSelPoolKey(key);
     setPool({ notes: [], balance: 0n }); setUsdgValue(null); setMaxNoteUsdg(null); setImpaired(false); setPoolReg(null);
-    setShieldAmt(""); setUnshieldAmt(""); setXferAmt(""); setXferTo("");
+    setShieldAmt(""); setUnshieldAmt(""); setXferAmt(""); setXferTo(""); setRelayFallback(null);
     if (poolKeys && a) run("switch", async () => {
       const g = scanGen.current;
       await rescan(poolKeys, p);
@@ -157,23 +184,27 @@ export function PrivatePage() {
     setShieldAmt(""); await rescan(poolKeys, selPool);
   }, isSupply ? "✓ Supplied privately — your position and its yield are now hidden." : "✓ Shielded — your balance is now private.");
 
-  const unshield = () => a && poolKeys && run("unshield", async () => {
-    const raw = await toRaw(unshieldAmt);
-    if (raw <= 0n) throw new Error("Enter an amount to unshield.");
-    const dest = (unshieldTo.trim() || a) as Address;
-    if (!isAddress(dest)) throw new Error("Enter a valid destination address.");
-    await flows.shieldWithdraw(a, pickNote(raw), raw, dest, poolKeys, viaRelayer, selPool, setStage);
-    setUnshieldAmt(""); await rescan(poolKeys, selPool);
-  }, isSupply ? "✓ Withdrawn — USDG plus accrued yield sent to your address." : "✓ Unshielded to your chosen address.");
+  const unshield = () => a && poolKeys && runRelayable("unshield", isSupply ? "withdrawal" : "unshield",
+    async () => {
+      const raw = await toRaw(unshieldAmt);
+      if (raw <= 0n) throw new Error("Enter an amount to unshield.");
+      const dest = (unshieldTo.trim() || a) as Address;
+      if (!isAddress(dest)) throw new Error("Enter a valid destination address.");
+      await flows.shieldWithdraw(a, pickNote(raw), raw, dest, poolKeys, viaRelayer, selPool, setStage);
+    },
+    async () => { setUnshieldAmt(""); await rescan(poolKeys, selPool); },
+    isSupply ? "✓ Withdrawn — USDG plus accrued yield sent to your address." : "✓ Unshielded to your chosen address.");
 
-  const transfer = () => a && poolKeys && run("xfer", async () => {
-    const raw = await toRaw(xferAmt);
-    if (raw <= 0n) throw new Error("Enter an amount to send.");
-    const dest = xferTo.trim();
-    if (!isAddress(dest)) throw new Error("Enter the recipient's wallet address.");
-    await flows.shieldTransfer(a, dest as Address, raw, pickNote(raw), poolKeys, viaRelayer, selPool, setStage);
-    setXferAmt(""); await rescan(poolKeys, selPool);
-  }, "✓ Sent privately — it will appear in the recipient's shielded balance.");
+  const transfer = () => a && poolKeys && runRelayable("xfer", "private transfer",
+    async () => {
+      const raw = await toRaw(xferAmt);
+      if (raw <= 0n) throw new Error("Enter an amount to send.");
+      const dest = xferTo.trim();
+      if (!isAddress(dest)) throw new Error("Enter the recipient's wallet address.");
+      await flows.shieldTransfer(a, dest as Address, raw, pickNote(raw), poolKeys, viaRelayer, selPool, setStage);
+    },
+    async () => { setXferAmt(""); await rescan(poolKeys, selPool); },
+    "✓ Sent privately — it will appear in the recipient's shielded balance.");
 
   const register = () => a && run("register", async () => {
     const k = await flows.registerStealth(a);
@@ -317,6 +348,24 @@ export function PrivatePage() {
                     <input type="checkbox" checked={viaRelayer} onChange={(e) => setViaRelayer(e.target.checked)} />
                     <span>Withdraw / send <b>via relayer</b> — the relayer submits for you, so the tx doesn't come from your wallet (hides your tx-origin) and costs you no gas. Uncheck to submit yourself.</span>
                   </label>
+
+                  {/* Relayer-unavailable fallback — explicit, consented downgrade. Never auto-switches; the
+                      via-relayer default above is left untouched. Confirming reuses the already-built proof. */}
+                  {relayFallback && (
+                    <div className="live-card" style={{ marginBottom: 14, borderColor: "var(--gold, #c9a227)" }}>
+                      <div className="pf-note" style={{ margin: "0 0 10px", lineHeight: 1.5 }}>
+                        ⚠ <b>Gasless relay is unavailable right now.</b> You can complete this {relayFallback.noun} yourself — but
+                        submitting directly makes the transaction come <b>from your own wallet</b>, revealing your address on-chain.
+                        The relay exists precisely to hide it. Your proof is already built; this only changes who submits it.
+                      </div>
+                      <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
+                        <button className="btn btn-gold" disabled={!!busy} onClick={() => relayFallback.proceed()}>
+                          {busy ? "submitting…" : "Submit directly (reveals my address)"}
+                        </button>
+                        <button className="btn" disabled={!!busy} onClick={() => setRelayFallback(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Shield (deposit) */}
                   <div className="pf-note" style={{ marginBottom: 6 }}>Heads-up: your <b>first</b> shield downloads a one-time ~12 MB proving key, so it takes ~30s (quick after that). The proof runs entirely in your browser — nothing is sent anywhere.</div>
