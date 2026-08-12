@@ -358,152 +358,167 @@ const FAQ: { q: string; a: string }[] = [
 
 const FEE_MAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 675" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
   <defs>
-    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ad8938"/></marker>
-    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5b8fd9"/></marker>
-    <marker id="aU" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2f9e6e"/></marker>
-    <marker id="aP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a06fd0"/></marker>
-    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c25050"/></marker>
+    <marker id="fmGold" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--gold)"/></marker>
+    <marker id="fmMut" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--tx-faint)"/></marker>
+    <marker id="fmOx" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ox)"/></marker>
   </defs>
 
-  <rect width="1200" height="675" fill="#0b0c10"/>
+  <rect width="1200" height="675" fill="var(--s1)"/>
+  <rect x="6" y="6" width="1188" height="663" rx="12" fill="none" stroke="var(--line-2)" stroke-width="1"/>
 
-  <text x="30" y="52" font-size="34" font-weight="700" fill="#e6c877">WHERE EVERY FEE GOES</text>
-  <text x="30" y="80" font-size="16" fill="#9a958a">Essey · 8,888 seats at the table · every route is on-chain and immutable</text>
+  <text x="40" y="52" font-size="30" font-weight="700" fill="var(--gold-hi)">WHERE EVERY FEE GOES</text>
+  <text x="40" y="78" font-size="15" fill="var(--tx-mut)">Every fee ends at the Bell (stock for staked Dons), the treasury, or the burn — never the floor.</text>
 
-  <text x="186" y="112" font-size="13" font-weight="700" letter-spacing="2" fill="#9a958a" text-anchor="middle">FEES IN</text>
-  <text x="610" y="112" font-size="13" font-weight="700" letter-spacing="2" fill="#9a958a" text-anchor="middle">ROUTED</text>
-  <text x="1026" y="112" font-size="13" font-weight="700" letter-spacing="2" fill="#9a958a" text-anchor="middle">PAID OUT</text>
+  <!-- legend -->
+  <circle cx="46" cy="99" r="6" fill="var(--gold)"/>
+  <text x="58" y="104" font-size="14" fill="var(--tx-mut)">buys stock for staked Dons (via the Bell)</text>
+  <circle cx="410" cy="99" r="6" fill="var(--tx-faint)"/>
+  <text x="422" y="104" font-size="14" fill="var(--tx-mut)">to the treasury</text>
+  <circle cx="600" cy="99" r="6" fill="var(--ox)"/>
+  <text x="612" y="104" font-size="14" fill="var(--tx-mut)">burned forever</text>
 
+  <text x="40" y="122" font-size="12" font-weight="700" letter-spacing="2" fill="var(--tx-faint)">FEE SOURCE</text>
+  <text x="800" y="122" font-size="12" font-weight="700" letter-spacing="2" fill="var(--tx-faint)">WHERE IT GOES</text>
+
+  <!-- fee sources (left) -->
   <g>
-    <rect x="28" y="122" width="316" height="70" rx="10" fill="#15161c" stroke="#5b8fd9" stroke-width="2"/>
-    <text x="44" y="150" font-size="20" font-weight="700" fill="#ece9e1">MINT FEES <tspan fill="#5b8fd9">· ETH</tspan></text>
-    <text x="44" y="176" font-size="15" fill="#b8b3a6">reroll ~$3 · custom mint ~$10</text>
+    <rect x="40" y="128" width="360" height="66" rx="9" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+    <text x="60" y="156" font-size="18" font-weight="700" fill="var(--tx)">MINT &amp; REROLL <tspan font-size="14" font-weight="400" fill="var(--r-bluechip)">· ETH</tspan></text>
+    <text x="60" y="178" font-size="14" fill="var(--tx-mut)">reroll ~$3 · custom mint ~$10</text>
 
-    <rect x="28" y="206" width="316" height="70" rx="10" fill="#15161c" stroke="#ad8938" stroke-width="2"/>
-    <text x="44" y="234" font-size="20" font-weight="700" fill="#ece9e1">AMM TRADE FEES <tspan fill="#ad8938">· $ESSEY</tspan></text>
-    <text x="44" y="260" font-size="15" fill="#b8b3a6">8% buy / sell · 12% snipe a specific Don</text>
+    <rect x="40" y="206" width="360" height="66" rx="9" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+    <text x="60" y="234" font-size="18" font-weight="700" fill="var(--tx)">TRADE / EXCHANGE <tspan font-size="14" font-weight="400" fill="var(--tx-mut)">· $ESSEY</tspan></text>
+    <text x="60" y="256" font-size="14" fill="var(--tx-mut)">8% buy / sell · 12% snipe a specific Don</text>
 
-    <rect x="28" y="290" width="316" height="70" rx="10" fill="#15161c" stroke="#ad8938" stroke-width="2"/>
-    <text x="44" y="318" font-size="20" font-weight="700" fill="#ece9e1">TIER STAKING <tspan fill="#ad8938">· $ESSEY</tspan></text>
-    <text x="44" y="344" font-size="15" fill="#b8b3a6">the 666 ladder: 66,666 → 1,666,666</text>
+    <rect x="40" y="284" width="360" height="66" rx="9" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+    <text x="60" y="312" font-size="18" font-weight="700" fill="var(--tx)">LOAN INTEREST <tspan font-size="14" font-weight="400" fill="var(--r-bluechip)">· ETH, prepaid</tspan></text>
+    <text x="60" y="334" font-size="14" fill="var(--tx-mut)">paid up front at borrow · never $ESSEY</text>
 
-    <rect x="28" y="374" width="316" height="70" rx="10" fill="#15161c" stroke="#5b8fd9" stroke-width="2"/>
-    <text x="44" y="402" font-size="20" font-weight="700" fill="#ece9e1">LOAN INTEREST <tspan fill="#5b8fd9">· ETH</tspan></text>
-    <text x="44" y="428" font-size="15" fill="#b8b3a6">prepaid at borrow · fixed 7–365d term</text>
+    <rect x="40" y="362" width="360" height="66" rx="9" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+    <text x="60" y="390" font-size="18" font-weight="700" fill="var(--tx)">ACTIVATION <tspan font-size="14" font-weight="400" fill="var(--tx-mut)">· $ESSEY</tspan></text>
+    <text x="60" y="412" font-size="14" fill="var(--tx-mut)">tier ladder 66,666 → 1,666,666</text>
 
-    <rect x="28" y="458" width="316" height="70" rx="10" fill="#15161c" stroke="#ad8938" stroke-width="2"/>
-    <text x="44" y="486" font-size="20" font-weight="700" fill="#ece9e1">LIQUIDATION PROCEEDS</text>
-    <text x="44" y="512" font-size="15" fill="#b8b3a6">Don seized &amp; redeemed at the floor</text>
-    <text x="28" y="552" font-size="13.5" fill="#9a958a">also from proceeds:  <tspan fill="#ece9e1">1% tip → caller</tspan> · <tspan fill="#ece9e1">principal → loan pool</tspan></text>
-    <text x="28" y="572" font-size="13.5" fill="#9a958a"><tspan fill="#ece9e1">surplus → borrower</tspan> — the Don itself is consumed (locked in the reserve)</text>
+    <rect x="40" y="440" width="360" height="66" rx="9" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+    <text x="60" y="468" font-size="18" font-weight="700" fill="var(--tx)">ROYALTIES <tspan font-size="14" font-weight="400" fill="var(--tx-mut)">· 5% secondary</tspan></text>
+    <text x="60" y="490" font-size="14" fill="var(--tx-mut)">on secondary-market resales</text>
   </g>
 
+  <!-- destinations (right) -->
   <g>
-    <rect x="470" y="132" width="280" height="96" rx="10" fill="#15161c" stroke="#2f9e6e" stroke-width="2.5"/>
-    <text x="486" y="160" font-size="20" font-weight="700" fill="#ece9e1">DonFeeRouter</text>
-    <text x="486" y="184" font-size="15" fill="#b8b3a6">ETH + $ESSEY → <tspan fill="#2f9e6e" font-weight="700">USDG</tspan></text>
-    <text x="486" y="206" font-size="15" fill="#b8b3a6">min-out ≥ 97% oracle-fair</text>
+    <rect x="800" y="128" width="360" height="146" rx="9" fill="var(--gold-dim)" stroke="var(--gold)" stroke-width="2.5"/>
+    <text x="822" y="160" font-size="20" font-weight="700" fill="var(--gold-hi)">THE BELL <tspan font-size="14" font-weight="400" fill="var(--tx-mut)">· stock for staked Dons</tspan></text>
+    <text x="822" y="188" font-size="14.5" fill="var(--tx)">fees → USDG → tokenized stock</text>
+    <text x="822" y="212" font-size="14.5" fill="var(--tx)">split pro-rata by tier weight (1.00× → 3.33×)</text>
+    <text x="822" y="236" font-size="14.5" fill="var(--tx)">lands in each Don's Vault (elect up to 3, or BUNDLE)</text>
+    <text x="822" y="260" font-size="13.5" fill="var(--tx-mut)">rings at ≥ 10 USDG · ringer tip 0% · O(1) split</text>
 
-    <rect x="470" y="282" width="280" height="52" rx="10" fill="#15161c" stroke="#4a453a" stroke-width="2"/>
-    <text x="486" y="315" font-size="20" font-weight="700" fill="#ece9e1">TREASURY</text>
+    <rect x="800" y="296" width="360" height="78" rx="9" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+    <text x="822" y="330" font-size="19" font-weight="700" fill="var(--tx)">TREASURY</text>
+    <text x="822" y="356" font-size="14" fill="var(--tx-mut)">protocol operations &amp; development</text>
 
-    <rect x="470" y="370" width="280" height="52" rx="10" fill="#15161c" stroke="#c25050" stroke-width="2.5"/>
-    <text x="486" y="396" font-size="20" font-weight="700" fill="#ece9e1">BURNED FOREVER</text>
-    <text x="486" y="415" font-size="13.5" fill="#b8b3a6">sent to 0x…dEaD — supply only shrinks</text>
-
-    <rect x="470" y="460" width="280" height="112" rx="10" fill="#1a1710" stroke="#c9a24b" stroke-width="3"/>
-    <text x="486" y="490" font-size="20" font-weight="700" fill="#e6c877">THE FLOOR · DonReserve</text>
-    <text x="486" y="516" font-size="15" fill="#ece9e1">2,666,666,666 $ESSEY ÷ 8,888 Dons</text>
-    <text x="486" y="540" font-size="15" fill="#ece9e1">= <tspan font-weight="700" fill="#e6c877">300,030 $ESSEY each</tspan></text>
-    <text x="486" y="562" font-size="14" fill="#b8b3a6">redeem any Don for it · it ONLY rises</text>
+    <rect x="800" y="392" width="360" height="78" rx="9" fill="var(--s2)" stroke="var(--ox)" stroke-width="2"/>
+    <text x="822" y="426" font-size="19" font-weight="700" fill="var(--tx)">BURNED FOREVER <tspan font-size="14" font-weight="400" fill="var(--ox)">· $ESSEY</tspan></text>
+    <text x="822" y="452" font-size="14" fill="var(--tx-mut)">→ 0x…dEaD · supply only shrinks</text>
   </g>
 
-  <g>
-    <rect x="880" y="132" width="292" height="86" rx="10" fill="#15161c" stroke="#2f9e6e" stroke-width="2.5"/>
-    <text x="896" y="162" font-size="20" font-weight="700" fill="#ece9e1">THE BELL <tspan fill="#2f9e6e">· USDG pot</tspan></text>
-    <text x="896" y="186" font-size="15" fill="#b8b3a6">rings at ≥ 10 USDG · ringer tip 0%</text>
-    <text x="896" y="207" font-size="15" fill="#b8b3a6">one O(1) split, no middleman</text>
+  <!-- gold: buys stock via the Bell -->
+  <path d="M400 161 C 560 161, 640 178, 800 178" fill="none" stroke="var(--gold)" stroke-width="3" marker-end="url(#fmGold)"/>
+  <text x="590" y="166" font-size="15" font-weight="700" fill="var(--gold-hi)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">100%</text>
+  <path d="M400 239 C 560 239, 650 200, 800 200" fill="none" stroke="var(--gold)" stroke-width="3" marker-end="url(#fmGold)"/>
+  <text x="586" y="212" font-size="15" font-weight="700" fill="var(--gold-hi)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">70%</text>
+  <path d="M400 317 C 560 317, 650 226, 800 226" fill="none" stroke="var(--gold)" stroke-width="3" marker-end="url(#fmGold)"/>
+  <text x="600" y="268" font-size="15" font-weight="700" fill="var(--gold-hi)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">70%</text>
 
-    <rect x="880" y="298" width="292" height="140" rx="10" fill="#181222" stroke="#a06fd0" stroke-width="3"/>
-    <text x="896" y="330" font-size="21" font-weight="700" fill="#ece9e1">STAKED DONS EARN</text>
-    <text x="896" y="356" font-size="21" font-weight="700" fill="#a06fd0">TOKENIZED STOCK</text>
-    <text x="896" y="384" font-size="15" fill="#b8b3a6">pro-rata by tier weight (100 → 333)</text>
-    <text x="896" y="406" font-size="15" fill="#b8b3a6">straight into each Don's Vault</text>
-    <text x="896" y="428" font-size="15" fill="#b8b3a6">elect up to 3 tickers · default: BUNDLE</text>
-  </g>
+  <!-- muted: to treasury -->
+  <path d="M400 239 C 580 252, 640 316, 800 322" fill="none" stroke="var(--tx-faint)" stroke-width="2" marker-end="url(#fmMut)"/>
+  <text x="626" y="300" font-size="14" font-weight="700" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">30%</text>
+  <path d="M400 317 C 570 322, 650 334, 800 336" fill="none" stroke="var(--tx-faint)" stroke-width="2" marker-end="url(#fmMut)"/>
+  <text x="648" y="330" font-size="14" font-weight="700" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">30%</text>
+  <path d="M400 395 C 570 395, 650 350, 800 352" fill="none" stroke="var(--tx-faint)" stroke-width="2" marker-end="url(#fmMut)"/>
+  <text x="626" y="372" font-size="14" font-weight="700" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">50%</text>
+  <path d="M400 473 C 580 473, 660 366, 800 366" fill="none" stroke="var(--tx-faint)" stroke-width="2" marker-end="url(#fmMut)"/>
+  <text x="600" y="438" font-size="14" font-weight="700" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">100%</text>
 
-  <path d="M344 157 C 410 157, 400 168, 462 172" fill="none" stroke="#5b8fd9" stroke-width="2.5" marker-end="url(#aB)"/>
-  <text x="404" y="152" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">100%</text>
-  <path d="M344 231 C 410 231, 402 208, 462 200" fill="none" stroke="#ad8938" stroke-width="2.5" marker-end="url(#aG)"/>
-  <text x="404" y="212" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">70%</text>
-  <path d="M344 254 C 414 262, 404 292, 462 298" fill="none" stroke="#ad8938" stroke-width="2" marker-end="url(#aG)"/>
-  <text x="404" y="290" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">30%</text>
-  <path d="M344 318 C 410 318, 404 316, 462 314" fill="none" stroke="#ad8938" stroke-width="2" marker-end="url(#aG)"/>
-  <text x="404" y="336" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">50%</text>
-  <path d="M344 341 C 416 352, 400 386, 462 392" fill="none" stroke="#c25050" stroke-width="2.5" marker-end="url(#aR)"/>
-  <text x="410" y="382" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">50% burned</text>
-  <path d="M344 396 C 418 392, 432 240, 462 210" fill="none" stroke="#5b8fd9" stroke-width="2.5" marker-end="url(#aB)"/>
-  <text x="398" y="300" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">70% ETH</text>
-  <path d="M344 426 C 418 430, 432 318, 462 308" fill="none" stroke="#5b8fd9" stroke-width="2" marker-end="url(#aB)"/>
-  <text x="404" y="372" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">30%</text>
-  <path d="M750 178 C 810 178, 812 175, 872 175" fill="none" stroke="#2f9e6e" stroke-width="3" marker-end="url(#aU)"/>
-  <text x="812" y="168" font-size="15" font-weight="700" fill="#ece9e1" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">USDG</text>
-  <path d="M1026 218 L 1026 290" fill="none" stroke="#a06fd0" stroke-width="3.5" marker-end="url(#aP)"/>
-  <text x="1036" y="250" font-size="15" font-weight="700" fill="#ece9e1" paint-order="stroke" stroke="#0b0c10" stroke-width="4">100% of pot</text>
-  <text x="1036" y="270" font-size="15" font-weight="700" fill="#a06fd0" paint-order="stroke" stroke="#0b0c10" stroke-width="4">as stock</text>
+  <!-- ox: burned -->
+  <path d="M400 395 C 580 400, 660 428, 800 428" fill="none" stroke="var(--ox)" stroke-width="2.5" marker-end="url(#fmOx)"/>
+  <text x="600" y="410" font-size="14" font-weight="700" fill="var(--ox)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">50% burned</text>
 
-  <text x="880" y="466" font-size="14.5" fill="#b8b3a6">Mint fees: <tspan fill="#e6c877" font-weight="700">100% to holders' stock</tspan></text>
-  <text x="880" y="486" font-size="14.5" fill="#b8b3a6">— the team takes 0%.</text>
-  <text x="880" y="510" font-size="14.5" fill="#b8b3a6">Borrow a fixed <tspan fill="#ece9e1" font-weight="700">50%</tspan> of the floor · <tspan fill="#ece9e1" font-weight="700">7–365d</tspan> term · liq if unpaid past due.</text>
-  <text x="880" y="532" font-size="14.5" fill="#b8b3a6">AMM price = max(300,000, live floor).</text>
+  <!-- the floor: funded separately, NOT from fees -->
+  <line x1="40" y1="524" x2="1160" y2="524" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="2 6"/>
+  <rect x="40" y="536" width="1120" height="98" rx="12" fill="none" stroke="var(--gold-line)" stroke-width="1.5" stroke-dasharray="7 6"/>
+  <text x="64" y="572" font-size="19" font-weight="700" fill="var(--gold-hi)">THE FLOOR · DonReserve <tspan font-size="14" font-weight="400" fill="var(--tx-mut)">— funded SEPARATELY</tspan></text>
+  <text x="64" y="598" font-size="14.5" fill="var(--tx-mut)">300,030 $ESSEY per Don · fed by protocol proceeds + anyone who chooses to fund it · redeemable any time · it only rises</text>
+  <text x="1136" y="572" font-size="15" font-weight="700" fill="var(--ox)" text-anchor="end">✕ no fee routes here</text>
+  <text x="1136" y="598" font-size="13.5" fill="var(--tx-faint)" text-anchor="end">interest &amp; fees never touch the floor</text>
 
-  <text x="1170" y="652" font-size="15" font-weight="700" fill="#c9a24b" text-anchor="end">essey.xyz</text>
-  <text x="30" y="652" font-size="13" fill="#6f6a5e">numbers read from the deployed contracts</text>
+  <text x="40" y="658" font-size="13" fill="var(--tx-faint)">numbers read from the deployed contracts</text>
+  <text x="1160" y="658" font-size="15" font-weight="700" fill="var(--gold)" text-anchor="end">essey.xyz</text>
 </svg>`;
 
 const FLYWHEEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 675" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
   <defs>
-    <marker id="fwA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c9a24b"/></marker>
+    <marker id="fwGold" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--gold)"/></marker>
+    <marker id="fwDim" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--tx-faint)"/></marker>
   </defs>
 
-  <rect width="1200" height="675" fill="#0b0c10"/>
+  <rect width="1200" height="675" fill="var(--s1)"/>
+  <rect x="6" y="6" width="1188" height="663" rx="12" fill="none" stroke="var(--line-2)" stroke-width="1"/>
 
-  <text x="600" y="330" font-size="30" font-weight="700" fill="#e6c877" text-anchor="middle">THE DONS FLYWHEEL</text>
-  <text x="600" y="358" font-size="16" fill="#9a958a" text-anchor="middle">8,888 seats · every route on-chain</text>
-  <text x="600" y="382" font-size="16" font-weight="700" fill="#c9a24b" text-anchor="middle">essey.xyz</text>
+  <!-- main loop arrows (drawn first, under the nodes) -->
+  <path d="M726 150 C 862 158, 972 198, 1002 240" fill="none" stroke="var(--gold)" stroke-width="4" marker-end="url(#fwGold)"/>
+  <text x="862" y="176" font-size="15" font-style="italic" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">every action pays a fee</text>
 
-  <rect x="415" y="42" width="370" height="92" rx="12" fill="#15161c" stroke="#4a453a" stroke-width="2.5"/>
-  <text x="600" y="76" font-size="23" font-weight="700" fill="#ece9e1" text-anchor="middle">ACTIVITY</text>
-  <text x="600" y="102" font-size="16" fill="#b8b3a6" text-anchor="middle">mint · reroll · trade · stake · borrow</text>
-  <text x="600" y="123" font-size="16" fill="#b8b3a6" text-anchor="middle">every action touches the machine</text>
+  <path d="M1006 320 C 1012 402, 968 468, 908 496" fill="none" stroke="var(--gold)" stroke-width="4" marker-end="url(#fwGold)"/>
+  <text x="1010" y="410" font-size="15" font-style="italic" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">70% buys stock</text>
+  <text x="1010" y="430" font-size="15" font-style="italic" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">30% → treasury</text>
 
-  <rect x="836" y="266" width="342" height="130" rx="12" fill="#15161c" stroke="#ad8938" stroke-width="2.5"/>
-  <text x="1007" y="298" font-size="23" font-weight="700" fill="#ece9e1" text-anchor="middle">FEES <tspan fill="#ad8938">· ETH + $ESSEY</tspan></text>
-  <text x="1007" y="325" font-size="15.5" fill="#b8b3a6" text-anchor="middle">100% of mint fees · 8–12% AMM fees</text>
-  <text x="1007" y="347" font-size="15.5" fill="#b8b3a6" text-anchor="middle">tier ladder 66,666 → 1,666,666</text>
-  <text x="1007" y="369" font-size="15.5" fill="#b8b3a6" text-anchor="middle">prepaid-ETH borrow fee (70/30)</text>
+  <path d="M724 536 C 620 588, 480 588, 476 540" fill="none" stroke="var(--gold)" stroke-width="4" marker-end="url(#fwGold)"/>
+  <text x="600" y="600" font-size="15" font-style="italic" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">stock into each staked Don's Vault</text>
 
-  <rect x="368" y="524" width="464" height="120" rx="12" fill="#181222" stroke="#a06fd0" stroke-width="3"/>
-  <text x="600" y="556" font-size="23" font-weight="700" fill="#a06fd0" text-anchor="middle">STOCK + FLOOR + BURN</text>
-  <text x="600" y="583" font-size="15.5" fill="#ece9e1" text-anchor="middle">fees buy tokenized stock for staked Dons</text>
-  <text x="600" y="605" font-size="15.5" fill="#ece9e1" text-anchor="middle">protocol proceeds fund the 300,030 $ESSEY floor — it only rises</text>
-  <text x="600" y="627" font-size="15.5" fill="#ece9e1" text-anchor="middle">half of every tier fee is burned forever</text>
+  <path d="M298 496 C 236 468, 192 402, 198 320" fill="none" stroke="var(--gold)" stroke-width="4" marker-end="url(#fwGold)"/>
+  <text x="196" y="410" font-size="15" font-style="italic" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">a richer seat</text>
 
-  <rect x="22" y="266" width="342" height="130" rx="12" fill="#1a1710" stroke="#c9a24b" stroke-width="3"/>
-  <text x="193" y="298" font-size="23" font-weight="700" fill="#e6c877" text-anchor="middle">HOLDERS WIN</text>
-  <text x="193" y="325" font-size="15.5" fill="#ece9e1" text-anchor="middle">your PFP pays real stock dividends</text>
-  <text x="193" y="347" font-size="15.5" fill="#ece9e1" text-anchor="middle">floor only rises · supply only shrinks</text>
-  <text x="193" y="369" font-size="15.5" fill="#ece9e1" text-anchor="middle">borrow against it while it earns</text>
+  <path d="M204 240 C 232 198, 342 158, 474 150" fill="none" stroke="var(--gold)" stroke-width="4" marker-end="url(#fwGold)"/>
+  <text x="336" y="176" font-size="15" font-style="italic" fill="var(--tx-mut)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">more reason to hold &amp; stake</text>
 
-  <path d="M 800 88 C 950 100, 1030 160, 1022 256" fill="none" stroke="#c9a24b" stroke-width="4" marker-end="url(#fwA)"/>
-  <text x="962" y="152" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">every action pays a fee</text>
-  <path d="M 1022 406 C 1030 500, 950 566, 844 578" fill="none" stroke="#c9a24b" stroke-width="4" marker-end="url(#fwA)"/>
-  <text x="990" y="502" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">routed on-chain,</text>
-  <text x="990" y="522" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">no middleman</text>
-  <path d="M 356 578 C 250 566, 170 500, 178 406" fill="none" stroke="#c9a24b" stroke-width="4" marker-end="url(#fwA)"/>
-  <text x="212" y="502" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">a richer seat</text>
-  <text x="212" y="522" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">at the table</text>
-  <path d="M 178 256 C 170 160, 250 100, 400 88" fill="none" stroke="#c9a24b" stroke-width="4" marker-end="url(#fwA)"/>
-  <text x="238" y="145" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">more reasons to mint,</text>
-  <text x="238" y="165" font-size="15.5" font-style="italic" fill="#b8b3a6" text-anchor="middle" paint-order="stroke" stroke="#0b0c10" stroke-width="4">trade, stake, borrow</text>
+  <!-- parallel reinforcing arc: proceeds → floor rises → borrow more -->
+  <path d="M902 320 C 828 372, 782 400, 744 408" fill="none" stroke="var(--tx-faint)" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#fwDim)"/>
+  <text x="826" y="392" font-size="13" font-style="italic" fill="var(--tx-faint)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">some proceeds fund the floor</text>
+  <path d="M572 392 C 468 344, 462 236, 546 168" fill="none" stroke="var(--tx-faint)" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#fwDim)"/>
+  <text x="452" y="300" font-size="13" font-style="italic" fill="var(--tx-faint)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">bigger draws,</text>
+  <text x="452" y="318" font-size="13" font-style="italic" fill="var(--tx-faint)" text-anchor="middle" paint-order="stroke" stroke="var(--s1)" stroke-width="4">borrow more</text>
+
+  <!-- center caption -->
+  <text x="600" y="248" font-size="27" font-weight="700" fill="var(--gold-hi)" text-anchor="middle">THE DONS FLYWHEEL</text>
+  <text x="600" y="276" font-size="15" fill="var(--tx-mut)" text-anchor="middle">activity → fees → stock → holders → more activity</text>
+  <text x="600" y="300" font-size="15" font-style="italic" fill="var(--gold)" text-anchor="middle">a seat that pays you to sit in it</text>
+
+  <!-- floor node (parallel arc) -->
+  <rect x="460" y="388" width="280" height="56" rx="10" fill="var(--gold-dim)" stroke="var(--gold-line)" stroke-width="1.5" stroke-dasharray="7 6"/>
+  <text x="600" y="412" font-size="15" font-weight="700" fill="var(--gold-hi)" text-anchor="middle">THE FLOOR ONLY RISES</text>
+  <text x="600" y="432" font-size="13" fill="var(--tx-mut)" text-anchor="middle">a stronger backstop under every Don</text>
+
+  <!-- ring nodes -->
+  <rect x="475" y="90" width="250" height="74" rx="12" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+  <text x="600" y="122" font-size="19" font-weight="700" fill="var(--tx)" text-anchor="middle">ACTIVITY</text>
+  <text x="600" y="146" font-size="13.5" fill="var(--tx-mut)" text-anchor="middle">mint · reroll · trade · borrow · stake</text>
+
+  <rect x="878" y="243" width="255" height="74" rx="12" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+  <text x="1005" y="275" font-size="19" font-weight="700" fill="var(--tx)" text-anchor="middle">FEES COLLECTED</text>
+  <text x="1005" y="299" font-size="13.5" fill="var(--tx-mut)" text-anchor="middle">on every action — ETH + $ESSEY</text>
+
+  <rect x="726" y="495" width="255" height="74" rx="12" fill="var(--gold-dim)" stroke="var(--gold)" stroke-width="2.5"/>
+  <text x="853" y="527" font-size="19" font-weight="700" fill="var(--gold-hi)" text-anchor="middle">70% BUYS STOCK</text>
+  <text x="853" y="551" font-size="13.5" fill="var(--tx-mut)" text-anchor="middle">fees → USDG → the Bell</text>
+
+  <rect x="220" y="495" width="255" height="74" rx="12" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+  <text x="347" y="527" font-size="19" font-weight="700" fill="var(--tx)" text-anchor="middle">STAKED DONS PAID</text>
+  <text x="347" y="551" font-size="13.5" fill="var(--tx-mut)" text-anchor="middle">real stock, pro-rata by weight</text>
+
+  <rect x="67" y="243" width="255" height="74" rx="12" fill="var(--s2)" stroke="var(--line-2)" stroke-width="1.5"/>
+  <text x="194" y="275" font-size="19" font-weight="700" fill="var(--tx)" text-anchor="middle">DONS WORTH MORE</text>
+  <text x="194" y="299" font-size="13.5" fill="var(--tx-mut)" text-anchor="middle">more reason to hold &amp; stake</text>
+
+  <text x="1160" y="658" font-size="15" font-weight="700" fill="var(--gold)" text-anchor="end">essey.xyz</text>
+  <text x="40" y="658" font-size="13" fill="var(--tx-faint)">8,888 seats · every route on-chain · nothing leaks out of the loop</text>
 </svg>`;
