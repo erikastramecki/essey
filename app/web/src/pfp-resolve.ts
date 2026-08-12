@@ -261,6 +261,21 @@ export function resolveSelection(data: BuilderData, forced: Record<string, strin
 }
 export function posOffset(data: BuilderData, category: string): number { return data.rules.POS_OFFSET[category] || 0; }
 
+// Vertical position override for female AR (17 AR): every variant was authored at canvas-top
+// (bbox y=0), so the holo HUD floats ABOVE the head instead of at eye level (male 26 AR is authored
+// correctly). Drop each female variant DOWN to the matching male 26 AR eye-line — the offset is the
+// male variant's authored top edge (female top is 0). Per-variant (each HUD art has a different top),
+// keyed by the variant token in the leaf file name (female files: e.g. 0686_17_AR_MVHQ_AR.webp).
+// The SINGLE source consumed by every renderer: pfp-compositor.ts (preview) and api/don-img (served),
+// and kept numerically in sync with pfp/engine.py AR_Y_OFFSET (mint). Deliberately NOT in the exported
+// rules JSON: category-keyed POS_OFFSET can't carry a per-variant value, and the JSON shape is frozen.
+const AR_Y_OFFSET: Record<string, number> = { "MVHQ AR": 323, "Wash Trade": 280, "Whale": 182, "Stonks": 280, "The Dev": 323 };
+export function posYOffset(category: string, file: string): number {
+  if (category !== "17 AR") return 0;
+  for (const variant in AR_Y_OFFSET) if (file.includes(variant.replace(/ /g, "_"))) return AR_Y_OFFSET[variant];
+  return 0;
+}
+
 // top-level variant options per category (for the picker panels). Mirror the resolver's own pool
 // filtering so the picker never offers a trait the engine suppresses (else a forced click on it
 // silently falls back to a random sibling): SUPPRESS (substring, everywhere) + SUPPRESS_IN

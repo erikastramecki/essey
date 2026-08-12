@@ -14,7 +14,7 @@
 // (inline SVG, no external assets) — never a broken image.
 import sharp from "sharp";
 import { assetOrigin, builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, json, preKey, store, ZERO32, type Preimage } from "../_don-lib";
-import { posOffset, resolveSelection, type BuilderData, type Resolved } from "../../src/pfp-resolve";
+import { posOffset, posYOffset, resolveSelection, type BuilderData, type Resolved } from "../../src/pfp-resolve";
 
 const CANVAS = 900;
 const CACHE_LONG = "public, max-age=3600, s-maxage=31536000, immutable";
@@ -85,7 +85,7 @@ export async function renderResolved(data: BuilderData, r: Resolved): Promise<Bu
     const img = layers[i];
     if (!img) continue;
     const l = r.render[i];
-    const x = l.bbox[0] + posOffset(data, l.category), y = l.bbox[1];
+    const x = l.bbox[0] + posOffset(data, l.category), y = l.bbox[1] + posYOffset(l.category, l.file);
     if (l.category === "26 AR" || l.category === "17 AR") {
       drawAR(canvas, img, x, y);
       continue;

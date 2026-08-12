@@ -344,6 +344,17 @@ Z_UNDER = {"15 Earing": "9 Hair"}  # earrings sit under the hair (down-hair cove
 # position overrides: female AR (17 AR) was authored off-canvas to the left -> shift it onto the
 # right side of the canvas (matching the male AR placement) so it actually renders.
 POS_OFFSET = {"17 AR": 1004}
+# vertical override: every female AR (17 AR) variant was ALSO authored at canvas-top (bbox top y=0),
+# so the holo HUD floats ABOVE the head instead of at eye level (male 26 AR is authored correctly).
+# Drop each female variant DOWN to the matching male 26 AR eye-line. The offset is exactly the male
+# variant's authored top edge (female top is 0), which lands the HUD's top on the brow/eye line just
+# like the male. Per-variant because each HUD art has a different authored top. Male 26 AR: no shift.
+AR_Y_OFFSET = {"MVHQ AR": 323, "Wash Trade": 280, "Whale": 182, "Stonks": 280, "The Dev": 323}
+
+def _ar_yoff(m):
+    if m.get("category") != "17 AR":
+        return 0
+    return AR_Y_OFFSET.get(m.get("path", "").split("/")[-1], 0)
 
 def composite(leaves, leafmeta, gender):
     canvas = np.zeros((900, 900, 4), np.float64)
@@ -363,7 +374,7 @@ def composite(leaves, leafmeta, gender):
         rgb, a = im[..., :3], im[..., 3]
         if m.get("category", "") in ("3 Chair", "1 Chairs"):   # kill the chair edge alpha-bleed speckle
             a = np.where(a < 0.9, 0.0, a)                       # (semi-transparent stray pixels -> gone)
-        l, t = m["bbox"][0] + POS_OFFSET.get(m.get("category", ""), 0), m["bbox"][1]; h, w = a.shape
+        l, t = m["bbox"][0] + POS_OFFSET.get(m.get("category", ""), 0), m["bbox"][1] + _ar_yoff(m); h, w = a.shape
         x0, y0 = max(l, 0), max(t, 0); x1, y1 = min(l + w, 900), min(t + h, 900)
         _ct = lf.get("_ct") or next((v for k, v in CROP_TOP.items() if k in m.get("path", "")), None)
         if _ct is not None: y0 = max(y0, _ct)   # clip runaway rows (smoke plume / hair above a hat crown)

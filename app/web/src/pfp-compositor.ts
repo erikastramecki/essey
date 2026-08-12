@@ -2,7 +2,7 @@
 // Mirrors pfp/engine.py composite(): normal/multiply/screen + AR darken-backing-then-screen.
 // Chair alpha-speckle is baked out at art-export time, so no per-pixel cleanup needed here.
 import type { BuilderData, RenderLeaf } from "./pfp-resolve";
-import { posOffset } from "./pfp-resolve";
+import { posOffset, posYOffset } from "./pfp-resolve";
 
 const CANVAS = 900;
 const imgCache = new Map<string, Promise<HTMLImageElement>>();
@@ -42,7 +42,7 @@ export async function composite(canvas: HTMLCanvasElement, data: BuilderData, re
   ctx.clearRect(0, 0, CANVAS, CANVAS);
   for (let i = 0; i < render.length; i++) {
     const img = imgs[i]; if (!img) continue;
-    const r = render[i]; const x = r.bbox[0] + posOffset(data, r.category); const y = r.bbox[1];
+    const r = render[i]; const x = r.bbox[0] + posOffset(data, r.category); const y = r.bbox[1] + posYOffset(r.category, r.file);
     if (r.category === "26 AR" || r.category === "17 AR") { drawAR(ctx, img, x, y); continue; }
     ctx.globalCompositeOperation = blendMap[r.blend] || "source-over"; ctx.globalAlpha = 1;
     // clip runaway rows: cropTop drops rows above the line (smoke plume), cropBottom drops rows
