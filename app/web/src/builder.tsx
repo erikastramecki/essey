@@ -7,6 +7,7 @@ import {
   parseEventLogs, BaseError, ContractFunctionRevertedError,
 } from "viem";
 import { DON_NET, donChain, distributorAbi, donAbi, fetchWlProof, WL_STAGE0_COMMIT_ETA_MS } from "./don-config";
+import { getSelectedProvider, pickProvider, useSelectedProvider } from "./wallet";
 
 type G = "male" | "female";
 // [categoryId, label, optional] — the panels the user picks from, in order.
@@ -36,7 +37,8 @@ const clean = (v: string) => v.replace(/#\d+/g, "").replace(/^[\d.]+\s+/, "").tr
 const pub = createPublicClient({ chain: donChain, transport: http(DON_NET.rpc) });
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-const getEth = (): any => (window as any).ethereum;
+// The wallet the user PICKED (EIP-6963), shared app-wide via wallet.tsx — never a blind window.ethereum.
+const getEth = (): any => getSelectedProvider();
 
 /// keccak of the resolver key — the exact bytes32 the DonDistributor usedCombo ledger (and the
 /// /api/reserve service) is keyed by.
@@ -76,14 +78,14 @@ function friendly(e: any): string {
   const msg = String(e?.shortMessage || e?.message || "");
   const has = (n: string) => name === n || msg.includes(n);
   if (e?.code === 4001 || /rejected|denied/i.test(msg)) return "Transaction rejected in wallet.";
-  if (has("ComboTaken")) return "Someone got this exact 1-of-1 first — tweak a trait for a fresh combo.";
+  if (has("ComboTaken")) return "Someone got this exact 1-of-1 first. Tweak a trait for a fresh combo.";
   if (has("PublicClosed")) return "Public custom minting isn't open yet.";
-  if (has("WrongFee")) return "The fee changed on-chain — retry to re-read it.";
-  if (has("StakedNoReroll") || has("TraitsLocked")) return "Staked art is locked — staking freezes a Don's look forever.";
-  if (has("BadProof")) return "Allowlist root isn't committed on-chain yet — claims open soon.";
+  if (has("WrongFee")) return "The fee changed on-chain. Retry to re-read it.";
+  if (has("StakedNoReroll") || has("TraitsLocked")) return "Staked art is locked: staking freezes a Don's look forever.";
+  if (has("BadProof")) return "Allowlist root isn't committed on-chain yet. Claims open soon.";
   if (has("StageClosed")) return "This claim stage isn't open yet.";
   if (has("AlreadyClaimed")) return "This wallet already claimed its allocation.";
-  if (has("LienActive")) return "This Don has an active loan lien — repay first.";
+  if (has("LienActive")) return "This Don has an active loan lien. Repay first.";
   if (has("NotOwner")) return "You don't own that Don.";
   return msg ? msg.slice(0, 140) : "Transaction failed.";
 }
@@ -163,6 +165,7 @@ export function BuilderPage() {
   const MINT_LIVE = true;
 
   // -------------------------------------------------------------------------- wallet + chain reads
+  const sel = useSelectedProvider(); // re-binds account listeners when the user picks/switches wallets
   const [wallet, setWallet] = useState<`0x${string}` | null>(null);
   const [fees, setFees] = useState<{ customFee?: bigint; rerollFee?: bigint; publicOpen?: boolean }>({});
   const [mint, setMint] = useState<TxState>({ status: "idle" });
@@ -218,8 +221,10 @@ export function BuilderPage() {
   }, []);
 
   const connect = useCallback(async (): Promise<`0x${string}`> => {
-    const eth = getEth();
-    if (!eth) throw new Error("No wallet found — install MetaMask or Rabby to mint.");
+    // Reuse the app-wide EIP-6963 picker: if nothing's selected yet, raise it so the user chooses
+    // their EVM wallet (MetaMask / Rabby / Phantom-EVM / …) — never a blind window.ethereum grab.
+    const eth = getEth() ?? (await pickProvider());
+    if (!eth) throw new Error("No EVM wallet found. Install MetaMask or Rabby to mint.");
     const [addr] = (await eth.request({ method: "eth_requestAccounts" })) as `0x${string}`[];
     await ensureChain(eth);
     setWallet(addr);
@@ -231,8 +236,8 @@ export function BuilderPage() {
     try { await connect(); } catch (e: any) { setMint({ status: "error", msg: friendly(e) }); }
   }, [connect]);
 
-  useEffect(() => { // wallet account switches reset the session context
-    const eth = getEth(); if (!eth?.on) return;
+  useEffect(() => { // wallet account switches reset the session context (bound to the SELECTED wallet)
+    const eth = sel as any; if (!eth?.on) return;
     const onAccounts = (accs: string[]) => {
       const a = (accs[0] as `0x${string}`) || null;
       setWallet(a); setWl(null); setOwned([]); setRerollSel(null);
@@ -240,7 +245,7 @@ export function BuilderPage() {
     };
     eth.on("accountsChanged", onAccounts);
     return () => { eth.removeListener?.("accountsChanged", onAccounts); };
-  }, [loadWl, loadOwned]);
+  }, [sel, loadWl, loadOwned]);
 
   const walletClient = useCallback(() => {
     if (!wallet) throw new Error("Connect a wallet first.");
@@ -276,7 +281,7 @@ export function BuilderPage() {
         pub.readContract({ address: DON_NET.distributor, abi: distributorAbi, functionName: "publicOpen" }),
         pub.readContract({ address: DON_NET.distributor, abi: distributorAbi, functionName: "customFee" }),
       ]);
-      if (used) { setMint({ status: "error", msg: "Someone got this exact 1-of-1 first — tweak a trait for a fresh combo." }); return; }
+      if (used) { setMint({ status: "error", msg: "Someone got this exact 1-of-1 first. Tweak a trait for a fresh combo." }); return; }
       if (!open) { setMint({ status: "error", msg: "Public custom minting isn't open yet." }); return; }
       setFees((f) => ({ ...f, customFee: fee, publicOpen: open }));
       const { request } = await pub.simulateContract({
@@ -314,12 +319,12 @@ export function BuilderPage() {
         keys.add(resolveSelection(d, tries < 300 ? eff : {}, s).key);
         tries++;
       }
-      if (keys.size < wl.allocation) { setWlTx({ status: "error", msg: "Couldn't roll enough distinct combos — clear a few picks and retry." }); return; }
+      if (keys.size < wl.allocation) { setWlTx({ status: "error", msg: "Couldn't roll enough distinct combos. Clear a few picks and retry." }); return; }
       const combos = [...keys].map(comboHash);
       const used = await Promise.all(combos.map((c) =>
         pub.readContract({ address: DON_NET.distributor, abi: distributorAbi, functionName: "usedCombo", args: [c] })));
-      if (used[0]) { setWlTx({ status: "error", msg: "Someone got this exact 1-of-1 first — tweak a trait for a fresh combo." }); return; }
-      if (used.some(Boolean)) { setWlTx({ status: "error", msg: "A rolled combo collided — hit claim again for a fresh roll." }); return; }
+      if (used[0]) { setWlTx({ status: "error", msg: "Someone got this exact 1-of-1 first. Tweak a trait for a fresh combo." }); return; }
+      if (used.some(Boolean)) { setWlTx({ status: "error", msg: "A rolled combo collided. Hit claim again for a fresh roll." }); return; }
       const { request } = await pub.simulateContract({
         address: DON_NET.distributor, abi: distributorAbi, functionName: "claimWL",
         args: [BigInt(wl.stage), BigInt(wl.allocation), wl.proof, combos], account: wallet,
@@ -351,8 +356,8 @@ export function BuilderPage() {
         pub.readContract({ address: DON_NET.don, abi: donAbi, functionName: "locked", args: [id] }),
         pub.readContract({ address: DON_NET.distributor, abi: distributorAbi, functionName: "rerollFee" }),
       ]);
-      if (used) { setRerollTx({ status: "error", msg: "That exact combo is already minted — tweak a trait first." }); return; }
-      if (locked) { setRerollTx({ status: "error", msg: "Staked art is locked — staking freezes a Don's look forever." }); return; }
+      if (used) { setRerollTx({ status: "error", msg: "That exact combo is already minted. Tweak a trait first." }); return; }
+      if (locked) { setRerollTx({ status: "error", msg: "Staked art is locked: staking freezes a Don's look forever." }); return; }
       setFees((f) => ({ ...f, rerollFee: fee }));
       const { request } = await pub.simulateContract({
         address: DON_NET.distributor, abi: distributorAbi, functionName: "reroll",
@@ -412,33 +417,33 @@ export function BuilderPage() {
             <button onClick={reserve} disabled={rsv.status === "busy" || rsv.status === "reserved"}
               className={"bld-chip" + (rsv.status === "reserved" ? " good" : rsv.status === "taken" ? " taken" : "")}
               style={{ padding: 11, fontSize: 13 }}>
-              {rsv.status === "reserved" ? "✓ Held for 30 min — mint below"
-                : rsv.status === "taken" ? "✗ Held by someone — change a trait"
+              {rsv.status === "reserved" ? "✓ Held for 30 min, mint below"
+                : rsv.status === "taken" ? "✗ Held by someone, change a trait"
                 : rsv.status === "busy" ? "Holding…"
-                : rsv.status === "offline" ? "Holds offline — mint is still first-come"
+                : rsv.status === "offline" ? "Holds offline, mint is still first-come"
                 : "Hold this combo (optional, 30 min)"}
             </button>
             {rsv.status === "taken" && <div className="bld-hint">This exact combination is on hold or already minted. Change any trait for a fresh 1-of-1.</div>}
-            {rsv.status === "offline" && <div className="bld-hint">The soft-hold service is offline — nothing is lost; minting stays first-come-first-served on-chain.</div>}
+            {rsv.status === "offline" && <div className="bld-hint">The soft-hold service is offline. Nothing is lost; minting stays first-come-first-served on-chain.</div>}
 
             {/* custom mint */}
             <div className="bld-hint">
-              This exact combination is checked against the on-chain uniqueness ledger — once you mint it, no other Don
+              This exact combination is checked against the on-chain uniqueness ledger. Once you mint it, no other Don
               can ever share it. Custom mint costs {fmtEth(fees.customFee)} ETH, and 100% of the fee buys stock for staked holders.
             </div>
             <button onClick={doMint} disabled={busyAny}
               className={"btn bld-mint " + (mint.status === "success" ? "bld-chip good" : "btn-gold")}
               style={{ opacity: busyAny ? 0.7 : 1, borderRadius: 999 }}>
               {mint.status === "busy" ? (mint.note || "Preparing…")
-                : mint.status === "pending" ? "Minting — confirm in wallet / waiting for chain…"
+                : mint.status === "pending" ? "Minting: confirm in wallet / waiting for chain…"
                 : mint.status === "success" ? `✓ Minted${mint.id !== undefined ? ` Don #${mint.id}` : ""}`
-                : wallet ? `Mint this 1-of-1 — ${fmtEth(fees.customFee)} ETH`
+                : wallet ? `Mint this 1-of-1 · ${fmtEth(fees.customFee)} ETH`
                 : "Connect & mint this 1-of-1"}
             </button>
-            {fees.publicOpen === false && mint.status === "idle" && <div className="bld-hint">Public custom minting isn't open yet — the button will preflight again when you try.</div>}
+            {fees.publicOpen === false && mint.status === "idle" && <div className="bld-hint">Public custom minting isn't open yet. The button will preflight again when you try.</div>}
             {(mint.status === "pending" || mint.status === "success") && (
               <div className="bld-hint">
-                {mint.status === "success" && mint.id !== undefined && <>Don #{mint.id} is yours — this combo is retired forever. </>}
+                {mint.status === "success" && mint.id !== undefined && <>Don #{mint.id} is yours. This combo is retired forever. </>}
                 <a href={txUrl(mint.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a>
               </div>
             )}
@@ -452,20 +457,20 @@ export function BuilderPage() {
                   <div className="bld-hint">✓ This wallet already claimed its {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}.</div>
                 ) : !wl.rootLive || !wl.open ? (
                   <div className="bld-hint">
-                    You're on the list — {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}. Claims open once the
+                    You're on the list: {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}. Claims open once the
                     allowlist root commits on-chain{wlEtaHrs > 0 ? ` (~${wlEtaHrs}h, after the 2-day timelock)` : " (any moment now)"}.
                   </div>
                 ) : (<>
                   <div className="bld-hint">
-                    You're on the list — {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}. Your whitelist allocation mints
-                    for gas only — the first uses your crafted combo, the rest roll random traits. You can reroll the look as
+                    You're on the list: {wl.allocation} free Don{wl.allocation > 1 ? "s" : ""}. Your whitelist allocation mints
+                    for gas only. The first uses your crafted combo, the rest roll random traits. You can reroll the look as
                     many times as you like before you stake; staking locks it forever.
                   </div>
                   <button onClick={doClaimWl} disabled={wlTx.status === "busy" || wlTx.status === "pending" || wlTx.status === "success"}
                     className={"bld-chip " + (wlTx.status === "success" ? "good" : "on")} style={{ padding: 11, fontSize: 13 }}>
                     {wlTx.status === "busy" ? (wlTx.note || "Preparing…")
-                      : wlTx.status === "pending" ? "Claiming — waiting for chain…"
-                      : wlTx.status === "success" ? `✓ ${wlTx.note}${wlTx.id !== undefined ? ` — first is #${wlTx.id}` : ""}`
+                      : wlTx.status === "pending" ? "Claiming: waiting for chain…"
+                      : wlTx.status === "success" ? `✓ ${wlTx.note}${wlTx.id !== undefined ? `, first is #${wlTx.id}` : ""}`
                       : `Claim ${wl.allocation} free Don${wl.allocation > 1 ? "s" : ""} (gas only)`}
                   </button>
                   {(wlTx.status === "pending" || wlTx.status === "success") && (
@@ -481,7 +486,7 @@ export function BuilderPage() {
               <div className="bld-panel">
                 <div className="bld-panel-h">Reroll one of your Dons</div>
                 <div className="bld-hint">
-                  Re-randomize this Don's traits for {fmtEth(fees.rerollFee)} ETH — unlimited, until it's staked. Your old
+                  Re-randomize this Don's traits for {fmtEth(fees.rerollFee)} ETH, unlimited, until it's staked. Your old
                   combo is released back to the pool and the fee buys stock for staked holders, all of it. The current
                   preview becomes the Don's new look.
                 </div>
@@ -494,9 +499,9 @@ export function BuilderPage() {
                   <button onClick={doReroll} disabled={rerollTx.status === "busy" || rerollTx.status === "pending"}
                     className={"bld-chip " + (rerollTx.status === "success" ? "good" : "on")} style={{ padding: 11, fontSize: 13, marginTop: 8 }}>
                     {rerollTx.status === "busy" ? (rerollTx.note || "Preparing…")
-                      : rerollTx.status === "pending" ? "Rerolling — waiting for chain…"
+                      : rerollTx.status === "pending" ? "Rerolling: waiting for chain…"
                       : rerollTx.status === "success" ? `✓ ${rerollTx.note}`
-                      : `Reroll Don #${rerollSel} to this preview — ${fmtEth(fees.rerollFee)} ETH`}
+                      : `Reroll Don #${rerollSel} to this preview · ${fmtEth(fees.rerollFee)} ETH`}
                   </button>
                   {(rerollTx.status === "pending" || rerollTx.status === "success") && (
                     <div className="bld-hint"><a href={txUrl(rerollTx.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a></div>
@@ -507,7 +512,7 @@ export function BuilderPage() {
             )}
           </>) : (
             <button disabled title="Minting opens with the on-chain drop" className="bld-soon">
-              ✦ Minting soon — this 1-of-1 will be claimable
+              ✦ Minting soon, this 1-of-1 will be claimable
             </button>
           )}
         </div>
@@ -542,7 +547,7 @@ export function BuilderPage() {
                   <span className="cn">{label}</span>
                   {deadReason !== undefined
                     ? <span className="cs bld-exp-btn" onClick={() => toggleExpand(cat)}>{deadReason} <span className="bld-exp">－</span></span>
-                    : cat === "13 Hair" && res?.drivers.hat ? <span className="cs">under hat — sets beard/brows</span>
+                    : cat === "13 Hair" && res?.drivers.hat ? <span className="cs">under hat: sets beard/brows</span>
                     : catUnavail && catUnavail.size > 0 ? <span className="cs">some options unavailable</span>
                     : sel && !selNone ? <span className="cs cv">{clean(sel)}</span>
                     : null}

@@ -33,7 +33,7 @@ const NAV: NavItem[] = [
   { label: "Earn", items: [
     { to: "/bell", label: "The Bell", desc: "Stake your Don, ring, claim stock" },
     { to: "/lend", label: "Lend", desc: "Supply USDG · borrow against stock" },
-    { to: "/cases", label: "Cases", desc: "Multiplier draws — odds on-chain" },
+    { to: "/cases", label: "Cases", desc: "Multiplier draws, odds on-chain" },
   ]},
   { label: "Learn", items: [
     { to: "/how-it-works", label: "How it works", desc: "The whole loop, start to finish" },
@@ -194,7 +194,7 @@ function PageShell({ title, children }: { title: string; children: ReactNode }) 
 
 function Landing() {
   const w = useWallet();
-  useEffect(() => { document.title = "Essey — the stock-market club where the odds and the books are both provable"; }, []);
+  useEffect(() => { document.title = "Essey: the stock-market club where the odds and the books are both provable"; }, []);
   // Signed-in testers land on their dashboard, not the pitch. Wait for the reconnect probe so we don't
   // flash the marketing page before redirecting.
   if (!w.ready) return null;
@@ -216,8 +216,8 @@ function Landing() {
               ["/market", "⇄", "Trade", "Buy, snipe, or sell Dons at the floor-pinned price. 70% of every fee pays staked holders."],
               ["/bell", "🔔", "The Bell", "Stake your Don, ring when the pot fills, claim your cut as tokenized stock."],
               ["/lend", "⚖", "Lend", "Supply USDG to earn interest, or borrow against the stock you hold."],
-              ["/cases", "🎁", "Cases", "Open a multiplier draw — 0.65× to 50×, odds published on-chain, paid in stock."],
-              ["/portfolio", "◈", "Portfolio", "Everything you hold: Dons, tiers, Vaults, loans — and every action on them."],
+              ["/cases", "🎁", "Cases", "Open a multiplier draw. 0.65× to 50×, odds published on-chain, paid in stock."],
+              ["/portfolio", "◈", "Portfolio", "Everything you hold: Dons, tiers, Vaults, loans, and every action on them."],
             ].map(([to, icon, h, p]) => (
               <Link key={to} className="dest-card" to={to}>
                 <span className="dest-icon" aria-hidden>{icon}</span>
@@ -239,7 +239,7 @@ function Landing() {
           <div className="start-cta plate">
             <div>
               <span className="eyebrow">Essey Private · experimental · testnet</span>
-              <h2>Hold, move, and earn — unseen</h2>
+              <h2>Hold, move, and earn, unseen</h2>
               <p>Stealth-address payments, a shielded pool that hides balances and amounts, gasless private
                 withdrawals through a trustless relayer, and private yield-bearing lending supply. Proofs run
                 in your browser; keys never leave your device.</p>
@@ -270,17 +270,17 @@ function Footer() {
       <div className="wrap foot-in">
         <div>
           <p className="disclaim"><b>"Payout," never "dividend."</b> Bell Payouts are protocol fees distributed to
-            Don holders — mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
+            Don holders, mechanically LP-style fee-shares, not dividends, not yield promises. No payout is
             guaranteed, ever. The Market contracts are adversarially audited (published rounds in the docs room)
-            and <b>live on Robinhood Chain testnet</b> — everything here is play money with no real value; not
+            and <b>live on Robinhood Chain testnet</b>. Everything here is play money with no real value; not
             on mainnet.{" "}
             <button className="linklike" onClick={() => window.dispatchEvent(new Event("essey:reopen-warning"))}>Terms &amp; risk</button></p>
           <p className="disclaim" style={{ marginTop: 10 }}><b>Tokenized equities are securities</b> and carry
             issuer, custody, and market-gap risk. On Robinhood Chain the Stock Token issuer holds an
-            adminBurn power — verified on-chain — that can destroy tokens at any address; posted collateral
+            adminBurn power (verified on-chain) that can destroy tokens at any address; posted collateral
             can therefore cease to exist. Not an offer of securities. Nothing here is financial advice.</p>
           <p className="disclaim" style={{ marginTop: 10 }}>Everything we know is unfinished is published in{" "}
-            <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">OUTSTANDING.md</a> — deliberately.</p>
+            <a href={`${REPO}/blob/main/docs/OUTSTANDING.md`} target="_blank" rel="noreferrer">OUTSTANDING.md</a>, deliberately.</p>
         </div>
         <div className="foot-links">
           <a href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
@@ -339,7 +339,7 @@ function DocsPage() {
       <div className="wrap">
         <div className="band-head"><div><span className="eyebrow">Docs</span><h2>Read the whole thing</h2>
           <p>The Market's design, the tokenomics, the risk framework, every adversarial audit round, and the list of
-            what is still unfinished. These are the repo's own files, rendered here — not a marketing summary of them.</p></div></div>
+            what is still unfinished. These are the repo's own files, rendered here, not a marketing summary of them.</p></div></div>
         {GROUPS.map((g) => {
           const inGroup = DOCS.filter((d) => d.group === g);
           if (inGroup.length === 0) return null;

@@ -4,6 +4,7 @@
 import { createPublicClient, createWalletClient, custom, defineChain, http, parseAbi, parseAbiItem, maxUint256, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { deriveStealthKeys, generateStealthAddress, checkAnnouncement, computeStealthPrivKey, STEALTH_DERIVE_MESSAGE, type StealthKeys } from "./stealth";
+import { getSelectedProvider } from "./wallet";
 export type { StealthKeys } from "./stealth";
 import { numberToHex } from "viem";
 import { initPool, deriveKeypair, deriveEncKeypair, buildDepositProof, buildWithdrawProof, buildTransferProof, recoverNotes, noteNullifier, packAccountKey, unpackAccountKey, type ProofCalldata, type PoolExtData, type PoolNote, type PoolKeypair, type PoolEncKeypair, type ChainCommitment } from "./poolsdk";
@@ -323,9 +324,9 @@ export interface ShieldedPoolCfg {
 }
 export const SHIELDED_POOLS: ShieldedPoolCfg[] = [
   { key: "usdg", label: "USDG", blurb: "Hide your USDG balance and amounts.", address: ADDR.shieldedPool, token: ADDR.usdg, unit: "USDG", decimals: 18, deployBlock: 97_728_346n, kind: "plain" },
-  { key: "aapl", label: "AAPL", blurb: "A private AAPL position — resilient to issuer token burns.", address: ADDR.shieldedStockAapl, token: ADDR.aapl, unit: "AAPL", decimals: 18, deployBlock: 97_832_310n, kind: "plain", stock: true },
-  { key: "nvda", label: "NVDA", blurb: "A private NVDA position — resilient to issuer token burns.", address: ADDR.shieldedStockNvda, token: ADDR.nvda, unit: "NVDA", decimals: 18, deployBlock: 97_832_416n, kind: "plain", stock: true },
-  { key: "supply", label: "USDG · yield", blurb: "Supply USDG privately and earn yield — the position and its yield stay hidden.", address: ADDR.shieldedSupply, token: ADDR.usdg, unit: "shares", decimals: 18, deployBlock: 97_808_037n, kind: "supply", lendingPool: ADDR.pool },
+  { key: "aapl", label: "AAPL", blurb: "A private AAPL position, resilient to issuer token burns.", address: ADDR.shieldedStockAapl, token: ADDR.aapl, unit: "AAPL", decimals: 18, deployBlock: 97_832_310n, kind: "plain", stock: true },
+  { key: "nvda", label: "NVDA", blurb: "A private NVDA position, resilient to issuer token burns.", address: ADDR.shieldedStockNvda, token: ADDR.nvda, unit: "NVDA", decimals: 18, deployBlock: 97_832_416n, kind: "plain", stock: true },
+  { key: "supply", label: "USDG · yield", blurb: "Supply USDG privately and earn yield. The position and its yield stay hidden.", address: ADDR.shieldedSupply, token: ADDR.usdg, unit: "shares", decimals: 18, deployBlock: 97_808_037n, kind: "supply", lendingPool: ADDR.pool },
 ];
 // The known ERC-20s a received stealth address could hold — we read balances directly rather than trust
 // event amounts, so the inbox shows what is actually spendable right now.
@@ -343,11 +344,9 @@ const RH_VIEM_CHAIN = defineChain({
   rpcUrls: { default: { http: [NET.rpc] } },
 });
 
-type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
-const eth = () => (window as { ethereum?: Eip1193 }).ethereum;
-
+// Sign through the wallet the user PICKED (EIP-6963), never a blind window.ethereum grab — see wallet.tsx.
 function wallet(account: Address) {
-  const provider = eth();
+  const provider = getSelectedProvider();
   if (!provider) throw new Error("No wallet");
   return createWalletClient({ account, chain: undefined, transport: custom(provider) });
 }
@@ -1106,7 +1105,7 @@ export const flows = {
   shieldTransfer: async (a: Address, recipientAddr: Address, amount: bigint, note: PoolNote, keys: PoolKeys, viaRelayer: boolean, pool: ShieldedPoolCfg, onStage?: (s: string) => void): Promise<Hex> => {
     onStage?.("looking up");
     const acct = await lookupPoolAccount(pool, recipientAddr);
-    if (!acct) throw new Error("That address hasn't set up a shielded account in this pool yet — they need to unlock + register on it first.");
+    if (!acct) throw new Error("That address hasn't set up a shielded account in this pool yet. They need to unlock + register on it first.");
     onStage?.("proving");
     const leaves = await poolLeaves(pool);
     const relayOpts = viaRelayer ? { relayer: ADDR.poolRelayer, fee: RELAYER_FEE } : undefined;
@@ -1418,23 +1417,23 @@ export function niceError(e: unknown): string {
   const m = String((e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? e);
   const s = m.toLowerCase();
   if (s.includes("user rejected") || s.includes("user denied") || s.includes("rejected the request")) return "You cancelled the transaction.";
-  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH — grab some from the Robinhood Chain faucet.";
+  if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH. Grab some from the Robinhood Chain faucet.";
   if (s.includes("erc20insufficientbalance") || s.includes("transfer amount exceeds balance") || s.includes("exceeds balance")) return "Not enough $ESSEY or USDG for this action.";
-  if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown — 8h between drips.";
-  if (s.includes("chain") && s.includes("match")) return "Wrong network — switch to Robinhood Chain testnet.";
-  if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first — try again and confirm both wallet popups.";
-  if (s.includes("marketclosed") || s.includes("notinsession")) return "Only open during US market hours — try again while the stock market is open (weekdays, ~9:30am–4pm ET).";
-  if (s.includes("soldout") || s.includes("emptyinventory")) return "Sold out — no inventory left right now.";
+  if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown: 8h between drips.";
+  if (s.includes("chain") && s.includes("match")) return "Wrong network. Switch to Robinhood Chain testnet.";
+  if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first. Try again and confirm both wallet popups.";
+  if (s.includes("marketclosed") || s.includes("notinsession")) return "Only open during US market hours. Try again while the stock market is open (weekdays, ~9:30am–4pm ET).";
+  if (s.includes("soldout") || s.includes("emptyinventory")) return "Sold out. No inventory left right now.";
   if (s.includes("notseatowner") || s.includes("notdonowner") || s.includes("notborrower")) return "That isn't yours to act on.";
-  if (s.includes("alreadyactive")) return "That Don is already staked — use upgrade instead.";
-  if (s.includes("potbelowminimum") || s.includes("noactiveseats")) return "The pot isn't ringable yet — trade a bit to grow it, or wait for an active Don.";
-  if (s.includes("slippageexceeded")) return "The price moved past your bound — refresh the quote and try again.";
-  if (s.includes("notininventory")) return "That Don isn't on the Exchange right now — check the available list.";
-  if (s.includes("lienactive")) return "That Don is loan collateral — repay the loan to unlock it.";
-  if (s.includes("exceedsltv")) return "That's more than 50% of the live floor — borrow less.";
-  if (s.includes("loanexists")) return "That Don already has an open loan — repay it before borrowing again.";
-  if (s.includes("already spent") || s.includes("input 0 is already spent") || s.includes("input 1 is already spent")) return "That shielded note was already spent — your local balance was stale. Refresh and try again.";
-  if (s.includes("invalid merkle root")) return "The pool changed while proving — refresh so your balance is current, then retry.";
+  if (s.includes("alreadyactive")) return "That Don is already staked. Use upgrade instead.";
+  if (s.includes("potbelowminimum") || s.includes("noactiveseats")) return "The pot isn't ringable yet. Trade a bit to grow it, or wait for an active Don.";
+  if (s.includes("slippageexceeded")) return "The price moved past your bound. Refresh the quote and try again.";
+  if (s.includes("notininventory")) return "That Don isn't on the Exchange right now. Check the available list.";
+  if (s.includes("lienactive")) return "That Don is loan collateral: repay the loan to unlock it.";
+  if (s.includes("exceedsltv")) return "That's more than 50% of the live floor, so borrow less.";
+  if (s.includes("loanexists")) return "That Don already has an open loan. Repay it before borrowing again.";
+  if (s.includes("already spent") || s.includes("input 0 is already spent") || s.includes("input 1 is already spent")) return "That shielded note was already spent, so your local balance was stale. Refresh and try again.";
+  if (s.includes("invalid merkle root")) return "The pool changed while proving. Refresh so your balance is current, then retry.";
   // Otherwise: strip the noisy viem wrapper, keep the first human line.
   return m.split("\n")[0].replace(/^(Error|ContractFunctionExecutionError):?\s*/i, "").slice(0, 150);
 }

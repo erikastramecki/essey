@@ -536,6 +536,21 @@ html, body { overflow-x: hidden; }         /* wide content scrolls inside its ow
 .wallet-chip .dot { width: 7px; height: 7px; border-radius: 50%; }
 .wallet-wrap { position: relative; display: inline-flex; }
 .wallet-err { position: absolute; top: 110%; right: 0; white-space: nowrap; font-size: 11px; color: var(--crit); font-style: normal; }
+/* Wallet picker — the EIP-6963 chooser (ledger-floor tokens, mirrors .doc-modal). */
+.wallet-modal { position: fixed; inset: 0; z-index: 120; background: rgba(6,8,12,.7); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 24px; }
+.wallet-sheet { width: min(400px, 100%); background: var(--s1); border: 1px solid var(--line-2); outline: 1px solid var(--gold-line); outline-offset: -5px; border-radius: var(--r-lg); box-shadow: 0 24px 70px rgba(0,0,0,.6); padding: 20px; }
+.wallet-sheet-h { display: flex; align-items: center; justify-content: space-between; font-family: var(--serif, var(--sans)); font-size: 17px; font-weight: 600; color: var(--tx); }
+.wallet-sheet-h button { background: 0; border: 0; color: var(--tx-mut); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.wallet-sheet-h button:hover { color: var(--gold); }
+.wallet-sheet-sub { margin: 4px 0 16px; font-size: 12.5px; color: var(--tx-mut); }
+.wallet-list { display: flex; flex-direction: column; gap: 8px; }
+.wallet-opt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; background: var(--s2); border: 1px solid var(--line-2); border-radius: var(--r); color: var(--tx); font-size: 14px; cursor: pointer; transition: border-color .12s, transform .06s; }
+.wallet-opt:hover { border-color: var(--gold-line); transform: translateY(-1px); }
+.wallet-opt b { font-weight: 600; }
+.wallet-opt-ic { width: 26px; height: 26px; border-radius: 6px; flex: none; object-fit: contain; }
+.wallet-opt-ic--blank { background: var(--s4); }
+.wallet-empty { font-size: 13px; color: var(--tx-mut); line-height: 1.6; margin: 4px 0 0; }
+.wallet-empty a { color: var(--gold); }
 .dest-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 @media (max-width: 980px) { .dest-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .dest-grid { grid-template-columns: 1fr; } }
