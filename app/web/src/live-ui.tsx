@@ -105,8 +105,18 @@ export function LiveExchange() {
   const sellDon = owned?.find((d) => d.id === sellPick) ?? null;
 
   return (
-    <section className="band" style={{ paddingTop: 0 }}>
+    <section className="band" id="trade" style={{ paddingTop: 0 }}>
       <div className="wrap">
+        {/* A real, titled section header so the visual swap announces itself as THE Exchange — the live
+            trading desk, not a widget. (The cards further down the page are no-wallet SANDBOXES; this is
+            the real thing, and the heading makes that unmistakable on load.) */}
+        <div className="band-head amm-head"><div>
+          <span className="eyebrow">The Exchange · live</span>
+          <h2>Trade Dons — see them, click one, done</h2>
+          <p>The live Don AMM, on-chain right now. Buy the next Don off the shelf at 8%, snipe an exact # at
+            12%, or sell one back — every price is the reserve floor, read fresh. No wallet needed to browse
+            the pool below.</p>
+        </div></div>
         <div className="live-card amm">
           <div className="live-h">TRADE DONS <span className="preview-chip">testnet</span></div>
 
@@ -132,15 +142,19 @@ export function LiveExchange() {
                   <b>Buy the next Don</b>
                   <span className="live-note">Takes whichever Don is next off the shelf — the cheapest way in at the <b>8%</b> fee. Don't care which #? Use this.</span>
                 </div>
-                {ready ? (
-                  <button className="btn btn-gold amm-next-btn" disabled={!!busy || float_ === 0n || !quote || shortBuy}
-                    onClick={() => act("buy", () => flows.buyDon(a!).then(({ id }) => setMsg(`✓ Don #${id} is yours — your 8% fee just fed the club. Next: stake a Tier at the Bell to start earning.`)), "✓ Don purchased")}>
-                    {busy === "buy" ? "buying…"
-                      : float_ === 0n ? "Pool is empty"
-                      : shortBuy ? "Need more $ESSEY"
-                      : quote ? `Buy next · ${fmt(quote.buyTotal)} $ESSEY` : "quoting…"}
-                  </button>
-                ) : <ConnectButton />}
+                {!ready ? <ConnectButton />
+                  : shortBuy ? (
+                    /* Short on $ESSEY: send them to the Faucet instead of a dead disabled button. A
+                       "Need more $ESSEY" button that does nothing on click reads as broken (it was). */
+                    <Link className="btn btn-gold amm-next-btn" to="/faucet">Get $ESSEY on the Faucet →</Link>
+                  ) : (
+                    <button className="btn btn-gold amm-next-btn" disabled={!!busy || float_ === 0n || !quote}
+                      onClick={() => act("buy", () => flows.buyDon(a!).then(({ id }) => setMsg(`✓ Don #${id} is yours — your 8% fee just fed the club. Next: stake a Tier at the Bell to start earning.`)), "✓ Don purchased")}>
+                      {busy === "buy" ? "buying…"
+                        : float_ === 0n ? "Pool is empty"
+                        : quote ? `Buy next · ${fmt(quote.buyTotal)} $ESSEY` : "quoting…"}
+                    </button>
+                  )}
               </div>
 
               {/* snipe-confirm for the clicked Don */}
@@ -153,12 +167,15 @@ export function LiveExchange() {
                     <div className="live-note">Picking an <b>exact</b> Don pays the 12% snipe fee — {quote ? fmt(quote.snipeFee - quote.buyFee) : "…"} $ESSEY more than buying the next one at 8%. Same live floor either way.</div>
                   </div>
                   <div className="amm-confirm-act">
-                    {ready ? (
-                      <button className="btn btn-gold" disabled={!!busy || !quote || shortSnipe}
-                        onClick={() => act("snipe", () => flows.snipeDon(a!, pick).then(() => { setMsg(`✓ Don #${pick} is yours — the 12% snipe fee fed the club. Stake it at the Bell to earn.`); setPick(null); }), "✓ sniped")}>
-                        {busy === "snipe" ? "sniping…" : shortSnipe ? "Need more $ESSEY" : `Confirm snipe · ${quote ? fmt(quote.snipeTotal) : "…"}`}
-                      </button>
-                    ) : <ConnectButton />}
+                    {!ready ? <ConnectButton />
+                      : shortSnipe ? (
+                        <Link className="btn btn-gold" to="/faucet">Get $ESSEY on the Faucet →</Link>
+                      ) : (
+                        <button className="btn btn-gold" disabled={!!busy || !quote}
+                          onClick={() => act("snipe", () => flows.snipeDon(a!, pick).then(() => { setMsg(`✓ Don #${pick} is yours — the 12% snipe fee fed the club. Stake it at the Bell to earn.`); setPick(null); }), "✓ sniped")}>
+                          {busy === "snipe" ? "sniping…" : `Confirm snipe · ${quote ? fmt(quote.snipeTotal) : "…"}`}
+                        </button>
+                      )}
                     <button className="btn btn-ghost" onClick={() => setPick(null)}>Cancel</button>
                   </div>
                 </div>

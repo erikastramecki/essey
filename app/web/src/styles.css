@@ -146,6 +146,10 @@ header.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: saturate(1.
 @media (max-width: 620px) { .ex-adv { grid-template-columns: 1fr; } .ex-adv-row { flex-wrap: wrap; } }
 
 /* ---- the visual AMM: see the Dons, click one, confirm (sudoswap-style) ---- */
+.amm-head { padding-top: 24px; }
+/* anchor-as-button variants (the "Get $ESSEY on the Faucet" links that replace a dead disabled button):
+   match the real buttons so a Link reads as the CTA it is, and never carries the underline. */
+a.amm-next-btn, .amm-confirm-act a.btn { display: inline-flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; }
 .amm { gap: 14px; }
 .amm-stats { margin-bottom: 4px; }
 .amm-stats i { color: var(--tx-faint); font-style: normal; }

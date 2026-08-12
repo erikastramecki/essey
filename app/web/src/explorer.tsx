@@ -9,43 +9,47 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseAbiItem, type Address } from "viem";
 import { pub, ADDR, poolAbi, marketsAbi, noteAbi, reads, fmt, NET } from "./live";
 
-// ---- terminal palette (scoped; the page commits to a single dark terminal look) ----
+// ---- the scan terminal, re-skinned onto the "ledger floor" palette ----
+// Instead of a hardcoded neon-phosphor look, the terminal draws straight from the shared
+// design tokens (styles.css), so the page inherits the gold/ink identity AND flips with
+// the site's light/dark theme. Green is gone: the all-purpose accent is now brass (--gold),
+// rules are solid hairlines, corners stay squared — a ledger read of a block explorer.
 const CSS = `
-.txp{--bg:#0a0d0a;--bg2:#0d120d;--grn:#39ff14;--grn2:#69d18a;--dim:#3f5f3f;--line:#1c2e1c;--amber:#e8c15a;--red:#ff5c5c;
-  background:var(--bg);color:var(--grn2);font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12px;
-  min-height:100vh;padding:14px;letter-spacing:.02em;}
+.txp{background:var(--ink);color:var(--tx);font-family:var(--mono);font-size:12px;
+  min-height:100vh;padding:14px;letter-spacing:.02em;font-variant-numeric:tabular-nums;}
 .txp *{box-sizing:border-box}
-.txp a{color:var(--grn)}
+.txp a{color:var(--gold)}
+.txp a:hover{color:var(--gold-hi)}
 .txp .top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-.txp .brand{color:var(--grn);font-weight:700;letter-spacing:.14em;white-space:nowrap}
-.txp .brand b{background:var(--grn);color:#000;padding:0 5px}
-.txp .search{flex:1;display:flex;align-items:center;gap:8px;border:1px dashed var(--dim);background:#000;padding:7px 10px}
-.txp .search input{flex:1;background:transparent;border:0;color:var(--grn);font:inherit;outline:none}
-.txp .clock{color:var(--dim);white-space:nowrap}
-.txp .ticker{display:flex;gap:18px;overflow-x:auto;border:1px dashed var(--line);padding:6px 10px;margin-bottom:10px;white-space:nowrap}
-.txp .ticker span b{color:var(--grn)}
-.txp .ticker .na{color:var(--dim)}
+.txp .brand{color:var(--gold);font-weight:700;letter-spacing:.14em;white-space:nowrap}
+.txp .brand b{background:var(--gold);color:#14100A;padding:0 5px}
+.txp .search{flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--line-2);background:var(--s2);padding:7px 10px}
+.txp .search input{flex:1;background:transparent;border:0;color:var(--tx);font:inherit;outline:none}
+.txp .clock{color:var(--tx-faint);white-space:nowrap}
+.txp .ticker{display:flex;gap:18px;overflow-x:auto;border:1px solid var(--line);padding:6px 10px;margin-bottom:10px;white-space:nowrap}
+.txp .ticker span b{color:var(--gold)}
+.txp .ticker .na{color:var(--tx-faint)}
 .txp .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .txp .full{grid-column:1/-1}
-.txp .panel{border:1px dashed var(--dim);background:var(--bg2);padding:10px 12px;min-width:0}
+.txp .panel{border:1px solid var(--line-2);background:var(--s1);padding:10px 12px;min-width:0}
 .txp .ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
-.txp .ph .t{color:var(--grn);letter-spacing:.12em;font-weight:700}
-.txp .ph .s{color:var(--dim);font-size:11px}
-.txp .big{font-size:26px;color:#eaffea;line-height:1.1}
+.txp .ph .t{color:var(--gold);letter-spacing:.12em;font-weight:700}
+.txp .ph .s{color:var(--tx-faint);font-size:11px}
+.txp .big{font-size:26px;color:var(--tx);line-height:1.1}
 .txp .kv{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:8px}
 .txp .kv div{display:flex;flex-direction:column}
-.txp .kv .k{color:var(--dim);font-size:10px;letter-spacing:.08em}
-.txp .kv .v{color:var(--grn2)}
+.txp .kv .k{color:var(--tx-faint);font-size:10px;letter-spacing:.08em}
+.txp .kv .v{color:var(--tx)}
 .txp table{width:100%;border-collapse:collapse;font-size:11px}
-.txp th{text-align:left;color:var(--dim);font-weight:400;border-bottom:1px dashed var(--line);padding:4px 8px 4px 0;letter-spacing:.06em}
-.txp td{padding:5px 8px 5px 0;border-bottom:1px dotted var(--line);white-space:nowrap}
+.txp th{text-align:left;color:var(--tx-faint);font-weight:400;border-bottom:1px solid var(--line-2);padding:4px 8px 4px 0;letter-spacing:.06em}
+.txp td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line);white-space:nowrap}
 .txp td.r,.txp th.r{text-align:right}
-.txp .good{color:var(--grn)} .txp .warn{color:var(--amber)} .txp .bad{color:var(--red)} .txp .muted{color:var(--dim)}
+.txp .good{color:var(--gold)} .txp .warn{color:var(--warn)} .txp .bad{color:var(--crit)} .txp .muted{color:var(--tx-faint)}
 .txp .pill{border:1px solid currentColor;padding:0 5px;font-size:10px}
-.txp button.v{background:transparent;border:1px solid var(--dim);color:var(--grn2);font:inherit;cursor:pointer;padding:1px 7px}
-.txp button.v:hover{border-color:var(--grn);color:var(--grn)}
-.txp .foot{color:var(--dim);margin-top:12px;border-top:1px dashed var(--line);padding-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
-.txp .empty{color:var(--dim);padding:8px 0}
+.txp button.v{background:transparent;border:1px solid var(--line-2);color:var(--tx-mut);font:inherit;cursor:pointer;padding:1px 7px}
+.txp button.v:hover{border-color:var(--gold);color:var(--gold)}
+.txp .foot{color:var(--tx-faint);margin-top:12px;border-top:1px solid var(--line);padding-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.txp .empty{color:var(--tx-faint);padding:8px 0}
 @media(max-width:820px){.txp .grid{grid-template-columns:1fr}}
 `;
 
@@ -231,7 +235,7 @@ export function ExplorerPage() {
                       <td className="r">{util === null ? <span className="muted">—</span> : <span className={hp!}>{(util * 100).toFixed(0)}%</span>}</td>
                       <td>{hp === null ? <span className="muted">—</span> : hp === "good" ? <span className="good">HEALTHY</span> : hp === "warn" ? <span className="warn">TIGHT</span> : <span className="bad">UNDERWATER</span>}</td>
                       <td>
-                        {st === "verified" ? <span className="good" title="debt ≤ collateral×price×LTV — verified in your browser">✅ SOLVENT</span>
+                        {st === "verified" ? <span className="good" title="debt ≤ collateral×price×LTV — verified in your browser">✓ SOLVENT</span>
                           : st === "checking" ? <span className="muted">verifying…</span>
                           : st === "failed" ? <span className="bad">✗ INVALID</span>
                           : st === "notwired" ? <span className="muted" title="Drop solvency_vk.json + loan_<id>.json in public/proof/ (needs gnark→snarkjs vk conversion)">proof not wired</span>

@@ -327,15 +327,26 @@ export function unavailableOptions(
   const out = new Map<string, Map<string, string>>();
   const male = data.gender === "male";
   const base = resolveSelection(data, forced, seed);
-  const rc = new Set(base.render.map((l) => l.category));
+  // Context is derived from what the preview ACTUALLY RENDERS, not from explicit picks — a randomly-rolled
+  // trait (e.g. a seed-chosen Whiskey grip) blocks canes/snakes exactly as a picked one does, so it must
+  // count. `rendered[cat]` maps each painted leaf back to its top-level option via its source path.
+  const fileToPath: Record<string, string> = {};
+  for (const e of data.leaves) if (e.file) fileToPath[e.file] = e.path;
+  const rendered: Record<string, string> = {};
+  for (const l of base.render) {
+    if (rendered[l.category] !== undefined) continue;
+    const p = fileToPath[l.file]; const parts = p ? p.split("/") : [];
+    rendered[l.category] = parts.length > 1 ? parts[1] : (parts[0] ?? l.category);
+  }
+  const rOpt = (cat: string): string | null => rendered[cat] ?? base.picks[cat] ?? null;
   const gripCat = male ? "19 Hand Grip" : "13 Hand Grip";
-  const grip = rc.has(gripCat) ? (base.picks[gripCat] || null) : null;
-  const cane = rc.has("18 Canes") ? (base.picks["18 Canes"] || null) : null;
+  const grip = rendered[gripCat] ?? null;                 // rendered grip (picked OR randomly rolled)
+  const cane = rendered["18 Canes"] ?? null;
   const family = (base.drivers.family as string) || "";
-  const fmFull = base.picks["17 Face Mod"] || "None";
+  const fmFull = rendered["17 Face Mod"] || "None";
   const facemod = fmFull.split(/\s+/)[0];
   const cover = fmFull.toLowerCase() !== "none" ? data.rules.FACEMOD_COVER[facemod] : undefined;
-  const laser = (base.picks["24 Laser Eye"] || "None").toLowerCase() !== "none";
+  const laser = !!rendered["24 Laser Eye"] && rendered["24 Laser Eye"].toLowerCase() !== "none";
   const hat = !!base.drivers.hat;
   const hairStyle = (base.drivers.hair_style as string) || "";
   const medusa = !male && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle);
@@ -343,9 +354,10 @@ export function unavailableOptions(
   const cx = { grip, cane, family, cover, facemod, laser, hat, medusa, SG };
 
   const opts = catOptions(data);
-  // Pin every category to its current rendered value; flipping one option can't perturb the context.
+  // Pin every category to its current RENDERED option (fallback: an explicit-but-hidden pick, else none),
+  // so flipping one option under test can't perturb the RNG-chosen context of every other category.
   const pinned: Record<string, string> = {};
-  for (const cat of Object.keys(opts)) pinned[cat] = base.picks[cat] ?? "none";
+  for (const cat of Object.keys(opts)) pinned[cat] = rOpt(cat) ?? "none";
 
   for (const cat of Object.keys(opts)) {
     for (const opt of opts[cat]) {

@@ -1,6 +1,6 @@
 // The faucet — testnet funding in one place. Restores the drip flow that was orphaned when the
 // quest page was retired: gas ETH comes from the chain's own faucet (external), play-money tokens
-// come from our TestnetFaucet contract via flows.drip (5,000 $ESSEY + 1,000 USDG, 8h cooldown).
+// come from our TestnetFaucet contract via flows.drip (100,000 $ESSEY + 1,000 USDG, 8h cooldown).
 // Route: /faucet. Testnet only — this page has no mainnet counterpart.
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -42,7 +42,7 @@ export function FaucetPage() {
     setBusy(true); setMsg(null);
     try {
       await flows.drip(addr);
-      setMsg({ ok: true, text: "✓ 5,000 $ESSEY + 1,000 USDG dripped — you're funded. Come back in 8h for more." });
+      setMsg({ ok: true, text: "✓ 100,000 $ESSEY + 1,000 USDG dripped — you're funded (enough to stake your first Bell tier). Come back in 8h for more." });
       await refresh(addr);
     } catch (e) {
       setMsg({ ok: false, text: niceError(e) });
@@ -94,7 +94,7 @@ export function FaucetPage() {
               <div className="live-row">
                 {bal !== null && !noGas && <a className="btn btn-ghost" href={NET.faucet} target="_blank" rel="noreferrer">More gas ↗</a>}
                 <button className="btn btn-gold" disabled={busy} onClick={drip}>
-                  {busy ? "dripping…" : noGas ? "2 · Then get 5,000 $ESSEY + 1,000 USDG" : "Get 5,000 $ESSEY + 1,000 USDG"}
+                  {busy ? "dripping…" : noGas ? "2 · Then get 100,000 $ESSEY + 1,000 USDG" : "Get 100,000 $ESSEY + 1,000 USDG"}
                 </button>
               </div>
               {msg && <div className="live-msg">{msg.text}</div>}

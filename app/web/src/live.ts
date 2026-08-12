@@ -36,8 +36,9 @@ export const ADDR = {
   // DCA / Auto-stack: recurring USDG→stock buys, non-custodial, keeper-executed, floored via its converter.
   recurringBuy: "0xF0DCE628d4023cdc8115E6f5998D9279eA06d9ab" as Address,
   cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
-  // Dons-era faucet: drips 5,000 v2 $ESSEY + 1,000 USDG per 8h (the old 0x11c6…ded2 faucet dripped v1).
-  faucet: "0x2ac1Bb0977e8f5b733C059ce3706963B38248C91" as Address,
+  // Dons-era faucet (redeployed 2026-08-11 with a bigger drip): 100,000 v2 $ESSEY + 1,000 USDG per 8h —
+  // enough to stake Bell Tier I (66,666 $ESSEY). Replaces the old 0x2ac1…48C91 (5,000 $ESSEY) faucet.
+  faucet: "0x90312b383Eac08E691c851a7ef866f106E6d9d7d" as Address,
   aapl: "0xaC6cd493e69eb82e8f113E33De8e5542F313B731" as Address,
   nvda: "0x8393cc99FAC1CF79E3bEceA56f344159ddFd91E9" as Address,
   // Lending stack (unchanged)
