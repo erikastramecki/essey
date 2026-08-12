@@ -3,7 +3,7 @@
 // Guardrail: no section may claim more than the contracts deliver — the Don contracts are audited
 // and live on Robinhood Chain testnet; the toys here are sandboxes and say so on the surface itself,
 // not in a footnote. Numbers mirror the deployed config (floor 300,030 $ESSEY; AMM 8%/12%; the
-// 666 tier ladder; loan 50% LTV / 15% APR / 70% liquidation).
+// 666 tier ladder; loan 50% LTV, interest prepaid in ETH, calendar-only default).
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
@@ -89,9 +89,9 @@ export function WarningModal() {
           <li><b>Redemption is a one-way door.</b> Redeeming a Don pays its full $ESSEY floor and locks the Don in
             the reserve forever — membership over, and its Vault, with everything still in it, is locked away too.
             Claim and empty the Vault first.</li>
-          <li><b>Liquidation consumes the Don.</b> Borrow against a Don and let the debt cross 70% of its floor, and
-            anyone can liquidate it: the Don is redeemed to settle the debt, the surplus comes back to you — but the
-            Don is gone, and every unclaimed dividend in its Vault is forfeited with it.</li>
+          <li><b>Liquidation consumes the Don.</b> Borrow against a Don and miss your due date — the end of your term
+            plus a 30-day grace — and anyone can liquidate it: the Don is redeemed to settle the debt, the surplus
+            comes back to you, but the Don is gone, and every unclaimed dividend in its Vault is forfeited with it.</li>
           <li><b>Provable ≠ risk-free.</b> We prove what we can prove — a distribution split, a loan's solvency —
             and hand you the button to check. Oracles can be wrong within their band; liquidation isn't instant;
             ordinary software has ordinary bugs. Proof removes one <em>class</em> of risk, not all of it.</li>
@@ -326,8 +326,8 @@ function FloorToy() {
       <div className="toy-note">Behind every Don sits a reserve seeded with <b className="num">2,666,666,666
         $ESSEY</b> — 30% of the supply. <b>Redemption is always open</b>: any owner can cash a Don in for its full
         floor share, no permission, no window, no admin — which is why a Don can never trade below the floor.
-        Funding is open to anyone (all loan interest goes here), and the only way out is a redemption at exactly one
-        share — so the floor for everyone else <b>can only rise</b>. But redeeming is a one-way door: the Don is
+        Funding is open to anyone (the protocol routes proceeds here), and the only way out is a redemption at exactly
+        one share — so the floor for everyone else <b>can only rise</b>. But redeeming is a one-way door: the Don is
         locked in the reserve forever, membership over, and its Vault is locked away with it. Claim first.</div>
     </div>
   );
@@ -449,8 +449,9 @@ function EsseyToy() {
       </div>
       <div className="toy-note">You spend the volatile token to earn the stable asset — <b>rewards are never paid in
         $ESSEY</b>, so there's no emissions death-spiral to run from. Every fee ends in one of two places: stock for
-        holders, or the floor under every Don. Activation fees burn 50% of themselves; <b>loan interest goes 100%
-        into the reserve, raising every Don's floor</b>. No fee in the system leaks out of it.</div>
+        holders, or the floor under every Don. Activation fees burn 50% of themselves; <b>loan interest is prepaid in
+        ETH and split 70% to the stock pot / 30% to the treasury</b> — the floor rises separately, whenever the
+        protocol funds it from proceeds. No fee in the system leaks out of it.</div>
     </div>
   );
 }
@@ -491,7 +492,7 @@ const CARDS: CardDef[] = [
   { id: "borrow", icon: "⚖", name: "Borrow", sub: "the Don as collateral", status: "audited",
     oneLiner: "Borrow $ESSEY at 50% of the floor while the Don sits in your wallet — still staked, still earning.", toy: BorrowToy },
   { id: "essey", icon: "◈", name: "$ESSEY", sub: "the access token", status: "audited",
-    oneLiner: "The chip you spend to get in. You never earn $ESSEY — you earn stock, and interest raises the floor.", toy: EsseyToy },
+    oneLiner: "The chip you spend to get in. You never earn $ESSEY — you earn stock, and the floor only rises.", toy: EsseyToy },
   { id: "tape", icon: "📈", name: "the Tape", sub: "the live proof feed", status: "audited",
     oneLiner: "Everything the Exchange does, printed live — and every line is a real receipt.", toy: TapeToy },
 ];

@@ -31,7 +31,7 @@ export const ADDR = {
   exchange: "0x10c22bC22B4deE66a7DE2f790a2678e622441753" as Address, // DonExchange AMM: 8%/12% fees, price = max(300k, live floor)
   // An $ESSEY reserve that gives every Don a hard, rising floor (redeem a Don for its pro-rata share). Immutable.
   donReserve: "0xD4aC7ADD2A790B9916367c35F9F892b6D92F24D6" as Address,
-  loan: "0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7" as Address, // DonLoan: 50% LTV / 70% liq / 15% APR, ESSEY-denominated
+  loan: "0x2Fd14544c53071D0Fef29A51C0DfdF176Ac36bC7" as Address, // DonLoan: 50% LTV, prepaid-ETH interest, calendar-only default, ESSEY-denominated
   feeRouter: "0x6EC22ab8442de2F780477d9A56926e0BA0382032" as Address, // feeSink: ETH+ESSEY fees → USDG → Bell pot
   // DCA / Auto-stack: recurring USDG→stock buys, non-custodial, keeper-executed, floored via its converter.
   recurringBuy: "0xF0DCE628d4023cdc8115E6f5998D9279eA06d9ab" as Address,
@@ -251,17 +251,19 @@ export const donReserveAbi = parseAbi([
   "function redeem(uint256 donId) returns (uint256 paid)",
 ]);
 
-// DonLoan — borrow $ESSEY against a Don at 50% of the live floor. The Don is LIENED in place (still in
-// the wallet, still staked + earning) until repay; liquidation (debt > 70% of live floor) consumes it.
+// DonLoan — borrow $ESSEY against a Don at 50% of the live floor. Interest is prepaid in ETH at signing;
+// the debt is flat (principal, repaid 1:1). The Don is LIENED in place (still in the wallet, still staked +
+// earning) until repay; default is a CALENDAR event — liquidatable once the term's expiry + 30-day grace
+// has passed (the 70%-of-floor ratio backstop exists but is structurally unreachable).
 export const donLoanAbi = parseAbi([
   "function lendable() view returns (uint256)",
   "function maxBorrow() view returns (uint256)",
   "function debtOf(uint256 donId) view returns (uint256)",
   "function liquidationThreshold() view returns (uint256)",
-  "function loans(uint256) view returns (address borrower, uint256 principal, uint256 accrued, uint64 lastAccrual, uint64 nonce)",
+  "function prepaidEth(uint256 termSeconds) view returns (uint256)",
+  "function loans(uint256) view returns (address borrower, uint256 principal, uint64 expiry, uint64 nonce)",
   "function ltvBps() view returns (uint256)",
-  "function rateBps() view returns (uint256)",
-  "function borrow(uint256 donId, uint256 amount)",
+  "function borrow(uint256 donId, uint256 termSeconds) payable",
   "function repay(uint256 donId, uint256 amount) returns (uint256 paid)",
 ]);
 
@@ -857,16 +859,19 @@ export const flows = {
 
   // ---- Don loan (lien-in-place $ESSEY borrowing) ----
 
-  /// Borrow $ESSEY against a Don you own (up to 50% of the live floor). The Don is liened IN PLACE — it
-  /// stays in your wallet, stays staked, keeps earning — but can't move until the debt clears. If debt
-  /// ever exceeds 70% of the LIVE floor, anyone can liquidate: the Don is consumed (redeemed into the
-  /// reserve) and its Vault + membership are forfeited.
-  borrowAgainstDon: (a: Address, id: bigint, amount: bigint): Promise<Hex> =>
-    send(a, ADDR.loan, donLoanAbi, "borrow", [id, amount]),
+  /// Borrow $ESSEY against a Don you own — a fixed draw of 50% of the live floor, for a term you choose
+  /// (7–365 days, passed as `termSeconds`). Interest is prepaid in ETH at signing (msg.value), not in
+  /// $ESSEY; the debt is flat and repaid 1:1. The Don is liened IN PLACE — it stays in your wallet, stays
+  /// staked, keeps earning — but can't move until the debt clears. Default is a CALENDAR event: once the
+  /// term's expiry + 30-day grace has passed, anyone can liquidate and the Don is consumed (redeemed into
+  /// the reserve), its Vault + membership forfeited.
+  borrowAgainstDon: (a: Address, id: bigint, termSeconds: bigint): Promise<Hex> =>
+    send(a, ADDR.loan, donLoanAbi, "borrow", [id, termSeconds]),
 
-  /// Repay a Don loan (interest first — forwarded to the reserve, raising everyone's floor). The contract
-  /// pulls at most the outstanding debt, so the 1% headroom only covers interest accrued since quoting;
-  /// full repayment releases the lien.
+  /// Repay a Don loan in $ESSEY. The debt is flat — interest was prepaid in ETH at borrow, so nothing
+  /// accrues; repaying the principal clears it 1:1 and releases the lien. The contract pulls at most the
+  /// outstanding principal, so the small buffer is only a guard against the debt read moving between
+  /// quote and inclusion; overpayment is never taken.
   repayDonLoan: async (a: Address, id: bigint, owed: bigint): Promise<Hex> => {
     const amount = owed + owed / 100n;
     await ensureAllowance(a, ADDR.essey, ADDR.loan, amount);

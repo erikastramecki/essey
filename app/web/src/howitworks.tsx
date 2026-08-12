@@ -276,7 +276,7 @@ export function HowItWorksPage() {
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Why is the trade fee 8%? That's high for an AMM.",
-    a: "This isn't a token AMM — it's an NFT broker desk trading whole Dons at a floor-pinned price. The fee is the anti-arbitrage margin: because any Don can always be redeemed for its floor, a fee-free desk at floor price would be drained by buy-then-redeem loops. 8% (12% to snipe a specific Don) makes that loop strictly unprofitable — and 70% of every fee buys tokenized stock for staked Dons. For reference, the mechanic we adapted charges 10%/15%; we softened both while keeping the 1.5× snipe ratio.",
+    a: "This isn't a token AMM — it's an NFT broker desk trading whole Dons at a floor-pinned price. The fee is the anti-arbitrage margin: because any Don can always be redeemed for its floor, a fee-free desk at floor price would be drained by buy-then-redeem loops. The 8% buy/sell fee makes that loop strictly unprofitable, and the 12% snipe premium prices the privilege of picking an exact Don over taking the next one from inventory. Either way, 70% of every fee buys tokenized stock for staked Dons — so the same margin that protects the desk also pays the table.",
   },
   {
     q: "What happens if I sell a staked Don?",
