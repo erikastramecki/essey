@@ -515,12 +515,17 @@ export function BuilderPage() {
         <div className="bld-cats">
           {SELECT[gender].map(([cat, label, opt]) => {
             const options = (opts[cat] || []).filter((o) => o && o.toLowerCase() !== "none");
-            const cur = picks[cat];
+            const pick = picks[cat];                       // the user's EXPLICIT pick (a click pins this)
+            // Highlight what's ACTUALLY on the Don: the resolved/rendered selection (res.picks) — this
+            // holds every randomly-rolled category after a Shuffle, not just explicit picks. Fall back to
+            // the explicit pick before the first resolve. Same source of truth the canvas renders from.
+            const sel = res?.picks[cat] ?? pick;
+            const selNone = typeof sel === "string" && sel.toLowerCase() === "none";
             const catUnavail = unavail.get(cat);
             const deadReason = deadCats.get(cat);
             // Fully-dead rows collapse to a compact header (auto-expand when live again; manual peek allowed).
             const collapsed = deadReason !== undefined && !expanded.has(cat);
-            const pickHidden = cur !== undefined && cur !== "none" && !!catUnavail?.has(cur);
+            const pickHidden = pick !== undefined && pick !== "none" && !!catUnavail?.has(pick);
             if (collapsed) {
               return (
                 <div key={cat} className="bld-cat collapsed" onClick={() => toggleExpand(cat)} title="Click to view options">
@@ -539,15 +544,16 @@ export function BuilderPage() {
                     ? <span className="cs bld-exp-btn" onClick={() => toggleExpand(cat)}>{deadReason} <span className="bld-exp">－</span></span>
                     : cat === "13 Hair" && res?.drivers.hat ? <span className="cs">under hat — sets beard/brows</span>
                     : catUnavail && catUnavail.size > 0 ? <span className="cs">some options unavailable</span>
+                    : sel && !selNone ? <span className="cs cv">{clean(sel)}</span>
                     : null}
                 </div>
                 <div className="bld-opts">
-                  {opt && <button className={"bld-opt" + (cur === "none" ? " on" : "")} onClick={() => setPick(cat, "none")}>∅ None</button>}
+                  {opt && <button className={"bld-opt" + (selNone ? " on" : "")} onClick={() => setPick(cat, "none")}>∅ None</button>}
                   {options.map((o) => {
-                    const reason = o === cur ? undefined : catUnavail?.get(o); // keep the current pick clickable
+                    const reason = o === pick ? undefined : catUnavail?.get(o); // keep the explicit pick clickable
                     return (
                       <button key={o} disabled={reason !== undefined} title={reason}
-                        className={"bld-opt" + ((cur ? cur === o : false) ? " on" : "") + (reason !== undefined ? " unavail" : "")}
+                        className={"bld-opt" + (sel === o ? " on" : "") + (reason !== undefined ? " unavail" : "")}
                         onClick={reason !== undefined ? undefined : () => setPick(cat, o)}>{clean(o)}</button>
                     );
                   })}
