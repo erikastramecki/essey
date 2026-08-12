@@ -464,5 +464,5 @@ export function PrivatePage() {
 
 const inputStyle: React.CSSProperties = {
   padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line, #333)",
-  background: "var(--bg-2, #111)", color: "inherit", fontSize: 14, fontFamily: "inherit",
+  background: "var(--bg-2, #111)", color: "inherit", fontSize: 16, fontFamily: "inherit", maxWidth: "100%",
 };

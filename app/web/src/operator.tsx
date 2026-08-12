@@ -8,7 +8,7 @@ import { parseUnits, formatUnits, isAddress } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
 import { launchpad, niceError, type LaunchProduct, type LaunchRaffle } from "./live";
 
-const inp = { padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line, #333)", background: "var(--bg-2, #111)", color: "inherit", fontSize: 14, fontFamily: "inherit" } as const;
+const inp = { padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line, #333)", background: "var(--bg-2, #111)", color: "inherit", fontSize: 16, fontFamily: "inherit", maxWidth: "100%" } as const;
 
 const usd = (x: bigint, dec: number) => Number(formatUnits(x, dec)).toLocaleString(undefined, { maximumFractionDigits: 2 });
 

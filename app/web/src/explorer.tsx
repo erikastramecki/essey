@@ -16,7 +16,8 @@ import { pub, ADDR, poolAbi, marketsAbi, noteAbi, reads, fmt, NET } from "./live
 // rules are solid hairlines, corners stay squared — a ledger read of a block explorer.
 const CSS = `
 .txp{background:var(--ink);color:var(--tx);font-family:var(--mono);font-size:12px;
-  min-height:100vh;padding:14px;letter-spacing:.02em;font-variant-numeric:tabular-nums;}
+  min-height:100dvh;padding:14px;padding-left:max(14px,env(safe-area-inset-left));
+  padding-right:max(14px,env(safe-area-inset-right));letter-spacing:.02em;font-variant-numeric:tabular-nums;}
 .txp *{box-sizing:border-box}
 .txp a{color:var(--gold)}
 .txp a:hover{color:var(--gold-hi)}
@@ -24,7 +25,7 @@ const CSS = `
 .txp .brand{color:var(--gold);font-weight:700;letter-spacing:.14em;white-space:nowrap}
 .txp .brand b{background:var(--gold);color:#14100A;padding:0 5px}
 .txp .search{flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--line-2);background:var(--s2);padding:7px 10px}
-.txp .search input{flex:1;background:transparent;border:0;color:var(--tx);font:inherit;outline:none}
+.txp .search input{flex:1;min-width:0;background:transparent;border:0;color:var(--tx);font:inherit;outline:none}
 .txp .clock{color:var(--tx-faint);white-space:nowrap}
 .txp .ticker{display:flex;gap:18px;overflow-x:auto;border:1px solid var(--line);padding:6px 10px;margin-bottom:10px;white-space:nowrap}
 .txp .ticker span b{color:var(--gold)}
@@ -50,7 +51,13 @@ const CSS = `
 .txp button.v:hover{border-color:var(--gold);color:var(--gold)}
 .txp .foot{color:var(--tx-faint);margin-top:12px;border-top:1px solid var(--line);padding-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .txp .empty{color:var(--tx-faint);padding:8px 0}
-@media(max-width:820px){.txp .grid{grid-template-columns:1fr}}
+@media(max-width:820px){
+  .txp .grid{grid-template-columns:1fr}
+  /* wide, nowrap tables scroll inside their own panel instead of being clipped by the page */
+  .txp table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* ≥16px so iOS Safari doesn't auto-zoom when the search field is focused */
+  .txp .search input{font-size:16px}
+}
 `;
 
 const ZERO = "0x0000000000000000000000000000000000000000";
