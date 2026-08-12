@@ -219,7 +219,7 @@ export function ExplorerPage() {
               {!markets && <tr><td colSpan={3} className="empty">loading…</td></tr>}
             </tbody>
           </table>
-          <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>PRICE feed not wired to the web layer yet — TODO.</div>
+          <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>PRICE feed not wired to the web layer yet. TODO.</div>
         </div>
 
         {/* LOANS — real; PROOF = in-browser verify */}
@@ -242,7 +242,7 @@ export function ExplorerPage() {
                       <td className="r">{util === null ? <span className="muted">—</span> : <span className={hp!}>{(util * 100).toFixed(0)}%</span>}</td>
                       <td>{hp === null ? <span className="muted">—</span> : hp === "good" ? <span className="good">HEALTHY</span> : hp === "warn" ? <span className="warn">TIGHT</span> : <span className="bad">UNDERWATER</span>}</td>
                       <td>
-                        {st === "verified" ? <span className="good" title="debt ≤ collateral×price×LTV — verified in your browser">✓ SOLVENT</span>
+                        {st === "verified" ? <span className="good" title="debt ≤ collateral×price×LTV, verified in your browser">✓ SOLVENT</span>
                           : st === "checking" ? <span className="muted">verifying…</span>
                           : st === "failed" ? <span className="bad">✗ INVALID</span>
                           : st === "notwired" ? <span className="muted" title="Drop solvency_vk.json + loan_<id>.json in public/proof/ (needs gnark→snarkjs vk conversion)">proof not wired</span>
@@ -258,7 +258,7 @@ export function ExplorerPage() {
           </div>
           <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>
             VERIFY runs snarkjs.groth16.verify in-browser against <span className="good">public/proof/solvency_vk.json</span> + <span className="good">loan_&lt;id&gt;.json</span>.
-            Real solvency proofs need the gnark→snarkjs vk conversion (TODO) — until then it honestly reports “proof not wired”.
+            Real solvency proofs need the gnark→snarkjs vk conversion (TODO). Until then it honestly reports “proof not wired”.
           </div>
         </div>
 
@@ -289,7 +289,7 @@ export function ExplorerPage() {
 
       <div className="foot">
         <span>ESSEY SCAN · v1 · Robinhood Chain {NET.chainId} testnet · <a href={NET.explorer} target="_blank" rel="noreferrer">raw explorer ↗</a></span>
-        <span>proof, not attestation — verify solvency yourself</span>
+        <span>proof, not attestation: verify solvency yourself</span>
       </div>
     </div>
   );

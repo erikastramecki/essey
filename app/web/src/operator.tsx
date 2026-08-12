@@ -42,7 +42,7 @@ export function OperatorPage() {
         <div className="band-head"><div>
           <span className="eyebrow">Launch</span>
           <h2>Create a money-backed tokenized asset</h2>
-          <p>Stand up your own USDG-backed voucher line — a trip, a gift card, brand credit, anything with a
+          <p>Stand up your own USDG-backed voucher line: a trip, a gift card, brand credit, anything with a
             price. Every unit you mint is covered 1:1 by real USDG you deposit, so it can never be unbacked.
             Optionally drop it into a Gotcha box that raffles it through the shared Essey economy. Your backing
             lives in its own contract, isolated from every other operator.</p>
@@ -99,7 +99,7 @@ function LaunchPanel({ a, onDone }: { a: Address; onDone: () => void }) {
     setBusy(true); setMsg(null);
     try {
       await launchpad.flows.launch(a, name.trim(), symbol.trim(), settlement as Address, Math.round(pct * 100), feeWallet as Address);
-      setMsg("✓ Launched — your backed-asset line is live below. Next: add a tier, then mint & back it.");
+      setMsg("✓ Launched. Your backed-asset line is live below. Next: add a tier, then mint & back it.");
       onDone();
     } catch (e) { setMsg(niceError(e)); } finally { setBusy(false); }
   };
@@ -170,15 +170,15 @@ function ProductCard({ a, dec, product, raffle, onDone }: { a: Address; dec: num
     const c = parseInt(mintCount, 10);
     if (!(c > 0)) return setMsg("How many vouchers to mint?");
     if (unit === 0n) return setMsg("Pick a defined tier first.");
-    run("mint", () => launchpad.flows.issue(a, product.voucher, Number(mintTier), c, unit), `✓ Minted ${c} — $${usd(mintTotal, dec)} USDG deposited as backing.`);
+    run("mint", () => launchpad.flows.issue(a, product.voucher, Number(mintTier), c, unit), `✓ Minted ${c}. $${usd(mintTotal, dec)} USDG deposited as backing.`);
   };
 
   // seed (into an existing box)
   const seed = () => run("seed", async () => {
     const ids = await launchpad.seedableIds(a, product.voucher);
-    if (ids.length === 0) throw new Error("No un-seeded vouchers to add — mint some first.");
+    if (ids.length === 0) throw new Error("No un-seeded vouchers to add. Mint some first.");
     return launchpad.flows.seed(a, raffle!.travelCase, product.voucher, ids);
-  }, "✓ Vouchers seeded into the box — they’re live prizes now.");
+  }, "✓ Vouchers seeded into the box. They’re live prizes now.");
 
   return (
     <div className="live-card">
@@ -237,7 +237,7 @@ function RaffleForm({ a, voucher, run, busy }: { a: Address; voucher: Address; r
     const p = parseFloat(price), f = parseFloat(fee || "0"), b = parseFloat(booster);
     if (!(p > 0)) return; // button hint below
     run("raffle", () => launchpad.flows.launchRaffle(a, voucher, parseUnits(String(p), 18), parseUnits(String(f), 18), Math.round(b * 100), a),
-      "✓ Gotcha box launched — now seed your minted vouchers into it.");
+      "✓ Gotcha box launched. Now seed your minted vouchers into it.");
   };
   return (
     <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>

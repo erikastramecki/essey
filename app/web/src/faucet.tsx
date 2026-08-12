@@ -42,7 +42,7 @@ export function FaucetPage() {
     setBusy(true); setMsg(null);
     try {
       await flows.drip(addr);
-      setMsg({ ok: true, text: "✓ 100,000 $ESSEY + 1,000 USDG dripped — you're funded (enough to stake your first Bell tier). Come back in 8h for more." });
+      setMsg({ ok: true, text: "✓ 100,000 $ESSEY + 1,000 USDG dripped. You're funded (enough to stake your first Bell tier). Come back in 8h for more." });
       await refresh(addr);
     } catch (e) {
       setMsg({ ok: false, text: niceError(e) });
@@ -58,7 +58,7 @@ export function FaucetPage() {
         <div className="band-head"><div>
           <span className="eyebrow">Testnet faucet</span>
           <h2>Fund your wallet with play money</h2>
-          <p>Everything on Essey runs on Robinhood Chain <b>testnet</b> — the tokens here are free and have no real
+          <p>Everything on Essey runs on Robinhood Chain <b>testnet</b>, so the tokens here are free and have no real
             value. Two things get you playing: <b>gas ETH</b> from the chain's own faucet, and <b>$ESSEY + USDG</b>
             from ours. $ESSEY is the token you spend to get in (mint tiers, trade Dons); USDG is the play-money
             stablecoin for fees and payouts.</p>
@@ -73,7 +73,7 @@ export function FaucetPage() {
             </div>
           ) : !w.chainOk ? (
             <div className="live-row">
-              <span className="live-note">Wrong network — switch to Robinhood Chain testnet first.</span>
+              <span className="live-note">Wrong network. Switch to Robinhood Chain testnet first.</span>
               <ConnectButton />
             </div>
           ) : (
@@ -86,7 +86,7 @@ export function FaucetPage() {
               {noGas && (
                 <div className="fund-gas">
                   <span className="fund-step num">1</span>
-                  <span>You have <b>no gas ETH</b> — nothing will send without it. Get some from the chain faucet
+                  <span>You have <b>no gas ETH</b>, so nothing will send without it. Get some from the chain faucet
                     first (it's free, opens in a new tab).</span>
                   <a className="btn btn-gold" href={NET.faucet} target="_blank" rel="noreferrer">Get gas ETH ↗</a>
                 </div>

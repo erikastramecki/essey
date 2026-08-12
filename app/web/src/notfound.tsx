@@ -13,7 +13,7 @@ export function NotFoundPage() {
         <EMonogram size={56} stamped={false} />
         <h2 style={{ marginTop: 18 }}>This page isn't on the books.</h2>
         <p className="lede" style={{ margin: "10px auto 26px", maxWidth: 520 }}>
-          The address you followed doesn't exist — it may be left over from an older version of the site.
+          The address you followed doesn't exist. It may be left over from an older version of the site.
           Everything that's live is one click away:
         </p>
         <div className="hero-cta" style={{ justifyContent: "center" }}>

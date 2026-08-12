@@ -29,7 +29,7 @@ export function LendPage() {
           <h2>Supply liquidity, borrow against your stock</h2>
           <p>The engine under the game: lenders supply USDG and earn the interest borrowers pay; anyone
             holding stock (say, a Case you opened) can borrow USDG against it. A share of that interest
-            routes to the Bell — so lending feeds the same pot the game does.</p>
+            routes to the Bell, so lending feeds the same pot the game does.</p>
         </div>
           <span className="preview-chip live">testnet</span>
         </div>
@@ -72,7 +72,7 @@ function SupplyPanel({ a, pool, onDone }: { a: Address; pool: PoolState | null; 
       const wei = parseUnits(amt, 18);
       if (mode === "supply") await flows.supply(a, wei);
       else await flows.withdrawSupply(a, wei);
-      setMsg(mode === "supply" ? `✓ supplied ${amt} USDG — now earning` : `✓ withdrew ${amt} USDG`);
+      setMsg(mode === "supply" ? `✓ supplied ${amt} USDG, now earning` : `✓ withdrew ${amt} USDG`);
       setAmt(""); onDone();
     } catch (e) { setMsg(niceError(e)); }
     finally { setBusy(false); }
@@ -80,7 +80,7 @@ function SupplyPanel({ a, pool, onDone }: { a: Address; pool: PoolState | null; 
 
   return (
     <div className="live-card">
-      <div className="live-h">SUPPLY — EARN <span className="preview-chip live">live now</span></div>
+      <div className="live-h">SUPPLY &amp; EARN <span className="preview-chip live">live now</span></div>
       <div className="live-bal num">your position: <b>{pool ? fmt(pool.mine, 2) : "…"}</b> USDG · earning {pool ? pool.supplyApy.toFixed(2) : "…"}% APY</div>
       <div className="seg" role="tablist" style={{ width: "fit-content" }}>
         <button aria-selected={mode === "supply"} onClick={() => setMode("supply")}>Supply</button>
@@ -94,7 +94,7 @@ function SupplyPanel({ a, pool, onDone }: { a: Address; pool: PoolState | null; 
         </button>
       </div>
       <div className="live-note">Interest accrues every second; withdraw whenever there's idle liquidity. A slice of
-        borrower interest is skimmed to the Bell — lending literally funds the Payouts.</div>
+        borrower interest is skimmed to the Bell. Lending literally funds the Payouts.</div>
       {msg && <div className="live-msg">{msg}</div>}
     </div>
   );
@@ -130,7 +130,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
     setBusy("borrow"); setMsg(null);
     try {
       await flows.borrow(a, token, parseUnits(coll, 18), parseUnits(debt, 18));
-      setMsg(`✓ borrowed ${debt} USDG against ${coll} ${token === ADDR.aapl ? "AAPL" : "NVDA"} — your position is a Note you can repay anytime`);
+      setMsg(`✓ borrowed ${debt} USDG against ${coll} ${token === ADDR.aapl ? "AAPL" : "NVDA"}. Your position is a Note you can repay anytime`);
       setColl(""); setDebt(""); load(); onDone();
     } catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
@@ -138,7 +138,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
 
   const repay = async (id: bigint, owed: bigint) => {
     setBusy("repay" + id); setMsg(null);
-    try { await flows.repay(a, id, owed); setMsg(`✓ repaid loan #${id} — your collateral is back`); load(); onDone(); }
+    try { await flows.repay(a, id, owed); setMsg(`✓ repaid loan #${id}. Your collateral is back`); load(); onDone(); }
     catch (e) { setMsg(niceError(e)); }
     finally { setBusy(null); }
   };
@@ -147,7 +147,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
 
   return (
     <div className="live-card">
-      <div className="live-h">BORROW — AGAINST STOCK {open
+      <div className="live-h">BORROW AGAINST STOCK {open
         ? <span className="preview-chip live">live now</span>
         : <span className="preview-chip">testnet: coming soon</span>}
       </div>
@@ -165,7 +165,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
 
       {!open ? (
         <div className="live-note">Borrowing against stock isn't live on testnet yet. The testnet stock tokens are
-          simple mocks that don't expose the price data the collateral market needs to size a loan safely — so we've
+          simple mocks that don't expose the price data the collateral market needs to size a loan safely, so we've
           kept borrowing closed rather than open a position we can't price honestly. It's on the roadmap; supplying
           USDG to earn (above) works today.</div>
       ) : !haveStock ? (
@@ -189,10 +189,10 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
             <span className="lend-unit">USDG</span>
             <button className="btn btn-gold" disabled={!!busy || !(parseFloat(debt) > 0)} onClick={doBorrow}>{busy === "borrow" ? "borrowing…" : "Borrow"}</button>
           </div>
-          {maxDebt !== null && <div className="live-note num">You can borrow up to <b>{fmt(maxDebt, 2)} USDG</b> against this — a conservative 35% of the stock's value, which leaves a wide buffer. It's still a loan: if the stock falls far enough, your collateral can be <b>liquidated</b> to cover the debt. Repay anytime to get it back.</div>}
+          {maxDebt !== null && <div className="live-note num">You can borrow up to <b>{fmt(maxDebt, 2)} USDG</b> against this: a conservative 35% of the stock's value, which leaves a wide buffer. It's still a loan: if the stock falls far enough, your collateral can be <b>liquidated</b> to cover the debt. Repay anytime to get it back.</div>}
         </>
       )}
-      <div className="live-note">Your loan is a Note — a transferable position that carries its debt, its collateral, and
+      <div className="live-note">Your loan is a Note, a transferable position that carries its debt, its collateral, and
         its solvency with it. Repay anytime to get the collateral back. <a href={`${NET.explorer}/address/${ADDR.pool}`} target="_blank" rel="noreferrer">the pool ↗</a></div>
       {msg && <div className="live-msg">{msg}</div>}
     </div>
@@ -222,7 +222,7 @@ function DcaPanel({ a }: { a: Address }) {
     setBusy("create"); setMsg(null);
     try {
       await flows.createDca(a, stock, parseUnits(perFill, 18), BigInt(freq), n);
-      setMsg("✓ Auto-stack started — fills run automatically during US market hours."); setPerFill(""); setCount(""); load();
+      setMsg("✓ Auto-stack started. Fills run automatically during US market hours."); setPerFill(""); setCount(""); load();
     } catch (e) { setMsg(niceError(e)); } finally { setBusy(null); }
   };
 
@@ -239,7 +239,7 @@ function DcaPanel({ a }: { a: Address }) {
   return (
     <div className="live-card" style={{ marginTop: 16 }}>
       <div className="live-h">AUTO-STACK INTO STOCK <span className="preview-chip">DCA</span></div>
-      <div className="live-note" style={{ marginBottom: 12 }}>Dollar-cost-average into stock — a recurring USDG→stock buy that runs on its own. <b>Your funds stay in your wallet</b>: each buy pulls only that buy's USDG (cancel or revoke the allowance anytime). Fills settle at an oracle-fair price within a ≤5% floor, <b>during US market hours</b>, executed by Essey's keeper. Testnet, play money.</div>
+      <div className="live-note" style={{ marginBottom: 12 }}>Dollar-cost-average into stock: a recurring USDG→stock buy that runs on its own. <b>Your funds stay in your wallet</b>: each buy pulls only that buy's USDG (cancel or revoke the allowance anytime). Fills settle at an oracle-fair price within a ≤5% floor, <b>during US market hours</b>, executed by Essey's keeper. Testnet, play money.</div>
       <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
         <select value={stock} onChange={(e) => setStock(e.target.value as Address)} style={{ ...dcaInput, flex: "0 0 90px" }} aria-label="stock">
           <option value={ADDR.aapl}>AAPL</option><option value={ADDR.nvda}>NVDA</option>
@@ -251,7 +251,7 @@ function DcaPanel({ a }: { a: Address }) {
         <input className="live-input" placeholder="# buys" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} style={{ ...dcaInput, flex: "0 0 90px" }} />
         <button className="btn btn-gold" disabled={busy === "create"} onClick={create}>{busy === "create" ? "starting…" : "Start Auto-stack →"}</button>
       </div>
-      {total > 0 && <div className="live-note num" style={{ marginTop: 8 }}>Total committed: <b>{total.toLocaleString()}</b> USDG over {count} buys (the allowance you approve — funds stay in your wallet until each fill).</div>}
+      {total > 0 && <div className="live-note num" style={{ marginTop: 8 }}>Total committed: <b>{total.toLocaleString()}</b> USDG over {count} buys (the allowance you approve, with funds staying in your wallet until each fill).</div>}
       {active.length > 0 && (
         <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
           <div className="live-note">Your active Auto-stacks:</div>

@@ -278,13 +278,13 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
         <div className="band-head"><div>
           <span className="eyebrow">Cases</span>
           <h2>Open a Case. Get real stock.</h2>
-          <p>Every pull lands ~the case's value in real stock — <b>the draw only ever decides which name</b>,
+          <p>Every pull lands ~the case's value in real stock. <b>The draw only ever decides which name</b>,
             never how much. Rarity is how rare the name is, not how much it's worth: chasing the gold leaf costs you
             nothing but the spin. Keep it, borrow against it, or sell it back for ~95% of its value.</p>
         </div>
           {live
-            ? <span className="preview-chip live" title="Connected to Robinhood Chain testnet — this opens a real Case on-chain with play money.">LIVE · testnet draw</span>
-            : <span className="preview-chip" title="Connect a wallet on testnet to open a real Case; otherwise the draw is simulated.">simulated — connect to go live</span>}
+            ? <span className="preview-chip live" title="Connected to Robinhood Chain testnet. This opens a real Case on-chain with play money.">LIVE · testnet draw</span>
+            : <span className="preview-chip" title="Connect a wallet on testnet to open a real Case; otherwise the draw is simulated.">simulated · connect to go live</span>}
         </div>
         )}
 
@@ -292,7 +292,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
         <div className="case-row">
           {CASES.map((cd, i) => <CaseBox key={cd.id} c={cd} active={i === caseIdx} onPick={() => pickCase(i)} />)}
         </div>
-        {live && <div className="live-note" style={{ marginTop: 6 }}>On testnet, only the <b>401(k) Pack</b> opens for real — the others preview what's coming at mainnet.</div>}
+        {live && <div className="live-note" style={{ marginTop: 6 }}>On testnet, only the <b>401(k) Pack</b> opens for real. The others preview what's coming at mainnet.</div>}
 
         {/* spin stage */}
         <div className="spin-shell">
@@ -304,14 +304,14 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                   <p>{live ? "The 401(k) Pack" : c.name} · {usd(c.price)} in $ESSEY</p>
                   {live
                     ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN A CASE · LIVE</button>
-                        <i>real draw on testnet — win a multiplier on AAPL, play money</i>
-                        <i>opening needs $ESSEY + USDG + a little gas ETH — grab them free on the <Link className="pf-link gold" to="/start">Quest page ⚡</Link></i></>
+                        <i>real draw on testnet: win a multiplier on AAPL, play money</i>
+                        <i>opening needs $ESSEY + USDG + a little gas ETH. Grab them free on the <Link className="pf-link gold" to="/start">Quest page ⚡</Link></i></>
                     : w.address && !w.chainOk
                       ? <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
-                          <i>simulated draw — <span className="live-connect"><ConnectButton /></span> to open a real one</i></>
+                          <i>simulated draw, <span className="live-connect"><ConnectButton /></span> to open a real one</i></>
                       : <><button className="btn btn-gold spin-cta" onClick={spin}>OPEN {c.name.toUpperCase()}</button>
-                          <i>simulated — <span className="live-connect"><ConnectButton /></span> to go live</i></>}
-                  {rollErr && <div className="spin-stage-label num err" style={{ position: "static", marginTop: 12 }}>{rollErr} — the roll didn't go through, so nothing was drawn. Try again.</div>}
+                          <i>simulated, <span className="live-connect"><ConnectButton /></span> to go live</i></>}
+                  {rollErr && <div className="spin-stage-label num err" style={{ position: "static", marginTop: 12 }}>{rollErr}. The roll didn't go through, so nothing was drawn. Try again.</div>}
                 </div>
               ) : (
                 <>
@@ -338,7 +338,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
               </div>
               <div className="reveal-actions">
                 {sold
-                  ? <div className="reveal-sold num">{sellMsg ?? (live ? "withdrawn to your wallet" : "preview only — connect to play for real")}</div>
+                  ? <div className="reveal-sold num">{sellMsg ?? (live ? "withdrawn to your wallet" : "preview only, connect to play for real")}</div>
                   : <>
                     <button className="btn btn-gold" onClick={again}>Roll again</button>
                     <button className="btn btn-ghost" disabled={sellBusy} onClick={collect}>{sellBusy ? "withdrawing…" : "Withdraw to wallet"}</button>
@@ -346,7 +346,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
                 {sold && <button className="linklike" onClick={again}>roll again →</button>}
               </div>
               {sellMsg && !sold && <div className="reveal-verify num" style={{ color: "var(--crit)" }}>{sellMsg}</div>}
-              <div className="reveal-verify num">{live ? "your winnings are stock — withdraw to your wallet, then borrow against it on Lend" : "a multiplier roll — win more or less than you paid · live when you connect"}</div>
+              <div className="reveal-verify num">{live ? "your winnings are stock. withdraw to your wallet, then borrow against it on Lend" : "a multiplier roll: win more or less than you paid · live when you connect"}</div>
             </div>
           )}
         </div>
@@ -372,7 +372,7 @@ export function CasesArcade({ embedded }: { embedded?: boolean } = {}) {
             })}
           </div>
           <div className="cc-legend">
-            <span className="cc-legend-note">Bigger multiples are rarer. Like any multiplier game, <b>an average roll returns less than it costs</b> — the full ladder is on-chain, so anyone can verify the odds. Play money, testnet.</span>
+            <span className="cc-legend-note">Bigger multiples are rarer. Like any multiplier game, <b>an average roll returns less than it costs</b>. The full ladder is on-chain, so anyone can verify the odds. Play money, testnet.</span>
           </div>
         </div>
 
@@ -401,7 +401,7 @@ export function CasesPage() {
           <div className="band-head"><div>
             <span className="eyebrow">Cases</span>
             <h2>Open a Case. Roll for stock.</h2>
-            <p>A <b>provably-fair</b> multiplier roll, backed by real stock <b>before</b> you open — win
+            <p>A <b>provably-fair</b> multiplier roll, backed by real stock <b>before</b> you open. Win
               <b> more or less</b> than you paid, from 0.65× to a 50× Gold Bell. Open 24/7.</p>
           </div>
             <span className="preview-chip live">testnet</span>

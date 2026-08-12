@@ -39,7 +39,7 @@ export function TickerTapeRail() {
       <a className="tape-rail-tag" href="/tape">THE TAPE</a>
       <div className="tape-rail-view">
         {rows.length === 0 ? (
-          <span className="tape-quiet num">— quiet right now · the Tape prints every trade, ring, draw and loan as it happens —</span>
+          <span className="tape-quiet num">quiet right now · the Tape prints every trade, ring, draw and loan as it happens</span>
         ) : still ? (
           <div className="tape-static">
             {rows.slice(0, 4).map((r) => <a key={r.key} className="tape-cell" href={txUrl(r.tx)} target="_blank" rel="noreferrer"><RowText r={r} /></a>)}
@@ -92,7 +92,7 @@ export function TapeRoom() {
         <div className="band-head"><div>
           <span className="eyebrow">The Tape</span>
           <h2>Every receipt, live</h2>
-          <p>Everything the club does, printed as it happens on Robinhood Chain testnet — and every line links
+          <p>Everything the club does, printed as it happens on Robinhood Chain testnet, and every line links
             the real transaction. The <b>⬡ proven only</b> filter shows just the events whose correctness is
             checkable on-chain: rings, payouts, fair draws, solvent loans.</p>
         </div>
@@ -110,7 +110,7 @@ export function TapeRoom() {
             <div className="tape-empty">Reading the chain…</div>
           ) : shown.length === 0 ? (
             <div className="tape-empty">{rows.length === 0
-              ? "No events in the recent window — the club is quiet. Play a flow and watch it print here."
+              ? "No events in the recent window. The club is quiet. Play a flow and watch it print here."
               : "Nothing in this filter yet."}</div>
           ) : (
             shown.map((r) => (

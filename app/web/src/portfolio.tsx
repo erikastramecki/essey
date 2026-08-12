@@ -38,7 +38,7 @@ export function PortfolioPage() {
         <div className="band-head"><div>
           <span className="eyebrow">Portfolio</span>
           <h2>Your Essey</h2>
-          <p>Everything you hold on testnet — balances, Dons and their Tiers, the Payouts sitting in each
+          <p>Everything you hold on testnet: balances, Dons and their Tiers, the Payouts sitting in each
             Vault, and the stock you've drawn from Cases. Come back here to do it all again.</p>
         </div>
         </div>
@@ -79,7 +79,7 @@ export function PortfolioPage() {
               ) : (
                 <>
                 {floor && floor.floor > 0n && (
-                  <div className="pf-note" style={{ marginBottom: 10 }}>🛡 <b>Every Don has a hard floor.</b> Redeem one for <b>≥ {fmt(floor.floor, 2)} $ESSEY</b> from the reserve, anytime — that's the reserve ({fmt(floor.reserve, 0)} $ESSEY) split across the {floor.backed.toString()} Dons it backs, and it only ever rises. Redeeming <b>locks the Don</b> and forfeits its membership and Vault.</div>
+                  <div className="pf-note" style={{ marginBottom: 10 }}>🛡 <b>Every Don has a hard floor.</b> Redeem one for <b>≥ {fmt(floor.floor, 2)} $ESSEY</b> from the reserve, anytime. That's the reserve ({fmt(floor.reserve, 0)} $ESSEY) split across the {floor.backed.toString()} Dons it backs, and it only ever rises. Redeeming <b>locks the Don</b> and forfeits its membership and Vault.</div>
                 )}
                 <div className="pf-seats">
                   {p.dons.map((s) => (
@@ -96,9 +96,9 @@ export function PortfolioPage() {
               <div className="pf-lend num">
                 {p.pool.mine > 0n
                   ? <span className="pf-lend-item">supplied <b>{fmt(p.pool.mine, 2)}</b> USDG <i>@ {p.pool.supplyApy.toFixed(2)}% APY</i></span>
-                  : <span className="pf-note">not supplying yet — supply USDG to earn {p.pool.supplyApy.toFixed(2)}% APY →</span>}
+                  : <span className="pf-note">not supplying yet. Supply USDG to earn {p.pool.supplyApy.toFixed(2)}% APY →</span>}
                 {p.loans.length === 0
-                  ? <span className="pf-note">no open loans{p.wins.aapl > 0n || p.wins.nvda > 0n ? " — you hold stock (borrowing against it is coming to testnet)" : ""}.</span>
+                  ? <span className="pf-note">no open loans{p.wins.aapl > 0n || p.wins.nvda > 0n ? " (you hold stock; borrowing against it is coming to testnet)" : ""}.</span>
                   : p.loans.map((l) => <span className="pf-lend-item" key={l.id.toString()}>Loan #{l.id.toString()} · owe <b>{fmt(l.debt, 2)}</b> USDG</span>)}
               </div>
             </div>
@@ -112,7 +112,7 @@ export function PortfolioPage() {
                 <div className="pf-wins num">
                   {p.wins.aapl > 0n && <span className="pf-win">AAPL <b>{fmt(p.wins.aapl, 2)}</b></span>}
                   {p.wins.nvda > 0n && <span className="pf-win">NVDA <b>{fmt(p.wins.nvda, 2)}</b></span>}
-                  <span className="pf-note">real testnet stock tokens — held in your wallet; borrow against them on <Link to="/lend">Lend</Link>.</span>
+                  <span className="pf-note">real testnet stock tokens, held in your wallet; borrow against them on <Link to="/lend">Lend</Link>.</span>
                 </div>
               )}
             </div>
@@ -156,18 +156,18 @@ function DonSeat({ s, a, floor, facility, busy, run }: {
 
   const doBorrow = () => a && facility && run("borrow" + s.id,
     () => flows.borrowAgainstDon(a, s.id, termSecs),
-    `✓ Borrowed ${fmt(draw, 2)} $ESSEY against Don #${s.id} — it's liened until you repay.`);
+    `✓ Borrowed ${fmt(draw, 2)} $ESSEY against Don #${s.id}. It's liened until you repay.`);
   const doRepay = () => a && run("repay" + s.id,
     () => flows.repayDonLoan(a, s.id, s.debt),
-    `✓ Repaid Don #${s.id}'s loan — the lien is lifted.`);
+    `✓ Repaid Don #${s.id}'s loan. The lien is lifted.`);
 
   return (
     <div className="pf-seat">
       <div className="pf-seat-top">
         <span className="pf-seat-id num">Don #{s.id.toString()}</span>
         <span className={"pf-tier" + (s.tier > 0 ? " on" : "")}>{s.tier === 0 ? "Base" : (TIERS[s.tier - 1]?.name ?? `Tier ${s.tier}`)}</span>
-        {s.locked && <span className="pf-tier on" title="This Don's traits are frozen forever — staking locks the art.">🔒 art locked</span>}
-        {s.liened && <span className="pf-tier on" title="Borrowed against — locked until repaid. It stays in your wallet, staked and earning, but can't be sold, redeemed, or swapped until the debt clears.">📜 borrowed — locked until repaid</span>}
+        {s.locked && <span className="pf-tier on" title="This Don's traits are frozen forever; staking locks the art.">🔒 art locked</span>}
+        {s.liened && <span className="pf-tier on" title="Borrowed against, locked until repaid. It stays in your wallet, staked and earning, but can't be sold, redeemed, or swapped until the debt clears.">📜 borrowed, locked until repaid</span>}
       </div>
       <div className="pf-seat-row num">
         <span>ready to claim: <b>{fmt(s.pending, 4)}</b> USDG</span>
@@ -186,13 +186,13 @@ function DonSeat({ s, a, floor, facility, busy, run }: {
           : s.tier === 0 ? <Link className="pf-link gold" to="/bell">stake →</Link>
           : <Link className="pf-link" to="/bell">upgrade →</Link>}
         {s.liened ? (
-          <button className="pf-link gold pf-inline-btn" disabled={!!busy} title="Repay the loan in $ESSEY (1:1, flat — interest was prepaid in ETH). Clears the debt and lifts the lien."
+          <button className="pf-link gold pf-inline-btn" disabled={!!busy} title="Repay the loan in $ESSEY (1:1, flat; interest was prepaid in ETH). Clears the debt and lifts the lien."
             onClick={doRepay}>{busy === "repay" + s.id ? "repaying…" : `repay ${fmt(s.debt, 2)} $ESSEY`}</button>
         ) : (
           <>
             {floor && floor.floor > 0n && (
               <button className="pf-link pf-inline-btn" disabled={!!busy} title="Redeem this Don for its $ESSEY floor. This locks the Don and forfeits its membership and Vault."
-                onClick={() => a && run("redeem" + s.id, () => flows.redeemDonFloor(a, s.id), `✓ Don #${s.id} redeemed for ${fmt(floor.floor, 2)} $ESSEY — membership forfeited.`)}>
+                onClick={() => a && run("redeem" + s.id, () => flows.redeemDonFloor(a, s.id), `✓ Don #${s.id} redeemed for ${fmt(floor.floor, 2)} $ESSEY. Membership forfeited.`)}>
                 {busy === "redeem" + s.id ? "redeeming…" : `redeem ↓ ${fmt(floor.floor, 2)} $ESSEY`}
               </button>
             )}
@@ -212,16 +212,16 @@ function DonSeat({ s, a, floor, facility, busy, run }: {
               onChange={(e) => setTermDays(+e.target.value)} aria-label="Loan term in days" />
           </div>
           <div className="pf-borrow-stats num">
-            <span>draw <b>{fmt(draw, 2)} $ESSEY</b> <i>(50% of the floor, flat debt — repay 1:1)</i></span>
+            <span>draw <b>{fmt(draw, 2)} $ESSEY</b> <i>(50% of the floor, flat debt, repay 1:1)</i></span>
             <span>interest: <b>{prepaid === null ? "…" : prepaid === 0n ? "free" : `${formatEther(prepaid)} ETH`}</b> <i>prepaid, once</i></span>
             <span>due <b>{fmtDate(dueSec)}</b> · liquidatable after <b>{fmtDate(dueSec + GRACE_DAYS * DAY)}</b></span>
           </div>
-          {potShort && <div className="pf-note">The loan pot is short right now — only {fmt(facility!.lendable, 2)} $ESSEY lendable, less than the {fmt(draw, 2)} draw. Try again once it's refunded.</div>}
+          {potShort && <div className="pf-note">The loan pot is short right now: only {fmt(facility!.lendable, 2)} $ESSEY lendable, less than the {fmt(draw, 2)} draw. Try again once it's refunded.</div>}
           <button className="btn btn-gold pf-borrow-go" disabled={!canBorrow}
             onClick={doBorrow}>
             {busy === "borrow" + s.id ? "borrowing…" : !a ? "connect a wallet to borrow" : `Borrow ${fmt(draw, 2)} $ESSEY`}
           </button>
-          <div className="pf-note">The Don stays in your wallet — still staked, still earning stock — but can't be sold, redeemed, or swapped until you repay. Miss the due date (term + a {GRACE_DAYS}-day grace) and it can be liquidated: redeemed at the floor to clear the debt, surplus back to you, but the Don and its Vault are forfeited.</div>
+          <div className="pf-note">The Don stays in your wallet (still staked, still earning stock) but can't be sold, redeemed, or swapped until you repay. Miss the due date (term + a {GRACE_DAYS}-day grace) and it can be liquidated: redeemed at the floor to clear the debt, surplus back to you, but the Don and its Vault are forfeited.</div>
         </div>
       )}
     </div>

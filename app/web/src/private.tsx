@@ -145,7 +145,7 @@ export function PrivatePage() {
   const pickNote = (raw: bigint): PoolNote => {
     const note = [...pool.notes].sort((x, y) => (BigInt(y.amount) > BigInt(x.amount) ? 1 : -1))[0];
     if (!note) throw new Error("Nothing shielded yet.");
-    if (raw > BigInt(note.amount)) throw new Error(`That's more than your largest single note (${maxHint}). Each transaction spends one note at a time — withdraw/send in steps.`);
+    if (raw > BigInt(note.amount)) throw new Error(`That's more than your largest single note (${maxHint}). Each transaction spends one note at a time, so withdraw/send in steps.`);
     return note;
   };
 
@@ -170,19 +170,19 @@ export function PrivatePage() {
     await rescan(keys, selPool);
     const reg = !!(await lookupPoolAccount(selPool, a));
     if (scanGen.current === g) setPoolReg(reg);
-  }, "✓ Unlocked — scanning your shielded balance.");
+  }, "✓ Unlocked. Scanning your shielded balance.");
 
   const registerPool = () => a && poolKeys && run("registerPool", async () => {
     await flows.registerPool(a, poolKeys, selPool);
     setPoolReg(true);
-  }, `✓ Registered — others can now send you shielded ${selPool.label} in-pool.`);
+  }, `✓ Registered. Others can now send you shielded ${selPool.label} in-pool.`);
 
   const shield = () => a && poolKeys && run("shield", async () => {
     const amt = parseUnits(shieldAmt || "0", isSupply ? USDG_DECIMALS : selPool.decimals);
     if (amt <= 0n) throw new Error("Enter an amount to shield.");
     await flows.shieldDeposit(a, amt, poolKeys, selPool, setStage);
     setShieldAmt(""); await rescan(poolKeys, selPool);
-  }, isSupply ? "✓ Supplied privately — your position and its yield are now hidden." : "✓ Shielded — your balance is now private.");
+  }, isSupply ? "✓ Supplied privately. Your position and its yield are now hidden." : "✓ Shielded. Your balance is now private.");
 
   const unshield = () => a && poolKeys && runRelayable("unshield", isSupply ? "withdrawal" : "unshield",
     async () => {
@@ -193,7 +193,7 @@ export function PrivatePage() {
       await flows.shieldWithdraw(a, pickNote(raw), raw, dest, poolKeys, viaRelayer, selPool, setStage);
     },
     async () => { setUnshieldAmt(""); await rescan(poolKeys, selPool); },
-    isSupply ? "✓ Withdrawn — USDG plus accrued yield sent to your address." : "✓ Unshielded to your chosen address.");
+    isSupply ? "✓ Withdrawn. USDG plus accrued yield sent to your address." : "✓ Unshielded to your chosen address.");
 
   const transfer = () => a && poolKeys && runRelayable("xfer", "private transfer",
     async () => {
@@ -204,7 +204,7 @@ export function PrivatePage() {
       await flows.shieldTransfer(a, dest as Address, raw, pickNote(raw), poolKeys, viaRelayer, selPool, setStage);
     },
     async () => { setXferAmt(""); await rescan(poolKeys, selPool); },
-    "✓ Sent privately — it will appear in the recipient's shielded balance.");
+    "✓ Sent privately. It will appear in the recipient's shielded balance.");
 
   const register = () => a && run("register", async () => {
     const k = await flows.registerStealth(a);
@@ -215,7 +215,7 @@ export function PrivatePage() {
     const k = await flows.unlockStealth(a);
     setKeys(k);
     await refreshInbox(k);
-  }, "✓ Unlocked — scanning your private inbox.");
+  }, "✓ Unlocked. Scanning your private inbox.");
 
   const refreshInbox = async (k: StealthKeys) => {
     const held = await scanPrivateInbox(k.viewPriv, k.spendPub);
@@ -255,8 +255,8 @@ export function PrivatePage() {
         <div className="band-head"><div>
           <span className="eyebrow">Essey Private</span>
           <h2>Private balances. Private payments.</h2>
-          <p>Two ways to move without being watched: <b>shielded pools</b> that hide your balance and amounts —
-            for USDG, AAPL/NVDA stock, and yield-bearing supply — and <b>stealth addresses</b> that hide who
+          <p>Two ways to move without being watched: <b>shielded pools</b> that hide your balance and amounts
+            (for USDG, AAPL/NVDA stock, and yield-bearing supply), and <b>stealth addresses</b> that hide who
             you're paid as. Both on Robinhood Chain, both testnet.</p>
         </div>
           <span className="preview-chip">Experimental · P0</span>
@@ -264,7 +264,7 @@ export function PrivatePage() {
 
         <div className="live-card" style={{ marginBottom: 16 }}>
           <div className="live-note" style={{ lineHeight: 1.5 }}>
-            <b>What this is.</b> Two privacy tools. The <b>shielded pools</b> (below) hide amounts — your balance and
+            <b>What this is.</b> Two privacy tools. The <b>shielded pools</b> (below) hide amounts: your balance and
             in-pool transfers are private, and deposits can't be linked to withdrawals; pick USDG, a stock (AAPL/NVDA),
             or private yield-bearing supply. <b>Stealth addresses</b> hide the link between your identity and where
             you're paid (amounts there stay public). Both grow stronger the more people use them. Experimental, testnet only.
@@ -278,7 +278,7 @@ export function PrivatePage() {
         ) : (
           <>
             <div className="pf-note" style={{ marginBottom: 12 }}>
-              New here? Every action needs a little testnet <b>gas ETH</b>, and shielding needs <b>play-money tokens</b> — grab both free on the <Link className="pf-link gold" to="/start">Quest page ⚡</Link>.
+              New here? Every action needs a little testnet <b>gas ETH</b>, and shielding needs <b>play-money tokens</b>. Grab both free on the <Link className="pf-link gold" to="/start">Quest page ⚡</Link>.
             </div>
             {/* 0 — shielded pools (hide amounts) — the flagship. Parametrized: USDG / AAPL / NVDA / private-yield. */}
             <div className="pf-block">
@@ -298,7 +298,7 @@ export function PrivatePage() {
               {!poolKeys ? (
                 <div className="live-card"><div className="live-row" style={{ flexWrap: "wrap", gap: 12 }}>
                   <span className="live-note" style={{ flex: "1 1 320px" }}>
-                    {selPool.blurb} Sign once to unlock — <b>no gas, no approvals, nothing spent, just a signature</b>. The
+                    {selPool.blurb} Sign once to unlock: <b>no gas, no approvals, nothing spent, just a signature</b>. The
                     same keys work across every pool, and your notes are recovered by scanning the chain, so they follow you
                     across devices (and include anything others have sent you).
                   </span>
@@ -320,18 +320,18 @@ export function PrivatePage() {
                   )}
                   <div className="pf-note" style={{ marginBottom: 14 }}>
                     {isSupply
-                      ? <>Your supply position and the yield it earns are hidden — the note's share count is fixed, but the shares appreciate as interest accrues. Withdraw any time to receive USDG plus accrued yield.</>
-                      : <>Your balance and any in-pool transfer are hidden, and the pool breaks the deposit↔withdrawal link. Deposit/withdraw <b>amounts</b> are public (matching amounts can re-link on a small pool — unshield to a fresh address).</>}
+                      ? <>Your supply position and the yield it earns are hidden. The note's share count is fixed, but the shares appreciate as interest accrues. Withdraw any time to receive USDG plus accrued yield.</>
+                      : <>Your balance and any in-pool transfer are hidden, and the pool breaks the deposit↔withdrawal link. Deposit/withdraw <b>amounts</b> are public (matching amounts can re-link on a small pool, so unshield to a fresh address).</>}
                     <button className="pf-link gold pf-inline-btn" disabled={!!busy} onClick={() => { if (poolKeys) run("rescan", () => rescan(poolKeys, selPool), "✓ Rescanned."); }}>rescan</button>
                   </div>
 
                   {pool.notes.length > 1 && (
-                    <div className="pf-note" style={{ marginBottom: 14 }}>Your balance is made of separate deposits ("notes"); each transaction spends one at a time. Largest single withdrawal or transfer: <b>{maxHint}</b> — larger amounts go in steps.</div>
+                    <div className="pf-note" style={{ marginBottom: 14 }}>Your balance is made of separate deposits ("notes"); each transaction spends one at a time. Largest single withdrawal or transfer: <b>{maxHint}</b>. Larger amounts go in steps.</div>
                   )}
 
                   {selPool.stock && impaired && (
                     <div className="live-card" style={{ marginBottom: 12, borderColor: "var(--gold, #c9a227)" }}>
-                      <div className="pf-note" style={{ margin: 0 }}>⚠ <b>Backing impaired.</b> The issuer has burned some of this pool's stock, so withdrawals now pay a <b>pro-rata share</b> of what remains — the loss is split fairly across all holders, in the same proportion no matter when you exit. New deposits are closed until the backing is restored.</div>
+                      <div className="pf-note" style={{ margin: 0 }}>⚠ <b>Backing impaired.</b> The issuer has burned some of this pool's stock, so withdrawals now pay a <b>pro-rata share</b> of what remains. The loss is split fairly across all holders, in the same proportion no matter when you exit. New deposits are closed until the backing is restored.</div>
                     </div>
                   )}
 
@@ -346,7 +346,7 @@ export function PrivatePage() {
 
                   <label className="pf-note" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
                     <input type="checkbox" checked={viaRelayer} onChange={(e) => setViaRelayer(e.target.checked)} />
-                    <span>Withdraw / send <b>via relayer</b> — the relayer submits for you, so the tx doesn't come from your wallet (hides your tx-origin) and costs you no gas. Uncheck to submit yourself.</span>
+                    <span>Withdraw / send <b>via relayer</b>: the relayer submits for you, so the tx doesn't come from your wallet (hides your tx-origin) and costs you no gas. Uncheck to submit yourself.</span>
                   </label>
 
                   {/* Relayer-unavailable fallback — explicit, consented downgrade. Never auto-switches; the
@@ -354,7 +354,7 @@ export function PrivatePage() {
                   {relayFallback && (
                     <div className="live-card" style={{ marginBottom: 14, borderColor: "var(--gold, #c9a227)" }}>
                       <div className="pf-note" style={{ margin: "0 0 10px", lineHeight: 1.5 }}>
-                        ⚠ <b>Gasless relay is unavailable right now.</b> You can complete this {relayFallback.noun} yourself — but
+                        ⚠ <b>Gasless relay is unavailable right now.</b> You can complete this {relayFallback.noun} yourself, but
                         submitting directly makes the transaction come <b>from your own wallet</b>, revealing your address on-chain.
                         The relay exists precisely to hide it. Your proof is already built; this only changes who submits it.
                       </div>
@@ -368,7 +368,7 @@ export function PrivatePage() {
                   )}
 
                   {/* Shield (deposit) */}
-                  <div className="pf-note" style={{ marginBottom: 6 }}>Heads-up: your <b>first</b> shield downloads a one-time ~12 MB proving key, so it takes ~30s (quick after that). The proof runs entirely in your browser — nothing is sent anywhere.</div>
+                  <div className="pf-note" style={{ marginBottom: 6 }}>Heads-up: your <b>first</b> shield downloads a one-time ~12 MB proving key, so it takes ~30s (quick after that). The proof runs entirely in your browser, so nothing is sent anywhere.</div>
                   <div className="live-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                     <input className="live-input" placeholder={`amount to ${isSupply ? "supply" : "shield"} (${inputUnit})`} inputMode="decimal"
                       value={shieldAmt} onChange={(e) => setShieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
@@ -379,20 +379,20 @@ export function PrivatePage() {
 
                   {/* Send privately in-pool (transfer) */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--line, #333)", paddingTop: 14, marginBottom: 14 }}>
-                    <div className="live-note">Send privately to another user (in-pool — nothing is unshielded):</div>
+                    <div className="live-note">Send privately to another user (in-pool, nothing is unshielded):</div>
                     <input className="live-input" placeholder="recipient wallet address (0x…)" value={xferTo} onChange={(e) => setXferTo(e.target.value)} style={inputStyle} />
                     <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
                       <input className="live-input" placeholder={`amount to send (${inputUnit})`} inputMode="decimal" value={xferAmt} onChange={(e) => setXferAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
                       <button className="btn" disabled={!!busy || pool.balance === 0n} onClick={transfer}>{busy === "xfer" ? (stage ? stage + "…" : "sending…") : "Send in-pool →"}</button>
                     </div>
-                    <div className="pf-note">The recipient must have unlocked + registered <b>in this pool</b>. It appears in their shielded balance — no amount leaves the pool, so it's fully private.</div>
+                    <div className="pf-note">The recipient must have unlocked + registered <b>in this pool</b>. It appears in their shielded balance; no amount leaves the pool, so it's fully private.</div>
                   </div>
 
                   {/* Unshield (withdraw) */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--line, #333)", paddingTop: 14 }}>
                     <div className="live-note">{isSupply ? "Withdraw (USDG + yield) to:" : "Unshield to:"}</div>
                     <input className="live-input" placeholder="destination address (0x…)" value={unshieldTo} onChange={(e) => setUnshieldTo(e.target.value)} style={inputStyle} />
-                    <div className="pf-note">⚠ Withdrawing to your own main wallet — or in an amount that matches your deposit — can re-link you on a small pool. Use a <b>fresh</b> address for stronger privacy.</div>
+                    <div className="pf-note">⚠ Withdrawing to your own main wallet (or in an amount that matches your deposit) can re-link you on a small pool. Use a <b>fresh</b> address for stronger privacy.</div>
                     <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
                       <input className="live-input" placeholder={`amount to ${isSupply ? "withdraw" : "unshield"} (${inputUnit})`} inputMode="decimal"
                         value={unshieldAmt} onChange={(e) => setUnshieldAmt(e.target.value)} style={{ ...inputStyle, flex: "1 1 160px" }} />
@@ -404,8 +404,8 @@ export function PrivatePage() {
                   </div>
 
                   <div className="pf-note" style={{ marginTop: 12 }}>
-                    Notes are encrypted to your key and stored on-chain, so they recover from any device by scanning —
-                    nothing is tied to this browser. Experimental, testnet only.
+                    Notes are encrypted to your key and stored on-chain, so they recover from any device by scanning.
+                    Nothing is tied to this browser. Experimental, testnet only.
                   </div>
                 </div>
               )}
@@ -418,8 +418,8 @@ export function PrivatePage() {
                 <div className="live-card"><div className="live-row" style={{ flexWrap: "wrap", gap: 12 }}>
                   <span className="live-note" style={{ flex: "1 1 320px" }}>
                     {registered === false
-                      ? "Sign once to create your stealth keys and publish your receiving address. No gas, no approvals — just a signature."
-                      : "Sign once to unlock your stealth keys on this device and scan for private payments. Same signature every time — it recreates the same keys."}
+                      ? "Sign once to create your stealth keys and publish your receiving address. No gas, no approvals, just a signature."
+                      : "Sign once to unlock your stealth keys on this device and scan for private payments. Same signature every time; it recreates the same keys."}
                   </span>
                   {registered === false
                     ? <button className="btn btn-gold" disabled={busy === "register"} onClick={register}>{busy === "register" ? "signing…" : "Set up private address"}</button>
@@ -427,7 +427,7 @@ export function PrivatePage() {
                 </div></div>
               ) : (
                 <div className="live-card">
-                  <div className="live-note" style={{ marginBottom: 8 }}>Your reusable receiving handle — share it, or just tell senders your wallet address (it resolves to this):</div>
+                  <div className="live-note" style={{ marginBottom: 8 }}>Your reusable receiving handle. Share it, or just tell senders your wallet address (it resolves to this):</div>
                   <div className="num" style={{ wordBreak: "break-all", fontSize: 12, opacity: 0.85, marginBottom: 10 }}>{keys.metaAddress}</div>
                   <div className="live-row" style={{ gap: 10 }}>
                     <button className="pf-link" onClick={() => navigator.clipboard?.writeText(keys.metaAddress)}>copy meta-address</button>
@@ -465,7 +465,7 @@ export function PrivatePage() {
                 <div className="live-card" style={{ marginBottom: 12 }}>
                   <div className="live-note" style={{ marginBottom: 8 }}>Sweep received funds to:</div>
                   <input className="live-input" placeholder="destination address (0x…)" value={sweepTo} onChange={(e) => setSweepTo(e.target.value)} style={inputStyle} />
-                  <div className="pf-note" style={{ marginTop: 8 }}>⚠ Sweeping spends gas from your <b>main wallet</b> and moves the funds to the address above — both write an on-chain link between the one-time address and those wallets. For stronger unlinkability, sweep to a <b>fresh</b> address; relayer-funded gas (no main-wallet link) comes in a later phase.</div>
+                  <div className="pf-note" style={{ marginTop: 8 }}>⚠ Sweeping spends gas from your <b>main wallet</b> and moves the funds to the address above. Both write an on-chain link between the one-time address and those wallets. For stronger unlinkability, sweep to a <b>fresh</b> address; relayer-funded gas (no main-wallet link) comes in a later phase.</div>
                 </div>
               )}
               {!keys ? (
@@ -473,7 +473,7 @@ export function PrivatePage() {
               ) : inbox === null ? (
                 <div className="pf-empty">Scanning…</div>
               ) : inbox.length === 0 ? (
-                <div className="pf-empty">No private payments found yet. When someone pays your address, it shows up here — visible only to you.</div>
+                <div className="pf-empty">No private payments found yet. When someone pays your address, it shows up here, visible only to you.</div>
               ) : (
                 <div className="pf-seats">
                   {inbox.map((h) => (
@@ -497,12 +497,12 @@ export function PrivatePage() {
                   ))}
                 </div>
               )}
-              {keys && <div className="pf-note" style={{ marginTop: 10 }}>Your stealth keys are derived from one signature and live in this browser tab only — never stored or sent. Sign again anytime to recover them on another device (standard EOA wallets only).</div>}
+              {keys && <div className="pf-note" style={{ marginTop: 10 }}>Your stealth keys are derived from one signature and live in this browser tab only, never stored or sent. Sign again anytime to recover them on another device (standard EOA wallets only).</div>}
             </div>
 
             {msg && <div className="live-msg" style={{ marginTop: 14 }}>{msg}</div>}
             <div className="pf-note" style={{ marginTop: 18 }}>
-              New here? <Link to="/portfolio" className="pf-link">Portfolio</Link> shows your public balances. Essey Private is an early primitive — expect rough edges.
+              New here? <Link to="/portfolio" className="pf-link">Portfolio</Link> shows your public balances. Essey Private is an early primitive, so expect rough edges.
             </div>
           </>
         )}

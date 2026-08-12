@@ -314,7 +314,7 @@ function availReason(
   const ZH = new Set(["13 Hair", "15 Eye Mod", "16 Glasses", "17 Face Mod", "22 Hat", "23 Ceasar", "24 Laser Eye"]);
   if (["Zombie", "Golden", "Glitch"].includes(cx.family) && ZH.has(cat))
     return `${cx.family} bodies show no face or head accessories`;
-  if (cat === "18 Canes") return cx.grip ? `needs a free hand — you're holding the ${stripName(cx.grip)}` : `needs a free hand`;
+  if (cat === "18 Canes") return cx.grip ? `needs a free hand (you're holding the ${stripName(cx.grip)})` : `needs a free hand`;
   if (cat === "25 Snake") {
     if (cx.grip && cx.SG.has(cx.grip)) return `won't drape over the ${stripName(cx.grip)} in your hand`;
     if (cx.cane) return `can't share the hand with your ${stripName(cx.cane)} cane`;
