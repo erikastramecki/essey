@@ -268,10 +268,21 @@ export function BuilderPage() {
     } catch { setRsv({ status: "offline" }); }
   }, [res, gender, eff, seed, wallet]);
 
+  // Register a minted Don's trait preimage so its REAL art renders (was a gap: only the optional
+  // "hold combo" button persisted, so un-held mints — and every WL bonus Don — rendered placeholders
+  // forever). Fire-and-forget: the reveal endpoint re-resolves + verifies the combo on-chain by id.
+  const registerReveal = useCallback((sel: { gender: string; forced: Record<string, string>; seed: number }, id?: number) => {
+    void fetch("/api/don-reveal", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...sel, id }),
+    }).catch(() => {}); // best-effort; the owner can always re-reveal from the builder later
+  }, []);
+
   // -------------------------------------------------------------------------- custom mint (~$10)
   const doMint = useCallback(async () => {
     if (!res) return;
     const key = res.key; // pin — picks may change while the tx is in flight
+    const sel = { gender, forced: eff, seed }; // pin the selection for the post-mint reveal
     const combo = comboHash(key);
     setMint({ status: "busy", note: "checking uniqueness…" });
     try {
@@ -300,10 +311,11 @@ export function BuilderPage() {
       if (id === undefined) {
         try { id = Number(await pub.readContract({ address: DON_NET.don, abi: donAbi, functionName: "totalMinted" })); } catch {}
       }
+      registerReveal(sel, id); // record the preimage so the real portrait renders
       setMint({ status: "success", hash, id });
       loadOwned(addr);
     } catch (e: any) { setMint({ status: "error", msg: friendly(e) }); }
-  }, [res, wallet, connect, walletClient, loadOwned]);
+  }, [res, gender, eff, seed, wallet, connect, walletClient, loadOwned, registerReveal]);
 
   // -------------------------------------------------------------------------- WL claim (free)
   const doClaimWl = useCallback(async () => {
@@ -312,15 +324,20 @@ export function BuilderPage() {
     try {
       // N DISTINCT resolver keys: the crafted selection first, then client-side re-rolls (random seeds).
       // If every category is forced, random seeds can't diverge — after a while drop the forced picks.
-      const keys = new Set<string>([res.key]);
+      // Track each roll's SELECTION alongside its key (same order) so every bonus Don can be revealed
+      // post-claim — otherwise the random seeds are discarded and those Dons render placeholders forever.
+      const rolls: { forced: Record<string, string>; seed: number; key: string }[] = [{ forced: eff, seed, key: res.key }];
+      const seen = new Set<string>([res.key]);
       let tries = 0;
-      while (keys.size < wl.allocation && tries < 600) {
+      while (rolls.length < wl.allocation && tries < 600) {
         const s = Math.floor(Math.random() * 1e9);
-        keys.add(resolveSelection(d, tries < 300 ? eff : {}, s).key);
+        const f = tries < 300 ? eff : {};
+        const k = resolveSelection(d, f, s).key;
+        if (!seen.has(k)) { seen.add(k); rolls.push({ forced: f, seed: s, key: k }); }
         tries++;
       }
-      if (keys.size < wl.allocation) { setWlTx({ status: "error", msg: "Couldn't roll enough distinct combos. Clear a few picks and retry." }); return; }
-      const combos = [...keys].map(comboHash);
+      if (rolls.length < wl.allocation) { setWlTx({ status: "error", msg: "Couldn't roll enough distinct combos. Clear a few picks and retry." }); return; }
+      const combos = rolls.map((r) => comboHash(r.key));
       const used = await Promise.all(combos.map((c) =>
         pub.readContract({ address: DON_NET.distributor, abi: distributorAbi, functionName: "usedCombo", args: [c] })));
       if (used[0]) { setWlTx({ status: "error", msg: "Someone got this exact 1-of-1 first. Tweak a trait for a fresh combo." }); return; }
@@ -338,11 +355,14 @@ export function BuilderPage() {
         const logs = parseEventLogs({ abi: distributorAbi, logs: rcpt.logs, eventName: "ClaimedWL" });
         if (logs[0]) firstId = Number(logs[0].args.firstId);
       } catch {}
+      // claimWL mints in `combos` order → firstId maps to rolls[0], firstId+1 to rolls[1], …
+      // Register every rolled selection so ALL claimed Dons (not just the crafted one) get real art.
+      if (firstId !== undefined) rolls.forEach((r, i) => registerReveal({ gender, forced: r.forced, seed: r.seed }, firstId! + i));
       setWlTx({ status: "success", hash, id: firstId, note: `${wl.allocation} Don${wl.allocation > 1 ? "s" : ""} minted` });
       setWl({ ...wl, claimed: true });
       loadOwned(wallet);
     } catch (e: any) { setWlTx({ status: "error", msg: friendly(e) }); }
-  }, [res, wl, d, wallet, eff, walletClient, loadOwned]);
+  }, [res, wl, d, wallet, gender, eff, seed, walletClient, loadOwned, registerReveal]);
 
   // -------------------------------------------------------------------------- reroll (~$3)
   const doReroll = useCallback(async () => {
@@ -367,9 +387,10 @@ export function BuilderPage() {
       setRerollTx({ status: "pending", hash });
       const rcpt = await pub.waitForTransactionReceipt({ hash });
       if (rcpt.status !== "success") { setRerollTx({ status: "error", msg: "Transaction reverted on-chain." }); return; }
+      registerReveal({ gender, forced: eff, seed }, rerollSel); // reroll changes the on-chain combo — record the new art
       setRerollTx({ status: "success", hash, id: rerollSel, note: `Don #${rerollSel} rerolled` });
     } catch (e: any) { setRerollTx({ status: "error", msg: friendly(e) }); }
-  }, [res, rerollSel, wallet, walletClient]);
+  }, [res, rerollSel, gender, eff, seed, wallet, walletClient, registerReveal]);
 
   const setPick = useCallback((cat: string, val: string) => {
     setPicks((p) => { const n = { ...p }; if (n[cat] === val) delete n[cat]; else n[cat] = val; return n; });
