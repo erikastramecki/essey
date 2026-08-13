@@ -36,7 +36,7 @@ function attributesFrom(r: Resolved, gender: string, locked: boolean, liened: bo
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "GET") return json(405, { error: "method" });
 
-  const idStr = new URL(req.url).pathname.split("/").filter(Boolean).pop() || "";
+  const idStr = new URL(req.url, "http://x").pathname.split("/").filter(Boolean).pop() || "";
   const id = Number(idStr);
   if (!Number.isInteger(id) || id < 1 || id > 1_000_000) return json(400, { error: "bad id" });
 

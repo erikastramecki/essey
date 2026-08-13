@@ -131,7 +131,7 @@ function svgResponse(label: string): Response {
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "GET") return json(405, { error: "method" });
 
-  const url = new URL(req.url);
+  const url = new URL(req.url, "http://x");
   const idStr = url.pathname.split("/").filter(Boolean).pop() || "";
   const id = Number(idStr);
   const comboParam = (url.searchParams.get("combo") || "").toLowerCase();

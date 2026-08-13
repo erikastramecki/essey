@@ -70,7 +70,7 @@ export default async function handler(req: Request): Promise<Response> {
   if (!redis) return json(503, { error: "reservation store not provisioned" });
 
   if (req.method === "GET") {
-    const key = new URL(req.url).searchParams.get("key") || "";
+    const key = new URL(req.url, "http://x").searchParams.get("key") || "";
     if (!key) return json(400, { error: "key required" });
     const held = (await redis.get<{ wallet: string }>(`hold:${key}`)) ?? null;
     const minted = await mintedOnChain(comboHash(key));
