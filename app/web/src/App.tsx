@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { DOCS, type Doc } from "./docs.generated";
+import { DOCS, DOCS_BRANCH, type Doc } from "./docs.generated";
 import { EMonogram, ThemeToggle, WarningModal, GameHero, GameLoop, ProvableTwist, EngineSection } from "./market";
 import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
 import { PortfolioPage } from "./portfolio";
@@ -360,7 +360,9 @@ function DocsPage() {
                       <span className="doc-r">Read →</span>
                     </Link>
                     <div className="doc-foot">
-                      <a className="doc-src" href={`${REPO}/blob/main/docs/${d.file}`} target="_blank" rel="noreferrer">source ↗</a>
+                      {/* DOCS_BRANCH, not "main": the site renders the built checkout, and some docs
+                          haven't merged yet — a main link would 404 for those. Self-heals at merge. */}
+                      <a className="doc-src" href={`${REPO}/blob/${DOCS_BRANCH}/docs/${d.file}`} target="_blank" rel="noreferrer">source ↗</a>
                     </div>
                   </div>
                 ))}

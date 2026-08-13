@@ -8,10 +8,10 @@ All contract facts below were read from the **deployed, verified source** on
 several widely-cited third-party write-ups are wrong about transfer restrictions.
 
 > **Scope note.** This document is the **lending-engine** scope: the port of the Sui pool/borrow/
-> liquidate core to Robinhood Chain. It does **not** cover the **market layer** — Seats, Vaults,
-> Tiers, Bell, the Exchange, Cases and Degen — which is now the primary deployed product and is
-> specified in [THE-MARKET.md](THE-MARKET.md). Read that document for the live product; read this
-> one for the lending engine underneath it.
+> liquidate core to Robinhood Chain. It does **not** cover the **market layer** — the Dons, Tiers,
+> the Bell, the Exchange, Cases and Degen — which is now the primary deployed product and is
+> specified in [TOKENOMICS-v3.md](TOKENOMICS-v3.md). Read that document for the live product; read
+> this one for the lending engine underneath it.
 
 ---
 
