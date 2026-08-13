@@ -147,7 +147,7 @@ export function DossierFile({ briefKey, open, onClose }: { briefKey: BriefKey | 
     departed ? "SIGNED · THE FOLDER IS THE ACTIVE CASE" :
     phase === "signing" ? "SIGN THE LOADOUT IN YOUR WALLET…" :
     phase === "submitting" ? "SUBMITTING THE DEPART TX…" :
-    gate ?? "HOLD THE SEAL TO SIGN · 750MS";
+    gate ?? "CLICK THE SEAL TO SIGN";
 
   return (
     <CaseFile open={open} stack2 tab={`OPERATION BRIEF · №${brief.no}`} head="CASE FILE" onClose={onClose}>

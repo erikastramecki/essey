@@ -700,7 +700,7 @@
 }
 
 /* ============================================================
-   THE WAX SEAL — press-and-hold commit affordance
+   THE WAX SEAL — single-click commit affordance
    ============================================================ */
 .g-sealwrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 4px; }
 .g-seal {
@@ -710,7 +710,6 @@
   width: 92px;
   height: 92px;
   border-radius: 50%;
-  --p: 0; /* hold progress 0..1, driven by JS (setTimeout, never rAF) */
   background:
     radial-gradient(circle at 34% 30%, #d8887c 0%, transparent 34%),
     radial-gradient(circle at 62% 68%, #7e352c 0%, transparent 55%),
@@ -721,7 +720,6 @@
     inset 0 -5px 10px rgba(60, 10, 5, 0.55);
   transition: transform 0.12s ease, filter 0.2s ease;
   -webkit-tap-highlight-color: transparent;
-  touch-action: none;
 }
 .g-seal::before {
   content: "";
@@ -752,10 +750,12 @@
   position: absolute;
   inset: -13px;
   border-radius: 50%;
-  background: conic-gradient(var(--g-gold) calc(var(--p) * 360deg), rgba(201, 162, 75, 0.14) 0);
+  background: rgba(201, 162, 75, 0.14);
   -webkit-mask: radial-gradient(circle, transparent 0 54px, black 55px 59px, transparent 60px);
   mask: radial-gradient(circle, transparent 0 54px, black 55px 59px, transparent 60px);
+  transition: background 0.12s ease;
 }
+.g-seal.pressing .g-ring, .g-seal.done .g-ring { background: var(--g-gold); }
 .g-seal.pressing { transform: scale(0.93); filter: brightness(0.9) saturate(1.15); }
 .g-seal.done { transform: scale(0.97); filter: brightness(0.82); }
 .g-seal.done::after { color: rgba(40, 6, 2, 0.8); box-shadow: inset 0 4px 9px rgba(40, 6, 2, 0.7); }
@@ -1158,6 +1158,6 @@
   .g-photowin { flex-basis: 104px; width: 104px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .g-file, .g-scrim, .g-seal { transition: none; }
+  .g-file, .g-scrim, .g-seal, .g-seal .g-ring { transition: none; }
   .game-root * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }

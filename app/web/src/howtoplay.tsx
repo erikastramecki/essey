@@ -69,12 +69,12 @@ function BriefBoard() {
   );
 }
 
-/// The practice seal — the same press-and-hold component the real dossier uses, firing nothing.
+/// The practice seal — the same single-click component the real dossier uses, firing nothing.
 function PracticeSeal() {
   const [sealed, setSealed] = useState(false);
   return (
     <div className="htp-sealrow">
-      <WaxSeal sealed={sealed} hint={sealed ? "SEALED — THAT'S THE WHOLE GESTURE" : "TRY IT · HOLD THE SEAL · 750MS · THIS ONE SIGNS NOTHING"}
+      <WaxSeal sealed={sealed} hint={sealed ? "SEALED — THAT'S THE WHOLE GESTURE" : "TRY IT · CLICK THE SEAL · THIS ONE SIGNS NOTHING"}
         onCommit={() => setSealed(true)} />
       {sealed && <Stamp ok thump>PRACTICE ONLY — NO TX FIRED</Stamp>}
     </div>
@@ -189,7 +189,7 @@ export function HowToPlayPage() {
           <W lbl="The live board">The four posted briefs, verbatim from the chain — tap through:</W>
           <BriefBoard />
           <hr className="g-dashrule" />
-          <W lbl="The wax seal">Dispatching is one press-and-hold on a wax seal. Under the wax it's an{" "}
+          <W lbl="The wax seal">Dispatching is one click on a wax seal. Under the wax it's an{" "}
             <b>EIP-712 signature</b> — a single typed message your wallet signs that says, in plain words:
             <i> "this Don, this job, this much provision, and this exact guard roster on my door."</i> The
             contract verifies that signature on-chain; nothing departs without it, and nobody can alter what

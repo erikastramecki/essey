@@ -213,7 +213,7 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
 
   const sealHint =
     phase === "committing" ? "SUBMITTING THE COMMIT TX…" :
-    gate ?? `HOLD THE SEAL · ◫ ${fmtAmt(COMMIT_FEE)} SUNK, WIN OR LOSE`;
+    gate ?? `CLICK THE SEAL · ◫ ${fmtAmt(COMMIT_FEE)} SUNK, WIN OR LOSE`;
 
   return (
     <CaseFile open={open} stack2 jacket="carbon" tab={`HIT ORDER · TARGET №${targetDonId.toString()}`} head="HIT ORDER" onClose={onClose}>

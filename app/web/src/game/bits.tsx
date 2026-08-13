@@ -1,5 +1,5 @@
 // D.O.N. game — the shared grammar components: the CaseFile slide-over (one component, every
-// screen), the wax-seal press-and-hold tx affordance, rubber stamps, the odds ladder, the
+// screen), the wax-seal single-click tx affordance, rubber stamps, the odds ladder, the
 // paperclip/mugshot/chair SVGs, and the real-Don photo with an intentional fallback plate.
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
@@ -36,60 +36,42 @@ export function CaseFile({ open, under, stack2, jacket, tab, head, onClose, chil
 }
 
 // ---------------------------------------------------------------------------------------------
-// The wax seal — press-and-hold 750ms, the universal tx affordance. The hold loop is setTimeout,
-// deliberately not rAF: hidden tabs throttle rAF to zero (the browser-verify house rule) and a
-// signature prompt may background the tab mid-hold.
+// The wax seal — single click, the universal tx affordance. One click fires onCommit immediately
+// (the wallet's signature prompt is the real confirmation step; a hold gesture confused live
+// testers). The stamp-down is a one-shot visual: pressed state for STAMP_MS, then the parent's
+// `sealed` prop holds the stamped result.
 // ---------------------------------------------------------------------------------------------
-const HOLD_MS = 750;
+const STAMP_MS = 220;
 
 export function WaxSeal({ disabled, sealed, hint, onCommit }: {
   disabled?: boolean;
   sealed?: boolean;         // the action is committed — die pressed, seal inert
   hint: string;             // the line under the seal (parent owns status copy)
-  onCommit: () => void;     // fired exactly once when the hold completes
+  onCommit: () => void;     // fired exactly once, immediately on click
 }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const holdT = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const start = useRef(0);
+  const stampT = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pressing, setPressing] = useState(false);
 
-  const setP = (p: number) => ref.current?.style.setProperty("--p", String(p));
-
-  const tick = () => {
-    const p = Math.min(1, (Date.now() - start.current) / HOLD_MS);
-    setP(p);
-    if (p >= 1) { setPressing(false); onCommit(); return; }
-    holdT.current = setTimeout(tick, 16);
-  };
-  const down = (e: React.PointerEvent) => {
+  const click = () => {
     if (disabled || sealed) return;
-    e.preventDefault();
-    ref.current?.setPointerCapture(e.pointerId);
-    start.current = Date.now();
     setPressing(true);
-    tick();
+    if (stampT.current) clearTimeout(stampT.current);
+    stampT.current = setTimeout(() => { stampT.current = null; setPressing(false); }, STAMP_MS);
+    onCommit();
   };
-  const up = () => {
-    if (holdT.current) clearTimeout(holdT.current);
-    holdT.current = null;
-    if (!sealed) setP(0);
-    setPressing(false);
-  };
-  useEffect(() => () => { if (holdT.current) clearTimeout(holdT.current); }, []);
-  useEffect(() => { if (sealed) setP(1); }, [sealed]);
+  useEffect(() => () => { if (stampT.current) clearTimeout(stampT.current); }, []);
 
   return (
     <div className="g-sealwrap">
       <button
-        ref={ref}
         className={"g-seal" + (pressing ? " pressing" : "") + (sealed ? " done" : "")}
         disabled={disabled || sealed}
-        aria-label="Press and hold to sign"
-        onPointerDown={down} onPointerUp={up} onPointerLeave={up} onPointerCancel={up}
+        aria-label="Click to sign"
+        onClick={click}
       >
         <span className="g-ring" aria-hidden />
       </button>
-      <div className="g-sealhint">{pressing ? "PRESSING… THE WAX TAKES THE DIE" : hint}</div>
+      <div className="g-sealhint">{hint}</div>
     </div>
   );
 }
