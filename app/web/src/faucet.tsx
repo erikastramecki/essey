@@ -62,6 +62,11 @@ export function FaucetPage() {
             value. Two things get you playing: <b>gas ETH</b> from the chain's own faucet, and <b>$ESSEY + USDG</b>
             from ours. $ESSEY is the token you spend to get in (mint tiers, trade Dons); USDG is the play-money
             stablecoin for fees and payouts.</p>
+          <p><b>Looking for Scrip (the game's points)?</b> Scrip never drips from a faucet — it is earned on the
+            job board, and the training wire pays like one: the <b>MILK RUN</b> takes 75 seconds and pays
+            <b> ◫ 6,000</b> on a near-sure roll. That funds a Hitter (◫ 900), hit orders (◫ 50), and your House in
+            one go. When the job lands, <b>bank the hopper</b> at the House desk — pay isn't spendable until
+            banked. <a href="/game/jobs/sprint">Run the Milk Run →</a></p>
         </div></div>
 
         <div className="live-card" style={{ maxWidth: 640 }}>

@@ -59,7 +59,7 @@ export function CrewFile({ open, onClose }: { open: boolean; onClose: () => void
   const mintGate = !g.configured ? "the crews sign with the season — contracts pending"
     : !g.connected ? "connect a wallet to retain a crew"
     : !don ? "a crew signs to a family — take a seat at the Registry first"
-    : don.vaultScrip < MINT_PRICE ? `the retainer is ◫ ${fmtAmt(MINT_PRICE)} — the vault is short` : null;
+    : don.vaultScrip < MINT_PRICE ? `the retainer is ◫ ${fmtAmt(MINT_PRICE)} — the vault is short. run the MILK RUN on the job board (75s, pays ◫ 6,000), then BANK IT at the house` : null;
   const expanded = g.hitters.find((h) => h.id.toString() === expandedId) ?? g.hitters[0] ?? null;
 
   return (

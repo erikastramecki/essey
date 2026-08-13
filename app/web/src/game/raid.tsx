@@ -138,7 +138,7 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
     !g.connected ? "CONNECT A WALLET TO SIGN" :
     !attacker ? "NO DON ON THE DESK — VISIT THE REGISTRY" :
     pendingLive ? `THIS DON HAS AN OPEN HIT ORDER ON №${pending.targetDonId} — KICK THAT DOOR FIRST` :
-    attacker.vaultScrip < COMMIT_FEE ? `THE ORDER COSTS ◫ ${fmtAmt(COMMIT_FEE)} · VAULT SHORT` :
+    attacker.vaultScrip < COMMIT_FEE ? `THE ORDER COSTS ◫ ${fmtAmt(COMMIT_FEE)} · VAULT SHORT — RUN THE MILK RUN ON THE JOB BOARD, THEN BANK IT` :
     available.length === 0 ? "NO CREW AVAILABLE — VISIT THE RAP SHEETS" :
     picked.size === 0 ? "PICK YOUR CREW FIRST" :
     picked.size > MAX_CREW ? `FIVE THROUGH THE DOOR, MAX` : null;

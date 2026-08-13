@@ -20,6 +20,16 @@ export function JobBoardFile({ open, under, onClose }: { open: boolean; under: b
   const navigate = useNavigate();
   return (
     <CaseFile open={open} under={under} tab="THE JOB BOARD · FOLDER DRAWER" head="DISPATCH · OPEN POSTINGS" onClose={onClose}>
+      {/* The Scrip faucet, spelled out — testers kept looking for a claim button (founder report). */}
+      <button className="g-target" style={{ width: "100%", marginBottom: 10, textAlign: "left" }}
+        onClick={() => navigate("/game/jobs/sprint")}>
+        <div className="g-tmeta" style={{ width: "100%" }}>
+          <b>NEW IN TOWN? START HERE.</b> Scrip is earned, never claimed: run the <b>MILK RUN</b> (75
+          seconds, pays <b>◫ 6,000</b> on a near-sure wire) and you can retain a Hitter (◫ 900), file
+          hit orders (◫ 50), and build the House — all off one job. When it lands, <b>BANK IT</b> at
+          the House desk: pay sits in the hopper until you do.
+        </div>
+      </button>
       <div className="g-drawer">
         {BRIEF_ORDER.map((k) => {
           const j = BRIEFS[k];
