@@ -431,9 +431,9 @@ Every family in Solvency is in two businesses. This is the second one.
 2. **File the job, sealed.** Your Hitter commits to a target without naming it in public: a sealed filing,
    plus **50 Scrip, sunk win or lose**. Walk away without kicking the door and the 50 burns at the city
    incinerator. Cowardice is a fee like everything else.
-3. **Kick the door.** Reveal inside the 10-to-40-minute window. The defense that counts is the defense
-   posted at that moment, and garrison changes take an hour to take effect, so nobody conjures guards at
-   the last second. You are attacking blind: garrison composition is fog until you are through the door.
+3. **Kick the door.** Reveal inside the 10-to-40-minute window. The defense that counts is the roster
+   the defender signed at depart: the House cannot change shape mid-window, so nobody conjures guards
+   at the last second. You are attacking blind: garrison composition is fog until you are through the door.
 4. **The roll.** One published ladder, two stages: did you get in, and what did you find.
 
 ### What a hit takes
