@@ -32,6 +32,9 @@ export const missionBoardAbi = parseAbi([
   "event ResolveRequested(uint64 indexed missionId, uint64 seq)",
   "event Resolved(uint64 indexed missionId, uint256 indexed donId, uint8 outcome, uint256 payout)",
   "event Reclaimed(uint64 indexed missionId, uint256 indexed donId, uint256 payout)",
+  // -- additive (explorer wire): verified against MissionBoard.sol L133-134 --
+  "event KitAttested(uint256 indexed donId, uint8 gripClass)",
+  "event BudgetFunded(uint256 amount, uint256 newTotal)",
 ]);
 
 /// Loadout settlement is INSIDE MissionBoard as-built — alias, kept for call-site clarity.
@@ -69,6 +72,8 @@ export const houseEscrowAbi = parseAbi([
   "event Damaged(uint256 indexed donId)",
   "event Repaired(uint256 indexed donId, uint256 fee)",
   "event StipendPaid(uint256 indexed donId, uint256 amount)",
+  // -- additive (explorer wire): verified against HouseEscrow.sol L92 (note the indexed line tag) --
+  "event BudgetFunded(bytes32 indexed line, uint256 amount, uint256 newTotal)",
 ]);
 
 export const raidEngineAbi = parseAbi([
@@ -116,6 +121,9 @@ export const hitterAbi = parseAbi([
   "event HitterMinted(uint256 indexed id, uint256 indexed payerDonId, address indexed to, bytes32 commit)",
   "event FavorRevealRequested(uint256 indexed id, uint64 seq)",
   "event FavorRevealed(uint256 indexed id, uint8 band, bool forced)",
+  // -- additive (explorer wire): verified against HitterNFT.sol L68-69 --
+  "event AttemptNoted(uint256 indexed id, uint64 at)",
+  "event Hospitalized(uint256 indexed id, uint64 until)",
 ]);
 
 /// The Favor lives INSIDE HitterNFT as-built — alias, kept for call-site clarity.
@@ -127,4 +135,10 @@ export const scripAbi = parseAbi([
   "function balanceOfAt(uint256 season, address account) view returns (uint256)",
   "function totalSupply() view returns (uint256)",
   "function totalBurned() view returns (uint256)",
+  // -- additive (explorer wire): verified against Scrip.sol L40-43. The `module` arg attributes
+  // every mint/burn/move to the emitting game contract — the flow-of-funds source. --
+  "event Minted(address indexed to, uint256 amount, address indexed module)",
+  "event Burned(address indexed from, uint256 amount, address indexed module)",
+  "event Moved(address indexed from, address indexed to, uint256 amount, address indexed module)",
+  "event SeasonClosed(uint256 indexed oldSeason, uint256 indexed newSeason)",
 ]);
