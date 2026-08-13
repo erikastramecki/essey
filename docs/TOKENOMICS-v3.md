@@ -40,6 +40,15 @@ the mint makes no on-chain-entropy claim today.
 team split: `teamBps` deployed at **0**). This is the flywheel: mint activity flows straight back to holders
 as stock. The split stays configurable (`teamBps`, `treasury`, `feeSink` settable) if a team cut is ever wanted.
 
+**Announced direction — the 50/50 mint splitter (design-forward, not yet deployed).** At the real-asset
+go-live the mint `feeSink` re-points to an **immutable 2-leg ETH splitter**: **50% → a stock-seed reserve**
+that funds the game's real-asset prize inventory (the stock active players *win* by playing) · **50% →
+treasury**. **No Bell leg, no floor leg** (`stockSeedBps = 5_000`, destinations immutable once deployed;
+the re-point is a single `setFeeSink` call). This is the anti-passive turn applied to mint: proceeds seed
+the prizes that at-risk play earns, rather than paying idle staked Dons. It supersedes the earlier
+50/20/10/20 idea. **Nothing here is live today** — mint currently routes 100% → `feeSink` as described
+above; the splitter is drafted and lands with the real-asset seasons (see `docs/GAME-GUIDE.md`).
+
 **Reserve: `reserveCap = 2,722` Dons** (hard cap on `mintReserved`, immutable — it cannot be raised):
 **2,222** of those are the exchange's trading inventory (protocol-owned, seeded into `DonExchange` — held by
 the desk, not by people) and **up to 500** cover partners and team.
@@ -121,7 +130,16 @@ settle. The pot is *not* pre-converted to stock as fees arrive.
   everything accumulated before them.
 - **Elect up to 3 stocks with weights** per Don; no election → the BUNDLE basket. Elections clear on transfer.
 - **All routed fees feed it** — mint rerolls/customs (100%) and the exchange's 70% share — the primary market
-  funds the dividends.
+  funds the dividends. (*Announced direction:* once the 50/50 mint splitter of §2 lands, mint proceeds seed
+  the game's stock prizes instead of the Bell; the Bell then draws from the exchange's 70% share and loan
+  interest. The Bell keeps feeding staked Dons from **market-layer** activity, unchanged.)
+
+**Market layer vs the game economy (design-forward).** The fees above are the **market layer** — mint,
+exchange, and loan activity — and they pay staked Dons through the Bell. The separate **game economy**
+(missions, raids, the House loop) follows an **anti-passive** rule and its fees **never touch the Bell**:
+game dividends pay *deployed, at-risk* capital, and a raid-insurance fund (the Fixer's Book) protects
+active players; idle staked Dons earn only the indirect legs (a rising floor). This split lands with the
+real-asset seasons; the player-facing shape is in `docs/GAME-GUIDE.md`.
 
 ## 7. The exchange — `DonExchange`
 

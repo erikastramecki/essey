@@ -178,6 +178,11 @@ export function GameLoop() {
           ))}
         </div>
         <div className="learn-row" style={{ marginTop: 18 }}>
+          <b>On the roadmap, honestly:</b> when the take goes real, the district you work pays its own asset —
+          chip jobs pay the chip company, Ledger Row pays T-bills, the Refinery oil, the Mint silver — and you
+          <em> win</em> it by playing, into a claim box no raid can touch. No dates, and nothing real this season.
+        </div>
+        <div className="learn-row" style={{ marginTop: 10 }}>
           The full walkthrough, with every number from the chain: <Link to="/how-to-play">How to play →</Link>
         </div>
       </div>

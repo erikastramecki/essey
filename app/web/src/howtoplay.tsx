@@ -202,6 +202,12 @@ export function HowToPlayPage() {
             ever stalls, anyone can settle a stuck job two hours past its window, and it settles at the
             sideways floor, never at zero. Slow is possible. Stuck is not. One active job per Don at a time —
             even legends work single file.</W>
+          <W lbl="Later, when the take is real">Roadmap, stamped: in the real-asset seasons the district you
+            work decides the asset you carry home — the tech quarters pay their tokenized equity, Ledger Row
+            pays T-bills, the Refinery pays oil, the Mint pays silver. You don't buy it, you <b>win</b> it by
+            playing, in fixed units of the asset itself. And won stock banks to a <b>claim box no raid can
+            touch</b>: it's yours and safe the instant the job resolves. Not this season, and no dates —
+            arrivals, not schedules.</W>
           <details>
             <summary>Provisioning — pressing your own bet</summary>
             <div><W>You can burn extra Scrip at dispatch, up to the folder's cap. Provisions <b>never move the
@@ -272,6 +278,12 @@ export function HowToPlayPage() {
           <W lbl="What you risk">A failed attempt isn't free: your Hitter risks being taken — 20% against a
             naked house, up to 43% against a full crew — and taken means a <b>48-hour hospital stay</b>,
             benched while the street keeps moving.</W>
+          <W lbl="Later, when the take is real">A stamped roadmap note, so you hear it here too: the real-asset
+            seasons keep this 48-hour lockout and the sacred Vault, but the big-score bite becomes
+            <b> skill-scaled</b> — a dominant crew that scouted a wide-open House can reach a rare, earned
+            ceiling of <b>65% of deployed</b>, and the <b>Fixer's Book</b> sells a cushion (roughly a quarter
+            of a bad night handed back). Banking is, and always will be, the free protection. Nothing real this
+            season; the full road is in <Link to="/docs/game-guide">the house rules</Link>.</W>
           <details>
             <summary>The full cap stack — for the spreadsheet crowd</summary>
             <div><div className="htp-table-scroll"><table className="htp-table">

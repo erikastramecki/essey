@@ -221,7 +221,9 @@ exists on-chain, and we print the address so you can check.
    This season, that mark pays out in Scrip.
 3. **In the real-settlement seasons,** the claim edge does the rest: at claim, the converter buys the
    take at the wire price and the tokens land in your Don's Vault. Held, not owed: the loot is acquired
-   when the job posts, so the payout exists before you earn it.
+   when the job posts, so the payout exists before you earn it. Won stock banks to a claim box of its
+   own, a ledger no raid can reach: what you win is claimable and safe the instant the job resolves,
+   never sitting in a hopper for someone to knock over.
 4. **Fail-open, always.** A stale wire never blocks a payout; it settles to base instead. Slow is
    possible. Stuck is not.
 
@@ -447,7 +449,11 @@ If you get in, a second roll decides what kind of night it was:
 
 - **The 7.5% tax.** The city takes 7.5% of every transferred score. The Floor eats with the winners.
 - **The safe gets moved.** One big score per House per **48 hours**, maximum, no matter who is knocking.
-  (Real-asset seasons run a gentler band: 10% to 20%, one per 72 hours.)
+  **· ARRIVES WITH A LATER POSTING ·** the real-asset seasons keep this same 48-hour lockout, but the
+  bite becomes skill-scaled: a marginal win stays in this same modest band, while a dominant crew that
+  scouted a wide-open House can reach a rare, earned ceiling of 65% of DEPLOYED. The Vault is never
+  touched, at any number, and the Fixer's Book sells a cushion for the rest. The road is in
+  *Coming to Solvency*.
 - **Repairs** cost about 1.5 days of that House's earning rate, pro-rated by damage. A scarred, unrepaired
   House is a public confession on the Tape: dealing with it is a fee, and everyone can see you have not.
 
@@ -814,11 +820,62 @@ No dates. The city does not promise schedules, it prints arrivals.
 - **Seasons and the four victories.** Thirty-day seasons with escrowed prize pots, era bonuses that
   crescendo, and four public, interceptable roads to a title: the Portfolio, the Sieges, the Venture,
   and Renown. Announce your ambition, then defend it.
-- **The real-asset rungs.** The take stops being Scrip and starts being the ticker on the folder: the
-  chip-fab job paying the chip company, the escort run paying T-bills. Then the property market for
-  deeds, the field ambush, the item marketplace and crates, the Family's real credit line against your
-  Don with the Floor as backing, and the districts opening one by one, each with the Fixer's actuarial
-  rating stamped on the map: LOW, STANDARD, STEEP, UNINSURABLE.
+- **The real-asset rungs.** The take stops being Scrip and starts being the ticker on the folder, and
+  the road is written and priced in the panels below: the prize map, the claim box, the Fixer's Book,
+  the self-refilling board, and the board that expands itself. Riding in alongside them: the property
+  market for standalone deeds, the field ambush, the item marketplace and crates, the Family's real
+  credit line against your Don with the Floor as backing, and the districts opening one by one, each with
+  the Fixer's actuarial rating stamped on the map: LOW, STANDARD, STEEP, UNINSURABLE.
+
+### The prize map: every district pays its own metal · ARRIVES WITH A LATER POSTING ·
+
+When the take goes real, the district you work decides the asset you carry home. The map is already drawn:
+
+| The district | The work | What it pays |
+|---|---|---|
+| The tech quarters (Foundry, Racks, Kelvin, Exchange, Launch Yards) | chip, rig, quantum, and market jobs | the tokenized equity on the folder: NVDA, AAPL, AMD, META, GOOGL, SPY, and the rest of the wire |
+| Ledger Row | the armored T-bill run | short T-bills (SGOV), the safe drip |
+| The Refinery | the barrel job | oil (USO) |
+| The Mint | the bullion run | silver (SLV) |
+
+You do not buy the stock. You **win** it, by playing: work the job, roll the published odds, and a fixed
+tranche of the district's asset lands in your name. A clean chip-fab run pays you a fixed cut of the chip
+company; the Refinery pays oil; the Mint pays silver. The loot IS the asset, not a promise of it, and the
+size of your cut is fixed in units of the thing itself, so no price feed sits between you and getting paid.
+
+### The claim box: winnings a raid can never reach · ARRIVES WITH A LATER POSTING ·
+
+Real stock you win does not sit in the hopper waiting to be robbed. It banks to a claim box of its own, a
+ledger no raid can touch, and sweeps to your Don's Vault whenever you like. Raids stay a Scrip fight,
+exactly as they are today: the till and the working capital are contested, the Vault never is, and your
+won stock is claimable and safe the instant the job resolves. You win it, it is yours, and no one can kick
+a door to take it.
+
+### The Fixer's Book: the cushion for a brutal night · ARRIVES WITH A LATER POSTING ·
+
+The real-asset seasons hit harder than the Skirmish. A dominant crew that scouted a wide-open House can
+take a real bite, on a skill-scaled ladder that tops out at a rare 65% of a victim's DEPLOYED capital. The
+Vault is never touched, at any number, and **banking is, and always will be, the free protection**. But
+for the working capital you chose to leave exposed, there is the Fixer's Book: buy a policy before you
+leave an exposed House, and a bad night is cushioned, roughly a quarter of the loss handed back. The Book
+pays for itself four ways: the premiums people pay, a slice of the tax on every landed raid, a small skim
+off the city's whole fee stream, and a season seed to open the doors. Banking is the real skill and the
+free armor; the Book is the second net for the money you deliberately put to work.
+
+### The self-refilling board: the pool you win from is the pool you feed · ARRIVES WITH A LATER POSTING ·
+
+Every real spend in the city routes instead of vanishing. Repair a House with silver, upgrade a deed with
+T-bills, provision a job with the district's own asset, and most of what you spend flows straight back
+into the prize pool you won it from, minus a thin protocol cut and a slice to the Book. The same metal you
+win, you spend, and it circulates back to be won again. The pools refill themselves off their own
+velocity, which is why the board can keep paying real assets without a bottomless treasury behind it.
+
+### The self-expanding board: new listings become new work · ARRIVES WITH A LATER POSTING ·
+
+The board is built to grow without a rebuild. When a new asset lists on the chain and clears its proof,
+the city wires a new district or a new folder around it and posts fresh quests, no rebuild, no new season
+required. The drawer of written-but-unposted briefs, and the standing job of watching the chain for new
+listings, mean Solvency keeps opening streets for as long as the market keeps making them.
 
 Solvency will never be finished. That was never the point. It was founded by 8,888 families who couldn't
 sit still, and it's being built, street by street, job by job, season by season, by everyone who takes a
