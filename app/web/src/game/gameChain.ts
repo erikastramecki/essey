@@ -98,8 +98,18 @@ export type RaidSecret = { attackerDonId: string; raidId: string; hitterIds: str
 const jset = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 const jget = <T,>(k: string): T | null => { try { const s = localStorage.getItem(k); return s ? (JSON.parse(s) as T) : null; } catch { return null; } };
 
-export const saveGarrisonSecret = (donId: bigint, s: GarrisonSecret) => jset(`essey.game.garrison.${donId}`, s);
-export const loadGarrisonSecret = (donId: bigint) => jget<GarrisonSecret>(`essey.game.garrison.${donId}`);
-export const saveRaidSecret = (s: RaidSecret) => jset("essey.game.raid.pending", s);
-export const loadRaidSecret = () => jget<RaidSecret>("essey.game.raid.pending");
-export const clearRaidSecret = () => { try { localStorage.removeItem("essey.game.raid.pending"); } catch { /* ignore */ } };
+// Keys are namespaced by CONNECTED ADDRESS + token id (pre-push audit, code-security lens): a single
+// global key let a second commit clobber the first raid's preimage (forfeiting its 50-Scrip fee) and
+// let another account on a shared browser read a defender's REDACTED garrison composition.
+const addrKey = (a: Address) => a.toLowerCase();
+export const saveGarrisonSecret = (addr: Address, donId: bigint, s: GarrisonSecret) =>
+  jset(`essey.game.garrison.${addrKey(addr)}.${donId}`, s);
+export const loadGarrisonSecret = (addr: Address, donId: bigint) =>
+  jget<GarrisonSecret>(`essey.game.garrison.${addrKey(addr)}.${donId}`);
+export const saveRaidSecret = (addr: Address, s: RaidSecret) =>
+  jset(`essey.game.raid.${addrKey(addr)}.${s.attackerDonId}`, s);
+export const loadRaidSecret = (addr: Address, attackerDonId: bigint) =>
+  jget<RaidSecret>(`essey.game.raid.${addrKey(addr)}.${attackerDonId}`);
+export const clearRaidSecret = (addr: Address, attackerDonId: bigint) => {
+  try { localStorage.removeItem(`essey.game.raid.${addrKey(addr)}.${attackerDonId}`); } catch { /* ignore */ }
+};

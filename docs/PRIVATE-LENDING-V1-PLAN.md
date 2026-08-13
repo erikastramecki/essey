@@ -159,7 +159,7 @@ encryption randomness. Constraints:
    so no product wraps the field (`solvency.go:33-43`). `ltvBps` is a public pool parameter asserted
    equal in-circuit.
 4. **Draw note:** `dcommitNew = Poseidon(D − fee, pk_recipient, b″)` — a hidden USDG note in Tree D.
-   Origination fee (StonkBroker/DonLoan shape: prepaid, flat debt — `DonLoan.sol:11-33`) is a public
+   Origination fee (the DonLoan shape: prepaid, flat debt — `DonLoan.sol:11-33`) is a public
    `feeBps` netted in-circuit; debt recorded is the full `D`.
 5. **Liquidation ticket (net-new, the one component with no in-repo precedent):** the circuit proves
    the published ciphertext is a correct Poseidon-DuplexSponge encryption of the position preimage
@@ -220,9 +220,8 @@ leg and sold publicly to restore USDG (the boundary crossing is public — feasi
 dregg retires "prove solvency over hidden values." It does **not** answer "who liquidates a position
 nobody can see?" — a price-triggered margin call requires someone to *know* a hidden position is
 underwater, which contradicts hiding it. This is the genuine research remnant (risk R1, §5). v1
-resolves it the way the founder's standing design rule resolves lending forks — **copy the
-StonkBroker mechanic** (memory: `essey-stonkbroker-reference-rule`), which is already the shipped
-DonLoan v3 model: **fixed-term loans, interest prepaid, flat debt, default is a calendar event**
+resolves it the way the standing design rule resolves lending forks — **reuse the shipped
+DonLoan v3 model**: **fixed-term loans, interest prepaid, flat debt, default is a calendar event**
 (`DonLoan.sol:11-19,48-58`). Concretely:
 
 - Terms bounded (`MIN_TERM`–`MAX_TERM`; recommend 7–90 days for stock collateral — shorter than

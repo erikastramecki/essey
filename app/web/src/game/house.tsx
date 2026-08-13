@@ -56,7 +56,7 @@ export function HouseFile({ open, onClose }: { open: boolean; onClose: () => voi
   const tierName = tier !== null ? HOUSE_TIERS[Math.min(tier, 4)] : null;
   const damage = repaired ? 0 : (don?.damageBps ?? 0);
   const condPct = Math.max(0, 100 - Math.round(damage / 100));
-  const garrisonIds = don ? (loadGarrisonSecret(don.id)?.hitterIds ?? []) : [];
+  const garrisonIds = don && g.address ? (loadGarrisonSecret(g.address, don.id)?.hitterIds ?? []) : [];
   const moveGate = !g.configured ? "the escrow opens with the season — contracts pending"
     : !g.connected ? "connect a wallet to move value"
     : don?.away ? "your Don is in the field — the escrow moves only while home" : null;

@@ -109,7 +109,7 @@ export function DossierFile({ briefKey, open, onClose }: { briefKey: BriefKey | 
       const salt = randomSalt();
       const garrisonIds: bigint[] = [];
       const gHash = garrisonCommit(garrisonIds, salt);
-      saveGarrisonSecret(don.id, { hitterIds: [], salt });
+      saveGarrisonSecret(g.address, don.id, { hitterIds: [], salt });
       // 2. The EIP-712 loadout: binds briefId + provision + garrison commit in one signature.
       const loadout = await buildLoadout(don.id, brief.chainId, provision, gHash);
       setPhase("signing");

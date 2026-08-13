@@ -98,13 +98,15 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
   const [, tick] = useState(0); // 1s tick while the envelope waits on the reveal window
 
   // Resume a pending commit across refreshes — the preimage lives in localStorage until reveal.
+  // Keyed by connected address + attacker Don (audit fix: a global key let a second commit clobber
+  // the first preimage and forfeit its fee).
   useEffect(() => {
     if (!open) return;
-    const s = loadRaidSecret();
+    const s = g.address && g.selected ? loadRaidSecret(g.address, g.selected.id) : null;
     if (s && targetDonId !== null && s.targetDonId === targetDonId.toString()) { setSecret(s); setPhase("committed"); }
     else { setSecret(null); setPhase("order"); setPicked(new Set()); setErr(null); setOutcome(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, targetDonId?.toString()]);
+  }, [open, targetDonId?.toString(), g.address, g.selected?.id?.toString()]);
 
   useEffect(() => {
     if (phase !== "committed") return;
@@ -138,13 +140,13 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
         attackerDonId: attacker.id.toString(), raidId: "", hitterIds: ids.map(String),
         targetDonId: targetDonId.toString(), salt, committedAt: Date.now(),
       };
-      saveRaidSecret(s); // the preimage — reveal needs it; losing it means the fee, so save FIRST
+      saveRaidSecret(g.address, s); // the preimage — reveal needs it; losing it means the fee, so save FIRST
       const hash = await gameSend(g.address, GAME_ADDR.raidEngine, raidEngineAbi, "commit", [attacker.id, h]);
       // The raidId comes back in the RaidCommitted event — reveal is keyed by it.
       const rcpt = await pub.getTransactionReceipt({ hash });
       const evts = parseEventLogs({ abi: raidEngineAbi, logs: rcpt.logs, eventName: "RaidCommitted" });
       if (evts.length > 0) s.raidId = (evts[0].args as { raidId: bigint }).raidId.toString();
-      saveRaidSecret(s);
+      saveRaidSecret(g.address, s);
       setSecret(s);
       setPhase("committed");
     } catch (e) {
@@ -166,7 +168,7 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
       const raidId = BigInt(secret.raidId);
       const hash = await gameSend(g.address, GAME_ADDR.raidEngine, raidEngineAbi, "reveal",
         [raidId, secret.hitterIds.map(BigInt), BigInt(secret.targetDonId), secret.salt], fee);
-      clearRaidSecret();
+      clearRaidSecret(g.address, BigInt(secret.attackerDonId));
       setPhase("report");
       g.refresh();
       // Settlement lands with the entropy callback (a later tx) — poll the RaidSettled event.

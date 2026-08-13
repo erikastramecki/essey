@@ -197,7 +197,7 @@ function Desk() {
                 <div className="g-lrow"><span>VAULT (banked)</span><b>◫ {fmtAmt(don.vaultScrip)} <span className="ok">never at risk</span></b></div>
                 <div className="g-lrow"><span>HOUSE (working)</span><b>◫ {fmtAmt(don.deployedScrip)}{don.away && don.deployedScrip > 0n ? <span className="warnc"> · EXPOSED ⚠</span> : null}</b></div>
                 <div className="g-lrow"><span>HOPPER (unbanked)</span><b>◫ {fmtAmt(don.hopperScrip)}{don.hopperScrip > 0n ? <span className="warnc"> · at risk on the board</span> : null}</b></div>
-                <div className="g-lrow"><span>GARRISON</span><b>{Math.min(loadGarrisonSecret(don.id)?.hitterIds.length ?? 0, don.garrisonSlots)}/{don.garrisonSlots || "—"} <span className="ok">on the door</span></b></div>
+                <div className="g-lrow"><span>GARRISON</span><b>{Math.min((g.address ? loadGarrisonSecret(g.address, don.id)?.hitterIds.length : 0) ?? 0, don.garrisonSlots)}/{don.garrisonSlots || "—"} <span className="ok">on the door</span></b></div>
               </>
             ) : (
               <>

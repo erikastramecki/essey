@@ -98,14 +98,14 @@ into borrower solvency.** That is a deliberate, disclosed trade, not a free lunc
   early still paid the full term. (Default coefficient is 0 = free, but the mechanism charges upfront when on.)
 - Default is a **calendar** event. A borrower who is *economically solvent* (debt far under the floor) but
   simply misses `expiry + grace` is still liquidated and **forfeits the Don and its Vault** — including any
-  unclaimed stock dividends sealed inside it. The reference desk's price-based trigger would leave that
+  unclaimed stock dividends sealed inside it. A market-value lender's price-based trigger would leave that
   solvent borrower alone. Essey borrowers must service the calendar; this must be surfaced in the UI.
 
 ---
 
 ## 4. Reproducing the numbers
 
-`scratchpad/risk_sim.py` (throwaway, not committed) computes both columns from first principles:
+A throwaway simulation script (not committed) computes both columns from first principles:
 
 ```
 ref_bad_debt(P_exec) = max(0, D − min(D, P_exec))          # D = 500, steelmanned (no slippage/bonus)
@@ -145,5 +145,5 @@ worst case for Essey — in reality it can only be higher). Output matches §2 a
 
 **Against a market-value lender, Essey trades borrowing *capacity* (smaller draws, no speculative upside,
 pre-funded reserve) for the total elimination of *price-driven bad debt*: on the −60% gap, −80%, −95%, and
-liquidation-delay scenarios the reference desk eats 20–90% of principal while Essey eats nothing — because
+liquidation-delay scenarios the market-value lender eats 20–90% of principal while Essey eats nothing — because
 Essey never lends against a number that can fall.**

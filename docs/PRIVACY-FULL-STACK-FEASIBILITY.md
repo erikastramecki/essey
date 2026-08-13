@@ -98,7 +98,7 @@ Hides **amounts** via a Tornado-Nova UTXO join-split. Proven on RH-chain testnet
   `EsseyStealthPay.sol`); amount public.
 - **Client provers + SDK** — `poolsdk.ts` (note build, join-split proofs, `register`), `stealth.ts`
   (ECDH stealth addresses), relayer `api/relay.ts`. The circom sources + witness/zkey live in
-  `rh-chain/circuits-nova/` and `scratchpad/nova-port/`.
+  `rh-chain/circuits-nova/` (plus a local porting workspace, not committed).
 
 **Reusable for private lending, near-wholesale:** the shielded-capital leg (deposit collateral/USDG
 privately, hold a hidden-value note, exit via relayer to a fresh address) IS this. **(assessment) ~40–50%
