@@ -95,7 +95,7 @@ function Desk() {
     try {
       let fee = 0n;
       try { fee = await pub.readContract({ address: GAME_ADDR.missionBoard, abi: missionBoardAbi, functionName: "entropyFee" }); } catch { /* optional */ }
-      await gameSend(g.address, GAME_ADDR.missionBoard, missionBoardAbi, "resolve", [don.missionId], fee);
+      await gameSend(g.address, GAME_ADDR.missionBoard, missionBoardAbi, "resolve", [don.missionId], fee, 1_000_000n);
       g.refresh();
     } catch (e) {
       setResolveErr(niceError(e));

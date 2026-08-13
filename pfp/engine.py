@@ -169,17 +169,27 @@ OPTIONAL = {"16 Neko": 0.05}  # Neko fox mask = rare accessory
 SUPPRESS = ("swollen",)       # user-flagged variants removed from every pool (bruised/red-rimmed eye)
 # ---- engine-side art-as-is fixes (no source edits): suppress a variant / hide a broken sub-leaf / crop.
 # variant suppression (drop from the pick pool -> a good sibling renders instead):
-SUPPRESS_IN = {"14 Ring": {"bar"}}          # female 'Bar' ring = oversized gold bird over the glass
+SUPPRESS_IN = {"14 Ring": {"bar"},          # female 'Bar' ring = oversized gold bird over the glass
+               "16 Neko": {"neko"}}         # plain female Neko variant: mask leaf vis-flagged off, only
+                                            # its shadow ever renders (deterministic) -> drop the variant;
+                                            # the three hair-keyed Neko variants keep the trait alive
 # (Bowler Red restored: its 'incomplete crown' was the cream-opaque Bowler Shadow layer, now
 #  converted to a neutral overlay by art_mitigations.py -> all bowler colours render clean.)
 # NO-DESIGNER female hair-vs-hat rules (art is final; female hats keep the full '9 Hair'):
 # 1) Medusa's snake-crown pierces every hat brim -> hats are blocked for Medusa (art defect,
 #    no designer; narrowest possible exclusion - all other styles keep all hats).
-FEMALE_HAT_BLOCK = {"Medusa"}
-# 2) Gem's spikes / Updo's top curls / Lush's crown tip poke above the hat. Crop those styles'
+#    The Afro joins Medusa (headwear audit D13): it is wider than every brim, so a crop line
+#    would cut it in open air — the exclusion is the minimal clean fix.
+FEMALE_HAT_BLOCK = {"Medusa", "Afro"}
+# 2) Voluminous styles poke above/through the hat (headwear audit D1-D12). Crop those styles'
 #    hair at the same crown line the PSD's own per-hat 'Hat Hair' variants are cut at.
+#    ("Curl" is the POC sub-style, matched via drivers.hair_style exactly like the engine derives it.)
 FEMALE_HAT_HAIR_CROP = {"Carmen": 207, "Arlington": 177, "Labrea": 256}   # per-hat crown line
-FEMALE_HAT_HAIR_CROP_STYLES = {"Gem", "Updo", "Lush"}
+FEMALE_HAT_HAIR_CROP_STYLES = {"Gem", "Updo", "Lush", "Pantene", "Punk", "Sash", "Boss", "Curl"}
+# 3) Volumetric/absurd hair styles break specific head accessories (specials audit D1/D2/D6):
+#    the Devilish horn floats unanchored on Curl/Afro and double-signatures amid Medusa's snakes;
+#    a Neko mask buries Medusa's circlet. Skip the category outright for those styles.
+FEMALE_STYLE_BLOCK = {"11 Devilish": {"Curl", "Afro", "Medusa"}, "16 Neko": {"Medusa"}}
 # sub-leaf hide (a broken always-drawn layer inside an otherwise-good trait):
 HIDE_LEAF = ("Devilish Rear",   # the disconnected floating devil tail (keep the horn)
              "Hair Fade")       # tan hat-hair base bleeds through light hair colours
@@ -201,7 +211,9 @@ def generate(tree, rng):
             if s.couple_pick(cats[name]["children"]) is None:
                 continue  # coupled optional (Neko) with no variant for this hairstyle -> absent
         if name == "10 Hat" and s.drivers.get("hair_style") in FEMALE_HAT_BLOCK:
-            continue  # art defect, no designer: Medusa's snake-crown pierces every female hat
+            continue  # art defect, no designer: Medusa's snakes / the Afro break every female hat
+        if s.drivers.get("hair_style") in FEMALE_STYLE_BLOCK.get(name, ()):
+            continue  # art defect, no designer: this hair style breaks the accessory (horn/mask)
         top = s.select_category(cats[name])
         r = roles[name]
         if r == "body" and top:
@@ -270,8 +282,9 @@ def apply_conflicts(s, leafmeta):
         hide_cats |= {"12 Beard"}; hide_paths += ["8 Mouth"]
     if laser:                                   # laser eyes replace any eyewear/eye-mod
         hide_cats |= {"16 Glasses", "15 Eye Mod"}
-    if hat:                                      # a hat and a laurel crown can't share the head
-        hide_cats |= {"23 Ceasar"}
+    if hat:                                      # a hat and a laurel crown can't share the head;
+        hide_cats |= {"23 Ceasar",               # female: the Devilish horn (z499) and the Neko
+                      "11 Devilish", "16 Neko"}  # mask ears (z670) always pierce every hat crown/brim
     if fm.split()[0] == "Doom":                  # Doom is a full helmet (hair baked in): no hat, no
         hide_cats |= {"22 Hat", "13.5 Hat Hair", "13 Hair", "23 Ceasar"}   # separate hair -> else a
         hat = False                              # broken beige dome shows between hat and helmet
@@ -340,7 +353,9 @@ def _over(canvas, col, sa, x0, y0):
     dst[..., 3:4] = out_a
 
 # Z overrides: render a category just beneath another, without editing the PSD.
-Z_UNDER = {"15 Earing": "9 Hair"}  # earrings sit under the hair (down-hair covers them, updos reveal them)
+Z_UNDER = {"15 Earing": "9 Hair",  # earrings sit under the hair (down-hair covers them, updos reveal them)
+           "17 AR": "9 Hair"}      # the holo HUD tucks behind hair (its darken+screen pass otherwise
+                                   # slices any hair/snakes in the panel zone; no-op where no overlap)
 # position overrides: female AR (17 AR) was authored off-canvas to the left -> shift it onto the
 # right side of the canvas (matching the male AR placement) so it actually renders.
 POS_OFFSET = {"17 AR": 1004}

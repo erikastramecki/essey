@@ -6,9 +6,9 @@
 // so the report polls the RaidSettled event and shows PENDING until the word arrives.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { parseEventLogs } from "viem";
+import { parseEventLogs, parseAbiItem } from "viem";
 import { niceError } from "../live";
-import { pub, gameSend, GAME_ADDR, saveRaidSecret, loadRaidSecret, clearRaidSecret, type RaidSecret } from "./gameChain";
+import { pub, gameSend, GAME_ADDR, GAME_DEPLOY_BLOCK, saveRaidSecret, loadRaidSecret, clearRaidSecret, type RaidSecret } from "./gameChain";
 import { raidEngineAbi } from "./gameAbi";
 import { raidCommitHash, randomSalt } from "./loadout";
 import { useGame, useAwayTargets, useCountdown, fmtHMS } from "./useGame";
@@ -109,7 +109,34 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
   useEffect(() => {
     if (!open) return;
     const s = g.address && g.selected ? loadRaidSecret(g.address, g.selected.id) : null;
-    if (s && targetDonId !== null && s.targetDonId === targetDonId.toString()) { setSecret(s); setPhase("committed"); }
+    if (s && targetDonId !== null && s.targetDonId === targetDonId.toString()) {
+      setSecret(s); setPhase("committed");
+      // Stale-envelope guard (full-loop verify): the raid may have settled OUT-OF-BAND (keeper
+      // floorSettle / another device) while this order sat closed — showing a live reveal button
+      // then would just revert. Check the engine's state and jump straight to the report.
+      if (s.raidId !== "" && g.address) {
+        const addr = g.address; const attackerId = g.selected!.id;
+        pub.readContract({ address: GAME_ADDR.raidEngine, abi: raidEngineAbi, functionName: "raids", args: [BigInt(s.raidId)] })
+          .then((r) => {
+            const state = Number((r as readonly unknown[])[9]); // Raid.state — 2 = Settled, 3 = Forfeited
+            if (state === 2 || state === 3) {
+              clearRaidSecret(addr, attackerId);
+              setSecret(null);
+              if (state === 2) {
+                setPhase("report");
+                pub.getLogs({
+                  address: GAME_ADDR.raidEngine,
+                  event: parseAbiItem("event RaidSettled(uint64 indexed raidId, uint8 outcome, uint256 pHitPpm, uint256 taken, uint256 tax)"),
+                  args: { raidId: BigInt(s.raidId) }, fromBlock: GAME_DEPLOY_BLOCK, toBlock: "latest",
+                }).then((logs) => {
+                  const o = (logs[0]?.args as { outcome?: number } | undefined)?.outcome;
+                  if (o !== undefined) setOutcome(Number(o));
+                }).catch(() => {});
+              } else { setPhase("order"); setErr("that order lapsed and was forfeited — the ◫50 burned"); }
+            }
+          }).catch(() => {});
+      }
+    }
     else { setSecret(null); setPhase("order"); setPicked(new Set()); setErr(null); setOutcome(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, targetDonId?.toString(), g.address, g.selected?.id?.toString()]);
@@ -155,7 +182,7 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
         targetDonId: targetDonId.toString(), salt, committedAt: Date.now(),
       };
       saveRaidSecret(g.address, s); // the preimage — reveal needs it; losing it means the fee, so save FIRST
-      const hash = await gameSend(g.address, GAME_ADDR.raidEngine, raidEngineAbi, "commit", [attacker.id, h]);
+      const hash = await gameSend(g.address, GAME_ADDR.raidEngine, raidEngineAbi, "commit", [attacker.id, h], undefined, 600_000n);
       // The raidId comes back in the RaidCommitted event — reveal is keyed by it.
       const rcpt = await pub.getTransactionReceipt({ hash });
       const evts = parseEventLogs({ abi: raidEngineAbi, logs: rcpt.logs, eventName: "RaidCommitted" });
@@ -184,8 +211,10 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
       let fee = 0n;
       try { fee = await pub.readContract({ address: GAME_ADDR.raidEngine, abi: raidEngineAbi, functionName: "entropyFee" }); } catch { /* optional */ }
       const raidId = BigInt(secret.raidId);
+      // 1.2M pin (uses ~443k): the old 3M pin made reveal UNAFFORDABLE for low-gas wallets — they
+      // could commit but not reveal, forfeiting the ◫50 (full-loop verify, HIGH finding).
       const hash = await gameSend(g.address, GAME_ADDR.raidEngine, raidEngineAbi, "reveal",
-        [raidId, secret.hitterIds.map(BigInt), BigInt(secret.targetDonId), secret.salt], fee);
+        [raidId, secret.hitterIds.map(BigInt), BigInt(secret.targetDonId), secret.salt], fee, 1_200_000n);
       clearRaidSecret(g.address, BigInt(secret.attackerDonId));
       setPhase("report");
       g.refresh();

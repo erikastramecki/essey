@@ -120,7 +120,7 @@ export function BuilderPage() {
   const [rsv, setRsv] = useState<{ status: "idle" | "busy" | "reserved" | "taken" | "offline" | "error"; by?: string }>({ status: "idle" });
   const d = data[gender];
   const opts = useMemo(() => (d ? catOptions(d) : {}), [d]);
-  const blocked = useMemo(() => (d ? blockedCats(d, picks) : new Set<string>()), [d, picks]);
+  const blocked = useMemo(() => (d ? blockedCats(d, picks, seed) : new Set<string>()), [d, picks, seed]);
   // effective selection = picks minus anything a conflict blocked (preview == what the rules allow)
   const eff = useMemo(() => {
     const e: Record<string, string> = {};

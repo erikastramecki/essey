@@ -12,6 +12,7 @@ import { garrisonCommit, buildLoadout, signLoadout, randomSalt } from "./loadout
 import { BRIEFS, BRIEF_ORDER, type BriefKey } from "./briefs";
 import { useGame } from "./useGame";
 import { CaseFile, WaxSeal, Stamp, RatingStamp, OddsLadder, PaperClip, DonImg, fmtAmt } from "./bits";
+import { ExhibitStill } from "./stills";
 
 // ---------------------------------------------------------------------------------------------
 // THE JOB BOARD — the folder drawer
@@ -172,10 +173,7 @@ export function DossierFile({ briefKey, open, onClose }: { briefKey: BriefKey | 
       </div>
 
       <hr className="g-dashrule" />
-      <div className="g-exhibit">
-        <span className="g-ts">CAM 4 · 02:41</span>
-        <span className="g-extag">{brief.exhibit}</span>
-      </div>
+      <ExhibitStill scene={brief.scene} ts="CAM 4 · 02:41" tag={brief.exhibit} />
 
       <hr className="g-dashrule" />
       <div className="g-typed">

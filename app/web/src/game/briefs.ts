@@ -5,6 +5,8 @@
 //   cumSuccessPpm <= roll < cumPartialPpm => PARTIAL ("the job went sideways" — partialPay)
 //   else                                  => FAIL    (nothing lands; provision burned at dispatch)
 // Payouts are SCRIP minted to the House hopper; dispatch fee + provision burn from the vault.
+import type { SceneKey } from "./stills";
+
 export type BriefKey = "paper" | "glass" | "pow" | "zero" | "sprint" | "windowjob";
 
 /// Scrip amount with 2-dp precision → 18-dec bigint.
@@ -16,7 +18,7 @@ export type GameBrief = {
   no: string; code: string; tab: string; arch: string;
   durationH: number;      // FIXED per brief on-chain (Brief.duration)
   rating: "low" | "std" | "steep" | "unins"; ratingLabel: string;
-  featured: boolean; riskBlocks: number; exhibit: string;
+  featured: boolean; riskBlocks: number; exhibit: string; scene: SceneKey;
   job: string; takeLine: string; risk: string; word: string;
   odds: [number, number, number];  // [success, partial, fail] % — straight off the cumPpm bands
   successPay: bigint; partialPay: bigint;   // Scrip
@@ -33,7 +35,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   paper: {
     key: "paper", chainId: 1n, no: "4470", code: "PAPER ROUTE", tab: "the treasury run · ledger row", arch: "The Treasury Run · Ledger Row",
     durationH: 3, rating: "low", ratingLabel: "LOW", featured: false,
-    riskBlocks: 1, exhibit: "EXHIBIT 1-A · the armored run, on schedule · AI-GEN SLOT",
+    riskBlocks: 1, exhibit: "EXHIBIT 1-A · the armored run, on schedule", scene: "armored-run",
     job: "Ride escort on the armored run from the Long Window to the Registry.",
     takeLine: "36 Scrip on a clean run, 14.4 if it goes sideways. Small, near-certain, dull as paint.",
     risk: "Approximately none, which is why it pays approximately that.",
@@ -44,7 +46,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   glass: {
     key: "glass", chainId: 2n, no: "4468", code: "GLASS HARVEST · RUSH", tab: "the chip-fab job · the foundry", arch: "The Chip-Fab Job · The Foundry",
     durationH: 5, rating: "std", ratingLabel: "STANDARD", featured: false,
-    riskBlocks: 4, exhibit: "EXHIBIT 2-A · dock 4 at shift change · AI-GEN SLOT",
+    riskBlocks: 4, exhibit: "EXHIBIT 2-A · dock 4 at shift change", scene: "fab-dock",
     job: "Walk finished wafers out of the fab through Dock 4 during the shift change.",
     takeLine: "75 Scrip on a clean walk-out, 30 if the airlock cycles early.",
     risk: "Prime target the whole window — everyone on the Tape knows what Dock 4 moves, and your House stands open while you're gloved up.",
@@ -55,7 +57,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   pow: {
     key: "pow", chainId: 3n, no: "4471", code: "PROOF OF WORK", tab: "the rig job · the racks", arch: "The Rig Job · The Racks",
     durationH: 12, rating: "steep", ratingLabel: "STEEP", featured: true,
-    riskBlocks: 5, exhibit: "EXHIBIT 4-C · the rig hall, through the fence · AI-GEN SLOT",
+    riskBlocks: 5, exhibit: "EXHIBIT 4-C · the rig hall, through the fence", scene: "rig-hall",
     job: "Cut the Rig's output over to your wallet for one power cycle.",
     takeLine: "236 Scrip for the full cycle, 94.4 for a partial cut. The peg is real — say so like it's ordinary.",
     risk: "Feast or famine — the take's chart is the steepest thing in the district, and the district includes the Substation.",
@@ -66,7 +68,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   zero: {
     key: "zero", chainId: 4n, no: "4474", code: "ABSOLUTE ZERO", tab: "the quantum grab · the kelvin quarter", arch: "The Quantum Grab · The Kelvin Quarter",
     durationH: 24, rating: "unins", ratingLabel: "UNINSURABLE", featured: false,
-    riskBlocks: 8, exhibit: "EXHIBIT 9-K · annex K, fridge cycle · AI-GEN SLOT",
+    riskBlocks: 8, exhibit: "EXHIBIT 9-K · annex K, fridge cycle", scene: "cryo-annex",
     job: "Lift the prototype from Annex K while the refrigerators are cycling.",
     takeLine: "2,775 Scrip if the dewar makes it out. 222 for fragments. Usually: nothing.",
     risk: "The Fixer won't underwrite this district. Read that sentence twice.",
@@ -82,7 +84,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   sprint: {
     key: "sprint", chainId: 5n, no: "9105", code: "MILK RUN", tab: "proving ground · 75s", arch: "Proving Ground · The Milk Run",
     durationH: 0.021, rating: "low", ratingLabel: "TRAINING", featured: true,
-    riskBlocks: 1, exhibit: "PROVING GROUND · the testnet training wire",
+    riskBlocks: 1, exhibit: "PROVING GROUND · the testnet training wire", scene: "milk-corner",
     job: "A 75-second answer for the family bankroll. Run it once, fund your whole night.",
     takeLine: "6,000 Scrip on a clean run: a Hitter off the rack is 900, a hit order is 50. Do the math.",
     risk: "Training wire. The city looks the other way.",
@@ -93,7 +95,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   windowjob: {
     key: "windowjob", chainId: 6n, no: "9106", code: "OPEN WINDOW", tab: "proving ground · 20min", arch: "Proving Ground · The Open Window",
     durationH: 0.33, rating: "low", ratingLabel: "TRAINING", featured: false,
-    riskBlocks: 1, exhibit: "PROVING GROUND · a raidable away window",
+    riskBlocks: 1, exhibit: "PROVING GROUND · a raidable away window", scene: "open-window",
     job: "Twenty minutes in the field, and your House stands open the whole while.",
     takeLine: "100 Scrip on a clean run. The real pay is the lesson.",
     risk: "The raid-practice wire: your hopper is exposed for 20 minutes. That is the point.",

@@ -13,6 +13,7 @@ import { houseEscrowAbi, houseDeedAbi } from "./gameAbi";
 import { HOUSE_TIERS, HOUSE_TIER_LINES } from "./briefs";
 import { useGame } from "./useGame";
 import { CaseFile, Stamp, PaperClip, ChairSlot, fmtAmt } from "./bits";
+import { ExhibitStill, HOUSE_TIER_SCENES } from "./stills";
 
 /// Row House upgrade fee — HouseDeed.tierStats(1).upgradeFee (1,500 Scrip, burned).
 const ROW_HOUSE_FEE = 1_500n * 10n ** 18n;
@@ -30,18 +31,18 @@ export function HouseFile({ open, onClose }: { open: boolean; onClose: () => voi
     setErr(null); setBusy(kind);
     try {
       if (kind === "repair") {
-        await gameSend(g.address, GAME_ADDR.houseEscrow, houseEscrowAbi, "repair", [don.id]);
+        await gameSend(g.address, GAME_ADDR.houseEscrow, houseEscrowAbi, "repair", [don.id], undefined, 600_000n);
         setRepaired(true);
       } else if (kind === "upgrade") {
-        await gameSend(g.address, GAME_ADDR.houseDeed, houseDeedAbi, "upgrade", [don.id]);
+        await gameSend(g.address, GAME_ADDR.houseDeed, houseDeedAbi, "upgrade", [don.id], undefined, 600_000n);
       } else if (kind === "bank") {
         // The sacred function — sweep everything home: deployed + hopper, free forever.
         await gameSend(g.address, GAME_ADDR.houseEscrow, houseEscrowAbi, "bank",
-          [don.id, don.deployedScrip, don.hopperScrip]);
+          [don.id, don.deployedScrip, don.hopperScrip], undefined, 600_000n);
       } else {
         const units = parseUnits(amt || "0", 18);
         if (units <= 0n) throw new Error("Enter an amount");
-        await gameSend(g.address, GAME_ADDR.houseEscrow, houseEscrowAbi, "deploy", [don.id, units]);
+        await gameSend(g.address, GAME_ADDR.houseEscrow, houseEscrowAbi, "deploy", [don.id, units], undefined, 600_000n);
         setAmt("");
       }
       g.refresh();
@@ -77,8 +78,10 @@ export function HouseFile({ open, onClose }: { open: boolean; onClose: () => voi
             <Stamp corner ok={damage === 0} style={{ fontSize: 11 }}>{damage === 0 ? "INTACT" : "INCIDENT"}</Stamp>
             <div className="g-photowin">
               <PaperClip />
-              <div className="g-pframe"><div className="g-extstill" /></div>
-              <div className="g-pcap">exterior still · AI-GEN SLOT</div>
+              <div className="g-pframe">
+                <ExhibitStill square scene={HOUSE_TIER_SCENES[Math.min(tier ?? 0, 4)]} damaged={damage > 0} />
+              </div>
+              <div className="g-pcap">exterior still</div>
             </div>
             <div className="g-typedfields">
               <p className="g-serifname">{tierName ?? "The Safehouse"}</p>

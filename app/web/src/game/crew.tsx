@@ -54,7 +54,7 @@ export function CrewFile({ open, onClose }: { open: boolean; onClose: () => void
     if (!g.address || !don || busy || !g.configured) return;
     setErr(null); setBusy("mint");
     try {
-      await gameSend(g.address, GAME_ADDR.hitter, hitterAbi, "mint", [don.id]);
+      await gameSend(g.address, GAME_ADDR.hitter, hitterAbi, "mint", [don.id], undefined, 800_000n);
       g.refresh();
     } catch (e) {
       setErr(niceError(e));
@@ -69,7 +69,7 @@ export function CrewFile({ open, onClose }: { open: boolean; onClose: () => void
     try {
       let fee = 0n;
       try { fee = await pub.readContract({ address: GAME_ADDR.hitter, abi: hitterAbi, functionName: "entropyFee" }); } catch { /* optional */ }
-      await gameSend(g.address, GAME_ADDR.hitter, hitterAbi, "revealFavor", [id], fee);
+      await gameSend(g.address, GAME_ADDR.hitter, hitterAbi, "revealFavor", [id], fee, 900_000n);
       // The word lands via the keeper seconds later — fast-poll so the envelope flips NOW, not on
       // the 15s cadence (founder hit this: reveal worked, UI lagged, second click reverted).
       setBusy("opening");

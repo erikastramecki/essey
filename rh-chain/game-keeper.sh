@@ -22,15 +22,16 @@ RPC="${RH_TESTNET_RPC:-https://rpc.testnet.chain.robinhood.com}"
 ENTROPY="0xc9e6B140C10e6DcDAE7a2d2a9FdD1BB82Ca1F047"   # game MockEntropy (46630)
 BOARD="0xA4839CA4b595c768636E05bF37E32b167e482d99"     # MissionBoard
 RAID="0xf497AAb709952FF061AEC34390Dad281649D1a2a"      # RaidEngine
-WINDOW=40   # recent seqs / missions / raids re-scanned each pass
-INTERVAL="${GAME_KEEPER_INTERVAL:-4}"
+WINDOW=15   # recent seqs / missions / raids re-scanned each pass (full-loop verify: 40-serial was ~60s/pass)
+INTERVAL="${GAME_KEEPER_INTERVAL:-2}"
 GARRISON_TIMEOUT=3600
 
 echo "game-keeper: entropy $ENTROPY / board $BOARD / raid $RAID every ${INTERVAL}s"
 while true; do
   now=$(date +%s)
 
-  # -- duty 1: deliver pending entropy words ------------------------------------------------------
+  # -- duty 1: deliver pending entropy words (parallel with duties 2/3 — latency fix) -------------
+  (
   next=$(cast call "$ENTROPY" 'nextSeq()(uint64)' --rpc-url "$RPC" 2>/dev/null)
   if [[ "$next" =~ ^[0-9]+$ ]] && [ "$next" -gt 1 ]; then
     start=1; [ "$next" -gt "$WINDOW" ] && start=$((next - WINDOW))
@@ -43,7 +44,9 @@ while true; do
     done
   fi
 
+  ) &
   # -- duty 2: ring the bell on due missions ------------------------------------------------------
+  (
   mcount=$(cast call "$BOARD" 'missionCount()(uint64)' --rpc-url "$RPC" 2>/dev/null)
   if [[ "$mcount" =~ ^[0-9]+$ ]] && [ "$mcount" -ge 1 ]; then
     mstart=1; [ "$mcount" -gt "$WINDOW" ] && mstart=$((mcount - WINDOW + 1))
@@ -64,7 +67,9 @@ while true; do
     done
   fi
 
+  ) &
   # -- duty 3: floor-settle raids whose garrison never opened -------------------------------------
+  (
   rcount=$(cast call "$RAID" 'raidCount()(uint64)' --rpc-url "$RPC" 2>/dev/null)
   if [[ "$rcount" =~ ^[0-9]+$ ]] && [ "$rcount" -ge 1 ]; then
     rstart=1; [ "$rcount" -gt "$WINDOW" ] && rstart=$((rcount - WINDOW + 1))
@@ -87,5 +92,7 @@ while true; do
     done
   fi
 
+  ) &
+  wait
   sleep "$INTERVAL"
 done

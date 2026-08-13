@@ -49,12 +49,16 @@ export function gameWallet(account: Address) {
 
 export async function gameSend(
   account: Address, to: Address, abi: readonly unknown[], functionName: string,
-  args: unknown[] = [], value?: bigint,
+  args: unknown[] = [], value?: bigint, gasLimit?: bigint,
 ): Promise<Hex> {
+  // Wallets require balance >= gasLimit x gasPrice + value to SUBMIT — a flat 3M pin made the raid
+  // reveal unaffordable for low-gas testers even though it uses ~443k (full-loop verify, HIGH):
+  // the ◫50 commit fee then forfeited at window close. Callers pass a right-sized pin; the 3M
+  // default stays for heavyweight paths (first-play depart mints deed + stipend + reservation).
   const w = gameWallet(account);
   const hash = await w.writeContract({
     address: to, abi: abi as never, functionName: functionName as never, args: args as never,
-    account, chain: null, gas: 3_000_000n, ...(value !== undefined ? { value } : {}),
+    account, chain: null, gas: gasLimit ?? 3_000_000n, ...(value !== undefined ? { value } : {}),
   });
   const rcpt = await pub.waitForTransactionReceipt({ hash, timeout: 120_000 });
   if (rcpt.status !== "success") throw new Error("Transaction reverted");

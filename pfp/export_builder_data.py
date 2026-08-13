@@ -20,6 +20,7 @@ RULES["CROP_BOTTOM"] = ns["CROP_BOTTOM"]
 RULES["FEMALE_HAT_BLOCK"] = sorted(ns["FEMALE_HAT_BLOCK"])
 RULES["FEMALE_HAT_HAIR_CROP"] = ns["FEMALE_HAT_HAIR_CROP"]
 RULES["FEMALE_HAT_HAIR_CROP_STYLES"] = sorted(ns["FEMALE_HAT_HAIR_CROP_STYLES"])
+RULES["FEMALE_STYLE_BLOCK"] = {k: sorted(v) for k, v in ns["FEMALE_STYLE_BLOCK"].items()}
 
 def role(name):
     return ns["_role"](name)

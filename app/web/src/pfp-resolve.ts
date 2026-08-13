@@ -16,6 +16,7 @@ export type Rules = {
   SUPPRESS_IN?: Record<string, string[]>;
   HIDE_LEAF?: string[]; CROP_TOP?: Record<string, number>; CROP_BOTTOM?: Record<string, number>;
   FEMALE_HAT_BLOCK?: string[]; FEMALE_HAT_HAIR_CROP?: Record<string, number>; FEMALE_HAT_HAIR_CROP_STYLES?: string[];
+  FEMALE_STYLE_BLOCK?: Record<string, string[]>;
 };
 export type BuilderData = {
   gender: string; leaves: Leaf[]; tree: TreeNode[];
@@ -149,10 +150,14 @@ function generate(data: BuilderData, rng: RNG, forced: Record<string, string> = 
       if (rng.random() >= R.OPTIONAL[name]) continue;
       if (s.couplePick(cats[name].children || []) === null) continue;
     }
-    // FEMALE_HAT_BLOCK (engine.py): Medusa's snake-crown pierces every female hat -> skip the hat
-    // category entirely for a blocked hair style, so preview + uniqueness key match the engine.
+    // FEMALE_HAT_BLOCK (engine.py): Medusa's snakes / the Afro break every female hat -> skip the
+    // hat category entirely for a blocked hair style, so preview + uniqueness key match the engine.
     if (name === "10 Hat" && R.FEMALE_HAT_BLOCK && typeof s.drivers.hair_style === "string"
       && R.FEMALE_HAT_BLOCK.includes(s.drivers.hair_style)) continue;
+    // FEMALE_STYLE_BLOCK (engine.py): a hair style that breaks this accessory (Devilish horn on
+    // Curl/Afro/Medusa, Neko mask on Medusa) -> skip the category, same semantics as the hat block.
+    if (R.FEMALE_STYLE_BLOCK && typeof s.drivers.hair_style === "string"
+      && (R.FEMALE_STYLE_BLOCK[name] || []).includes(s.drivers.hair_style)) continue;
     const top = s.selectCategory(cats[name]); const r = roles[name];
     if (r === "body" && top) {
       const fam = fw(top); s.drivers.family = fam;
@@ -195,7 +200,9 @@ function applyConflicts(data: BuilderData, s: Sel) {
   else if (cover === "eyes") { hideCats.add("16 Glasses"); hideCats.add("15 Eye Mod"); }
   else if (cover === "lower") { hideCats.add("12 Beard"); hidePaths.push("8 Mouth"); }
   if (laser) { hideCats.add("16 Glasses"); hideCats.add("15 Eye Mod"); }
-  if (hat) hideCats.add("23 Ceasar");
+  // A hat and a laurel crown can't share the head; female: the Devilish horn (z499) and the Neko
+  // mask ears (z670) always pierce every hat crown/brim (male-precedent conflict idiom).
+  if (hat) { hideCats.add("23 Ceasar"); hideCats.add("11 Devilish"); hideCats.add("16 Neko"); }
   if (fm.split(/\s+/)[0] === "Doom") { ["22 Hat", "13.5 Hat Hair", "13 Hair", "23 Ceasar"].forEach((c) => hideCats.add(c)); hat = false; }
 
   const variant = (cat: string): string | null => {
@@ -308,7 +315,7 @@ const stripName = (v: string) => v.replace(/#\d+/g, "").replace(/^[\d.]+\s+/, ""
 function availReason(
   data: BuilderData, male: boolean, cat: string, cx: {
     grip: string | null; cane: string | null; family: string; cover?: string;
-    facemod: string; laser: boolean; hat: boolean; medusa: boolean; SG: Set<string>;
+    facemod: string; laser: boolean; hat: boolean; hairStyle: string; SG: Set<string>;
   }): string {
   const HAT = male ? "22 Hat" : "10 Hat";
   const ZH = new Set(["13 Hair", "15 Eye Mod", "16 Glasses", "17 Face Mod", "22 Hat", "23 Ceasar", "24 Laser Eye"]);
@@ -326,11 +333,26 @@ function availReason(
   }
   if (cat === HAT) {
     if (cx.facemod === "Doom") return `the Doom helmet covers your whole head`;
-    if (cx.medusa) return `Medusa's snake-crown pierces every hat`;
+    if (!male && (data.rules.FEMALE_HAT_BLOCK || []).includes(cx.hairStyle))
+      return cx.hairStyle === "Medusa"
+        ? `Medusa's snake-crown pierces every hat`
+        : `your ${cx.hairStyle} is too big for any hat`;
   }
   if (cat === "23 Ceasar") {
     if (cx.facemod === "Doom") return `the Doom helmet leaves no room for a crown`;
     if (cx.hat) return `can't wear a laurel crown under a hat`;
+  }
+  if (cat === "11 Devilish") {
+    if ((data.rules.FEMALE_STYLE_BLOCK?.["11 Devilish"] || []).includes(cx.hairStyle))
+      return cx.hairStyle === "Medusa"
+        ? `the horn can't share the head with Medusa's snakes`
+        : `the horn has nowhere to anchor in your ${cx.hairStyle}`;
+    if (cx.hat) return `the horn would pierce your hat`;
+  }
+  if (cat === "16 Neko") {
+    if ((data.rules.FEMALE_STYLE_BLOCK?.["16 Neko"] || []).includes(cx.hairStyle))
+      return `the mask would bury Medusa's snake-crown`;
+    if (cx.hat) return `the mask's ears would pierce your hat`;
   }
   return `unavailable with your current traits`;
 }
@@ -364,20 +386,26 @@ export function unavailableOptions(
   const laser = !!rendered["24 Laser Eye"] && rendered["24 Laser Eye"].toLowerCase() !== "none";
   const hat = !!base.drivers.hat;
   const hairStyle = (base.drivers.hair_style as string) || "";
-  const medusa = !male && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle);
   const SG = new Set(data.hand_conflicts?.snake_grip || []);
-  const cx = { grip, cane, family, cover, facemod, laser, hat, medusa, SG };
+  const cx = { grip, cane, family, cover, facemod, laser, hat, hairStyle, SG };
 
   const opts = catOptions(data);
   // Pin every category to its current RENDERED option (fallback: an explicit-but-hidden pick, else none),
   // so flipping one option under test can't perturb the RNG-chosen context of every other category.
   const pinned: Record<string, string> = {};
   for (const cat of Object.keys(opts)) pinned[cat] = rOpt(cat) ?? "none";
+  // Also pin the NESTED picks the preview resolved ("9 Hair/POC" -> "Curl"): a top-level pin alone
+  // lets the test resolve re-roll a different sub-style (POC -> Afro), which would phantom-block
+  // options (e.g. every hat) that are perfectly available with the sub-style actually on screen.
+  const nested: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base.picks)) if (k.includes("/")) nested[k] = v;
 
   for (const cat of Object.keys(opts)) {
+    const nestedSafe: Record<string, string> = {};
+    for (const [k, v] of Object.entries(nested)) if (!k.startsWith(cat + "/")) nestedSafe[k] = v;
     for (const opt of opts[cat]) {
       if (!opt || opt.toLowerCase() === "none") continue; // ∅ None is always a valid choice
-      const test = resolveSelection(data, { ...pinned, [cat]: opt }, seed);
+      const test = resolveSelection(data, { ...pinned, ...nestedSafe, [cat]: opt }, seed);
       if (new Set(test.render.map((l) => l.category)).has(cat)) continue; // it renders -> available
       let m = out.get(cat); if (!m) { m = new Map(); out.set(cat, m); }
       m.set(opt, availReason(data, male, cat, cx));
@@ -386,8 +414,10 @@ export function unavailableOptions(
   return out;
 }
 
-// which category panels to gray-out given the current selection (a pick there won't render)
-export function blockedCats(data: BuilderData, forced: Record<string, string>): Set<string> {
+// which category panels to gray-out given the current selection (a pick there won't render).
+// `seed` (when given) must match the live preview's: female hair styles can live one level below
+// the forced pick ("9 Hair": "POC" -> style Afro), so the style is read off the RESOLVED driver.
+export function blockedCats(data: BuilderData, forced: Record<string, string>, seed?: number): Set<string> {
   const b = new Set<string>();
   const male = data.gender === "male";
   const HAT = male ? "22 Hat" : "10 Hat", EYEMOD = "15 Eye Mod", GLASSES = "16 Glasses",
@@ -400,10 +430,21 @@ export function blockedCats(data: BuilderData, forced: Record<string, string>): 
   const hat = forced[HAT]; if (hat && hat.toLowerCase() !== "none") b.add(CEASAR);
   const fam = (forced[male ? "4 Body" : "3 Body"] || "").split(/\s+/)[0];
   if (["Zombie", "Golden", "Glitch"].includes(fam)) [FACEMOD, HAT, CEASAR, GLASSES, EYEMOD, LASER].forEach((x) => b.add(x));
-  // FEMALE_HAT_BLOCK: a blocked hair style (Medusa) pierces every female hat -> the hat won't render.
   if (!male) {
-    const hairStyle = (forced["9 Hair"] || "").split(/\s+/)[0];
+    // Resolved hair style: an explicit "9 Hair" pick may carry the style one level down (POC -> Afro),
+    // so consult the resolver's driver when a seed is available; fall back to the forced first word.
+    let hairStyle = (forced["9 Hair"] || "").split(/\s+/)[0];
+    if (seed !== undefined) {
+      const st = resolveSelection(data, forced, seed).drivers.hair_style;
+      if (typeof st === "string" && st) hairStyle = st;
+    }
+    // FEMALE_HAT_BLOCK: a blocked hair style (Medusa/Afro) breaks every female hat -> no hat renders.
     if (hairStyle && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle)) b.add(HAT);
+    // FEMALE_STYLE_BLOCK: a hair style that breaks an accessory (Devilish horn / Neko mask).
+    for (const [cat, styles] of Object.entries(data.rules.FEMALE_STYLE_BLOCK || {}))
+      if (hairStyle && styles.includes(hairStyle)) b.add(cat);
+    // A hat hides the Devilish horn and the Neko mask (ears/horn pierce every crown/brim).
+    if (hat && hat.toLowerCase() !== "none") { b.add("11 Devilish"); b.add("16 Neko"); }
   }
   return b;
 }
