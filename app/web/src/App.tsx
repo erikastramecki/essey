@@ -17,6 +17,7 @@ import { HowItWorksPage } from "./howitworks";
 import { FaucetPage } from "./faucet";
 import { NotFoundPage } from "./notfound";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
+import { GamePage } from "./game/GamePage";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -30,6 +31,7 @@ type NavItem = { to: string; label: string } | { label: string; items: NavLeaf[]
 const NAV: NavItem[] = [
   { to: "/builder", label: "Mint" },
   { to: "/market", label: "Trade" },
+  { to: "/game", label: "The Game" },
   { label: "Earn", items: [
     { to: "/bell", label: "The Bell", desc: "Stake your Don, ring, claim stock" },
     { to: "/lend", label: "Lend", desc: "Supply USDG · borrow against stock" },
@@ -54,13 +56,14 @@ const MOBILE_NAV: [string, NavLeaf[]][] = [
   ["The floor", [
     { to: "/builder", label: "Mint", desc: "build your Don" },
     { to: "/market", label: "Trade", desc: "buy · snipe · sell" },
+    { to: "/game", label: "The Game", desc: "jobs · raids · the city of Solvency" },
     { to: "/bell", label: "The Bell", desc: "stake · ring · claim" },
     { to: "/lend", label: "Lend", desc: "supply · borrow" },
     { to: "/cases", label: "Cases", desc: "multiplier draws" },
     { to: "/portfolio", label: "Portfolio", desc: "everything you hold" },
   ]],
-  ["Learn", (NAV[3] as { items: NavLeaf[] }).items],
-  ["More", (NAV[4] as { items: NavLeaf[] }).items],
+  ["Learn", (NAV[4] as { items: NavLeaf[] }).items],
+  ["More", (NAV[5] as { items: NavLeaf[] }).items],
 ];
 
 /// Thin wrapper for app pages: sets the document title. Each page's own band-head carries its
@@ -82,6 +85,7 @@ export default function App() {
             <Route path="/market" element={<AppPage title="The Exchange"><LiveExchange /><Mechanics /></AppPage>} />
             <Route path="/bell" element={<AppPage title="The Bell"><LiveBell /></AppPage>} />
             <Route path="/cases" element={<AppPage title="Cases"><CasesPage /></AppPage>} />
+            <Route path="/game/*" element={<AppPage title="D.O.N. — the Game"><GamePage /></AppPage>} />
             <Route path="/lend" element={<AppPage title="Lend"><LendPage /></AppPage>} />
             <Route path="/launch" element={<AppPage title="Launch"><OperatorPage /></AppPage>} />
             <Route path="/explorer" element={<ExplorerPage />} />

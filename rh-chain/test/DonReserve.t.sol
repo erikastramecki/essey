@@ -27,7 +27,7 @@ contract DonReserveTest is Test {
 
     function setUp() public {
         essey = new ERC20Mock();
-        don = new Don("Essey Don", "DON", CAP, address(this)); // test = minter
+        don = new Don("Essey Don", "DON", CAP, address(this), address(0x7EE), 500); // test = minter
         res = new DonReserve(IERC20(address(essey)), IERC721(address(don)));
     }
 

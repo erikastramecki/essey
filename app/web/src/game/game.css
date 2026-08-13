@@ -1,0 +1,1164 @@
+/* ============================================================
+   D.O.N. — the dossier interface (game layer)
+   Ported from the verified prototype (scratchpad/don-ui-prototype.html).
+   One grammar, two materials:
+     Material A (LEDGER)    = chain truth. ink ground, mono numbers.
+     Material B (CASE FILE) = the fiction. paper, stamps, wax.
+   Every class is `g-` prefixed and the tokens live on .game-root, so this
+   sheet can never collide with styles.css (which owns .tape-row, .stamp-ish
+   names of its own). Imported ONLY by src/game components.
+   ============================================================ */
+.game-root {
+  /* Material A — the ledger (dark ink world) */
+  --g-ink: #12100c;
+  --g-s1: #181510;
+  --g-line: #2a251c;
+  --g-line-2: #3b3427;
+  --g-tx: #ede8dc;
+  --g-tx-mut: #a69e8c;
+  --g-tx-faint: #6f685a;
+  --g-gold: #c9a24b;
+  --g-gold-hi: #e2c177;
+  --g-gold-line: rgba(201, 162, 75, 0.32);
+  --g-gold-dim: rgba(201, 162, 75, 0.12);
+  --g-good: #4cbe8a;
+  --g-warn: #e0913e;
+  --g-crit: #e0685c;
+  --g-bell: #f0c46a;
+  --g-tape: #7fe3c4;
+  /* Material B — the case file (game-layer additions, art brief §1.3) */
+  --g-paper: #e8dfc9;
+  --g-paper-hi: #f3eddd;
+  --g-paper-edge: #c9be9f;
+  --g-ink-type: #26221a;
+  --g-ink-type-mut: #5c5240;
+  --g-stamp: #a8352a;
+  --g-stamp-ok: #2e6b4f;
+  --g-carbon: #4a5a78;
+  /* type — system stacks matching the ledger floor */
+  --g-serif: "Didot", "Bodoni 72", "Hoefler Text", "New York", Georgia, serif;
+  --g-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --g-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  display: flex;
+  justify-content: center;
+  padding: 18px 8px calc(70px + env(safe-area-inset-bottom)); /* clears the fixed ticker rail */
+  background: #0b0a07;
+  color: var(--g-tx);
+  font-family: var(--g-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 60vh;
+}
+
+/* ---------- the game surface (was the prototype's phone frame) ---------- */
+.g-phone {
+  position: relative;
+  width: min(430px, 100%);
+  height: min(860px, calc(100dvh - 150px));
+  min-height: 520px;
+  background: var(--g-ink);
+  border: 1px solid var(--g-line-2);
+  border-radius: 18px;
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.9), inset 0 0 0 1px #060504;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* ============================================================
+   THE WORLD LAYER — the desk (Material A). Files slide over it.
+   ============================================================ */
+.g-desk {
+  position: absolute;
+  inset: 0;
+  padding: 14px 14px 76px;
+  overflow-y: auto;
+  background:
+    radial-gradient(120% 60% at 50% -8%, rgba(201, 162, 75, 0.05), transparent 55%),
+    var(--g-ink);
+}
+.g-desk::-webkit-scrollbar { display: none; }
+.g-topnav {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 2px 12px;
+  border-bottom: 1px solid var(--g-line);
+}
+.g-brand { font-family: var(--g-serif); font-size: 19px; letter-spacing: 0.05em; color: var(--g-tx); }
+.g-brand i { font-style: normal; color: var(--g-gold); }
+.g-scrip {
+  font-family: var(--g-mono);
+  font-size: 12px;
+  color: var(--g-tx-mut);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.g-scrip b { color: var(--g-bell); font-weight: 500; font-variant-numeric: tabular-nums; }
+/* season banner — one line of world truth under the masthead */
+.g-season {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 7px 10px;
+  border: 1px solid var(--g-gold-line);
+  border-radius: 5px;
+  background: var(--g-gold-dim);
+  font-family: var(--g-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--g-gold);
+}
+.g-season span:last-child { color: var(--g-tx-faint); letter-spacing: 0.04em; text-transform: none; }
+
+/* your Don's file cover, lying on the desk (Material B object on Material A ground) */
+.g-deskcard {
+  margin: 14px 0 0;
+  padding: 14px;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  background: linear-gradient(174deg, var(--g-paper-hi), var(--g-paper) 70%);
+  color: var(--g-ink-type);
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.75), 0 2px 0 -1px var(--g-paper-edge);
+  transform: rotate(-0.5deg);
+  position: relative;
+  font-family: var(--g-sans);
+}
+.g-deskcard:active { transform: rotate(-0.5deg) translateY(1px); }
+.g-deskcard .g-row { display: flex; gap: 12px; align-items: flex-start; }
+.g-deskcard .g-ph {
+  width: 74px;
+  height: 74px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid var(--g-gold);
+  outline: 1px solid rgba(0, 0, 0, 0.25);
+  outline-offset: -4px;
+  overflow: hidden;
+  position: relative;
+  background: radial-gradient(120% 100% at 50% 0%, #262119, #12100c);
+}
+.g-deskcard .g-ph img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.9);
+  transform-origin: 50% 18%;
+}
+.g-deskcard .g-ph .g-ph-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--g-mono);
+  font-size: 11px;
+  color: var(--g-gold);
+}
+.g-deskcard h3 { margin: 0; font-family: var(--g-mono); font-size: 13px; letter-spacing: 0.06em; font-weight: 600; }
+.g-deskcard .g-sub { font-family: var(--g-mono); font-size: 11px; color: var(--g-ink-type-mut); letter-spacing: 0.04em; }
+.g-deskcard .g-cd { font-family: var(--g-mono); font-size: 19px; letter-spacing: 0.03em; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.g-deskcard .g-cd small { font-size: 10.5px; color: var(--g-ink-type-mut); letter-spacing: 0.12em; }
+
+/* additional owned Dons — case-file chips row */
+.g-chips { display: flex; gap: 8px; overflow-x: auto; margin: 10px -2px 0; padding: 2px; }
+.g-chips::-webkit-scrollbar { display: none; }
+.g-chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--g-paper-edge);
+  border-radius: 4px;
+  background: linear-gradient(178deg, #ede4cc, #e2d6b8 80%);
+  color: var(--g-ink-type);
+  font-family: var(--g-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  padding: 5px 10px 5px 5px;
+  cursor: pointer;
+  box-shadow: 0 4px 9px -6px rgba(0, 0, 0, 0.55);
+}
+.g-chip.on { box-shadow: inset 0 0 0 1.5px var(--g-gold), 0 4px 9px -6px rgba(0, 0, 0, 0.55); }
+.g-chip .g-chip-ph {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--g-gold);
+  background: #1a1712;
+  position: relative;
+}
+.g-chip .g-chip-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.9); transform-origin: 50% 18%; }
+.g-chip i { font-style: normal; color: var(--g-stamp-ok); font-size: 8.5px; letter-spacing: 0.14em; }
+.g-chip i.away { color: var(--g-stamp); }
+
+/* the ledger strip under the card — money truth, Material A */
+.g-ledgerstrip {
+  margin: 14px 0 0;
+  border: 1px solid var(--g-line-2);
+  border-radius: 6px;
+  background: var(--g-s1);
+  padding: 11px 13px;
+  font-family: var(--g-mono);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+.g-ledgerstrip .g-lrow { display: flex; justify-content: space-between; gap: 8px; padding: 3.5px 0; color: var(--g-tx-mut); }
+.g-ledgerstrip .g-lrow b { color: var(--g-tx); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.g-ledgerstrip .ok { color: var(--g-good); }
+.g-ledgerstrip .warnc { color: var(--g-warn); }
+.g-ledgerstrip .g-cap {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--g-gold);
+  text-transform: uppercase;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--g-line);
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.g-ledgerstrip .g-cap span:last-child { color: var(--g-tx-faint); }
+
+/* tape feed */
+.g-tapefeed { margin: 14px 0 0; }
+.g-tape-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 2px;
+  border-bottom: 1px dashed var(--g-line-2);
+  font-family: var(--g-mono);
+  font-size: 11.5px;
+  color: var(--g-tx-mut);
+}
+.g-tape-row .t { color: var(--g-tx-faint); flex: 0 0 auto; }
+.g-tape-row .fresh { color: var(--g-tape); }
+.g-tape-row b { color: var(--g-tx); font-weight: 500; }
+
+/* the connect / acquire CTA card — same paper object, different message */
+.g-cta {
+  margin: 16px 0 0;
+  padding: 18px 16px;
+  border-radius: 6px;
+  background: linear-gradient(174deg, var(--g-paper-hi), var(--g-paper) 70%);
+  color: var(--g-ink-type);
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.75), 0 2px 0 -1px var(--g-paper-edge);
+  transform: rotate(-0.5deg);
+  text-align: center;
+}
+.g-cta .g-cta-h { font-family: var(--g-mono); font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--g-ink-type-mut); margin-bottom: 8px; }
+.g-cta p { font-family: var(--g-mono); font-size: 11.5px; line-height: 1.7; margin: 0 0 12px; }
+.g-cta-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-block;
+  font-family: var(--g-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--g-stamp-ok);
+  border: 2.5px solid var(--g-stamp-ok);
+  border-radius: 4px;
+  padding: 6px 14px 5px;
+  transform: rotate(-2deg);
+  filter: blur(0.22px);
+}
+.g-cta-btn:active { transform: rotate(-2deg) scale(0.95); }
+
+/* dim scrim when a file is over the desk */
+.g-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 5, 3, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  z-index: 4;
+}
+.g-phone.file-open .g-scrim { opacity: 1; }
+
+/* ============================================================
+   THE FILE LAYER — Material B sheets that slide over the world
+   ============================================================ */
+.g-file {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 52px;
+  bottom: 0;
+  z-index: 6;
+  transform: translateY(106%);
+  transition: transform 0.42s cubic-bezier(0.32, 0.9, 0.31, 1);
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.g-file.open { transform: translateY(0); pointer-events: auto; }
+.g-file.under { transform: translateY(-8px) scale(0.984); filter: brightness(0.92); pointer-events: none; }
+.g-file.stack2 { z-index: 8; }
+
+/* the folder tab that peeks above the sheet */
+.g-foldertab {
+  align-self: flex-start;
+  margin-left: 16px;
+  background: var(--g-paper);
+  color: var(--g-ink-type-mut);
+  font-family: var(--g-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 5px 14px 3px;
+  border-radius: 7px 7px 0 0;
+  border: 1px solid var(--g-paper-edge);
+  border-bottom: none;
+  box-shadow: 0 -6px 14px -8px rgba(0, 0, 0, 0.6);
+  max-width: calc(100% - 32px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.g-file.jacket-carbon .g-foldertab { background: var(--g-carbon); color: #dce2ee; border-color: transparent; }
+.g-file.jacket-grey .g-foldertab { background: #d9d4c4; }
+.g-sheet {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background:
+    repeating-linear-gradient(2deg, rgba(120, 100, 60, 0.028) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(92deg, rgba(60, 50, 30, 0.02) 0 3px, transparent 3px 7px),
+    linear-gradient(176deg, var(--g-paper-hi) 0%, var(--g-paper) 82%);
+  color: var(--g-ink-type);
+  border: 1px solid var(--g-paper-edge);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 -18px 44px -18px rgba(0, 0, 0, 0.85);
+  padding: 18px 18px 96px 34px;
+  position: relative;
+}
+.g-sheet::-webkit-scrollbar { display: none; }
+.g-file.jacket-carbon .g-sheet {
+  background:
+    repeating-linear-gradient(2deg, rgba(20, 30, 60, 0.05) 0 2px, transparent 2px 5px),
+    linear-gradient(176deg, #dfe4ef 0%, #cfd6e4 82%);
+}
+/* punch holes, left edge */
+.g-punch {
+  position: absolute;
+  left: 9px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #0e0c08 55%, #2a251c 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.g-punch.p1 { top: 120px; }
+.g-punch.p2 { top: 340px; }
+/* CONFIDENTIAL watermark */
+.g-wm { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 10px 10px 0 0; }
+.g-wm::before {
+  content: "CONFIDENTIAL · CONFIDENTIAL · CONFIDENTIAL";
+  position: absolute;
+  top: 44%;
+  left: -20%;
+  right: -20%;
+  transform: rotate(-24deg);
+  font-family: var(--g-mono);
+  font-size: 34px;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+  color: rgba(38, 34, 26, 0.045);
+  font-weight: 700;
+}
+/* file head bar */
+.g-filehead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--g-mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--g-ink-type-mut);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 2px solid var(--g-ink-type);
+}
+.g-filehead .g-rule { flex: 1; border-top: 1px solid rgba(38, 34, 26, 0.25); margin: 0 10px; }
+.g-xbtn {
+  all: unset;
+  cursor: pointer;
+  font-family: var(--g-mono);
+  font-size: 13px;
+  padding: 2px 8px;
+  color: var(--g-ink-type-mut);
+  border: 1px solid rgba(38, 34, 26, 0.3);
+  border-radius: 3px;
+}
+.g-xbtn:hover { color: var(--g-stamp); border-color: var(--g-stamp); }
+
+/* ---------- the canonical composition: photo window + typed fields + stamp ---------- */
+.g-canon { display: flex; gap: 14px; position: relative; margin-bottom: 8px; }
+.g-photowin {
+  flex: 0 0 128px;
+  width: 128px;
+  position: relative;
+  transform: rotate(-1.6deg);
+  filter: drop-shadow(2px 4px 5px rgba(30, 20, 5, 0.35));
+}
+.g-photowin .g-pframe { background: #fff; padding: 6px 6px 22px; border: 1px solid #d8d2c0; }
+.g-photowin .g-pimg { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #1a1712; }
+.g-photowin .g-pcap {
+  position: absolute;
+  left: 8px;
+  right: 6px;
+  bottom: 6px;
+  font-family: var(--g-mono);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  color: #8a8272;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.g-pclip { position: absolute; top: -13px; left: 12px; width: 22px; height: 44px; z-index: 2; }
+.g-typedfields { flex: 1; min-width: 0; font-family: var(--g-mono); font-size: 11.5px; letter-spacing: 0.02em; }
+.g-tf { display: flex; gap: 8px; align-items: baseline; padding: 4px 0 3px; border-bottom: 1px solid rgba(38, 34, 26, 0.22); }
+.g-tf label { flex: 0 0 auto; font-size: 9px; letter-spacing: 0.18em; color: var(--g-ink-type-mut); text-transform: uppercase; }
+.g-tf b { font-weight: 600; font-size: 10.5px; line-height: 1.45; min-width: 0; }
+.g-tf .ok { color: var(--g-stamp-ok); }
+.g-serifname { font-family: var(--g-serif); font-size: 19px; letter-spacing: 0.02em; margin: 0 0 2px; line-height: 1.15; }
+
+/* rubber stamp component — rotated bordered mono caps, ink bleed via blur+mask */
+.g-stamp {
+  display: inline-block;
+  font-family: var(--g-mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--g-stamp);
+  border: 2.5px solid var(--g-stamp);
+  border-radius: 4px;
+  padding: 3px 10px 2px;
+  transform: rotate(-8deg);
+  font-size: 13px;
+  filter: blur(0.24px);
+  -webkit-mask-image: radial-gradient(circle at 30% 40%, black 60%, rgba(0, 0, 0, 0.72) 100%);
+  mask-image: radial-gradient(circle at 30% 40%, black 60%, rgba(0, 0, 0, 0.72) 100%);
+  opacity: 0.92;
+  white-space: nowrap;
+}
+.g-stamp.ok { color: var(--g-stamp-ok); border-color: var(--g-stamp-ok); }
+.g-stamp.carbon { color: var(--g-carbon); border-color: var(--g-carbon); }
+.g-stamp.corner { position: absolute; right: -6px; top: -24px; z-index: 3; }
+.g-stamp.big { font-size: 16px; padding: 5px 14px 4px; }
+@keyframes g-thump {
+  0% { transform: scale(2.6) rotate(-18deg); opacity: 0; }
+  60% { transform: scale(0.92) rotate(-7deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-8deg); opacity: 0.92; }
+}
+.g-stamp.thump { animation: g-thump 0.38s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+
+/* stamped action button (REPAIR / RETAIN / CLAIM ... the tx affordance below seal-grade) */
+.g-stampbtn {
+  all: unset;
+  cursor: pointer;
+  font-family: var(--g-mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--g-stamp);
+  border: 2px solid var(--g-stamp);
+  border-radius: 3px;
+  padding: 3px 10px 2px;
+  transform: rotate(-2deg);
+  filter: blur(0.2px);
+}
+.g-stampbtn.ok { color: var(--g-stamp-ok); border-color: var(--g-stamp-ok); }
+.g-stampbtn:active { transform: rotate(-2deg) scale(0.94); }
+.g-stampbtn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* dashed section rule + section eyebrows inside paper */
+.g-dashrule { border: none; border-top: 1.5px dashed rgba(38, 34, 26, 0.3); margin: 14px 0; }
+.g-pcap-h {
+  font-family: var(--g-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--g-ink-type-mut);
+  margin: 0 0 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.g-pcap-h::after { content: ""; flex: 1; border-top: 1px solid rgba(38, 34, 26, 0.2); }
+/* typed brief body */
+.g-typed { font-family: var(--g-mono); font-size: 12px; line-height: 1.75; letter-spacing: 0.01em; }
+.g-typed p { margin: 0 0 10px; }
+.g-typed .lbl { font-size: 9.5px; letter-spacing: 0.2em; color: var(--g-ink-type-mut); display: block; margin-bottom: 1px; }
+
+/* ---------- the surveillance exhibit (AI-GEN SLOT, code-drawn placeholder) ---------- */
+.g-exhibit {
+  position: relative;
+  aspect-ratio: 4/3;
+  margin: 4px 0;
+  overflow: hidden;
+  border: 1px solid #cfc7ae;
+  background:
+    linear-gradient(112deg, transparent 40%, rgba(232, 223, 201, 0.16) 41%, transparent 43%),
+    linear-gradient(100deg, transparent 63%, rgba(232, 223, 201, 0.12) 64%, transparent 66.5%),
+    linear-gradient(0deg, transparent 0 26%, #3a3428 26% 62%, transparent 62%),
+    repeating-linear-gradient(90deg, transparent 0 26px, rgba(240, 196, 106, 0.28) 26px 30px, transparent 30px 52px),
+    repeating-linear-gradient(90deg, rgba(20, 17, 12, 0.85) 0 2px, transparent 2px 26px),
+    linear-gradient(0deg, rgba(20, 17, 12, 0.85) 0 3px, transparent 3px),
+    linear-gradient(180deg, #57503e 0%, #2b261c 78%, #191510 100%);
+}
+.g-exhibit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(38, 34, 26, 0.5) 0.8px, transparent 1.5px);
+  background-size: 5px 5px;
+  mix-blend-mode: multiply;
+}
+.g-exhibit .g-extag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  background: rgba(243, 237, 221, 0.92);
+  border: 1px solid #b9b096;
+  font-family: var(--g-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-ink-type-mut);
+  padding: 3px 7px;
+}
+.g-exhibit .g-ts {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  font-family: var(--g-mono);
+  font-size: 9px;
+  color: var(--g-carbon);
+  letter-spacing: 0.1em;
+  background: rgba(243, 237, 221, 0.85);
+  padding: 2px 6px;
+  z-index: 2;
+}
+
+/* the surveillance-still treatment for a real Don render (raid target intel) */
+.g-surv { position: relative; overflow: hidden; border: 1px solid #cfc7ae; background: #1a1712; }
+.g-surv img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; filter: saturate(0.4) contrast(0.95) brightness(0.9) blur(0.4px); }
+.g-surv::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(20, 25, 40, 0.16) 0 2px, transparent 2px 5px);
+  pointer-events: none;
+}
+.g-surv .g-ts { position: absolute; right: 6px; top: 6px; font-family: var(--g-mono); font-size: 8.5px; color: #dce2ee; letter-spacing: 0.1em; background: rgba(30, 38, 58, 0.8); padding: 2px 6px; z-index: 2; }
+
+/* ---------- Material A island inside a file: the odds ladder ---------- */
+.g-island {
+  margin: 6px 0;
+  padding: 12px 13px;
+  border-radius: 5px;
+  background: var(--g-ink);
+  color: var(--g-tx);
+  border: 1px solid var(--g-line-2);
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 75, 0.08);
+  font-family: var(--g-mono);
+  font-size: 11.5px;
+}
+.g-island .g-cap {
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--g-gold);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.g-island .g-cap span:last-child { color: var(--g-tx-faint); letter-spacing: 0.06em; text-transform: none; }
+.g-odds-row { display: flex; align-items: baseline; gap: 10px; padding: 2.5px 0; }
+.g-odds-row .k { flex: 0 0 64px; color: var(--g-tx-mut); }
+.g-odds-row .blocks { flex: 1; letter-spacing: 1.5px; font-size: 10.5px; color: var(--g-line-2); white-space: nowrap; overflow: hidden; }
+.g-odds-row .blocks b { font-weight: 400; }
+.g-odds-row.suc .blocks b { color: var(--g-good); }
+.g-odds-row.set .blocks b { color: var(--g-warn); }
+.g-odds-row.amb .blocks b { color: var(--g-crit); }
+.g-odds-row .pct { flex: 0 0 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--g-tx); }
+.g-payline {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--g-line-2);
+  color: var(--g-tx-mut);
+}
+.g-payline b { color: var(--g-bell); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* duration = file tabs */
+.g-durtabs { display: flex; gap: 4px; margin: 10px 0 2px; }
+.g-durtabs button {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  font-family: var(--g-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  padding: 7px 0 5px;
+  color: var(--g-ink-type-mut);
+  background: linear-gradient(180deg, #efe8d4, #e2d8be);
+  border: 1px solid var(--g-paper-edge);
+  border-bottom: 2px solid var(--g-paper-edge);
+  border-radius: 7px 7px 0 0;
+  position: relative;
+  top: 2px;
+}
+.g-durtabs button[aria-pressed="true"] {
+  color: var(--g-ink-type);
+  font-weight: 700;
+  background: var(--g-paper-hi);
+  border-bottom: 2px solid var(--g-paper-hi);
+  top: 0;
+  padding-top: 9px;
+}
+.g-exposure {
+  font-family: var(--g-mono);
+  font-size: 10.5px;
+  color: var(--g-stamp);
+  letter-spacing: 0.03em;
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border: 1px dashed rgba(168, 53, 42, 0.55);
+  border-radius: 3px;
+  background: rgba(168, 53, 42, 0.05);
+}
+/* provisioning chips */
+.g-provs { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0 2px; }
+.g-provs button {
+  all: unset;
+  cursor: pointer;
+  font-family: var(--g-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 6px 11px;
+  border: 1.5px solid rgba(38, 34, 26, 0.4);
+  border-radius: 16px;
+  color: var(--g-ink-type);
+  background: rgba(255, 255, 255, 0.35);
+}
+.g-provs button[aria-pressed="true"] {
+  border-color: var(--g-stamp-ok);
+  background: rgba(46, 107, 79, 0.12);
+  color: var(--g-stamp-ok);
+  font-weight: 700;
+}
+.g-provnote { font-family: var(--g-mono); font-size: 10px; color: var(--g-ink-type-mut); letter-spacing: 0.03em; }
+.g-feeline {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--g-mono);
+  font-size: 11px;
+  color: var(--g-ink-type-mut);
+  margin: 12px 0 4px;
+  letter-spacing: 0.04em;
+}
+.g-err {
+  font-family: var(--g-mono);
+  font-size: 10.5px;
+  color: var(--g-stamp);
+  letter-spacing: 0.02em;
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(168, 53, 42, 0.45);
+  border-radius: 3px;
+  background: rgba(168, 53, 42, 0.07);
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   THE WAX SEAL — press-and-hold commit affordance
+   ============================================================ */
+.g-sealwrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 4px; }
+.g-seal {
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  --p: 0; /* hold progress 0..1, driven by JS (setTimeout, never rAF) */
+  background:
+    radial-gradient(circle at 34% 30%, #d8887c 0%, transparent 34%),
+    radial-gradient(circle at 62% 68%, #7e352c 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, #b05548 0%, #a34a3e 55%, #7c3129 100%);
+  box-shadow:
+    0 6px 14px -6px rgba(90, 20, 10, 0.7),
+    inset 0 3px 6px rgba(255, 220, 200, 0.28),
+    inset 0 -5px 10px rgba(60, 10, 5, 0.55);
+  transition: transform 0.12s ease, filter 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+.g-seal::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 48% 55% 46% 58%/54% 46% 58% 44%;
+  background: radial-gradient(circle at 50% 50%, rgba(163, 74, 62, 0.9) 58%, rgba(124, 49, 41, 0.85) 78%, transparent 79%);
+  z-index: -1;
+  transform: rotate(8deg);
+}
+.g-seal::after {
+  content: "D";
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--g-serif);
+  font-size: 30px;
+  font-weight: 600;
+  color: rgba(60, 12, 6, 0.55);
+  text-shadow: 0 1px 0 rgba(255, 200, 180, 0.3);
+  border: 2px solid rgba(60, 12, 6, 0.35);
+  box-shadow: inset 0 2px 5px rgba(60, 10, 5, 0.5);
+}
+.g-seal .g-ring {
+  position: absolute;
+  inset: -13px;
+  border-radius: 50%;
+  background: conic-gradient(var(--g-gold) calc(var(--p) * 360deg), rgba(201, 162, 75, 0.14) 0);
+  -webkit-mask: radial-gradient(circle, transparent 0 54px, black 55px 59px, transparent 60px);
+  mask: radial-gradient(circle, transparent 0 54px, black 55px 59px, transparent 60px);
+}
+.g-seal.pressing { transform: scale(0.93); filter: brightness(0.9) saturate(1.15); }
+.g-seal.done { transform: scale(0.97); filter: brightness(0.82); }
+.g-seal.done::after { color: rgba(40, 6, 2, 0.8); box-shadow: inset 0 4px 9px rgba(40, 6, 2, 0.7); }
+.g-sealhint {
+  font-family: var(--g-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--g-ink-type-mut);
+  text-align: center;
+}
+.g-seal[disabled] { cursor: default; opacity: 0.85; }
+/* departed banner inside dossier after sealing */
+.g-departbar { text-align: center; margin: 10px 0; }
+
+/* ============================================================
+   JOB BOARD — the folder drawer
+   ============================================================ */
+.g-drawer { display: flex; flex-direction: column; gap: 13px; margin-top: 4px; }
+.g-jobfolder {
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  display: block;
+  border-radius: 4px 10px 6px 6px;
+  background: linear-gradient(178deg, #ede4cc, #e2d6b8 80%);
+  border: 1px solid var(--g-paper-edge);
+  box-shadow: 0 7px 16px -9px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  padding: 12px 13px 11px;
+}
+.g-jobfolder::before {
+  content: attr(data-tab);
+  position: absolute;
+  top: -13px;
+  left: 10px;
+  background: inherit;
+  border: 1px solid var(--g-paper-edge);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 2px 12px 0;
+  font-family: var(--g-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  color: var(--g-ink-type-mut);
+  text-transform: uppercase;
+}
+.g-jobfolder:active { transform: translateY(1px); }
+.g-jf-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.g-jf-code { font-family: var(--g-mono); font-weight: 700; font-size: 13.5px; letter-spacing: 0.08em; color: var(--g-ink-type); }
+.g-jf-code i { font-style: normal; color: var(--g-gold-hi); }
+.g-jf-take { font-family: var(--g-mono); font-size: 11px; color: var(--g-ink-type-mut); letter-spacing: 0.04em; white-space: nowrap; }
+.g-jf-take b { color: var(--g-ink-type); font-weight: 700; }
+.g-jf-mid { display: flex; justify-content: space-between; align-items: center; margin-top: 7px; gap: 8px; }
+.g-jf-risk { font-family: var(--g-mono); font-size: 10.5px; letter-spacing: 2px; color: rgba(38, 34, 26, 0.3); }
+.g-jf-risk b { font-weight: 400; color: var(--g-stamp); }
+.g-ratestamp {
+  font-family: var(--g-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  border: 1.5px solid;
+  border-radius: 3px;
+  padding: 1px 7px 0;
+  transform: rotate(-4deg);
+  filter: blur(0.2px);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.g-ratestamp.low { color: var(--g-stamp-ok); border-color: var(--g-stamp-ok); }
+.g-ratestamp.std { color: var(--g-carbon); border-color: var(--g-carbon); }
+.g-ratestamp.steep { color: var(--g-stamp); border-color: var(--g-stamp); }
+.g-ratestamp.unins { color: #fff; background: var(--g-stamp); border-color: var(--g-stamp); }
+.g-jobfolder.featured { box-shadow: 0 7px 16px -9px rgba(0, 0, 0, 0.55), inset 0 0 0 1.5px var(--g-gold); }
+.g-jobfolder.featured::after {
+  content: "★ FEATURED";
+  position: absolute;
+  right: -7px;
+  top: -11px;
+  background: linear-gradient(100deg, var(--g-gold), var(--g-gold-hi));
+  color: #171204;
+  font-family: var(--g-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 3px 9px;
+  transform: rotate(4deg);
+  box-shadow: 0 3px 7px -3px rgba(0, 0, 0, 0.5);
+}
+.g-jobfolder.locked { opacity: 0.75; cursor: not-allowed; overflow: hidden; }
+.g-jobfolder.locked .g-strap {
+  position: absolute;
+  inset: auto -20px 26px;
+  height: 22px;
+  background: repeating-linear-gradient(45deg, #4a4436 0 12px, #3a3529 12px 24px);
+  transform: rotate(-3deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8dfc9;
+  font-family: var(--g-mono);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+}
+
+/* ============================================================
+   DON CASE FILE — evidence-tag equip callout
+   ============================================================ */
+.g-bigphoto {
+  position: relative;
+  margin: 6px 0 14px;
+  transform: rotate(-0.8deg);
+  background: #fff;
+  padding: 8px 8px 26px;
+  border: 1px solid #d8d2c0;
+  box-shadow: 3px 5px 12px -4px rgba(30, 20, 5, 0.4);
+}
+.g-bigphoto img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: radial-gradient(120% 100% at 50% 0%, #262119, #12100c); }
+.g-bigphoto .g-pcap { position: absolute; left: 10px; bottom: 6px; font-family: var(--g-mono); font-size: 8px; letter-spacing: 0.16em; color: #8a8272; text-transform: uppercase; }
+.g-bigphoto .g-pclip { top: -14px; left: 18px; }
+/* evidence tag + leader line to the equipped item in the art */
+.g-evi-dot {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px dashed var(--g-stamp);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px rgba(168, 53, 42, 0.12);
+}
+.g-evi-tag {
+  position: absolute;
+  background: #f3eddd;
+  border: 1.5px solid var(--g-stamp);
+  border-radius: 2px;
+  padding: 5px 8px 4px;
+  max-width: 200px;
+  font-family: var(--g-mono);
+  font-size: 9px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  color: var(--g-ink-type);
+  box-shadow: 2px 3px 8px -3px rgba(0, 0, 0, 0.45);
+}
+.g-evi-tag b { display: block; color: var(--g-stamp); font-size: 8.5px; letter-spacing: 0.18em; margin-bottom: 1px; }
+.g-evi-tag::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 12px;
+  width: 10px;
+  height: 10px;
+  background: radial-gradient(circle at 35% 35%, #d9d2bd, #a89f84);
+  border-radius: 50%;
+  border: 1px solid #8a8168;
+}
+.g-rapgrid { font-family: var(--g-mono); font-size: 11.5px; }
+.g-rapgrid .g-tf label { flex: 0 0 118px; }
+
+/* ============================================================
+   HITTER RAP SHEETS — the redacted mugshot (zero-budget solution)
+   ============================================================ */
+.g-crewstrip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 12px; margin: 0 -4px; }
+.g-crewstrip::-webkit-scrollbar { display: none; }
+.g-hitcard {
+  flex: 0 0 118px;
+  background: #ddd7c4;
+  border: 1px solid var(--g-paper-edge);
+  border-radius: 4px;
+  padding: 8px;
+  box-shadow: 0 5px 10px -6px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.g-hitcard.on { box-shadow: inset 0 0 0 1.5px var(--g-carbon), 0 5px 10px -6px rgba(0, 0, 0, 0.4); }
+.g-mug {
+  position: relative;
+  aspect-ratio: 1/1.1;
+  overflow: hidden;
+  border: 1px solid #b9b096;
+  background:
+    repeating-linear-gradient(0deg, rgba(38, 34, 26, 0.35) 0 1px, transparent 1px 14px),
+    linear-gradient(180deg, #cdc6ae, #bcb498);
+}
+.g-mug .g-ruler {
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  bottom: 0;
+  font-family: var(--g-mono);
+  font-size: 6px;
+  color: rgba(38, 34, 26, 0.5);
+  line-height: 14px;
+  letter-spacing: 0.05em;
+}
+.g-mug svg { position: absolute; inset: auto 0 0 0; width: 100%; height: 86%; }
+.g-censor {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 34%;
+  height: 17%;
+  background: #17140e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--g-mono);
+  font-size: 6.5px;
+  letter-spacing: 0.34em;
+  color: #8b8371;
+}
+.g-hname { font-family: var(--g-mono); font-weight: 700; font-size: 10.5px; letter-spacing: 0.1em; margin: 7px 0 2px; color: var(--g-ink-type); text-transform: uppercase; }
+.g-hstat { font-family: var(--g-mono); font-size: 8.5px; color: var(--g-ink-type-mut); letter-spacing: 0.04em; line-height: 1.6; }
+.g-hstat b { color: var(--g-ink-type); }
+.g-hstamp { margin-top: 5px; }
+.g-sealedslot { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-family: var(--g-mono); font-size: 7.5px; letter-spacing: 0.1em; color: var(--g-carbon); }
+.g-sealedslot.revealed { color: var(--g-stamp-ok); }
+/* full rap sheet (expanded, grey-manila) */
+.g-rapsheet { background: #dcd6c5; border: 1px solid var(--g-paper-edge); border-radius: 5px; padding: 13px; margin-top: 6px; }
+
+/* ============================================================
+   HOUSE PROPERTY FILE — three-box + garrison + cork strip
+   ============================================================ */
+.g-extstill {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid #cfc7ae;
+  background:
+    linear-gradient(0deg, #201b13 0 9%, transparent 9%),
+    linear-gradient(90deg, transparent 0 44%, #4a3c26 44% 56%, transparent 56%) 0 0/100% 42% no-repeat border-box,
+    repeating-linear-gradient(90deg, transparent 0 14%, rgba(240, 196, 106, 0.5) 14% 24%, transparent 24% 38%) 0 18%/76% 16% no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 14%, rgba(240, 196, 106, 0.28) 14% 24%, transparent 24% 38%) 0 42%/76% 14% no-repeat,
+    linear-gradient(180deg, #4e4433 0%, #37301f 88%, #201b13 100%);
+}
+.g-extstill::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 14%; background: linear-gradient(180deg, #191510, transparent); }
+.g-extstill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(25, 20, 12, 0.5) 0.8px, transparent 1.5px);
+  background-size: 5px 5px;
+}
+/* the three-box: ledger columns inside the folder */
+.g-threebox { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin: 4px 0; }
+.g-tb { background: var(--g-ink); color: var(--g-tx); border: 1px solid var(--g-line-2); border-radius: 5px; padding: 9px 8px 8px; font-family: var(--g-mono); font-size: 10px; }
+.g-tb h5 { margin: 0 0 6px; font-size: 8.5px; letter-spacing: 0.2em; color: var(--g-gold); font-weight: 600; text-transform: uppercase; display: flex; align-items: center; gap: 4px; }
+.g-tb .g-amt { font-size: 14.5px; letter-spacing: -0.01em; color: var(--g-tx); font-variant-numeric: tabular-nums; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; }
+.g-tb .g-krow { display: flex; justify-content: space-between; gap: 4px; color: var(--g-tx-faint); padding: 1.5px 0; }
+.g-tb .g-krow b { font-weight: 500; }
+.g-tb .g-krow .ok { color: var(--g-good); }
+.g-tb .g-krow .mid { color: var(--g-warn); }
+.g-tb .g-krow .hot { color: var(--g-crit); }
+.g-tb.vault { box-shadow: inset 0 0 0 1px rgba(76, 190, 138, 0.15); }
+.g-tb.house { box-shadow: inset 0 0 0 1px rgba(224, 104, 92, 0.14); }
+.g-note { font-family: var(--g-mono); font-size: 9.5px; color: var(--g-ink-type-mut); letter-spacing: 0.05em; text-align: center; margin: 2px 0 4px; }
+/* bank ⇄ deploy row */
+.g-moverow { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; }
+.g-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--g-mono);
+  font-size: 16px; /* 16px floor — iOS will not zoom-jump the sheet */
+  padding: 7px 9px;
+  border: 1.5px solid rgba(38, 34, 26, 0.4);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--g-ink-type);
+}
+.g-input:focus { outline: 2px solid var(--g-stamp-ok); outline-offset: 0; }
+/* garrison chairs */
+.g-garrison { display: flex; gap: 12px; align-items: flex-end; padding: 8px 4px 4px; flex-wrap: wrap; }
+.g-chairslot { display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: var(--g-mono); font-size: 8px; letter-spacing: 0.1em; color: var(--g-ink-type-mut); }
+.g-chairslot .g-occ { position: relative; width: 44px; height: 52px; }
+.g-chairslot svg { position: absolute; inset: 0; }
+.g-chairslot .g-sil { position: absolute; left: 8px; right: 8px; top: 0; height: 34px; }
+/* cork strip robbery log */
+.g-cork {
+  margin-top: 6px;
+  border-radius: 5px;
+  padding: 11px 10px;
+  background:
+    radial-gradient(circle at 12% 30%, rgba(0, 0, 0, 0.12) 1px, transparent 2.5px),
+    radial-gradient(circle at 68% 62%, rgba(0, 0, 0, 0.1) 1px, transparent 2.5px),
+    radial-gradient(circle at 38% 78%, rgba(255, 235, 200, 0.12) 1px, transparent 2px),
+    repeating-linear-gradient(24deg, rgba(0, 0, 0, 0.03) 0 3px, transparent 3px 6px),
+    linear-gradient(174deg, #a9805a, #8f6a47);
+  box-shadow: inset 0 0 14px rgba(60, 35, 15, 0.5);
+}
+.g-corkcard {
+  position: relative;
+  background: var(--g-paper-hi);
+  border: 1px solid #cfc5a8;
+  border-radius: 2px;
+  padding: 8px 10px 7px 12px;
+  margin-bottom: 8px;
+  font-family: var(--g-mono);
+  font-size: 10px;
+  color: var(--g-ink-type);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  box-shadow: 1px 3px 6px -2px rgba(40, 20, 5, 0.5);
+  transform: rotate(-0.7deg);
+}
+.g-corkcard:nth-child(even) { transform: rotate(0.8deg); }
+.g-corkcard:last-child { margin-bottom: 0; }
+.g-corkcard::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #e2c177, #8f6716);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.45);
+}
+.g-corkcard .t { color: var(--g-ink-type-mut); font-size: 8.5px; float: right; }
+.g-corkcard b.bad { color: var(--g-stamp); }
+.g-corkcard b.okc { color: var(--g-stamp-ok); }
+
+/* ============================================================
+   RAID FLOW — stakeout list, hit order, envelope, after-action
+   ============================================================ */
+.g-target {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(38, 34, 26, 0.28);
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-family: var(--g-mono);
+}
+.g-target:active { transform: translateY(1px); }
+.g-target .g-surv { flex: 0 0 84px; width: 84px; }
+.g-target .g-tmeta { flex: 1; min-width: 0; font-size: 10.5px; letter-spacing: 0.03em; color: var(--g-ink-type); }
+.g-target .g-tmeta .away { color: var(--g-stamp); font-weight: 700; }
+.g-target .g-tmeta .band { letter-spacing: 2px; color: rgba(38, 34, 26, 0.35); }
+.g-target .g-tmeta .band b { color: var(--g-stamp); font-weight: 400; }
+.g-target .g-tmeta .red { display: inline-block; background: #17140e; color: #8b8371; font-size: 7.5px; letter-spacing: 0.3em; padding: 1px 7px; }
+/* sealed envelope (post-commit ritual) */
+.g-envelope { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 0 8px; }
+.g-envelope svg { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.3)); }
+@keyframes g-envpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+.g-envelope.waiting svg { animation: g-envpulse 2.2s ease-in-out infinite; }
+
+/* ============================================================
+   TAB BAR — bottom, thumb zone
+   ============================================================ */
+.g-tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--g-ink) 90%, transparent);
+  backdrop-filter: blur(12px) saturate(1.3);
+  border-top: 1px solid var(--g-line-2);
+}
+.g-tabbar button {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  font-family: var(--g-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  color: var(--g-tx-faint);
+  padding: 9px 0 7px;
+  border-radius: 6px;
+}
+.g-tabbar button.on { color: var(--g-gold); background: var(--g-gold-dim); }
+.g-tabbar button:active { transform: translateY(1px); }
+
+/* intentional fallback plate when /api/don-img is unavailable (dev server) or art unrevealed */
+.g-imgph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  background: radial-gradient(120% 100% at 50% 0%, #262119, #12100c);
+  color: var(--g-gold);
+  font-family: var(--g-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- mobile + motion ---------- */
+@media (max-width: 480px) {
+  .game-root { padding: 8px 4px calc(64px + env(safe-area-inset-bottom)); }
+  .g-phone { height: calc(100dvh - 130px); border-radius: 12px; }
+  .g-canon { gap: 10px; }
+  .g-photowin { flex-basis: 104px; width: 104px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-file, .g-scrim, .g-seal { transition: none; }
+  .game-root * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

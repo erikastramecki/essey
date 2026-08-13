@@ -146,3 +146,21 @@ Proven live: mintCustom fee (0.0025 ETH) → flushEth → **Bell pot 11.25 USDG*
 Owner = deployer `0x976EBff4…993D`. Drip retunable via `setDrips(essey, usdg, cooldown)` (caps 10M/1M). Funded 100M ESSEY.
 Supersedes the 5k-drip faucets (0x2ac1…8C91, 0x11c6…ded2). Audit CLEAN (money paths + access + logic). Frontend
 ADDR.faucet + copy update handled with the faucet-UI fix.
+
+### D.O.N. game — Skirmish Phase 0 (2026-08-13, Scrip-only, plays the live Dons)
+| Contract | Address |
+|---|---|
+| GameController (role registry, sealed, 2-day re-point timelock) | `0xe2BEA5db063EA57F73D6bA8294592d7f60CBec9f` |
+| Scrip (season-scoped points, non-transferable, module-only) | `0xAE8AEB1E0eA9A6E6A55b469107DD5c7cbf28F1F6` |
+| HouseDeed (soulbound 721-in-6551; Safehouse free / Row House 1,500) | `0xe180dbda25966Cd6AE372C967200F0EB6D003368` |
+| HouseEscrow (deployed/hopper custody, yield, free `bank()`) | `0x869cbc012C37F7655FA5eA8F655E862Aa631C93C` |
+| MissionBoard (EIP-712 loadouts, worst-case reservation, 4 briefs) | `0xA4839CA4b595c768636E05bF37E32b167e482d99` |
+| RaidEngine (commit-reveal away-window robbery) | `0xf497AAb709952FF061AEC34390Dad281649D1a2a` |
+| HitterNFT (900-Scrip crew mint, sealed Favor slot) | `0x219fafE26FB865b8dA4F55EF38ee99a91Ef969Cf` |
+| MockEntropy (game keeper words) | `0xc9e6B140C10e6DcDAE7a2d2a9FdD1BB82Ca1F047` |
+
+Deploy block 100489472. Admin/keeper = deployer `0x976EBff4…993D`. Budgets funded: 1M Scrip missions /
+500k yield / 50k stipend (1,000 first plays). Briefs 1-4: PAPER ROUTE 3h · GLASS HARVEST - RUSH 5h ·
+PROOF OF WORK 12h · ABSOLUTE ZERO 24h. Reads the live Dons `0x582E…dB53c`, never modifies them.
+Audit: round-1 findings (6) all fixed; round-2 re-audit CLEAN across all 3 lenses in the same round.
+Rules: docs/GAME-GUIDE.md. E2E harness report: docs/TESTNET-GAME-E2E.md.

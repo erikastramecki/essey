@@ -62,7 +62,7 @@ contract BellElectTest is Test {
         conv.listStock(address(stockB), AggregatorV3Interface(address(feedB)), 3000);
         conv.listStock(address(stockC), AggregatorV3Interface(address(feedC)), 3000);
 
-        don = new Don("Essey Don", "DON", 8888, address(this)); // test = minter
+        don = new Don("Essey Don", "DON", 8888, address(this), address(0x7EE), 500); // test = minter
         bell = new Bell(ISeatLike(address(don)), essey, usdg, treasury, 100e18, 100, fees, weights, conv, address(0));
         don.setHook(address(bell));
 

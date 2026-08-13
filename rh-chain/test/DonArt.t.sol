@@ -28,7 +28,7 @@ contract DonArtTest is Test, IERC721Receiver {
     function setUp() public {
         // The production wiring shape: distributor is the Don's immutable minter; art wires through it.
         dist = new DonDistributor(address(this), 10, 2 days, 0, 0, 0);
-        don = new Don("Essey Don", "DON", 8888, address(dist));
+        don = new Don("Essey Don", "DON", 8888, address(dist), address(0x7EE), 500);
         dist.initDon(don);
         art = new DonArt(don, address(this), "");
         dist.setDonArt(address(art));
@@ -41,7 +41,7 @@ contract DonArtTest is Test, IERC721Receiver {
     /// A Don whose minter is this test directly — for exercising reroll/lock renders without the
     /// distributor's fee/Bell ceremony.
     function _directDon() internal returns (Don d, DonArt a, uint256 id) {
-        d = new Don("D", "D", 10, address(this));
+        d = new Don("D", "D", 10, address(this), address(0x7EE), 500);
         a = new DonArt(d, address(this), "");
         d.setArt(address(a));
         id = d.mint(alice, COMBO_A);
@@ -61,7 +61,7 @@ contract DonArtTest is Test, IERC721Receiver {
     }
 
     function test_UnsetArtRendersEmpty() public {
-        Don d2 = new Don("D", "D", 10, address(this));
+        Don d2 = new Don("D", "D", 10, address(this), address(0x7EE), 500);
         uint256 id = d2.mint(address(this), COMBO_A);
         assertEq(d2.tokenURI(id), "", "no renderer wired: empty, never a broken link");
     }

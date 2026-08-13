@@ -40,7 +40,7 @@ contract DonLoanTest is Test {
 
     function setUp() public {
         essey = new ERC20Mock();
-        don = new Don("Essey Don", "DON", CAP, address(this)); // test = minter
+        don = new Don("Essey Don", "DON", CAP, address(this), address(0x7EE), 500); // test = minter
         reserve = new DonReserve(IERC20(address(essey)), IERC721(address(don)));
         loan = new DonLoan(_config(don, reserve, LTV, LIQ, GRACE, TIP, 0, ETH_SHARE)); // free by default
         don.setLienManager(address(loan));
@@ -123,7 +123,7 @@ contract DonLoanTest is Test {
         _newLoan(LTV, LIQ, GRACE, TIP, 1 ether, ETH_SHARE); // coefficient AT the ceiling is fine
 
         // reserve/don pairing must match - a foreign reserve can't price this collection
-        Don other = new Don("Other", "OTH", CAP, address(this));
+        Don other = new Don("Other", "OTH", CAP, address(this), address(0x7EE), 500);
         DonReserve otherReserve = new DonReserve(IERC20(address(essey)), IERC721(address(other)));
         vm.expectRevert(DonLoan.BadConfig.selector);
         new DonLoan(_config(don, otherReserve, LTV, LIQ, GRACE, TIP, 0, ETH_SHARE));
@@ -263,7 +263,7 @@ contract DonLoanTest is Test {
         loan.borrow(id, 30 days); // one open loan per Don, no top-ups
 
         // An unfunded floor lends nothing - the draw would be zero, so borrowing fails closed.
-        Don bare = new Don("Bare", "BARE", CAP, address(this));
+        Don bare = new Don("Bare", "BARE", CAP, address(this), address(0x7EE), 500);
         DonReserve bareReserve = new DonReserve(IERC20(address(essey)), IERC721(address(bare)));
         DonLoan bareLoan = new DonLoan(_config(bare, bareReserve, LTV, LIQ, GRACE, TIP, 0, ETH_SHARE));
         bare.setLienManager(address(bareLoan));

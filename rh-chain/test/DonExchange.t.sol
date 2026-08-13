@@ -35,7 +35,7 @@ contract DonExchangeTest is Test, IERC721Receiver {
 
     function setUp() public {
         essey = new ERC20Mock();
-        don = new Don("Essey Don", "DON", CAP, address(this)); // test = minter + seeder
+        don = new Don("Essey Don", "DON", CAP, address(this), address(0x7EE), 500); // test = minter + seeder
         reserve = new DonReserve(IERC20(address(essey)), IERC721(address(don)));
         ex = new DonExchange(
             IERC721(address(don)), IERC20(address(essey)), IDonFloor(address(reserve)),
