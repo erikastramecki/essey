@@ -6,7 +6,7 @@ import { useWallet } from "../wallet";
 import { reads } from "../live";
 import { pub, GAME_ADDR, GAME_DEPLOY_BLOCK, gameConfigured } from "./gameChain";
 import { ownedTokens } from "./gameChain";
-import { missionBoardAbi, houseDeedAbi, houseEscrowAbi, hitterAbi, scripAbi } from "./gameAbi";
+import { missionBoardAbi, houseDeedAbi, houseEscrowAbi, hitterAbi, scripAbi, raidEngineAbi } from "./gameAbi";
 import { SEASON } from "./briefs";
 
 /// RaidEngine.COOLDOWN — the (t/20h)² diminished-odds anchor (display only; never a hard gate).
@@ -169,7 +169,7 @@ export function useGameStateValue(): GameState {
   };
 }
 
-export type AwayTarget = { donId: bigint; briefId: bigint; dueMs: number; deployedScrip: bigint };
+export type AwayTarget = { donId: bigint; briefId: bigint; dueMs: number; deployedScrip: bigint; heatUntilMs: number };
 
 /// Raid targets — Dons currently away, from MissionBoard Departed events cross-checked against
 /// activeMissionOf (a Don stays robbable until resolve/reclaim, even past due). Own Dons are
@@ -199,11 +199,14 @@ export function useAwayTargets(exclude: bigint[]): { targets: AwayTarget[] | nul
           const donId = BigInt(idStr);
           const mid = await pub.readContract({ address: GAME_ADDR.missionBoard, abi: missionBoardAbi, functionName: "activeMissionOf", args: [donId] });
           if (mid === 0n) return; // came home — no longer a target
-          const [[, briefId, , due], deployed] = await Promise.all([
+          const [[, briefId, , due], deployed, heat] = await Promise.all([
             pub.readContract({ address: GAME_ADDR.missionBoard, abi: missionBoardAbi, functionName: "missions", args: [mid] }),
             pub.readContract({ address: GAME_ADDR.houseEscrow, abi: houseEscrowAbi, functionName: "deployedOf", args: [donId] }).catch(() => 0n),
+            // Heat check (UI-verify F1): a heat-locked target's reveal is doomed (TargetOnHeat) but the
+            // 50-Scrip commit fee would burn anyway — surface it so nobody files a doomed hit order.
+            pub.readContract({ address: GAME_ADDR.raidEngine, abi: raidEngineAbi, functionName: "heatUntil", args: [donId] }).catch(() => 0n),
           ]);
-          list.push({ donId, briefId: BigInt(briefId), dueMs: Number(due) * 1000, deployedScrip: deployed });
+          list.push({ donId, briefId: BigInt(briefId), dueMs: Number(due) * 1000, deployedScrip: deployed, heatUntilMs: Number(heat) * 1000 });
         }));
         if (live) setTargets(list.sort((x, y) => x.dueMs - y.dueMs));
       } catch {

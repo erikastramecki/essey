@@ -104,11 +104,15 @@ export function DossierFile({ briefKey, open, onClose }: { briefKey: BriefKey | 
     if (gate || !don || !g.address || busy || departed) return;
     setErr(null);
     try {
-      // 1. Garrison commit — freezes at depart for the whole away window (the gas law). Empty
-      //    garrison at launch UI; plaintext+salt kept locally for the permissionless-reveal rail.
+      // 1. Garrison commit — freezes at depart for the whole away window (the gas law). The launch UI
+      //    ships no garrison picker, and an EMPTY garrison must go up as bytes32(0) — "openly
+      //    ungarrisoned" — NOT as a salted hash of an empty roster (UI-verify F2): a hashed empty
+      //    roster earns zero extra defense but makes every raid against this Don wait the full 1h
+      //    unrevealed-garrison timeout before settling, for nothing. bytes32(0) settles instantly.
+      //    When the garrison picker ships, a non-empty roster goes back to garrisonCommit(ids, salt).
       const salt = randomSalt();
       const garrisonIds: bigint[] = [];
-      const gHash = garrisonCommit(garrisonIds, salt);
+      const gHash = garrisonIds.length > 0 ? garrisonCommit(garrisonIds, salt) : ("0x" + "0".repeat(64)) as `0x${string}`;
       saveGarrisonSecret(g.address, don.id, { hitterIds: [], salt });
       // 2. The EIP-712 loadout: binds briefId + provision + garrison commit in one signature.
       const loadout = await buildLoadout(don.id, brief.chainId, provision, gHash);

@@ -48,17 +48,21 @@ export function StakeoutFile({ open, under, onClose }: { open: boolean; under: b
         <div className="g-typed"><p><span className="lbl">THE WORD</span>every Don in the city is home tonight. patience is also a strategy.</p></div>
       ) : (
         targets.map((t) => <TargetRow key={t.donId.toString()} donId={t.donId} dueMs={t.dueMs} deployed={t.deployedScrip}
-          onPick={() => navigate(`/game/raid/${t.donId.toString()}`)} />)
+          heatUntilMs={t.heatUntilMs} onPick={() => navigate(`/game/raid/${t.donId.toString()}`)} />)
       )}
     </CaseFile>
   );
 }
 
-function TargetRow({ donId, dueMs, deployed, onPick }: { donId: bigint; dueMs: number; deployed: bigint; onPick: () => void }) {
+function TargetRow({ donId, dueMs, deployed, heatUntilMs, onPick }: { donId: bigint; dueMs: number; deployed: bigint; heatUntilMs: number; onPick: () => void }) {
   const cd = useCountdown(dueMs);
+  const heatCd = useCountdown(heatUntilMs);
   const b = band(deployed);
+  // Heat gate (UI-verify F1): the chain rejects a reveal against a hot target (TargetOnHeat) but the
+  // 50-Scrip commit fee burns regardless — so a hot door is shown, marked, and not clickable.
+  const hot = Date.now() < heatUntilMs;
   return (
-    <button className="g-target" onClick={onPick}>
+    <button className="g-target" onClick={hot ? undefined : onPick} disabled={hot} style={hot ? { opacity: 0.55, cursor: "not-allowed" } : undefined}>
       <div className="g-surv">
         <span className="g-ts">CAM 2 · LIVE</span>
         <DonImg id={donId} alt={`surveillance still — Don №${donId.toString()}`} />
@@ -67,7 +71,9 @@ function TargetRow({ donId, dueMs, deployed, onPick }: { donId: bigint; dueMs: n
         DON №{donId.toString()}<br />
         <span className="away">AWAY</span> · returns {cd}<br />
         deployed <span className="band"><b>{"▮".repeat(b)}</b>{"░".repeat(8 - b)}</span><br />
-        garrison <span className="red">REDACTED</span>
+        {hot
+          ? <>heat <span className="red">TOO HOT · cops on the block · {heatCd}</span></>
+          : <>garrison <span className="red">REDACTED</span></>}
       </div>
     </button>
   );
@@ -120,10 +126,16 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
   const now = Date.now();
   // Hospital is the only hard gate; cooldown is diminished odds, never a revert.
   const available = g.hitters.filter((h) => h.hospitalUntil <= now);
+  // One open hit order per Don (gate-audit hardening): a second commit from the same Don would
+  // overwrite the first raid's stored preimage, making it unrevealable — its 50-Scrip fee forfeits.
+  const pending = g.address && attacker ? loadRaidSecret(g.address, attacker.id) : null;
+  const pendingLive = pending !== null && now <= pending.committedAt + REVEAL_WINDOW_MS
+    && pending.targetDonId !== targetDonId.toString();
   const gate =
     !g.configured ? "THE ENGINE OPENS WITH THE SEASON · CONTRACTS PENDING" :
     !g.connected ? "CONNECT A WALLET TO SIGN" :
     !attacker ? "NO DON ON THE DESK — VISIT THE REGISTRY" :
+    pendingLive ? `THIS DON HAS AN OPEN HIT ORDER ON №${pending.targetDonId} — KICK THAT DOOR FIRST` :
     attacker.vaultScrip < COMMIT_FEE ? `THE ORDER COSTS ◫ ${fmtAmt(COMMIT_FEE)} · VAULT SHORT` :
     available.length === 0 ? "NO CREW AVAILABLE — VISIT THE RAP SHEETS" :
     picked.size === 0 ? "PICK YOUR CREW FIRST" :
