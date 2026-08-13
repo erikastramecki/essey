@@ -4,7 +4,7 @@
 // Chrome (CAM label, EXHIBIT tag) stays HTML — no text lives inside the SVG art.
 // FUTURE RASTER SLOT: pass `src` and the component swaps the SVG for the real AI-gen image
 // under the identical surveillance treatment (frame, grain, scanlines, chrome).
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 export type SceneKey =
   | "armored-run" | "fab-dock" | "rig-hall" | "cryo-annex" | "milk-corner" | "open-window"
@@ -43,6 +43,23 @@ const PAPERHI = "#f3eddd";
 
 const SQUARE: readonly SceneKey[] = HOUSE_TIER_SCENES;
 
+// The raster stills — photographic noir location plates (locally generated, vision-QA'd),
+// served from /public/stills. Used as the default `src`; if a file 404s the component
+// falls back to the code-drawn SVG scene, so the raster layer is purely additive.
+export const RASTER_STILLS: Record<SceneKey, string> = {
+  "armored-run": "/stills/armored-run.webp",
+  "fab-dock": "/stills/fab-dock.webp",
+  "rig-hall": "/stills/rig-hall.webp",
+  "cryo-annex": "/stills/cryo-annex.webp",
+  "milk-corner": "/stills/milk-corner.webp",
+  "open-window": "/stills/open-window.webp",
+  "safehouse": "/stills/safehouse.webp",
+  "row-house": "/stills/row-house.webp",
+  "brownstone": "/stills/brownstone.webp",
+  "estate": "/stills/estate.webp",
+  "compound": "/stills/compound.webp",
+};
+
 // ---------------------------------------------------------------------------------------------
 // The component. `ts`/`tag` are the HTML chrome (kept out of the SVG); `square` picks the 1:1
 // exterior-portrait framing (house file); `damaged` etches a cracked-glass line over the still.
@@ -53,15 +70,19 @@ export function ExhibitStill({ scene, ts, tag, square, damaged, src, className }
   tag?: string;             // exhibit tag chrome, bottom-left ("EXHIBIT 1-A · …")
   square?: boolean;         // 1:1 exterior portrait (default 4:3 surveillance frame)
   damaged?: boolean;        // the House took a hit — cracked-glass overlay
-  src?: string;             // future raster override: a real AI-gen image slots in here
+  src?: string;             // explicit raster override (default: RASTER_STILLS[scene])
   className?: string;
 }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  const raster = src ?? RASTER_STILLS[scene];
+  const showRaster = !!raster && raster !== broken;
   return (
     <div className={"g-still" + (square ? " sq" : "") + (className ? ` ${className}` : "")}>
-      {src
-        ? <img className="g-still-img" src={src} alt={SCENE_LABELS[scene]} loading="lazy" decoding="async" />
+      {showRaster
+        ? <img className="g-still-img" src={raster} alt={SCENE_LABELS[scene]} loading="lazy" decoding="async"
+            onError={() => setBroken(raster)} />
         : <SceneSvg scene={scene} damaged={damaged} />}
-      {src && damaged && (
+      {showRaster && damaged && (
         <svg className="g-still-crack" viewBox="0 0 400 400" preserveAspectRatio="none" aria-hidden>
           <path d={CRACK} fill="none" stroke={PAPER} strokeWidth="1.4" opacity="0.4" />
         </svg>
@@ -582,8 +603,10 @@ const SCENES: Record<SceneKey, (u: string) => ReactNode> = {
       <polygon points="194,230 206,230 220,304 180,304" fill={`url(#${u}drive)`} opacity=".55" />
       {/* the hedge line, then the wall it grows over */}
       <path fill="#0f0b07" d="M0 310 q22 -12 44 0 q22 -11 44 0 q22 -12 44 0 l16 2 v40 H0 Z M252 312 q22 -12 44 0 q22 -11 44 0 q22 -12 44 0 l16 2 v38 h-148 Z" />
-      <rect y="330" width="150" height="40" fill="#141009" />
-      <rect x="250" y="330" width="150" height="40" fill="#141009" />
+      <rect y="330" width="150" height="40" fill="#181209" />
+      <rect x="250" y="330" width="150" height="40" fill="#181209" />
+      <path d="M0 330 H150 M250 330 H400" stroke={GOLD} strokeWidth="1.4" opacity=".18" />
+      <path d="M36 330 v40 M90 330 v40 M310 330 v40 M364 330 v40" stroke="#0d0a06" strokeWidth="2" />
       {/* pillars, lamps, gate */}
       <rect x="144" y="284" width="22" height="82" fill="#1d1711" />
       <rect x="140" y="278" width="30" height="9" fill="#2b241a" />
