@@ -2,7 +2,7 @@
 // the RETAIN (mint) stamp, and the sealed-envelope Favor state (the sealed slot lives INSIDE
 // HitterNFT as-built — every unrevealed Hitter is a lottery ticket with disclosed odds).
 // mint(payerDonId) burns ◫900 from the paying Don's vault — no ETH, the Scrip-mode sink.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { niceError } from "../live";
 import { pub, gameSend, GAME_ADDR } from "./gameChain";
 import { hitterAbi } from "./gameAbi";
@@ -20,13 +20,35 @@ const disposition = (h: GameHitter): { label: string; rating: "low" | "std" | "s
   return { label: "AT THE SLICK", rating: "std" };
 };
 
+/// FavorRevealed band names (HitterNFT._bandName) — 70 / 20 / 8.5 / 1.5.
+const FAVOR_BANDS = [
+  "AN EMPTY ENVELOPE — 70% are. the ticket was the thrill",
+  "A SMALL FAVOR — the family remembers little things",
+  "A REAL FAVOR — one genuine edge, on the record",
+  "THE DON OWES YOU — say it quietly",
+] as const;
+
 export function CrewFile({ open, onClose }: { open: boolean; onClose: () => void }) {
   const g = useGame();
-  const [busy, setBusy] = useState<null | "mint" | "reveal">(null);
+  const [busy, setBusy] = useState<null | "mint" | "reveal" | "opening">(null);
   const [err, setErr] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [favorBand, setFavorBand] = useState<string | null>(null);
 
   const don = g.selected;
+  const expandedSealed = g.hitters.find((h) => h.id.toString() === (expandedId ?? g.hitters[0]?.id.toString()))?.sealed;
+
+  // The revealed band, fetched for the expanded sheet (favorOf is only meaningful once unsealed).
+  useEffect(() => {
+    setFavorBand(null);
+    const id = expandedId ?? g.hitters[0]?.id.toString();
+    if (!id || expandedSealed !== false) return;
+    let live = true;
+    pub.readContract({ address: GAME_ADDR.hitter, abi: hitterAbi, functionName: "favorOf", args: [BigInt(id)] })
+      .then((b) => { if (live) setFavorBand(FAVOR_BANDS[Number(b)] ?? null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [expandedId, expandedSealed, g.hitters.length]);
 
   const mint = async () => {
     if (!g.address || !don || busy || !g.configured) return;
@@ -48,9 +70,22 @@ export function CrewFile({ open, onClose }: { open: boolean; onClose: () => void
       let fee = 0n;
       try { fee = await pub.readContract({ address: GAME_ADDR.hitter, abi: hitterAbi, functionName: "entropyFee" }); } catch { /* optional */ }
       await gameSend(g.address, GAME_ADDR.hitter, hitterAbi, "revealFavor", [id], fee);
+      // The word lands via the keeper seconds later — fast-poll so the envelope flips NOW, not on
+      // the 15s cadence (founder hit this: reveal worked, UI lagged, second click reverted).
+      setBusy("opening");
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const stillSealed = await pub.readContract({ address: GAME_ADDR.hitter, abi: hitterAbi, functionName: "sealed_", args: [id] });
+          if (!stillSealed) break;
+        } catch { /* transient read — keep polling */ }
+      }
       g.refresh();
     } catch (e) {
-      setErr(niceError(e));
+      const msg = niceError(e);
+      // The chain refusing a second open means the first one WORKED — say so instead of scaring.
+      setErr(/AlreadyRevealed|already/i.test(msg) ? "the envelope is already open — the Favor below is the record" : msg);
+      g.refresh();
     } finally {
       setBusy(null);
     }
@@ -125,14 +160,14 @@ export function CrewFile({ open, onClose }: { open: boolean; onClose: () => void
                 <div className="g-tf"><label>Carries</label><b>— · takeable once carried</b></div>
                 <div className="g-tf"><label>The Favor</label>
                   <b className={expanded.sealed ? undefined : "ok"}>
-                    {expanded.sealed ? "SEALED ✉ — contents unknown to rivals" : "REVEALED — the Favor is on the record"}
+                    {expanded.sealed ? "SEALED ✉ — contents unknown to rivals" : (favorBand ?? "REVEALED — the Favor is on the record")}
                   </b></div>
               </div>
             </div>
             {expanded.sealed && g.connected && (
               <div style={{ marginTop: 8, textAlign: "center" }}>
                 <button className="g-stampbtn" disabled={busy !== null} onClick={() => revealFavor(expanded.id)}>
-                  {busy === "reveal" ? "OPENING…" : "OPEN THE ENVELOPE · REVEAL THE FAVOR"}
+                  {busy === "reveal" ? "SIGNING…" : busy === "opening" ? "THE WORD IS OUT — OPENING…" : "OPEN THE ENVELOPE · REVEAL THE FAVOR"}
                 </button>
               </div>
             )}
