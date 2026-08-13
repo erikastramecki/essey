@@ -89,8 +89,8 @@ export const GAME_DEPLOY_BLOCK = 100489472n;
 // ---------------------------------------------------------------------------------------------
 // Local persistence for the two secrets the client must remember between txs:
 //  - the garrison plaintext+salt (handed to the keeper reveal rail; kept locally as the
-//    permissionless-reveal fallback, arch doc §1.3)
-//  - the raid commit preimage (needed to build the reveal tx, §2.6)
+//    permissionless-reveal fallback)
+//  - the raid commit preimage (needed to build the reveal tx)
 // ---------------------------------------------------------------------------------------------
 export type GarrisonSecret = { hitterIds: string[]; salt: Hex };
 export type RaidSecret = { attackerDonId: string; raidId: string; hitterIds: string[]; targetDonId: string; salt: Hex; committedAt: number };

@@ -11,7 +11,7 @@ import {
     GameRoles
 } from "./GameTypes.sol";
 
-/// HouseEscrow — the game-contestable custody heart (contracts-architecture §2.3): two ledgers, one
+/// HouseEscrow — the game-contestable custody heart: two ledgers, one
 /// custody pool, the Bell O(1) accrual pattern for House yield.
 ///
 ///   deployed[donId] — working capital the player moved Vault→House (robbable while the Don is away)
@@ -21,14 +21,14 @@ import {
 /// totalDeployed + totalHopper` — the Phase-1 audit invariant, enforced by construction: deploys move
 /// in, loot/yield mint in, banks move out, raids move out, taxes burn out).
 ///
-/// THE EXITS LAW — `bank()` is the sacred function (contracts-architecture §2.3, economy §9.1 group
-/// H): free forever, no fee, no pause, no keeper in the path, no admin hook, and it does NOT consult
+/// THE EXITS LAW — `bank()` is the sacred function:
+/// free forever, no fee, no pause, no keeper in the path, no admin hook, and it does NOT consult
 /// the generational `closed` flag. The only condition is the design law itself: the Don must be home
 /// (away = the exposure the player chose at depart, and MissionBoard.reclaim guarantees every Don
 /// always comes home even with a dead keeper). Any PR adding a fee or a gate to bank() is wrong by
 /// definition.
 ///
-/// House yield is a FUNDED BUDGET LINE, never a promise (RNG bible §3.3/§6.1): the accrual index
+/// House yield is a FUNDED BUDGET LINE, never a promise: the accrual index
 /// advances at the launch rate only while `yieldBudget` covers the emission; when the budget runs
 /// dry the index simply stops (the Phase-0 form of the deposit-cap valve — refuse new liability,
 /// never dilute or owe). Budgets are funded by visible, admin-signed events (the S_declared line).
@@ -41,16 +41,16 @@ contract HouseEscrow is ReentrancyGuard {
     uint256 internal constant BPS = 10_000;
     uint256 internal constant PRECISION = 1e18;
 
-    /// Launch gross rate: 15 bps/day on effective deployed weight (B2 — the exposure frontier;
+    /// Launch gross rate: 15 bps/day on effective deployed weight (the exposure frontier;
     /// floor/cap float arrives with the USDG-mode budget quotient in Phase 1).
     uint256 public constant RATE_BPS_PER_DAY = 15;
-    /// Small-hit earning debuff: -40% until repaired (B6).
+    /// Small-hit earning debuff: -40% until repaired.
     uint256 public constant DAMAGE_BPS = 4_000;
-    /// Repair = 1.5 days of the House's gross earning, pro-rated by damage (rate card C6).
+    /// Repair = 1.5 days of the House's gross earning, pro-rated by damage (the rate card).
     uint256 public constant REPAIR_DAYS_X10 = 15; // 1.5 days, x10 fixed point
-    /// Hit tax on every raid transfer: 7.5% uniform (B3/B4), burned (the Scrip-mode fee sink).
+    /// Hit tax on every raid transfer: 7.5% uniform, burned (the Scrip-mode fee sink).
     uint256 public constant HIT_TAX_BPS = 750;
-    /// First-play starter stipend (the grinder faucet's Scrip-mode stand-in, economy §2.2) — enough
+    /// First-play starter stipend (the grinder faucet's Scrip-mode stand-in) — enough
     /// to cover early dispatch fees + a small provision, minted into the Don's vault once, ever.
     uint256 public constant STIPEND = 50e18;
 
@@ -150,7 +150,7 @@ contract HouseEscrow is ReentrancyGuard {
     // ---------------------------------------------------------------- first play
 
     /// Idempotent first-play setup, called by MissionBoard inside the first depart tx: the free
-    /// Safehouse (funnel gate C1) + the one-time starter stipend into the Don's vault.
+    /// Safehouse (the funnel gate) + the one-time starter stipend into the Don's vault.
     function ensureHouse(uint256 donId) external onlyMission {
         if (deed.deedOf(donId) == 0) {
             deed.mintSafehouse(donId);
@@ -183,7 +183,7 @@ contract HouseEscrow is ReentrancyGuard {
         emit Deployed(donId, amount);
     }
 
-    /// THE SACRED FUNCTION — House -> Vault, free forever (economy §9.1 group H: the zero-fee exit
+    /// THE SACRED FUNCTION — House -> Vault, free forever (the zero-fee exit
     /// law). No fee, no pause, no closed-flag, no admin path, no keeper dependency. The single
     /// requirement is the design law: the Don is home (and MissionBoard.reclaim guarantees "home"
     /// is always reachable, keeper or no keeper).
@@ -204,8 +204,8 @@ contract HouseEscrow is ReentrancyGuard {
         emit Banked(donId, fromDeployed, fromHopper);
     }
 
-    /// Clear the small-hit debuff. Fee = 1.5 days of the House's gross earning pro-rated by damage
-    /// (C6), burned from the Don's banked Scrip. The steadiest sink in the game.
+    /// Clear the small-hit debuff. Fee = 1.5 days of the House's gross earning pro-rated by damage,
+    /// burned from the Don's banked Scrip. The steadiest sink in the game.
     function repair(uint256 donId) external nonReentrant {
         if (don.ownerOf(donId) != msg.sender) revert NotDonOwner();
         if (damageBps[donId] == 0) revert NotDamaged();
@@ -266,7 +266,7 @@ contract HouseEscrow is ReentrancyGuard {
 
     /// RaidEngine's big score ("they found the safe"): a capped slice of DEPLOYED only — principal
     /// moves, hit-taxed, raids reassign and never mint. Slice band is the engine's job; this side
-    /// hard-caps at 30% (the Scrip-band ceiling, economy §10.1).
+    /// hard-caps at 30% (the Scrip-band ceiling).
     function applyRaidBig(uint256 targetDonId, address attackerVault, uint256 sliceBps)
         external
         onlyRaid

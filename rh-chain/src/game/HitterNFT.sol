@@ -7,22 +7,22 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IEntropy, IEntropyConsumer} from "../market/EsseyCasesDegen.sol";
 import {IDonLike, IGameController, IScrip, GameRoles} from "./GameTypes.sol";
 
-/// HitterNFT — the mass-mint crew unit (contracts-architecture §2.7), Phase-0 minimal per the
-/// concept §4.4 manifest: mint, hunt/garrison availability flags, cooldown/hospital state, and the
+/// HitterNFT — the mass-mint crew unit, Phase-0 minimal:
+/// mint, hunt/garrison availability flags, cooldown/hospital state, and the
 /// SEALED-SLOT FAVOR. No 6551 vaults, no items, no kill-loot yet (Phase 1 adds the SeatVault clone
-/// per Hitter when equipped gear becomes lootable); supply UNCAPPED, one SKU (B7).
+/// per Hitter when equipped gear becomes lootable); supply UNCAPPED, one SKU.
 ///
-/// Pricing: Phase 0 is Scrip-only, so the mint prices in Scrip at the peg of the ruled $9 sealed
-/// SKU (B5) — 900 Scrip, burned (a sink; the $6/$3 cash split is a USDG-mode concern). Payment
+/// Pricing: Phase 0 is Scrip-only, so the mint prices in Scrip at the peg of the $9 sealed
+/// SKU — 900 Scrip, burned (a sink; the $6/$3 cash split is a USDG-mode concern). Payment
 /// draws from a Don's banked Scrip (the vault), keeping Scrip non-transferable end to end.
 ///
-/// THE SEALED SLOT ("the Favor", economy §1): every mint carries it. Commit at mint (the user-side
+/// THE SEALED SLOT ("the Favor"): every mint carries it. Commit at mint (the user-side
 /// randomness seed is fixed in the mint tx, before any odds can be steered), entropy reveal on
-/// first use — the Cases odds pattern with the ruled published bands 70 / 20 / 8.5 / 1.5 (B5),
+/// first use — the Cases odds pattern with published bands 70 / 20 / 8.5 / 1.5,
 /// validated on-chain the Degen way. A sealed Favor past the timeout can be force-revealed
 /// permissionlessly AT THE FLOOR BAND (Common), the reclaim philosophy: nothing stays sealed, and
 /// the valve is never better than a real roll. Transfer-auto-reveal + the Edge-envelope machinery
-/// are Phase-1 scope (flagged in the build report).
+/// are Phase-1 scope (flagged, deferred).
 ///
 /// Metadata is REDACTED by design (art ships later; the dossier UI reads the flags): a minimal
 /// on-chain JSON with the case-file framing.
@@ -37,13 +37,13 @@ contract HitterNFT is ERC721, IEntropyConsumer, ReentrancyGuard {
     uint32 public immutable callbackGasLimit;
 
     uint256 internal constant PPM = 1_000_000;
-    /// $9 sealed SKU at the 0.01 peg (B5) — burned, the Scrip-mode sink.
+    /// $9 sealed SKU at the 0.01 peg — burned, the Scrip-mode sink.
     uint256 public constant MINT_PRICE = 900e18;
     /// Sealed past this window => anyone may floor-reveal at Common.
     uint256 public constant FORCE_REVEAL_TIMEOUT = 30 days;
 
-    /// The ruled Favor bands: Common 70% / Uncommon 20% / Rare 8.5% / Legendary 1.5% —
-    /// published on-chain before any mint is sold (economy §1.6 trust set).
+    /// The Favor bands: Common 70% / Uncommon 20% / Rare 8.5% / Legendary 1.5% —
+    /// published on-chain before any mint is sold (odds disclosed up front).
     uint32 public constant CUM_COMMON_PPM = 700_000;
     uint32 public constant CUM_UNCOMMON_PPM = 900_000;
     uint32 public constant CUM_RARE_PPM = 985_000;
@@ -108,7 +108,7 @@ contract HitterNFT is ERC721, IEntropyConsumer, ReentrancyGuard {
 
     /// Mint a sealed Hitter to the caller, paid from their Don's banked Scrip (the vault). The
     /// Favor commitment is fixed HERE, in the mint tx — the assignment can't be steered after the
-    /// fact (economy §1.6 #2), and the reveal roll later folds this commit into its randomness.
+    /// fact, and the reveal roll later folds this commit into its randomness.
     function mint(uint256 payerDonId) external nonReentrant returns (uint256 id) {
         if (don.ownerOf(payerDonId) != msg.sender) revert NotDonOwner();
         if (controller.closed()) revert GenerationClosed();
@@ -128,7 +128,7 @@ contract HitterNFT is ERC721, IEntropyConsumer, ReentrancyGuard {
     }
 
     /// Open the envelope — owner-triggered at first use (the client fires this alongside the
-    /// Hitter's first raid; reveal-on-first-use per B5). Entropy fee as msg.value, excess refunded.
+    /// Hitter's first raid; reveal-on-first-use). Entropy fee as msg.value, excess refunded.
     function revealFavor(uint256 id) external payable nonReentrant returns (uint64 seq) {
         if (ownerOf(id) != msg.sender) revert NotHitterOwner();
         if (!sealed_[id]) revert AlreadyRevealed();

@@ -4,17 +4,17 @@ pragma solidity ^0.8.28;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IDonLike, IGameController, IScrip, IMissionBoard, GameRoles} from "./GameTypes.sol";
 
-/// HouseDeed — the House as a 721 in the Don's 6551 (contracts-architecture §2.2, adapted from the
+/// HouseDeed — the House as a 721 in the Don's 6551 (adapted from the
 /// Don.sol shape: module-gated minting, tier state, deterministic custody).
 ///
-/// Phase 0 ships exactly two rungs of the ladder (concept §4.4): the FREE Safehouse (auto-claimed at
+/// Phase 0 ships exactly two rungs of the ladder: the FREE Safehouse (auto-claimed at
 /// first play) and ONE paid upgrade — the Row House — to test the upgrade-purchase loop. Tier stats
-/// follow the ruled numbers: Safehouse cap $50-flat (A6; 5,000 Scrip at the 0.01 peg), Row House
-/// $15 fee / $150 cap (B4; 1,500 / 15,000 Scrip). Base defense on the bible's HD 40→120 ramp.
+/// are fixed constants: Safehouse cap $50-flat (5,000 Scrip at the 0.01 peg), Row House
+/// $15 fee / $150 cap (1,500 / 15,000 Scrip). Base defense on the HD 40→120 ramp.
 ///
 /// Custody: the deed is minted INTO vaultOf(donId) and is SOULBOUND there for Phase 0 — deed
-/// withdrawal and the property market are Phase-1 scope (concept §4.4 defers them), and the
-/// install/withdraw discipline ("only while home + hopper banked", C2) ships with that market.
+/// withdrawal and the property market are Phase-1 scope (deferred deliberately), and the
+/// install/withdraw discipline ("only while home + hopper banked") ships with that market.
 /// Upgrades are in-place (no flip arbitrage), paid in Scrip, burned (the Scrip-mode fee sink).
 contract HouseDeed is ERC721 {
     struct TierStats {
@@ -59,13 +59,13 @@ contract HouseDeed is ERC721 {
         scrip = scrip_;
     }
 
-    /// The tier table — the ruled constants, readable in one place.
+    /// The tier table — the launch constants, readable in one place.
     function tierStats(uint8 t) public pure returns (TierStats memory) {
         if (t == 0) {
-            // Safehouse: free (funnel gate C1), $50-flat cap (A6), HD 40 (bible §2.1).
+            // Safehouse: free (the funnel gate), $50-flat cap, HD 40.
             return TierStats({upgradeFee: 0, deployCap: 5_000e18, defense: 40, garrisonSlots: 2});
         }
-        // Row House: $15 fee / $150 cap (B4), HD 60 (first step on the 40→120 ramp).
+        // Row House: $15 fee / $150 cap, HD 60 (first step on the 40→120 ramp).
         return TierStats({upgradeFee: 1_500e18, deployCap: 15_000e18, defense: 60, garrisonSlots: 3});
     }
 
@@ -135,7 +135,7 @@ contract HouseDeed is ERC721 {
 
     /// Phase-0 deeds never leave the vault they were minted into. The property market (withdrawal,
     /// listing, the 500-bps deed royalty class) is Phase-1 scope and arrives with the
-    /// "withdraw only while home + hopper banked" root discipline (C2).
+    /// "withdraw only while home + hopper banked" root discipline.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
         from = _ownerOf(tokenId);
         if (from != address(0)) revert SoulboundInPhase0();

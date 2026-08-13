@@ -6,29 +6,29 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IEntropy, IEntropyConsumer} from "../market/EsseyCasesDegen.sol";
 import {IDonLike, IGameController, IScrip, IHouseEscrow, GameRoles} from "./GameTypes.sol";
 
-/// MissionBoard — depart/resolve on the Cases/Degen engine (contracts-architecture §2.4). "The Degen
+/// MissionBoard — depart/resolve on the Cases/Degen engine. "The Degen
 /// case IS a mission with no theme": pay in, reserve the worst case from a real budget, request
 /// entropy, settle against a published cumPpm ladder, permissionless floor-reclaim if the keeper
 /// stalls, credit the payout to the House hopper.
 ///
-/// Phase-0 adaptations, per the ruled slate:
-///  - 4 briefs (A5 duration coverage, lore codenames): the odds tables are the RNG bible §1.2/1.3
-///    rows verbatim, seeded at deploy and IMMUTABLE once posted (the Degen "disclosed odds can't be
+/// Phase-0 adaptations:
+///  - 4 briefs (one per duration tier, lore codenames): the odds tables are
+///    seeded at deploy and IMMUTABLE once posted (the Degen "disclosed odds can't be
 ///    swapped under holders" rule). The windowed BriefPoster is Phase-1; Phase 0 runs the permanent
 ///    core rows (liveness table: the board degrades to the safe on-ramp, never to zero).
 ///  - Payouts are Scrip, minted from a funded MISSION BUDGET with Degen-style worst-case
 ///    reservation: depart reverts unless the budget already covers the best possible outcome
 ///    (success pay + the full provisioning boost). No mission can ever be an unfunded liability.
-///  - THE GAS LAW (§1): the depart tx settles an EIP-712 signed loadout that freezes the garrison
+///  - THE GAS LAW: the depart tx settles an EIP-712 signed loadout that freezes the garrison
 ///    commit for the whole away window — "you set your defenses before you leave." Recomposing the
 ///    garrison while home is a free re-sign; only the loadout presented at depart ever hits the
 ///    chain. The signature binds briefId + provision too, so a relayed loadout can never spend the
 ///    vault on terms the owner didn't sign (Phase 1 generalizes this into the LoadoutRegistry).
-///  - Entropy is requested at RESOLVE, not depart (RNG bible §7.2 — requesting at dispatch leaks
+///  - Entropy is requested at RESOLVE, not depart (requesting at dispatch leaks
 ///    the outcome hours early, a free option on banking/garrison decisions).
-///  - THE KIT (traits-as-gameplay §3, Phase-0 SIMPLIFIED): trait preimages live off-chain in the
+///  - THE KIT (Phase-0 SIMPLIFIED): trait preimages live off-chain in the
 ///    reserve API, so the Phase-0 kit is KEEPER-ATTESTED — the keeper submits the Don's grip class
-///    alongside its first resolve; `kitClaimed` latches forever (A11: one kit per Don, ever; rerolls
+///    alongside its first resolve; `kitClaimed` latches forever (one kit per Don, ever; rerolls
 ///    never re-mint). Phase 1 replaces the attestation with the trustless resolver-picks derivation
 ///    WITHOUT redeploying Scrip or this board: the latch + class storage here are already the final
 ///    interface (`kitClaimed` / `kitClassOf`), only the attestor role re-points.
@@ -43,15 +43,15 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         uint32 cumPartialPpm; // roll < this  => PARTIAL ("the job went sideways"); else FAIL
         uint256 successPay; // Scrip
         uint256 partialPay; // Scrip (the reclaim floor — never zero, never better than a roll)
-        uint256 dispatchFee; // Scrip, burned (1.5% of E[payout], rate card A1-A4)
-        uint256 provisionCap; // Scrip (bible §1.5)
+        uint256 dispatchFee; // Scrip, burned (1.5% of E[payout], the rate card)
+        uint256 provisionCap; // Scrip
         uint256 betaBps; // success-payout boost per provisioned Scrip (90% marginal RTP)
         string codename; // lore surface (GLASS HARVEST, ...)
     }
 
     /// The EIP-712 depart intent. Signed by ownerOf(donId); submittable by anyone (relayer/session
     /// key), which is why it binds the brief and the provision — the signature authorizes exactly
-    /// one shaped spend, and the garrison hash rides the same signature (gas law §1.3).
+    /// one shaped spend, and the garrison hash rides the same signature (the gas law).
     struct Loadout {
         uint256 donId;
         uint64 briefId;
@@ -85,7 +85,7 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
 
     uint256 internal constant PPM = 1_000_000;
     uint256 internal constant BPS = 10_000;
-    /// Unresolved past due + grace => anyone may floor-settle at PARTIAL (bible §7.2; the Degen
+    /// Unresolved past due + grace => anyone may floor-settle at PARTIAL (the Degen
     /// reclaim philosophy: the valve is never better than a real roll, so it only un-sticks).
     uint256 public constant RECLAIM_GRACE = 2 hours;
 
@@ -104,12 +104,12 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
     mapping(uint256 => uint64) public activeMissionOf; // donId => missionId (0 = home)
     mapping(uint64 => uint64) public seqToMission; // entropy seq => missionId
 
-    /// Per-TOKEN monotonic loadout nonce (gas law §1.4). Stale signatures also die on transfer
+    /// Per-TOKEN monotonic loadout nonce (the gas law). Stale signatures also die on transfer
     /// because the signer must equal the CURRENT owner at settle time.
     mapping(uint256 => uint256) public lastSettledNonce;
 
     mapping(uint256 => bool) public hasDispatched;
-    mapping(uint256 => bool) public kitClaimed; // the A11 latch — one kit per Don, EVER
+    mapping(uint256 => bool) public kitClaimed; // the kit latch — one kit per Don, EVER
     mapping(uint256 => uint8) public kitClassOf; // keeper-attested grip class (Phase-0; see header)
 
     uint256 public missionBudget; // funded emission line (S_declared events)
@@ -263,7 +263,7 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         escrow.ensureHouse(l.donId);
 
         address vault = don.vaultOf(l.donId);
-        scrip.burn(vault, b.dispatchFee); // rate card A1-A4: Scrip-mode dispatch fees burn
+        scrip.burn(vault, b.dispatchFee); // rate card: Scrip-mode dispatch fees burn
         if (l.provision > 0) scrip.burn(vault, l.provision); // consumed at dispatch — the gamble
 
         // Worst-case reservation BEFORE the roll exists (the solvency law): best outcome is
@@ -291,7 +291,7 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         emit Departed(missionId, l.donId, l.briefId, l.provision, b.dispatchFee, worst, l.garrisonHash);
     }
 
-    /// EIP-712 settlement (gas law §1.2): recover the signer, require it to be the CURRENT owner
+    /// EIP-712 settlement (the gas law): recover the signer, require it to be the CURRENT owner
     /// (transfer therefore kills every prior owner's signatures with no epoch bookkeeping), enforce
     /// deadline + per-token monotonic nonce.
     function _settleLoadout(Loadout calldata l, bytes calldata sig) internal {
@@ -312,7 +312,7 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         return entropy.getFeeV2(entropyProvider, callbackGasLimit);
     }
 
-    /// Request the roll — at expiry, never at dispatch (bible §7.2). Permissionless on purpose:
+    /// Request the roll — at expiry, never at dispatch. Permissionless on purpose:
     /// the keeper normally runs it (and pays), but a stalled keeper can't stall a mission — anyone
     /// can trigger the roll, and `reclaim` floors it if even the entropy never lands.
     function resolve(uint64 missionId) external payable nonReentrant {
@@ -393,9 +393,9 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
 
     // ---------------------------------------------------------------- the kit (Phase-0 attested)
 
-    /// Keeper-attested Starting Kit (traits §3.1, SIMPLIFIED — see the contract header): the keeper
+    /// Keeper-attested Starting Kit (Phase-0 SIMPLIFIED — see the contract header): the keeper
     /// submits the grip class read from the Don's resolved art alongside the first resolve. Latches
-    /// forever (A11); rerolls never re-mint and never revoke. Phase 1 swaps the attestor for the
+    /// forever; rerolls never re-mint and never revoke. Phase 1 swaps the attestor for the
     /// trustless resolver-picks derivation behind the same latch + storage — no redeploy of Scrip
     /// or this board.
     function attestKit(uint256 donId, uint8 gripClass) external {

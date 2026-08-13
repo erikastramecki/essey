@@ -177,7 +177,7 @@ contract GameMissionBoardTest is GameBase {
     }
 
     /// A relayer may SUBMIT a signed loadout — the signature, not the sender, is the authority
-    /// (session-key rail, gas law §1.5) — and it can only execute exactly what was signed.
+    /// (session-key rail, the gas law) — and it can only execute exactly what was signed.
     function test_Loadout_RelayableButBindsTerms() public {
         _fund(aliceDon, 100e18);
         MissionBoard.Loadout memory l = _loadout(aliceDon, PAPER_ROUTE, 5e18, bytes32("g"));
@@ -318,7 +318,7 @@ contract GameMissionBoardTest is GameBase {
         board.attestKit(aliceDon, 3);
         assertTrue(board.kitClaimed(aliceDon));
         assertEq(board.kitClassOf(aliceDon), 3);
-        // One kit per Don, EVER (A11) — no re-attest, no revoke.
+        // One kit per Don, EVER — no re-attest, no revoke.
         vm.prank(keeper);
         vm.expectRevert(MissionBoard.KitAlreadyClaimed.selector);
         board.attestKit(aliceDon, 1);

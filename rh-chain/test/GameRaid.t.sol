@@ -290,7 +290,7 @@ contract GameRaidTest is GameBase {
     // ---------------------------------------------------------------- cooldown & caps
 
     /// The (t/20h)^2 curve: a second attempt 10h10m after the first runs at ~26% power — diminished
-    /// odds, not a revert (patience strictly dominates, bible §2.8).
+    /// odds, not a revert (patience strictly dominates).
     function test_Cooldown_DiminishedOdds_NotAGate() public {
         _targetAway(bytes32(0));
         // A miss word whose kill-partition also spares crew slot 0 (deterministic un-killed path).
@@ -455,7 +455,7 @@ contract GameRaidTest is GameBase {
 
         vm.warp(block.timestamp + 2 hours);
         raid.reclaimRaid(raidId); // anyone
-        // Fee stays sunk (B1), cooldown stands, target unharmed, heat armed.
+        // Fee stays sunk, cooldown stands, target unharmed, heat armed.
         assertEq(scrip.balanceOf(address(raid)), 0);
         assertGt(hitter.lastAttemptAt(aliceHitter), 0);
         assertEq(escrow.damageBps(bobDon), 0);

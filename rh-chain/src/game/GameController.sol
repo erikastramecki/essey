@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {GameRoles} from "./GameTypes.sol";
 
-/// GameController — the generation registry (contracts-architecture §2.16 / §5.2).
+/// GameController — the generation registry.
 ///
 /// One question, one seam: persistent contracts (Scrip, HouseDeed, HouseEscrow) never name mechanics
 /// contracts directly — they ask `moduleOf(role)` / `isModule(addr)`. Upgrades are generational
@@ -12,7 +12,7 @@ import {GameRoles} from "./GameTypes.sol";
 /// Cases-v2 lesson).
 ///
 /// THE ROLE LIST IS FIXED AT DEPLOY and can never grow: a module can be re-pointed, a new *power*
-/// cannot be invented (§5.2). Per the ruled slate (A14) the list reserves OUTFIT_MODULE now — Outfits
+/// cannot be invented. The list reserves OUTFIT_MODULE now — Outfits
 /// ship at Phase 1.5 into a slot that already exists — and SEASON_MODULE for the Phase-2 escrow.
 ///
 /// Wiring discipline: deploy-time wiring is instant (the stack is assembled in one script run);
@@ -27,7 +27,7 @@ contract GameController {
     bool public sealed_;
     /// Generational close: modules consult this before any NEW exposure (departs, raid commits,
     /// hitter mints, deploys). Exits, resolves, reclaims and bank() NEVER consult it — closing a
-    /// generation can stop new play, never strand or gate an exit (§5.3).
+    /// generation can stop new play, never strand or gate an exit.
     bool public closed;
 
     mapping(bytes32 => bool) public isRole;
@@ -115,7 +115,7 @@ contract GameController {
         emit Sealed();
     }
 
-    /// Generational close (§5.3): no NEW departs/commits/mints/deploys. Existing missions and raids
+    /// Generational close: no NEW departs/commits/mints/deploys. Existing missions and raids
     /// resolve or reclaim normally; bank() and every exit stay open forever.
     function close() external onlyAdmin {
         closed = true;

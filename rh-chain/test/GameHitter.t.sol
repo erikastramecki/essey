@@ -63,7 +63,7 @@ contract GameHitterTest is GameBase {
         assertEq(hitter.favorOf(id), _expectedBand(word, commit));
     }
 
-    /// Every band of the ruled 70/20/8.5/1.5 ladder is reachable (words searched per band).
+    /// Every band of the 70/20/8.5/1.5 ladder is reachable (words searched per band).
     function test_Favor_AllBandsReachable() public {
         bool[4] memory seen;
         uint256 found;

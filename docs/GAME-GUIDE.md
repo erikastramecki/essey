@@ -6,7 +6,9 @@ and a game where the jobs are timed, the odds are published, and nothing bleeds 
 > **This is the Skirmish: Season Zero, live on the test network.** Everything this season is played in
 > Scrip, the city's season money, on testnet funds with no real value. It is the proving season: same
 > rules, same odds, zero real stakes. Real-asset seasons come later, one audited step at a time.
-> Every number in this guide is the number on the chain. Check us.
+> Every number in this guide is the number on the chain. Check us. And where a room is still being
+> built, we say so with a stamp: anything marked **· ARRIVES WITH A LATER POSTING ·** is roadmap,
+> written and priced but not on this season's chain. Everything unstamped is live now, and checkable.
 
 ---
 
@@ -21,8 +23,9 @@ and a game where the jobs are timed, the odds are published, and nothing bleeds 
    earns daily and can be robbed while you are out. That choice is the whole game. Start small.
 5. **Take your first job.** Open the board, pick PAPER ROUTE, the 3-hour escort run. Reading the folder is
    reading the odds: the dossier is the risk disclosure.
-6. **Dispatching does two things the first time:** your sealed Favor opens (see The Favor), and your
-   Starting Kit mints: the item your Don is holding in his portrait comes off the canvas and into his wallet.
+6. **Dispatching prints your first line on the Tape.** This season the Keeper also attests your Starting
+   Kit class on the record at first dispatch; the kit's mint into the wallet, and the Don's sealed Edge
+   envelope, carry the stamp: · ARRIVES WITH A LATER POSTING · (see Your Don is the loadout).
 7. **Come back when the window closes.** Your pay lands in the House hopper.
 8. **Bank it.** Hopper to Vault, free, forever. Banked money is sacred. Bank before you brag.
 
@@ -101,7 +104,8 @@ is the odds: the dossier is the on-chain table wearing a trench coat, and the di
 **How a job works:** pick a brief, choose your provisions, dispatch. Your Don departs, locked and visibly
 away, which the whole street can read on the Tape. At the window's end the Keeper rolls the outcome against
 the published ladder and pays the House hopper. Three outcomes on every folder: **clean** (full pay),
-**sideways** (the job went sideways: 40% pay), **bust** (nothing, provisions gone).
+**sideways** (the job went sideways: the partial pay printed on the folder), **bust** (nothing,
+provisions gone).
 
 If the Keeper ever stalls, anyone can settle a stuck job two hours past its window, and it settles at the
 sideways floor, never at zero. The valve is never better than a real roll, so it cannot be gamed, only
@@ -111,9 +115,9 @@ un-stuck.
 
 | Codename | The job | Window | Clean | Sideways | Bust | Clean pays | Sideways pays | Door fee |
 |---|---|---|---:|---:|---:|---:|---:|---:|
-| **PAPER ROUTE** | escort the armored T-bill run down Ledger Row (SGOV) | 3h | 78% | 15% | 7% | 36 Scrip | 14 Scrip | 0.45 Scrip |
-| **IDLE CYCLES** | siphon unmetered compute off Hall C in the Racks (ORCL/DELL) | 5h | 70% | 18% | 12% | 75 Scrip | 30 Scrip | 0.87 Scrip |
-| **GLASS HARVEST** | walk finished wafers out of the fab through Dock 4 (NVDA) | 12h | 60% | 22% | 18% | 236 Scrip | 94 Scrip | 2.44 Scrip |
+| **PAPER ROUTE** | escort the armored T-bill run down Ledger Row (SGOV) | 3h | 78% | 15% | 7% | 36 Scrip | 14.4 Scrip | 0.45 Scrip |
+| **GLASS HARVEST · RUSH** | walk finished wafers out of the fab through Dock 4, one shift (NVDA) | 5h | 70% | 18% | 12% | 75 Scrip | 30 Scrip | 0.87 Scrip |
+| **PROOF OF WORK** | cut the Rig's output over to your wallet for one power cycle (CLSK) | 12h | 60% | 22% | 18% | 236 Scrip | 94.4 Scrip | 2.44 Scrip |
 | **ABSOLUTE ZERO** | lift the prototype from the lab that isn't in the Registry (IONQ/RGTI) | 24h | 12% | 23% | 65% | **2,775 Scrip** | 222 Scrip | 5.76 Scrip |
 
 Read the table honestly and it tells you three things. Longer jobs pay more per hour: that is the exposure
@@ -126,28 +130,36 @@ Every brief is pegged to a real ticker because in later seasons the take will BE
 job pays the chip company. This season the take is Scrip, marked to the peg. The full quest log, with
 every mission's token contract and price wire printed for verification, is the Mission Compendium below.
 
-**Board texture:** briefs post in windows and expire. No two identical folders run at once, odds jitter
-inside published bands, and a codename retires for a season once used. The board never shows you the same
-job twice, even when it is the same job.
+**Board texture · ARRIVES WITH A LATER POSTING ·** The living board: briefs posting in windows and
+expiring, odds jittering inside published bands, no two identical folders at once, codenames retiring
+for a season once used. This season the four folders above stand posted and steady while the loop proves
+out. The jitter comes later; the ladders are already law.
 
-### Provisioning: sizing your own stake
+### Provisioning: pressing your own bet
 
-You can provision a job with Scrip, consumed at dispatch. Provisions nudge your odds and fatten the clean
-payout. They are also gone if you bust. You are sizing your own bet, and the city's cut applies: across
-the whole city, every 100 Scrip provisioned returns about 90 in expectation. Provision because you like
-the job, not because it beats the math. It does not. Nothing here does; see The house rules.
+You can provision a job with Scrip, burned at dispatch. Burned, not staked, and hear this part the way
+the contract says it: **provisions never move your odds.** The dispatcher's ladder is the ladder whether
+you walk in empty-handed or loaded to the cap. What a provision buys is a fatter take on the clean
+outcome, and only the clean outcome: the payout grows by your provision times the folder's posted beta,
+IF the job lands. Go sideways or bust and the provision is simply gone. You are pressing the bet: same
+door, same odds, bigger swing. And the city's cut applies: across the whole city, every 100 Scrip
+provisioned returns about 90 in expectation. Provision because you like the job, not because it beats
+the math. It does not. Nothing here does; see The house rules.
 
-| Brief | Provision cap | Max odds nudge | What a full provision does |
+| Brief | Provision cap | Posted beta | A full carry adds to the clean take |
 |---|---:|---:|---|
-| PAPER ROUTE | 15 Scrip | +6 points | small edge, small stake |
-| IDLE CYCLES | 30 Scrip | +6 points | the standard carry |
-| GLASS HARVEST | 80 Scrip | +6 points | serious carry, serious loss on a bust |
-| ABSOLUTE ZERO | 200 Scrip | +1 point | barely moves the odds, hugely fattens the jackpot |
+| PAPER ROUTE | 15 Scrip | 1.1538x | ~17.3 Scrip, IF the 78% lands |
+| GLASS HARVEST · RUSH | 30 Scrip | 1.2857x | ~38.6 Scrip, IF the 70% lands |
+| PROOF OF WORK | 80 Scrip | 1.5x | 120 Scrip, IF the 60% lands |
+| ABSOLUTE ZERO | 200 Scrip | 7.5x | 1,500 Scrip on the jackpot, IF the 12% hits |
 
-### The Moonshot and the Big Pot
+Run the arithmetic on that last row and understand what you are buying: burn 200, and 65% of the time it
+was a bonfire. Variance is the product. The odds were never for sale.
 
-ABSOLUTE ZERO sometimes posts a variant folder: **the Moonshot**. Same window, same expected pay, entirely
-different shape:
+### The Moonshot and the Big Pot · ARRIVES WITH A LATER POSTING ·
+
+When this room opens, ABSOLUTE ZERO will sometimes post a variant folder: **the Moonshot**. Same window,
+same expected pay, entirely different shape:
 
 | | Long Con (standard) | Moonshot variant |
 |---|---:|---:|
@@ -162,21 +174,24 @@ progressive pot. Every Moonshot resolution has an independent **0.4%** chance to
 days it pays in hours. Some weeks it builds into a number the whole city watches. When it goes, the Tape
 prints a name.
 
-### Reputation: how leveling works
+### Reputation: how leveling works · ARRIVES WITH A LATER POSTING ·
 
-Work raises your standing. Standing raises your wage, never your odds.
+Work raises your standing. Standing raises your wage, never your odds. This season the ladder is not yet
+on the chain: every Don works at a flat 1.00x wage and every posted folder is open to every Don. Here is
+the standing system as it will post:
 
 | Standing | Unlocks | Wage multiplier |
 |---|---|---:|
-| Level 1 | PAPER ROUTE tier (3h) | 1.00x |
-| Level 3 | IDLE CYCLES tier (5h) | 1.10x |
-| Level 6 | GLASS HARVEST tier (12h) | 1.25x |
-| Level 10 | ABSOLUTE ZERO tier (24h) | 1.45x |
+| Level 1 | Errand tier (3h) | 1.00x |
+| Level 3 | Job tier (5h) | 1.10x |
+| Level 6 | Score tier (12h) | 1.25x |
+| Level 10 | Long Con tier (24h) | 1.45x |
 | Level 21 | (cap) | **2.00x, the ceiling** |
 
 Odds never scale with standing. A level-21 Don busts 7% of escort runs like everybody else; his envelope is
-just thicker. One published ladder per tier, same for every Don in the city, auditable at a glance. Also:
-**four dispatches per day, maximum.** Even legends sleep.
+just thicker. One published ladder per tier, same for every Don in the city, auditable at a glance. One
+rule that is already the law this season: **one active job per Don at a time.** Even legends work single
+file.
 
 ---
 
@@ -212,13 +227,17 @@ exists on-chain, and we print the address so you can check.
 
 ### The master ledger: every brief, every token, every wire
 
+The first four rows are this season's live board. Everything below them is the runway and the drawer,
+posted here so the pegs are on the record before the folders are.
+
 | Brief | Window | The take | Token contract | Price wire | The chart's personality |
 |---|---:|---|---|---|---|
 | PAPER ROUTE | 3h | SGOV | pending the proof | on the wire | the safe drip |
-| IDLE CYCLES | 5h | ORCL / DELL | pending the proof | on the wire | the steady meter |
-| GLASS HARVEST | 12h | NVDA | [`0xd060…9EEC`](https://robinhoodchain.blockscout.com/address/0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC) | [`0x379E…9F15`](https://robinhoodchain.blockscout.com/address/0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15) | the flagship, volatile |
-| GLASS HARVEST · SPREAD | 12h | NVDA / TSM / AMD | AMD [`0x8692…3fdC`](https://robinhoodchain.blockscout.com/address/0x86923f96303D656E4aa86D9d42D1e57ad2023fdC); TSM pending | AMD [`0x943A…2C72`](https://robinhoodchain.blockscout.com/address/0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72) | the basket takes the edge off |
+| GLASS HARVEST · RUSH | 5h | NVDA | [`0xd060…9EEC`](https://robinhoodchain.blockscout.com/address/0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC) | [`0x379E…9F15`](https://robinhoodchain.blockscout.com/address/0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15) | the flagship, volatile |
+| PROOF OF WORK | 12h | CLSK | pending the proof | on the wire | feast or famine |
 | ABSOLUTE ZERO | 24h | IONQ / RGTI | pending the proof | on the wire | the lottery |
+| IDLE CYCLES | 5h | ORCL / DELL | pending the proof | on the wire | the steady meter |
+| GLASS HARVEST · SPREAD | 12h | NVDA / TSM / AMD | AMD [`0x8692…3fdC`](https://robinhoodchain.blockscout.com/address/0x86923f96303D656E4aa86D9d42D1e57ad2023fdC); TSM pending | AMD [`0x943A…2C72`](https://robinhoodchain.blockscout.com/address/0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72) | the basket takes the edge off |
 | HOT WAFER · RUSH | 5h | NVDA | [`0xd060…9EEC`](https://robinhoodchain.blockscout.com/address/0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC) | [`0x379E…9F15`](https://robinhoodchain.blockscout.com/address/0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15) | the flagship, in and out |
 | STATIC FIRE | 12h | RKLB | pending the proof | on the wire | long odds |
 | GRAVITY TAX · LONG | 24h | SPCX | [`0x4a0E…5eEa`](https://robinhoodchain.blockscout.com/address/0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa) | [`0xB265…Bffb`](https://robinhoodchain.blockscout.com/address/0xB265810950ba6c5C0Ff821c9963014a56fD8Bffb) | long odds, bigger board |
@@ -228,10 +247,9 @@ exists on-chain, and we print the address so you can check.
 | BILL OF LADING | 12h | BABA / EWY | pending the proof | on the wire | weather from abroad |
 | DOUBLE EXPOSURE | 12h | MSTR | pending the proof | on the wire | levered, both directions |
 | NO SERIALS | 5h | MU / SNDK | pending the proof | on the wire | the cycle |
-| PROOF OF WORK | 12h | CLSK | pending the proof | on the wire | feast or famine |
 | THE FULL BASKET | 12h | SPY | [`0x117c…4C0C`](https://robinhoodchain.blockscout.com/address/0x117cc2133c37B721F49dE2A7a74833232B3B4C0C) | [`0x3197…9f6A`](https://robinhoodchain.blockscout.com/address/0x319724394D3A0e3669269846abE664Cd621f9f6A) | professionally average |
 
-Fifteen briefs, one rule: the take is real, all different, and dynamic. The armored run pays paper, the
+Fifteen briefs, one rule: the peg is real, all different, and dynamic. The armored run pays paper, the
 fab pays silicon, the cold rooms pay a coin flip on the future, and each one's swing is its ticker's
 swing. The Tape prints the mark; the wire sets it; you can audit both.
 
@@ -247,8 +265,8 @@ swing. The Tape prints the mark; the wire sets it; you can audit both.
 | The line | |
 |---|---|
 | Odds | 78% clean · 15% sideways · 7% bust |
-| Pays | 36 Scrip clean · 14 sideways · 0.45 door fee |
-| Carry | provision up to 15 Scrip |
+| Pays | 36 Scrip clean · 14.4 sideways · 0.45 door fee |
+| Carry | provision up to 15 Scrip; a full carry adds ~17.3 to the clean take |
 | Pegged | **SGOV**, 0-3 month T-bills: the safe drip |
 | Token | pending the proof; prints here the day it clears |
 | Price wire | live on the city wire |
@@ -258,42 +276,41 @@ There's no shame in the Paper Route. There's barely any interest, either.
 
 ---
 
-#### ▪ IDLE CYCLES
-**The Data-Center Skim · The Racks · 5h window · Job tier · stamp: STANDARD**
+#### ▪ GLASS HARVEST · RUSH
+**The Chip-Fab Job, rush cut · The Foundry · 5h window · Job tier · stamp: STANDARD**
 
-*Siphon unmetered compute off Hall C between the midnight batch jobs.*
+*Walk one pallet of finished wafers out of the fab through Dock 4, in and out inside a single shift.*
 
 | The line | |
 |---|---|
 | Odds | 70% clean · 18% sideways · 12% bust |
 | Pays | 75 Scrip clean · 30 sideways · 0.87 door fee |
-| Carry | provision up to 30 Scrip |
-| Pegged | **ORCL / DELL** per window; CRWV/NBIS on the SPREAD posting |
-| Token | pending the proof |
-| Price wire | live on the city wire |
-
-THE WORD: Whatever runs in the gap ran for free, and whatever ran for free ran for you. The skim's been
-run so many times the night crew waves. Wave back. It keeps the premium down.
-
----
-
-#### ▪ GLASS HARVEST
-**The Chip-Fab Job · The Foundry · 12h window · Score tier · stamp: STEEP**
-
-*Walk finished wafers out of the fab through Dock 4 during the shift change.*
-
-| The line | |
-|---|---|
-| Odds | 60% clean · 22% sideways · 18% bust |
-| Pays | 236 Scrip clean · 94 sideways · 2.44 door fee |
-| Carry | provision up to 80 Scrip |
-| Pegged | **NVDA**; posts SPREAD as 50/30/20 NVDA/TSM/AMD |
+| Carry | provision up to 30 Scrip; a full carry adds ~38.6 to the clean take |
+| Pegged | **NVDA**: the flagship, volatile |
 | Token | [`0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC`](https://robinhoodchain.blockscout.com/address/0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC) · verified |
 | Price wire | [`0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15`](https://robinhoodchain.blockscout.com/address/0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15) |
 
 THE WORD: The wafers manifest as "glass, industrial," which is technically true and legally hilarious.
 You'll be lint-free, badge-forward, and carrying the most valuable objects per gram in the Nation. Try
-to look bored.
+to look bored. You have five hours, not twelve. The rush is the mercy.
+
+---
+
+#### ▪ PROOF OF WORK
+**The Rig Job · The Racks · 12h window · Score tier · stamp: STEEP**
+
+*Cut the Rig's output over to your wallet for one full power cycle.*
+
+| The line | |
+|---|---|
+| Odds | 60% clean · 22% sideways · 18% bust |
+| Pays | 236 Scrip clean · 94.4 sideways · 2.44 door fee |
+| Carry | provision up to 80 Scrip; a full carry adds 120 to the clean take |
+| Pegged | **CLSK**: feast or famine |
+| Token | pending the proof; prints here the day it clears |
+| Price wire | live on the city wire |
+
+THE WORD: The name of the job is the whole philosophy of this town. You did the work. Here's the proof.
 
 ---
 
@@ -306,7 +323,7 @@ to look bored.
 |---|---|
 | Odds | 12% jackpot · 23% consolation · 65% bust |
 | Pays | **2,775 Scrip** jackpot · 222 consolation · 5.76 door fee |
-| Carry | provision up to 200 Scrip; the Moonshot variant posts here |
+| Carry | provision up to 200 Scrip; a full carry adds 1,500 to the jackpot, and only the jackpot |
 | Pegged | **IONQ or RGTI**, posted per window |
 | Token | pending the proof |
 | Price wire | live on the city wire |
@@ -374,10 +391,11 @@ said.
 MU/SNDK (pending the proof). Take the flash-memory pallets that were never serialized off the overnight
 dock. THE WORD: Either way it stacks flat and sells everywhere. The classics survive for a reason.
 
-#### ▪ PROOF OF WORK
-**The Rig Job · The Racks · 12h · stamp: STEEP** · pegged **CLSK** (pending the proof). Cut the Rig's
-output over to your wallet for one power cycle. THE WORD: The name of the job is the whole philosophy of
-this town. You did the work. Here's the proof.
+#### ▪ IDLE CYCLES
+**The Data-Center Skim · The Racks · 5h · stamp: STANDARD** · pegged **ORCL / DELL** per window (pending
+the proof); CRWV/NBIS on the SPREAD posting. Siphon unmetered compute off Hall C between the midnight
+batch jobs. THE WORD: Whatever runs in the gap ran for free, and whatever ran for free ran for you. The
+skim's been run so many times the night crew waves. Wave back. It keeps the premium down.
 
 #### ▪ THE FULL BASKET
 **The Index Job · The Exchange District · 12h · stamp: STANDARD** · pegged **SPY**
@@ -435,9 +453,14 @@ If you get in, a second roll decides what kind of night it was:
 
 ### Your odds at the door
 
-Attack strength comes from your Hitter's level and gear; defense comes from the House and its garrison.
-The success band is clamped: never below 5%, never above 70%. There are no sure things in Solvency, in
-either direction. Worked odds for a seasoned, kitted Hitter:
+Attack strength comes from your Hitter; defense comes from the House and its garrison. The success band
+is clamped: never below 5%, never above 70%. There are no sure things in Solvency, in either direction.
+
+**The Skirmish truth first:** levels and gear carry the stamp, · ARRIVES WITH A LATER POSTING ·, so this
+season every Hitter swings at base power and the door runs richer than the mature table below. A fresh
+Hitter kicking an undefended starter House lands about **62%** right now, and the 5% / 70% clamps still
+apply. The table is the worked outlook for a seasoned, kitted Hitter of later seasons, printed so you
+can see where the road goes. Illustrative, not this season's roll:
 
 | The door you're kicking | Hit chance |
 |---|---:|
@@ -484,12 +507,13 @@ needed to enforce it. The curve is the law.
 | Target heat | 8h immunity the moment an attempt is filed against you, from anyone |
 | Big-score lockout | 1 per House per 48h (Skirmish); 72h in real-asset seasons |
 | Garrison changes | 1h to take effect. Posting guards takes an hour |
-| Mission dispatches | 4 per Don per 24h |
+| Mission dispatches | 1 active job per Don at a time |
 
-### Getting back up: the comeback kit
+### Getting back up: the comeback kit · ARRIVES WITH A LATER POSTING ·
 
-Losses in Solvency come with paperwork, and the paperwork comes with help. Every one of these exists so a
-bad night converts into a next move instead of a quit:
+Losses in Solvency come with paperwork, and the paperwork comes with help. The desk below is drafted and
+priced but not yet open; this season a bad night's remedy is the oldest one: bank, garrison, go again.
+Every one of these exists so a bad night converts into a next move instead of a quit:
 
 | It | Cost | When | What it does |
 |---|---:|---|---|
@@ -537,27 +561,32 @@ The rules that keep it an edge and not a wall:
 - **Favors bend odds, never money.** No Favor touches yields, the Bell, or what a robbery can take.
 - **Opening Night.** Any envelope still sealed at season's end opens with everyone watching.
 
-Dons run the same ritual from the other side: the custom builder sells determinism, and the random path
-carries its own sealed Edge envelope at the same published odds. Dons choose their fate; Hitters roll
-theirs. Same city, two thrills.
+**· ARRIVES WITH A LATER POSTING ·** Dons will run the same ritual from the other side: the custom
+builder sells determinism, and the random path carries its own sealed Edge envelope at the same published
+odds. Dons choose their fate; Hitters roll theirs. Same city, two thrills. The Don's envelope is not on
+this season's chain yet; when it posts, the odds post first.
 
 ---
 
 ## Your Don is the loadout
 
 The art was the item system all along. Whatever your Don holds in his portrait, whatever he wears, whatever
-stares back from his eyes: it plays.
+stares back from his eyes: it plays. One honest stamp over this whole wing of the guide: the item and
+trait mechanics below carry the mark, **· ARRIVES WITH A LATER POSTING ·**. This season the Keeper attests
+your kit class on the record at first dispatch, so your place in line is provable now; the mints and the
+combat effects post later, at these published shapes.
 
-### The Starting Kit
+### The Starting Kit · ARRIVES WITH A LATER POSTING ·
 
 At first dispatch, alongside the Favor, your Don takes the item painted in his hand **off the canvas and
-into his wallet**: a real token, minted once, ever. Rarer paint mints a rarer item; the portrait's own
-rarity table is the loot table, publicly verifiable from the art. One kit per Don for all time. Rerolling
+into his wallet**: a real token, minted once, ever. (This season: the kit class prints on the record at
+first dispatch by Keeper attestation; the token itself mints with a later posting.) Rarer paint mints a
+rarer item; the portrait's own rarity table is the loot table, publicly verifiable from the art. One kit per Don for all time. Rerolling
 your art before first dispatch re-aims the future kit; rerolling after changes the wardrobe, never the
 inventory. And if your Don holds nothing? **The Empty Hand** mints instead: the badge for a short quest
 line ("get yourself a piece") ending in a Common item of your chosen class. Nothing in this city is a dud.
 
-### The kit chart
+### The kit chart · ARRIVES WITH A LATER POSTING ·
 
 Every grip in the collection, what it becomes, and its band. **Tiers: Common / Uncommon / Rare / Epic /
 Legendary.** Weapons add raid and garrison power by tier; everything else does what it says.
@@ -600,7 +629,7 @@ balanced like a loot table before anyone knew it was one.
 Your kit is property: equippable, lendable to your crew, and losable. Carry it on a job and it can be
 taken like anything else carried. The exposure law applies to sentiment too.
 
-### The Callings
+### The Callings · ARRIVES WITH A LATER POSTING ·
 
 Your Don's wardrobe declares a trade. Every Calling grants the same three things: **+3 points** on its
 mission family, **-20%** on its service fees, and a fatter draw on its quest line when the Specialists
@@ -610,7 +639,7 @@ better and cheaper.
 | Calling | The look | Mission family | Fee break |
 |---|---|---|---|
 | **THE MUSCLE** | face mods (Terminator, Bane, Doom, Samurai, Cthulu), weapon kit, The General / Badass suits | escorts and sieges (PAPER ROUTE) | repairs -20% |
-| **THE EYES** | eye mods, laser eyes, AR HUDs, Bladerunner / Weeb suits, the Hawk, the Bird | recon and tech jobs (IDLE CYCLES, ABSOLUTE ZERO) | scouting -20% |
+| **THE EYES** | eye mods, laser eyes, AR HUDs, Bladerunner / Weeb suits, the Hawk, the Bird | recon and tech jobs (PROOF OF WORK, ABSOLUTE ZERO) | scouting -20% |
 | **THE CON** | Cigar / Havannah / Audrey, Pimp / Couture / Jennifer / Riviera / Hotlanta / Scarlet suits | social-engineering jobs (coming to the board) | market royalties -20% |
 | **THE LEDGER** | Scholar / Windsor / Duchess / Opera suits, Knowledge Throne, Billfold / Stack, Rolex / Watch | finance jobs (coming to the board) | Marker credit builds +20% faster |
 | **THE TABLE** | Ace / Chips kit, Devilish, Jester face mod | the degen lane (Moonshots) | Moonshot door fee -20%, fee leg only, never the pot |
@@ -623,7 +652,7 @@ of the deal. And the **Full Motley** (Joker suit plus Jester face) carries the J
 week, swap a posted brief for its variant twin. A choice among published ladders, so the math never moves,
 only the mood.
 
-### Signature edges
+### Signature edges · ARRIVES WITH A LATER POSTING ·
 
 Rare paint, real perks. Each one line, each inside the caps:
 
@@ -644,7 +673,7 @@ Rare paint, real perks. Each one line, each inside the caps:
 Everything not listed is cosmetic, and we say so out loud. "Every trait secretly matters" is how a game
 becomes a spreadsheet with a lawsuit attached.
 
-### The Donna's edge
+### The Donna's edge · ARRIVES WITH A LATER POSTING ·
 
 The women of Solvency run the systems that decide games: information, command, and resilience. Not a
 bonus. A boss. Four powers, every one of them mechanical:
@@ -663,7 +692,7 @@ and stands back up), **Neko** (cat reflexes), **Devilish** (the Table's icon: Mo
 His identity is breadth: more edges, more volume, more variance. Hers is depth: know more, lose less.
 The optimal family is mixed, which is exactly the point.
 
-### The Edge Budget: why gear is an edge and not a wall
+### The Edge Budget: why gear is an edge and not a wall · ARRIVES WITH A LATER POSTING ·
 
 Everything stacks on one curve with a hard ceiling: **no combination of traits, Favors, and items ever
 shifts a roll more than +10 points**, item power saturates at **1.35x**, fee discounts stack to **25%**
@@ -689,9 +718,10 @@ doors your crew can hold, and how hard the place is to crack.
 
 - **A bigger house earns nothing by itself.** It raises the cap on what you may expose. Every Scrip earned
   still traces to a deploy choice and a job window. The ladder sells capacity, never yield.
-- **Deployed money earns 0.15% per day** at launch rates, floating with the city's budget, floor 0.12%.
-  When the district is full, new deployments queue. The rate never lies and never promises what the books
-  cannot pay.
+- **Deployed money earns 0.15% per day**, a fixed constant this season, posted on-chain. The floating
+  rate that moves with the city's budget (floor 0.12%), and deployment queues when a district fills,
+  carry the stamp: · ARRIVES WITH A LATER POSTING ·. The rate never lies and never promises what the
+  books cannot pay.
 - Upgrades consume the prior tier: the deed levels up in place. The deed itself is property in your Don's
   wallet, and a property market for standalone deeds, plus rare off-ladder deeds ("the Docks Warehouse,"
   "the Funeral Parlor"), arrives on the roadmap.

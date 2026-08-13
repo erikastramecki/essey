@@ -19,7 +19,7 @@ pragma solidity ^0.8.28;
 //   ENTROPY_PROVIDER — provider address (default 0xDACE, the Degen testnet convention)
 //   MISSION_BUDGET / YIELD_BUDGET / STIPEND_BUDGET — Scrip emission lines (S_declared; defaults below)
 //
-// Seeds the 4 Phase-0 briefs (RNG bible §1.2/1.3 rows, lore codenames), wires all roles, funds the
+// Seeds the 4 Phase-0 briefs (one per duration tier, lore codenames), wires all roles, funds the
 // budgets, and SEALS the controller (all later re-points go through the 2-day timelock).
 import {Script, console} from "forge-std/Script.sol";
 import {IEntropy} from "../src/market/EsseyCasesDegen.sol";
@@ -145,19 +145,18 @@ contract DeployGame is Script {
         );
     }
 
-    /// The Phase-0 board: 4 permanent rows, one per duration tier (A4/A5), odds = RNG bible
-    /// §1.2/§1.3 verbatim, codenames from the lore bible §3.3. betaBps carries the full 90%
-    /// marginal-RTP provisioning return on the payout leg (the Phase-0 fold of the odds-shift —
-    /// see the build report).
+    /// The Phase-0 board: 4 permanent rows, one per duration tier, with fixed disclosed
+    /// odds and lore codenames. betaBps carries the full 90%
+    /// marginal-RTP provisioning return on the payout leg (the Phase-0 fold of the odds-shift).
     function _seedBriefs(MissionBoard board_) internal {
         // T1 "Errand" — PAPER ROUTE (Treasury Run, SGOV, 3h): 78/15/7, pays 36 / 14.4 Scrip.
         board_.postBrief("PAPER ROUTE", 1, 3 hours, 780_000, 930_000, 36e18, 14.4e18, 0.45e18, 15e18, 11_538);
         // T2 "Job" — GLASS HARVEST · RUSH (Chip-Fab, NVDA, 5h): 70/18/12, pays 75 / 30 Scrip.
         board_.postBrief("GLASS HARVEST - RUSH", 2, 5 hours, 700_000, 880_000, 75e18, 30e18, 0.87e18, 30e18, 12_857);
-        // T3 "Score" — PROOF OF WORK (The Rig, CLSK per C8, 12h): 60/22/18, pays 236 / 94.4 Scrip.
+        // T3 "Score" — PROOF OF WORK (The Rig, CLSK, 12h): 60/22/18, pays 236 / 94.4 Scrip.
         board_.postBrief("PROOF OF WORK", 3, 12 hours, 600_000, 820_000, 236e18, 94.4e18, 2.44e18, 80e18, 15_000);
         // T4 "Long Con" — ABSOLUTE ZERO (Quantum Grab, IONQ, 24h lottery): 12/23/65,
-        // jackpot 2,775 / consolation 222 Scrip (the §1.4 lottery shape, jackpot = 7.2x EV).
+        // jackpot 2,775 / consolation 222 Scrip (the lottery shape, jackpot = 7.2x EV).
         board_.postBrief("ABSOLUTE ZERO", 4, 24 hours, 120_000, 350_000, 2_775e18, 222e18, 5.76e18, 200e18, 75_000);
     }
 }

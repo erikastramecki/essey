@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 /// D.O.N. Skirmish — Phase-0 shared surface (interfaces + the fixed role vocabulary).
 ///
-/// Phase 0 is the Scrip-only playable core (GAME-CONCEPT §4.4 "Skirmish v2"): mission board +
+/// Phase 0 is the Scrip-only playable core ("Skirmish v2"): mission board +
 /// House/Vault + one raid type (house robbery in the away window) + season-scoped points. No items,
 /// no marketplace, no Specialists, no Outfits, no real assets — but every interface below leaves the
 /// seam its Phase-1 hardening needs (see per-contract notes).
@@ -15,7 +15,7 @@ interface IDonLike {
     function vaultOf(uint256 id) external view returns (address);
 }
 
-/// The generation registry (contracts-architecture §2.16/§5): fixed role list, timelocked
+/// The generation registry: fixed role list, timelocked
 /// re-pointing, generational close(). Persistent contracts never name mechanics contracts directly —
 /// they ask this one question: who currently holds operator powers over me?
 interface IGameController {
@@ -25,8 +25,8 @@ interface IGameController {
     function isModule(address account) external view returns (bool);
 }
 
-/// The fixed role vocabulary. IMMUTABLE at deploy per the ruled slate: A14 requires the reserved
-/// OUTFIT_MODULE slot to exist NOW (the list can never grow), even though no Outfit contract ships
+/// The fixed role vocabulary. IMMUTABLE at deploy: the reserved
+/// OUTFIT_MODULE slot must exist NOW (the list can never grow), even though no Outfit contract ships
 /// before Phase 1.5. SEASON_MODULE is likewise reserved for the Phase-2 SeasonEscrow.
 library GameRoles {
     bytes32 internal constant MISSION_MODULE = "MISSION_MODULE";
@@ -35,11 +35,11 @@ library GameRoles {
     bytes32 internal constant DEED_MODULE = "DEED_MODULE"; // HouseDeed (burns upgrade fees)
     bytes32 internal constant HITTER_MODULE = "HITTER_MODULE";
     bytes32 internal constant SEASON_MODULE = "SEASON_MODULE"; // reserved (Phase 2)
-    bytes32 internal constant OUTFIT_MODULE = "OUTFIT_MODULE"; // reserved (Phase 1.5, per A14)
+    bytes32 internal constant OUTFIT_MODULE = "OUTFIT_MODULE"; // reserved (Phase 1.5)
     bytes32 internal constant KEEPER = "KEEPER";
 }
 
-/// Season-scoped, non-transferable points (contracts-architecture §2.13). Mint/burn/move only by
+/// Season-scoped, non-transferable points. Mint/burn/move only by
 /// registered game modules; raids move, missions mint from budget, fees burn (the Scrip-mode sink).
 interface IScrip {
     function mint(address to, uint256 amount) external;
@@ -74,7 +74,7 @@ interface IHouseEscrow {
 
 interface IMissionBoard {
     function isAway(uint256 donId) external view returns (bool);
-    /// The garrison commit frozen at depart (gas law §1.3): zero while home or if the player
+    /// The garrison commit frozen at depart (the gas law): zero while home or if the player
     /// departed ungarrisoned (public information, priced by the player's own choice).
     function garrisonHashOf(uint256 donId) external view returns (bytes32);
 }

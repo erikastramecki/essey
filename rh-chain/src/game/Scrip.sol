@@ -3,18 +3,18 @@ pragma solidity ^0.8.28;
 
 import {IGameController, GameRoles} from "./GameTypes.sol";
 
-/// Scrip — season-scoped, NON-TRANSFERABLE game points (contracts-architecture §2.13). Phase 0's
-/// entire settlement asset (the ruled two-tier currency, A3: routine play prices in Scrip; $ESSEY
+/// Scrip — season-scoped, NON-TRANSFERABLE game points. Phase 0's
+/// entire settlement asset (the two-tier currency design: routine play prices in Scrip; $ESSEY
 /// and USDG never enter the Phase-0 loop).
 ///
 /// Design laws in code:
 ///  - NOT an ERC-20. There is no transfer, no approve, no allowance — a player can never sell,
 ///    bridge, or wash-trade Scrip. Balances move only through registered game modules, each of which
 ///    holds one narrowly-scoped power (missions mint from budget, raids MOVE — never mint — and fees
-///    BURN, the Scrip-mode fee sink per economy §9.1 A1).
+///    BURN, the Scrip-mode fee sink).
 ///  - Balances are keyed (seasonId, account): season close is an O(1) global reset (bump the key);
 ///    old seasons stay readable for archives via `balanceOfAt`.
-///  - Scrip emission is not a solvency liability (RNG bible units convention) — but emission is
+///  - Scrip emission is not a solvency liability (points, not a backed claim) — but emission is
 ///    still budget-gated at the MODULE layer (MissionBoard/HouseEscrow reserve worst-case before any
 ///    roll), so this contract enforces the WHO, the modules enforce the HOW MUCH.
 ///
@@ -94,7 +94,7 @@ contract Scrip {
     }
 
     /// Reassignment without emission — the raid law: raids move value between players, they can
-    /// never mint it (solvency law, contracts-architecture §3).
+    /// never mint it (the solvency law).
     function move(address from, address to, uint256 amount) external onlyModule {
         if (to == address(0)) revert BadConfig();
         uint256 bal = balanceOfAt[seasonId][from];

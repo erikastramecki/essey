@@ -57,7 +57,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
     durationH: 12, rating: "steep", ratingLabel: "STEEP", featured: true,
     riskBlocks: 5, exhibit: "EXHIBIT 4-C · the rig hall, through the fence · AI-GEN SLOT",
     job: "Cut the Rig's output over to your wallet for one power cycle.",
-    takeLine: "236 Scrip for the full cycle, 94.4 for a partial cut. The take is real — say so like it's ordinary.",
+    takeLine: "236 Scrip for the full cycle, 94.4 for a partial cut. The peg is real — say so like it's ordinary.",
     risk: "Feast or famine — the take's chart is the steepest thing in the district, and the district includes the Substation.",
     word: "The Rig turns the city's power bill into digital gold and doesn't much care whose address is on the payout line — that's a config file, and config files can be edited by anyone standing in the right hall with the right badge at the right hour. Twelve hours on the swing shift, one cutover, no alarms: the machines genuinely cannot tell. You did the work. Here's the proof.",
     odds: [60, 22, 18],
@@ -76,10 +76,10 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
   },
 };
 
-/// The season header — Phase 0 launch season (naming grammar, world bible §5.5).
+/// The season header — Phase 0 launch season.
 export const SEASON = { id: 1, name: "The Season of the First Bell" };
 
-/// House tier names, world bible §4.4. Phase 0 ships tiers 0-1 (Safehouse, Row House).
+/// House tier names. Phase 0 ships tiers 0-1 (Safehouse, Row House).
 export const HOUSE_TIERS = ["Safehouse", "Row House", "Brownstone", "Estate", "Compound"] as const;
 export const HOUSE_TIER_LINES = [
   "new in town, and welcome",

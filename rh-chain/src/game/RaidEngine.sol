@@ -14,24 +14,24 @@ import {
     GameRoles
 } from "./GameTypes.sol";
 
-/// RaidEngine — commit-reveal house robbery, Phase 0's single raid type (concept §4.4). The Cases
-/// entropy engine + a commit-reveal shell + the bible's §2 power/odds model.
+/// RaidEngine — commit-reveal house robbery, Phase 0's single raid type. The Cases
+/// entropy engine + a commit-reveal shell + the power/odds model below.
 ///
 /// The window law: a House is robbable ONLY while its Don is away (MissionBoard flags the window),
 /// and the defense was FROZEN at the defender's depart tx (the garrison commit rode the loadout —
-/// gas law §1.3). The commit provably predates every raid against the window; no equip-front-run is
+/// the gas law). The commit provably predates every raid against the window; no equip-front-run is
 /// possible because the garrison literally cannot change.
 ///
-/// The roll (bible §2, one entropy word, partitioned reads — the Degen `_multiplierFor` idiom):
+/// The roll (one entropy word, partitioned reads — the Degen `_multiplierFor` idiom):
 ///   p_hit  = clamp(0.72 x A/(A+D), 5%, 70%)          A = crew power (cooldown-diminished)
 ///   two-tier on success, cumPpm [920000, 1e6]:        D = House HD + garrison power x 0.95
 ///     92% COMMON  — the hopper (unbanked yield/loot, never principal) transfers, -40% debuff
-///      8% BIG     — 15% + 15%·u² of DEPLOYED (the ruled Scrip band, mean 20%, max 30%; §10.1),
+///      8% BIG     — 15% + 15%·u² of DEPLOYED (the Scrip band, mean 20%, max 30%),
 ///                   48h per-House lockout (the principal-drain hard cap at the Scrip-mode floor)
 ///   on miss: P(kill|fail) = 0.15 + 0.35 x D/(A+D) per Hitter — 48h hospital (kit loss is Phase 1)
-///   7.5% hit tax burned on every transfer (B3/B4), applied inside HouseEscrow.
+///   7.5% hit tax burned on every transfer, applied inside HouseEscrow.
 ///
-/// Cooldown is STRATEGY, not a revert (bible §2.8): early hunting is allowed at (t/20h)²-diminished
+/// Cooldown is STRATEGY, not a revert: early hunting is allowed at (t/20h)²-diminished
 /// power, so patience strictly dominates and ~1.2 full-odds attempts/day/Hitter is the natural rate
 /// limit — the curve IS the bookkeeping.
 ///
@@ -40,10 +40,10 @@ import {
 ///     zero (House defends alone, worst p_hit). Suppressing the reveal never dodges loot/principal —
 ///     it only forfeits the defensive bonus a reveal would have proven (logic-lens H-1 fix).
 ///   - entropy withheld         => reclaim: MISS outcome, no transfers, cooldowns stand. The commit
-///     fee stays sunk (B1: sunk win-or-lose — the rate card is canonical over the architecture
-///     sketch's "stake returned"; a refund would need a mint, and raids never mint).
-///   - no reveal in the window  => forfeit: the held fee burns. (B2's bond-to-target needs the
-///     target's identity, which only the reveal discloses — flagged as a Phase-0 deviation.)
+///     fee stays sunk (sunk win-or-lose — the rate card is canonical over an earlier
+///     "stake returned" sketch; a refund would need a mint, and raids never mint).
+///   - no reveal in the window  => forfeit: the held fee burns. (Bonding the fee to the target needs
+///     the target's identity, which only the reveal discloses — flagged as a Phase-0 deviation.)
 contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     // ---------------------------------------------------------------- config
 
@@ -60,27 +60,27 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
 
     uint256 internal constant PPM = 1_000_000;
 
-    /// $0.50 flat per attempt at the peg (B1), sunk win-or-lose — prices ATTEMPTS, undodgeable by
+    /// $0.50 flat per attempt at the peg, sunk win-or-lose — prices ATTEMPTS, undodgeable by
     /// target selection.
     uint256 public constant COMMIT_FEE = 50e18;
-    /// Reveal window [10, 40] min after commit (bible §7.2) — kills mempool sniping both directions.
+    /// Reveal window [10, 40] min after commit — kills mempool sniping both directions.
     uint256 public constant REVEAL_DELAY = 10 minutes;
     uint256 public constant REVEAL_WINDOW = 40 minutes;
     /// Hitter cooldown anchor for the (t/20h)^2 diminished-odds curve.
     uint256 public constant COOLDOWN = 20 hours;
-    /// Target immunity after any resolved attempt (<= 2 attempts/target/day, cap stack §4.1).
+    /// Target immunity after any resolved attempt (<= 2 attempts/target/day).
     uint256 public constant HEAT = 8 hours;
     /// One attempt per attacker-target pair per 24h (no focus-fire).
     uint256 public constant PAIR_COOLDOWN = 24 hours;
-    /// Scrip-mode big-score lockout: 48h per House (economy §10.1 — the range floor).
+    /// Scrip-mode big-score lockout: 48h per House.
     uint256 public constant BIG_SCORE_LOCKOUT = 48 hours;
     /// Garrison unrevealed this long after the word lands => floor settle.
     uint256 public constant GARRISON_TIMEOUT = 1 hours;
     /// Entropy withheld this long after reveal => reclaim (miss).
     uint256 public constant RECLAIM_TIMEOUT = 2 hours;
 
-    // The bible §2 constants (ppm / bps where rolled on-chain).
-    uint256 public constant TWO_TIER_CUM_PPM = 920_000; // 92 common / 8 big (B1 sign-off)
+    // The power/odds constants (ppm / bps where rolled on-chain).
+    uint256 public constant TWO_TIER_CUM_PPM = 920_000; // 92 common / 8 big
     uint256 public constant P_COEF_PPM = 720_000; // 0.72 coefficient
     uint256 public constant P_MIN_PPM = 50_000; // 5% floor — every commit is a real gamble
     uint256 public constant P_MAX_PPM = 700_000; // 70% ceiling — never a sure thing
@@ -88,7 +88,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     uint256 public constant KILL_SLOPE_PPM = 350_000;
     uint256 public constant BASE_POWER = 50; // HitterPower at L1 (levels are Phase 1)
     uint256 public constant GARRISON_EFF_BPS = 9_500; // defenders fight at 0.95x
-    uint256 public constant MAX_CREW = 5; // the B7 crew cap
+    uint256 public constant MAX_CREW = 5; // the crew cap
 
     // ---------------------------------------------------------------- state
 
@@ -245,11 +245,11 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         r.state = RaidState.Revealed;
         r.attackPower = _settleCrew(raidId, hitterIds);
 
-        // The fee is sunk the moment the attempt is real (B1) — entropy + keeper resources are
+        // The fee is sunk the moment the attempt is real — entropy + keeper resources are
         // consumed whether or not the hit lands.
         scrip.burn(address(this), COMMIT_FEE);
 
-        // Snapshot the garrison commit that was FROZEN at the defender's depart (gas law §1.3).
+        // Snapshot the garrison commit that was FROZEN at the defender's depart (the gas law).
         bytes32 g = board.garrisonHashOf(targetDonId);
         r.garrisonHash = g;
         if (g == bytes32(0)) {
@@ -264,7 +264,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     }
 
     /// Validate the crew and lock in attack power (x1e6): each Hitter contributes BASE_POWER scaled
-    /// by the (elapsed/20h)^2 cooldown curve — diminished odds, never a hard gate (bible §2.8).
+    /// by the (elapsed/20h)^2 cooldown curve — diminished odds, never a hard gate.
     /// Strictly-increasing ids kill duplicate stacking; hospitalized Hitters can't ride.
     function _settleCrew(uint64 raidId, uint256[] calldata hitterIds) internal returns (uint256 power) {
         uint256 n = hitterIds.length;
@@ -306,7 +306,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
 
     /// Open the defender's frozen commit — normally the keeper (which holds the plaintext via the
     /// relayer rail), but PERMISSIONLESS: anyone with the plaintext may reveal, so the keeper can
-    /// stall a reveal but never monopolize it (gas law §1.3 fallback 1). Garrison Hitters no longer
+    /// stall a reveal but never monopolize it (the gas-law fallback). Garrison Hitters no longer
     /// owned by the defender (sold mid-window) or hospitalized contribute zero rather than reverting
     /// — a stale plaintext must never brick the reveal.
     function revealGarrison(uint64 raidId, uint256[] calldata garrisonIds, bytes32 salt) external nonReentrant {
@@ -344,7 +344,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         // else: wait for revealGarrison, or the floor path after GARRISON_TIMEOUT.
     }
 
-    /// The full roll — one word, partitioned reads (bible §7.1).
+    /// The full roll — one word, partitioned reads.
     function _settle(uint64 raidId) internal {
         Raid storage r = raids[raidId];
         r.state = RaidState.Settled;
@@ -369,7 +369,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         address attackerVault = don.vaultOf(r.attackerDon);
         bool big = tierRoll >= TWO_TIER_CUM_PPM && block.timestamp >= bigLockUntil[r.targetDon];
         if (big) {
-            // The Scrip band (economy §10.1): slice = 15% + 15%·u², u ~ U[0,1) — mean 20%, max 30%.
+            // The Scrip band: slice = 15% + 15%·u², u ~ U[0,1) — mean 20%, max 30%.
             uint256 u = uint256(keccak256(abi.encodePacked(word, uint8(2)))) % PPM;
             uint256 sliceBps = 1_500 + (1_500 * ((u * u) / PPM)) / PPM;
             bigLockUntil[r.targetDon] = uint64(block.timestamp + BIG_SCORE_LOCKOUT);
@@ -422,7 +422,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     }
 
     /// Entropy withheld: settle as a MISS with no kill rolls (no word => no roll). Cooldowns stand
-    /// (the attempt was public), the fee stays sunk (B1). Anyone may call — a dead keeper can never
+    /// (the attempt was public), the fee stays sunk. Anyone may call — a dead keeper can never
     /// strand a raid.
     function reclaimRaid(uint64 raidId) external nonReentrant {
         Raid storage r = raids[raidId];
@@ -435,7 +435,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     }
 
     /// Commit abandoned past the reveal window: the held fee burns. Permissionless cleanup.
-    /// (B2's "bond to the target" needs a target identity the chain never learned — Phase-0
+    /// (A "bond to the target" design needs a target identity the chain never learned — Phase-0
     /// deviation, flagged; abandoning a bad-looking commit still costs more than rolling it.)
     function forfeit(uint64 raidId) external nonReentrant {
         Raid storage r = raids[raidId];
