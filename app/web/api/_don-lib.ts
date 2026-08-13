@@ -97,12 +97,34 @@ export async function builderData(gender: string): Promise<BuilderData> {
   return data;
 }
 
+// ---------------------------------------------------------------------------- Node handler plumbing
+
+// The deployed Vercel Node runtime hands functions a Node-style req (url = bare path, headers = plain
+// lowercase-keyed object, body pre-read) and an Express-like res. Loose structural types, same posture
+// as relay.ts: type only the members we actually use.
+export type NodeReq = {
+  method?: string;
+  url?: string;
+  body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
+};
+export type NodeRes = {
+  status: (code: number) => { json: (b: unknown) => void; send: (b: unknown) => void; end: () => void };
+  setHeader: (name: string, value: string) => void;
+};
+
+/// Header lookup on the plain Node headers object (keys arrive lowercased; string[] takes the first).
+export function header(req: NodeReq, name: string): string | undefined {
+  const v = req.headers?.[name.toLowerCase()];
+  return Array.isArray(v) ? v[0] : v;
+}
+
 /// The public origin serving THIS request — used for self-referential URLs inside metadata (the image
 /// endpoint), so metadata served through any domain points back at that same domain.
-export function requestOrigin(req: Request): string {
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+export function requestOrigin(req: NodeReq): string {
+  const host = header(req, "x-forwarded-host") || header(req, "host");
   if (host) {
-    const proto = req.headers.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
+    const proto = header(req, "x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
     return `${proto}://${host}`;
   }
   return assetOrigin();
@@ -112,9 +134,7 @@ export function requestOrigin(req: Request): string {
 
 export const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-export function json(code: number, obj: unknown, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(obj), {
-    status: code,
-    headers: { "content-type": "application/json", ...headers },
-  });
+export function json(res: NodeRes, code: number, obj: unknown, headers: Record<string, string> = {}): void {
+  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
+  res.status(code).json(obj);
 }

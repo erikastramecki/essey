@@ -13,7 +13,7 @@
 // requests cache short. ETag = combo hash either way. Unrevealed/unknown falls to a branded placeholder
 // (inline SVG, no external assets) — never a broken image.
 import sharp from "sharp";
-import { assetOrigin, builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, json, preKey, store, ZERO32, type Preimage } from "../_don-lib.js";
+import { assetOrigin, builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, header, json, preKey, store, ZERO32, type NodeReq, type NodeRes, type Preimage } from "../_don-lib.js";
 import { posOffset, posYOffset, resolveSelection, type BuilderData, type Resolved } from "../../src/pfp-resolve.js";
 
 const CANVAS = 900;
@@ -121,17 +121,17 @@ function placeholderSvg(label: string): string {
   );
 }
 
-function svgResponse(label: string): Response {
-  return new Response(placeholderSvg(label), {
-    status: 200,
-    headers: { "content-type": "image/svg+xml", "cache-control": CACHE_SHORT },
-  });
+function sendSvg(res: NodeRes, label: string): void {
+  res.setHeader("content-type", "image/svg+xml");
+  res.setHeader("cache-control", CACHE_SHORT);
+  res.status(200).send(placeholderSvg(label));
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "GET") return json(405, { error: "method" });
+// Vercel Node serverless handler (Node req + Express-like res; see _don-lib NodeReq/NodeRes).
+export default async function handler(req: NodeReq, res: NodeRes) {
+  if (req.method !== "GET") return json(res, 405, { error: "method" });
 
-  const url = new URL(req.url, "http://x");
+  const url = new URL(req.url || "/", "http://x");
   const idStr = url.pathname.split("/").filter(Boolean).pop() || "";
   const id = Number(idStr);
   const comboParam = (url.searchParams.get("combo") || "").toLowerCase();
@@ -143,7 +143,7 @@ export default async function handler(req: Request): Promise<Response> {
     locked = true; // combo-addressed content is immutable by construction
     label = "DON";
   } else {
-    if (!Number.isInteger(id) || id < 1 || id > 1_000_000) return json(400, { error: "bad id" });
+    if (!Number.isInteger(id) || id < 1 || id > 1_000_000) return json(res, 400, { error: "bad id" });
     label = `DON #${id}`;
     try {
       const client = chainClient();
@@ -152,34 +152,30 @@ export default async function handler(req: Request): Promise<Response> {
         client.readContract({ address: DON_ADDR, abi: donReadAbi, functionName: "locked", args: [BigInt(id)] }),
       ]);
     } catch {
-      return json(503, { error: "chain read failed — retry" }, { "cache-control": "no-store" });
+      return json(res, 503, { error: "chain read failed — retry" }, { "cache-control": "no-store" });
     }
-    if (combo === ZERO32) return json(404, { error: "not minted" }, { "cache-control": CACHE_SHORT });
+    if (combo === ZERO32) return json(res, 404, { error: "not minted" }, { "cache-control": CACHE_SHORT });
   }
 
   // 304 fast-path: the combo hash IS the content identity.
-  if (req.headers.get("if-none-match") === `"${combo.toLowerCase()}"`) {
-    return new Response(null, { status: 304 });
+  if (header(req, "if-none-match") === `"${combo.toLowerCase()}"`) {
+    return res.status(304).end();
   }
 
   const redis = store();
   const pre = redis ? await redis.get<Preimage>(preKey(combo)).catch(() => null) : null;
-  if (!pre) return svgResponse(label); // unrevealed (or store unclaimed): branded placeholder
+  if (!pre) return sendSvg(res, label); // unrevealed (or store unclaimed): branded placeholder
 
   try {
     const data = await builderData(pre.gender);
     const r = resolveSelection(data, pre.forced || {}, pre.seed >>> 0);
-    if (comboHash(r.key).toLowerCase() !== combo.toLowerCase()) return svgResponse(label);
+    if (comboHash(r.key).toLowerCase() !== combo.toLowerCase()) return sendSvg(res, label);
     const webp = await renderResolved(data, r);
-    return new Response(new Uint8Array(webp), {
-      status: 200,
-      headers: {
-        "content-type": "image/webp",
-        etag: `"${combo.toLowerCase()}"`,
-        "cache-control": locked ? CACHE_LONG : CACHE_SHORT,
-      },
-    });
+    res.setHeader("content-type", "image/webp");
+    res.setHeader("etag", `"${combo.toLowerCase()}"`);
+    res.setHeader("cache-control", locked ? CACHE_LONG : CACHE_SHORT);
+    return res.status(200).send(webp);
   } catch {
-    return svgResponse(label); // a render failure must degrade to the placeholder, never a 500 image
+    return sendSvg(res, label); // a render failure must degrade to the placeholder, never a 500 image
   }
 }

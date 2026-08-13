@@ -12,20 +12,21 @@
 // is NX (first record wins; any valid record for a hash decodes to the same rendered art, because the
 // hash IS the resolver key's keccak). Worst case for an attacker: they reveal someone's art earlier
 // than the owner would have — reveal is disclosure, not authority.
-import { builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, json, persistPreimage, preKey, store, type Preimage } from "./_don-lib.js";
+import { builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, json, persistPreimage, preKey, store, type NodeReq, type NodeRes, type Preimage } from "./_don-lib.js";
 import { resolveSelection } from "../src/pfp-resolve.js";
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "POST") return json(405, { error: "method" });
+// Vercel Node serverless handler (Node req + Express-like res; see _don-lib NodeReq/NodeRes).
+export default async function handler(req: NodeReq, res: NodeRes) {
+  if (req.method !== "POST") return json(res, 405, { error: "method" });
 
   const redis = store();
-  if (!redis) return json(503, { error: "preimage store not provisioned — the reveal cannot be recorded yet; retry once the store is claimed" });
+  if (!redis) return json(res, 503, { error: "preimage store not provisioned — the reveal cannot be recorded yet; retry once the store is claimed" });
 
   let body: any;
   try {
-    body = await req.json();
+    body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
   } catch {
-    return json(400, { error: "bad json" });
+    return json(res, 400, { error: "bad json" });
   }
   const { gender, forced, seed, id } = body || {};
 
@@ -37,7 +38,7 @@ export default async function handler(req: Request): Promise<Response> {
     key = r.key;
     combo = comboHash(key);
   } catch (e) {
-    return json(500, { error: `resolve failed: ${(e as Error)?.message ?? e}` });
+    return json(res, 500, { error: `resolve failed: ${(e as Error)?.message ?? e}` });
   }
 
   // On-chain verification: only combos the chain has actually committed get a permanent record.
@@ -55,9 +56,9 @@ export default async function handler(req: Request): Promise<Response> {
     if (!minted) {
       minted = await client.readContract({ address: DISTRIBUTOR_ADDR, abi: donReadAbi, functionName: "usedCombo", args: [combo] });
     }
-    if (!minted) return json(404, { ok: false, error: "combo not found on-chain (not minted)", combo });
+    if (!minted) return json(res, 404, { ok: false, error: "combo not found on-chain (not minted)", combo });
   } catch {
-    return json(502, { error: "chain verification unavailable — retry" });
+    return json(res, 502, { error: "chain verification unavailable — retry" });
   }
 
   try {
@@ -68,8 +69,8 @@ export default async function handler(req: Request): Promise<Response> {
       const existing = await redis.get<Preimage>(preKey(combo));
       if (existing && existing.id == null) await redis.set(preKey(combo), { ...existing, id: verifiedId });
     }
-    return json(200, { ok: true, revealed: true, already: !created, combo, id: verifiedId ?? null });
+    return json(res, 200, { ok: true, revealed: true, already: !created, combo, id: verifiedId ?? null });
   } catch {
-    return json(503, { error: "preimage store write failed — retry" });
+    return json(res, 503, { error: "preimage store write failed — retry" });
   }
 }

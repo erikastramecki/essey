@@ -62,15 +62,18 @@ async function mintedOnChain(combo: `0x${string}`): Promise<boolean | null> {
   }
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  const json = (code: number, obj: unknown) =>
-    new Response(JSON.stringify(obj), { status: code, headers: { "content-type": "application/json" } });
+// Vercel Node serverless handler (relay.ts-style loose structural typing: Node req + Express-like res).
+export default async function handler(
+  req: { method?: string; url?: string; body?: unknown },
+  res: { status: (n: number) => { json: (b: unknown) => void } },
+) {
+  const json = (code: number, obj: unknown) => res.status(code).json(obj);
 
   const redis = store();
   if (!redis) return json(503, { error: "reservation store not provisioned" });
 
   if (req.method === "GET") {
-    const key = new URL(req.url, "http://x").searchParams.get("key") || "";
+    const key = new URL(req.url || "/", "http://x").searchParams.get("key") || "";
     if (!key) return json(400, { error: "key required" });
     const held = (await redis.get<{ wallet: string }>(`hold:${key}`)) ?? null;
     const minted = await mintedOnChain(comboHash(key));
@@ -80,7 +83,7 @@ export default async function handler(req: Request): Promise<Response> {
   if (req.method === "POST") {
     let body: any;
     try {
-      body = await req.json();
+      body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     } catch {
       return json(400, { error: "bad json" });
     }
