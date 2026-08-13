@@ -4,8 +4,19 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { parseAbiItem, type Address } from "viem";
 import { useWallet } from "../wallet";
 import { reads } from "../live";
-import { pub, GAME_ADDR, GAME_DEPLOY_BLOCK, gameConfigured } from "./gameChain";
+import { pub, GAME_ADDR, GAME_DEPLOY_BLOCK, gameConfigured, DON_COLLECTION } from "./gameChain";
 import { ownedTokens } from "./gameChain";
+
+/// ownerOf, for confirming a Don genuinely left the wallet before dropping it from the desk.
+const erc721OwnerOfAbi = [{
+  type: "function", name: "ownerOf", stateMutability: "view",
+  inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ name: "", type: "address" }],
+}] as const;
+
+/// Per-address memory of Dons we've already confirmed (in-memory only; a wallet switch starts clean).
+const _knownDonIds = new Map<string, bigint[]>();
+const knownIdsOf = (a: Address): bigint[] => _knownDonIds.get(a.toLowerCase()) ?? [];
+const rememberIds = (a: Address, ids: bigint[]) => { _knownDonIds.set(a.toLowerCase(), ids); };
 import { missionBoardAbi, houseDeedAbi, houseEscrowAbi, hitterAbi, scripAbi, raidEngineAbi } from "./gameAbi";
 import { SEASON } from "./briefs";
 
@@ -147,7 +158,26 @@ export function useGameStateValue(): GameState {
   const refresh = useCallback(() => {
     if (!a) { setDons(null); setHitters([]); return; }
     reads.ownedDons(a)
-      .then((ids) => Promise.all(ids.map(readDon)))
+      .then(async (ids) => {
+        // RPC log-lag guard (live tester bug 2026-08-13): the Transfer scan hits a load-balanced
+        // testnet RPC whose nodes index logs at different speeds — a just-minted Don can be present
+        // on one poll and MISSING on the next, which yanked it out of the desk mid-session and
+        // snapped the selection back to an away Don, gating everything. The list is therefore
+        // monotonic: a previously-known Don is only dropped once ownerOf CONFIRMS it left the
+        // wallet (transfer/redeem); a scan miss or read error keeps it.
+        const knownIds = knownIdsOf(a);
+        const scanned = new Set(ids.map(String));
+        const keep: bigint[] = [];
+        await Promise.all(knownIds.filter((id) => !scanned.has(id.toString())).map(async (id) => {
+          try {
+            const owner = await pub.readContract({ address: DON_COLLECTION, abi: erc721OwnerOfAbi, functionName: "ownerOf", args: [id] }) as Address;
+            if (owner.toLowerCase() === a.toLowerCase()) keep.push(id); // scan lagged — still ours
+          } catch { keep.push(id); } // read hiccup: keep rather than yank the desk
+        }));
+        const finalIds = [...ids, ...keep].sort((x, y) => (x < y ? -1 : 1));
+        rememberIds(a, finalIds);
+        return Promise.all(finalIds.map(readDon));
+      })
       .then(setDons)
       .catch(() => { setDons((prev) => prev ?? []); });
     readHitters(a).then(setHitters);
@@ -155,6 +185,13 @@ export function useGameStateValue(): GameState {
   }, [a]);
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 15_000); return () => clearInterval(t); }, [refresh]);
+  // Coming back from the builder (mint) or another tab should not wait out the poll.
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => { document.removeEventListener("visibilitychange", onFocus); window.removeEventListener("focus", onFocus); };
+  }, [refresh]);
 
   const selected = dons && dons.length > 0
     ? (dons.find((d) => d.id === selectedId) ?? dons[0])

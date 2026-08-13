@@ -98,7 +98,9 @@ export function DossierFile({ briefKey, open, onClose }: { briefKey: BriefKey | 
     !g.configured ? "THE BOARD POSTS WITH THE SEASON · CONTRACTS PENDING" :
     !g.connected ? "CONNECT A WALLET TO SIGN" :
     !don ? "NO DON ON THE DESK — VISIT THE REGISTRY" :
-    don.away ? "YOUR DON IS IN THE FIELD" : null;
+    don.away ? ((g.dons ?? []).some((d) => !d.away)
+      ? "THIS DON IS IN THE FIELD — SWITCH OPERATIVES AT THE DESK"
+      : "YOUR DON IS IN THE FIELD") : null;
 
   const depart = async () => {
     if (gate || !don || !g.address || busy || departed) return;
