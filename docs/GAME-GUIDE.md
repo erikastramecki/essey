@@ -429,8 +429,8 @@ Every family in Solvency is in two businesses. This is the second one.
 1. **Find a window.** Depart lines print on the Tape. A Don who took a 12-hour job left a House standing
    open for 12 hours, and everyone knows it.
 2. **File the job, sealed.** Your Hitter commits to a target without naming it in public: a sealed filing,
-   plus **50 Scrip, sunk win or lose**. Walk away without kicking the door and the 50 goes to the family
-   you were casing. They hear about it.
+   plus **50 Scrip, sunk win or lose**. Walk away without kicking the door and the 50 burns at the city
+   incinerator. Cowardice is a fee like everything else.
 3. **Kick the door.** Reveal inside the 10-to-40-minute window. The defense that counts is the defense
    posted at that moment, and garrison changes take an hour to take effect, so nobody conjures guards at
    the last second. You are attacking blind: garrison composition is fog until you are through the door.
@@ -457,9 +457,9 @@ Attack strength comes from your Hitter; defense comes from the House and its gar
 is clamped: never below 5%, never above 70%. There are no sure things in Solvency, in either direction.
 
 **The Skirmish truth first:** levels and gear carry the stamp, · ARRIVES WITH A LATER POSTING ·, so this
-season every Hitter swings at base power and the door runs richer than the mature table below. A fresh
-Hitter kicking an undefended starter House lands about **62%** right now, and the 5% / 70% clamps still
-apply. The table is the worked outlook for a seasoned, kitted Hitter of later seasons, printed so you
+season every Hitter swings at base power and the door runs richer than the mature table below. One fresh
+Hitter kicking an undefended starter House lands about **40%** right now; a full crew of five pushes the
+same door to about **62%**. The 5% / 70% clamps still apply. The table is the worked outlook for a seasoned, kitted Hitter of later seasons, printed so you
 can see where the road goes. Illustrative, not this season's roll:
 
 | The door you're kicking | Hit chance |
@@ -506,7 +506,7 @@ needed to enforce it. The curve is the law.
 | Same attacker, same target | 1 attempt per 24h |
 | Target heat | 8h immunity the moment an attempt is filed against you, from anyone |
 | Big-score lockout | 1 per House per 48h (Skirmish); 72h in real-asset seasons |
-| Garrison changes | 1h to take effect. Posting guards takes an hour |
+| Garrison | frozen at depart. The guard roster you sign is the roster for the whole window |
 | Mission dispatches | 1 active job per Don at a time |
 
 ### Getting back up: the comeback kit · ARRIVES WITH A LATER POSTING ·
@@ -559,7 +559,8 @@ The rules that keep it an edge and not a wall:
 - **Sealed once, ever.** Nothing re-seals, nothing re-rolls the envelope. There is no slot machine here,
   only one envelope per soul.
 - **Favors bend odds, never money.** No Favor touches yields, the Bell, or what a robbery can take.
-- **Opening Night.** Any envelope still sealed at season's end opens with everyone watching.
+- **The 30-day rule.** An envelope left sealed 30 days can be opened by anyone, and a forced envelope
+  always comes up empty. Pay for your own reveal and you keep the full odds ladder.
 
 **· ARRIVES WITH A LATER POSTING ·** Dons will run the same ritual from the other side: the custom
 builder sells determinism, and the random path carries its own sealed Edge envelope at the same published
@@ -708,8 +709,8 @@ doors your crew can hold, and how hard the place is to crack.
 
 | Deed | Price | Deploy cap | Garrison slots | Defense | Repair (full scar) | This season |
 |---|---:|---:|---:|---|---:|---|
-| **Safehouse** | free | 50 marks | 1 | base | 0.11 | **open** |
-| **Row House** | 15 marks | 150 | 2 | + | 0.34 | **open** |
+| **Safehouse** | free | 50 marks | 2 | base | 0.11 | **open** |
+| **Row House** | 15 marks | 150 | 3 | + | 0.34 | **open** |
 | **Brownstone** | 40 marks | 400 | 3 | ++ | 0.90 | opening soon |
 | **Estate** | 120 marks | 1,000 | 4 | +++ | 2.25 | opening soon |
 | **Compound** | 400 marks | 2,500 | 5 | ++++ | 5.63 | opening soon |

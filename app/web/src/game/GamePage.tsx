@@ -214,7 +214,7 @@ function Desk() {
                 <span>your Don is in the field — <b>the House stands open</b>. both facts print on the Tape.</span></div>
             )}
             <div className="g-tape-row"><span className="t">—</span>
-              <span>word is out: <b>{SEASON.name.toUpperCase()}</b> {g.configured ? "is live" : "posts soon"}. the board never shows the same job twice.</span></div>
+              <span>word is out: <b>{SEASON.name.toUpperCase()}</b> {g.configured ? "is live" : "posts soon"}. four wires on the board, and the doors are already getting kicked.</span></div>
             <div className="g-tape-row"><span className="t">—</span>
               <span>the dispatcher never lies. open <b>JOBS</b> and read THE WORD for yourself.</span></div>
             <div className="g-tape-row"><span className="t">—</span>
