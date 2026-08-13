@@ -269,6 +269,7 @@ html, body { overflow-x: hidden; }         /* wide content scrolls inside its ow
 .doc-md h2 { font-family: var(--serif); font-size: 19px; color: var(--tx); margin: 26px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .doc-md h3 { font-size: 15.5px; color: var(--tx); margin: 20px 0 8px; }
 .doc-md p { margin: 10px 0; } .doc-md ul, .doc-md ol { margin: 10px 0; padding-left: 22px; } .doc-md li { margin: 5px 0; }
+.doc-md img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 4px; margin: 14px 0; display: block; }
 .doc-md strong { color: var(--tx); } .doc-md em { color: var(--tx); }
 .doc-md a { color: var(--gold); text-decoration: underline; }
 .doc-md code { font-family: var(--mono); font-size: 12.5px; background: var(--s3); padding: 1px 6px; border-radius: 5px; color: var(--gold-hi); }

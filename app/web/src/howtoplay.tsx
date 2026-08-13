@@ -325,6 +325,16 @@ export function HowToPlayPage() {
           <W lbl="Go deeper">The complete rulebook — every brief, every band, the ticker pegs, and everything
             stamped as arriving with a later posting — is <Link to="/docs/game-guide">the full house
             rules</Link> in the technical docs, rendered from the repo's own file.</W>
+          <W lbl="The wall charts">Two exhibits for the corkboard — how the whole machine moves, and what
+            every trait does:</W>
+          <a href="/charts/economy-stack.png" target="_blank" rel="noreferrer" style={{ display: "block", margin: "10px 0" }}>
+            <img src="/charts/economy-stack.png" alt="The D.O.N. Economy Stack — how fees, prizes, raids and insurance fit together"
+              style={{ maxWidth: "100%", height: "auto", border: "1px solid var(--g-line, rgba(0,0,0,.2))", borderRadius: 4, display: "block" }} />
+          </a>
+          <a href="/charts/trait-chart.png" target="_blank" rel="noreferrer" style={{ display: "block", margin: "10px 0" }}>
+            <img src="/charts/trait-chart.png" alt="The Trait Chart — every trait mapped to its in-game effect, the eight stats, the six build archetypes"
+              style={{ maxWidth: "100%", height: "auto", border: "1px solid var(--g-line, rgba(0,0,0,.2))", borderRadius: 4, display: "block" }} />
+          </a>
           <div className="g-cta htp-cta">
             <div className="g-cta-h">THE BELL IS ABOUT TO RING</div>
             <p>ten files read. one seat missing. the Registry is minting, and the desk is waiting.</p>

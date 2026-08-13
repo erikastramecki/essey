@@ -577,6 +577,8 @@ this season's chain yet; when it posts, the odds post first.
 
 ## Your Don is the loadout
 
+![The Trait Chart: every trait mapped to its in-game effect, the eight stats, and the six build archetypes](/charts/trait-chart.png)
+
 The art was the item system all along. Whatever your Don holds in his portrait, whatever he wears, whatever
 stares back from his eyes: it plays. One honest stamp over this whole wing of the guide: the item and
 trait mechanics below carry the mark, **· ARRIVES WITH A LATER POSTING ·**. This season the Keeper attests
@@ -808,6 +810,8 @@ This game sits next to real money, so it holds itself to the standard the city i
 ## Coming to Solvency
 
 No dates. The city does not promise schedules, it prints arrivals.
+
+![The D.O.N. Economy Stack: how fees, prizes, raids and insurance fit together. Solid lines are this season; dashed lines are the real-asset road](/charts/economy-stack.png)
 
 - **The Syndicate update.** Outfits: chartered crews of families. The Understanding (3 seats), the
   Syndicate (6), the Combine (10). Group jobs, pooled muscle, pledged garrisons, contribution-split
