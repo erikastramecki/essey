@@ -33,10 +33,6 @@ const EVENTS = {
     parseAbiItem("event Repaid(uint256 indexed donId, address indexed payer, uint256 interestPaid, uint256 principalPaid, bool closed)"),
     parseAbiItem("event Liquidated(uint256 indexed donId, address indexed caller, uint256 proceeds, uint256 debtRecovered, uint256 surplusToBorrower, uint256 tip)"),
   ],
-  cases: [
-    parseAbiItem("event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)"),
-    parseAbiItem("event SoldBack(address indexed seller, address indexed token, uint256 amount, uint256 paid, uint256 toBell)"),
-  ],
   pool: [
     parseAbiItem("event Borrowed(uint256 indexed id, address indexed borrower, address indexed token, uint256 collateral, uint256 debt)"),
     parseAbiItem("event Repaid(uint256 indexed id, uint256 paid, uint256 collateralReturned)"),
@@ -77,10 +73,6 @@ function row(contract: string, l: Log & { eventName?: string; args?: Record<stri
       return { ...base, kind: "loan", proven: true, icon: "📜", text: `DON LOAN · Don #${a.donId} repaid ${usd((a.interestPaid as bigint) + (a.principalPaid as bigint))} $ESSEY${a.closed ? " · lien released" : ""}` };
     case "donloan.Liquidated":
       return { ...base, kind: "loan", proven: true, icon: "📜", text: `LIQUIDATED · Don #${a.donId} consumed at the floor · ${usd(a.debtRecovered)} $ESSEY recovered` };
-    case "cases.CaseOpened":
-      return { ...base, kind: "case", proven: true, icon: "🎁", text: `CASE OPENED · drew ${fmt(a.amount as bigint, 2)} ${stock(a.token as string)} · draw fair ✓` };
-    case "cases.SoldBack":
-      return { ...base, kind: "case", proven: true, icon: "🎁", text: `CASE · ${stock(a.token as string)} sold back for ${usd(a.paid)} USDG` };
     case "pool.Borrowed":
       return { ...base, kind: "loan", proven: true, icon: "📜", text: `LOAN · borrowed ${usd(a.debt)} USDG against ${stock(a.token as string)}` };
     case "pool.Repaid":
@@ -93,7 +85,7 @@ function row(contract: string, l: Log & { eventName?: string; args?: Record<stri
 }
 
 const SRC: [string, Address][] = [
-  ["don", ADDR.don], ["bell", ADDR.bell], ["exchange", ADDR.exchange], ["donloan", ADDR.loan], ["cases", ADDR.cases], ["pool", ADDR.pool],
+  ["don", ADDR.don], ["bell", ADDR.bell], ["exchange", ADDR.exchange], ["donloan", ADDR.loan], ["pool", ADDR.pool],
 ];
 
 /// Read the freshest Tape rows — a bounded window of recent blocks, newest first. Errors on any one

@@ -8,8 +8,8 @@
 // Cache posture: a LOCKED Don's traits are frozen on-chain forever -> long immutable CDN cache. An
 // unlocked Don can reroll -> short cache. Unrevealed metadata is always short-cached so a reveal
 // propagates quickly.
-import { builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, json, preKey, requestOrigin, store, ZERO32, type Preimage } from "../_don-lib";
-import { resolveSelection, type Resolved } from "../../src/pfp-resolve";
+import { builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, json, preKey, requestOrigin, store, ZERO32, type Preimage } from "../_don-lib.js";
+import { resolveSelection, type Resolved } from "../../src/pfp-resolve.js";
 
 const CACHE_LONG = "public, max-age=3600, s-maxage=31536000, immutable";
 const CACHE_SHORT = "public, max-age=0, s-maxage=60, stale-while-revalidate=600";

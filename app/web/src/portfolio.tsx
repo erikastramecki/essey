@@ -38,8 +38,8 @@ export function PortfolioPage() {
         <div className="band-head"><div>
           <span className="eyebrow">Portfolio</span>
           <h2>Your Essey</h2>
-          <p>Everything you hold on testnet: balances, Dons and their Tiers, the Payouts sitting in each
-            Vault, and the stock you've drawn from Cases. Come back here to do it all again.</p>
+          <p>Everything you hold on testnet: balances, your Dons, the Payouts sitting in each
+            Vault, and any stock in your wallet. Your Dons are your characters in the game.</p>
         </div>
         </div>
 
@@ -62,10 +62,9 @@ export function PortfolioPage() {
             {/* Returning-user launchpad: the repeat actions, one hop each. */}
             <div className="pf-quick">
               <span className="pf-quick-h">Quick actions</span>
+              <Link className="pf-quick-btn" to="/game">♠ Play D.O.N.</Link>
               <Link className="pf-quick-btn" to="/market">⬡ Buy a Don</Link>
-              <Link className="pf-quick-btn" to="/bell">🔔 Stake / Ring</Link>
-              <Link className="pf-quick-btn" to="/cases">🎁 Open a Case</Link>
-              <Link className="pf-quick-btn" to="/lend">⚖ Supply</Link>
+              <Link className="pf-quick-btn" to="/builder">◇ Build a Don</Link>
               <Link className="pf-quick-btn" to="/tape">📈 The Tape</Link>
             </div>
 
@@ -103,11 +102,11 @@ export function PortfolioPage() {
               </div>
             </div>
 
-            {/* Case winnings */}
+            {/* Wallet-held stock */}
             <div className="pf-block">
-              <div className="pf-block-h">Stock from Cases {(p.wins.aapl > 0n || p.wins.nvda > 0n) && <Link className="pf-link" to="/cases">open another →</Link>}</div>
+              <div className="pf-block-h">Stock in your wallet</div>
               {p.wins.aapl === 0n && p.wins.nvda === 0n ? (
-                <div className="pf-empty">No stock drawn yet. <Link to="/cases">Open a Case →</Link></div>
+                <div className="pf-empty">No stock tokens in this wallet yet.</div>
               ) : (
                 <div className="pf-wins num">
                   {p.wins.aapl > 0n && <span className="pf-win">AAPL <b>{fmt(p.wins.aapl, 2)}</b></span>}

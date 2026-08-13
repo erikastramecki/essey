@@ -27,8 +27,6 @@ export const ADDR = {
   don: "0x582E4B8E3A783B1FE09409AEDa3C6533782dB53c" as Address, // the 8,888 PFP membership NFT (lien-capable)
   distributor: "0x9F9928E1FDa97f67d54A9E7b7fFedC003C669103" as Address, // mint: free WL / reroll / custom
   essey: "0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F" as Address, // $ESSEY v2 (8.888B supply)
-  // Legacy $ESSEY v1 — the Cases/Degen/Faucet stack was deployed against it and still charges in it.
-  esseyV1: "0x0659eca47665da545e1157ede11fcb4c8222879f" as Address,
   usdg: "0x7461E670d44FF4397A3E48030C5b06f6163a5De2" as Address,
   bell: "0x8a7749e47E79964B265B6ee6216FD5d017701552" as Address, // Dons-era Bell: 5-tier 666-ladder, elect-3, no ringer tip
   exchange: "0x9Cec219bCdA1a901D4a7154B55648bdAE5433582" as Address, // DonExchange AMM: 8%/12% fees, price = max(300k, live floor)
@@ -40,7 +38,6 @@ export const ADDR = {
   feeRouter: "0x0000000000000000000000000000000000000000" as Address,
   // DCA / Auto-stack: recurring USDG→stock buys, non-custodial, keeper-executed, floored via its converter.
   recurringBuy: "0xF0DCE628d4023cdc8115E6f5998D9279eA06d9ab" as Address,
-  cases: "0x97ad3b44d0B362F70460c90993E9eF79b9D2D749" as Address, // keeper-enabled (1-sign reveal)
   // Dons-era faucet (redeployed 2026-08-11 with a bigger drip): 100,000 v2 $ESSEY + 1,000 USDG per 8h —
   // enough to stake Bell Tier I (66,666 $ESSEY). Replaces the old 0x2ac1…48C91 (5,000 $ESSEY) faucet.
   faucet: "0x90312b383Eac08E691c851a7ef866f106E6d9d7d" as Address,
@@ -51,9 +48,6 @@ export const ADDR = {
   markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732" as Address,
   // Stock-payout converter (Bell claim-edge → real stock into the Vault).
   converter: "0x3c6a57b21c000caecc61655568eabb6cfbb67fb0" as Address,
-  // Degen (multiplier) case + its testnet entropy keeper.
-  degenCases: "0xA0B438Da1b489748D863C9529D19A29C36309599" as Address, // 24/7, share-denominated (no session gate)
-  degenEntropy: "0xb9b82A4900642A98e29F59B937FDE6B2DDaF1E6F" as Address,
   // Essey Private — Phase 0 (stealth-address payments, ERC-5564/6538). Zero custody.
   stealthAnnouncer: "0xe386345BB307166F59A191130230bA445F05F402" as Address,
   stealthRegistry: "0x7f28EbFfC1310849f4Cb5612e1Ff892fd892880f" as Address,
@@ -87,10 +81,6 @@ export const MAX_DONS = 8888;
 // Collateral markets open after the 2-day parameter timelock (a real safety feature, not a knob).
 export const BORROW_OPENS = new Date("2026-08-05T18:55:00Z");
 
-// Legacy Cases pricing as deployed (v1 $ESSEY price + USDG fee). The DonExchange has no flat prices:
-// its quote is price() = max(300k, live floor) plus a percentage fee — see FEE_BPS + reads.quote*.
-export const PRICE = { casePrice: 100n * 10n ** 18n, caseFee: 5n * 10n ** 18n };
-
 // DonExchange percentage fees (of price(), charged in $ESSEY): 8% buy/sell, 12% to snipe a specific Don.
 export const FEE_BPS = { swap: 800n, snipe: 1200n };
 
@@ -113,14 +103,6 @@ export const exchangeAbi = parseAbi([
   "event Bought(uint256 indexed id, address indexed buyer, uint256 price, uint256 fee)",
   "event Sniped(uint256 indexed id, address indexed buyer, uint256 price, uint256 fee)",
   "event Sold(uint256 indexed id, address indexed seller, uint256 net, uint256 fee)",
-]);
-export const casesAbi = parseAbi([
-  "function buy() returns (uint256)",
-  "function open(uint256) returns (address, uint256)",
-  "function inventoryCount() view returns (uint256)",
-  "function cases(uint256) view returns (address buyer, uint64 drawBlock, uint64 boughtAt, bool opened)",
-  "event CaseBought(uint256 indexed caseId, address indexed buyer, uint64 drawBlock)",
-  "event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)",
 ]);
 export const bellAbi = parseAbi([
   "function pot() view returns (uint256)",
@@ -192,34 +174,6 @@ export const marketsAbi = parseAbi([
   "function maxBorrow(address token, uint256 rawAmount) view returns (uint256)",
 ]);
 export const noteAbi = parseAbi(["function ownerOf(uint256) view returns (address)"]);
-// Cases sell-back — approve the stock unit, then sell it back at oracle value minus the spread.
-export const casesSellAbi = parseAbi([
-  "function sellBack(address token) returns (uint256 paid)",
-  "function stocks(address) view returns (uint256 unitAmount, uint8 tokenDecimals, bool listed)",
-]);
-
-// Degen (multiplier) case — a provably-fair+solvent gacha: buy (payable, entropy fee), a keeper
-// settles the roll, then withdraw the won stock. Ladder odds are on-chain (multiplierBps/cumPpm).
-export const degenAbi = parseAbi([
-  "function buy() payable returns (uint64)",
-  "function withdraw() returns (uint256)",
-  "function reclaim(uint64 seq)",
-  "function owed(address) view returns (uint256)",
-  "function freeReserve() view returns (uint256)",
-  "function reservedShares() view returns (uint256)",
-  "function maxMultiplierBps() view returns (uint256)",
-  "function referenceShares() view returns (uint256)",
-  "function tierCount() view returns (uint256)",
-  "function multiplierBps(uint256) view returns (uint256)",
-  "function cumPpm(uint256) view returns (uint256)",
-  "function entropyFee() view returns (uint256)",
-  "event CaseBought(uint64 indexed seq, address indexed buyer, uint256 worstShares)",
-  "event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)",
-]);
-// Testnet MockEntropy keeper — anyone can settle a pending request.
-export const mockEntropyAbi = parseAbi(["function fulfill(uint64 seq)", "function fulfilled(uint64) view returns (bool)"]);
-const caseOpenedItem = parseAbiItem("event CaseOpened(uint64 indexed seq, address indexed buyer, uint256 multiplierBps, uint256 payoutShares)");
-const fairCaseOpenedItem = parseAbiItem("event CaseOpened(uint256 indexed caseId, address indexed buyer, address indexed token, uint256 amount)");
 
 // Essey Private — Phase 0 ABIs (ERC-6538 registry + ERC-5564 announcer + private-pay).
 export const stealthRegistryAbi = parseAbi([
@@ -515,7 +469,6 @@ export const launchpad = {
 // ---------------------------------------------------------------- reads
 export const reads = {
   floatCount: () => pub.readContract({ address: ADDR.exchange, abi: exchangeAbi, functionName: "inventoryCount" }),
-  caseUnits: () => pub.readContract({ address: ADDR.cases, abi: casesAbi, functionName: "inventoryCount" }),
   pot: () => pub.readContract({ address: ADDR.bell, abi: bellAbi, functionName: "pot" }),
   balances: async (a: Address) => {
     const [essey, usdg, dons] = await Promise.all([
@@ -717,26 +670,8 @@ export const reads = {
     return out;
   },
 
-  /// Degen case: the disclosed ladder + the caller's account (owed winnings, reserve, entropy fee).
-  degen: async (a: Address | null) => {
-    const n = Number(await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "tierCount" }));
-    const [mults, cums] = await Promise.all([
-      Promise.all(Array.from({ length: n }, (_, i) => pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "multiplierBps", args: [BigInt(i)] }) as Promise<bigint>)),
-      Promise.all(Array.from({ length: n }, (_, i) => pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "cumPpm", args: [BigInt(i)] }) as Promise<bigint>)),
-    ]);
-    const [maxMult, free, reserved, fee, owed] = await Promise.all([
-      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "maxMultiplierBps" }) as Promise<bigint>,
-      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "freeReserve" }) as Promise<bigint>,
-      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "reservedShares" }) as Promise<bigint>,
-      pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as Promise<bigint>,
-      a ? pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "owed", args: [a] }) as Promise<bigint> : Promise.resolve(0n),
-    ]);
-    const ladder = mults.map((m, i) => ({ multBps: Number(m), pct: (Number(cums[i]) - (i > 0 ? Number(cums[i - 1]) : 0)) / 10_000 }));
-    return { ladder, maxMultBps: Number(maxMult), free, reserved, fee, owed };
-  },
-
   /// Everything the Portfolio needs, in one pass: balances, each owned Don with its tier + claimable
-  /// + lien/art status + Vault balance, Case winnings, pool position, and shielded status.
+  /// + lien/art status + Vault balance, wallet-held stock, pool position, and shielded status.
   portfolio: async (a: Address) => {
     const [gas, bal, ids, wins, pool, loans, shielded] = await Promise.all([
       reads.gasBalance(a), reads.balances(a), reads.ownedDons(a), reads.stockWins(a), reads.poolState(a), reads.myLoans(a),
@@ -852,14 +787,6 @@ export const flows = {
 
   ringBell: (a: Address): Promise<Hex> => send(a, ADDR.bell, bellAbi, "ring"),
 
-  /// Sell a won stock unit back to the Cases contract for USDG (oracle value minus the spread).
-  /// Approves the exact unit size, then sells. Session-gated on chain (US market hours + fresh feed).
-  sellCaseStock: async (a: Address, token: Address): Promise<Hex> => {
-    const [unit] = await pub.readContract({ address: ADDR.cases, abi: casesSellAbi, functionName: "stocks", args: [token] }) as readonly [bigint, number, boolean];
-    await ensureAllowance(a, token, ADDR.cases, unit);
-    return send(a, ADDR.cases, casesSellAbi, "sellBack", [token]);
-  },
-
   /// Claim a Don's accrued Payout — it lands in that Don's Vault (permissionless, but the funds go
   /// to the Vault the Don owner controls, never the caller).
   claimPayout: (a: Address, id: bigint): Promise<Hex> => send(a, ADDR.bell, bellAbi, "claim", [id]),
@@ -923,61 +850,6 @@ export const flows = {
     await ensureAllowance(a, ADDR.usdg, ADDR.pool, owed + owed / 100n); // headroom for a second of interest
     return send(a, ADDR.pool, poolAbi, "repay", [id, (owed * 1001n) / 1000n]); // repay accepts >= owed, refunds change
   },
-
-  /// The degen (multiplier) case: buy (pays the entropy fee), settle the roll via the keeper, decode
-  /// the multiplier + payout. On testnet the frontend triggers the MockEntropy keeper; on mainnet the
-  /// real Dice keeper settles automatically (this would just poll instead of calling fulfill).
-  degenOpen: async (a: Address, onStage?: (s: string) => void): Promise<{ multBps: number; payoutShares: bigint; seq: bigint }> => {
-    const fee = await pub.readContract({ address: ADDR.degenCases, abi: degenAbi, functionName: "entropyFee" }) as bigint;
-    onStage?.("approving");
-    await ensureAllowance(a, ADDR.esseyV1, ADDR.degenCases, PRICE.casePrice); // case price (legacy v1 $ESSEY), sunk to treasury (one-time)
-    await ensureAllowance(a, ADDR.usdg, ADDR.degenCases, PRICE.caseFee); // buy fee, feeds the Bell pot (one-time)
-    onStage?.("buying");
-    // The ONLY per-roll signature: buy requests the roll. Settlement is permissionless — a keeper (or,
-    // on mainnet, the real Dice oracle) calls fulfill and the roll credits the stored buyer, not the caller.
-    const buyTx = await send(a, ADDR.degenCases, degenAbi, "buy", [], fee);
-    const buyRcpt = await pub.getTransactionReceipt({ hash: buyTx });
-    const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.degenCases.toLowerCase());
-    const seq = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n; // CaseBought: topic[1] = seq
-
-    // Reliable "did the keeper settle it" signal: a cheap boolean eth_call (never throws the flow).
-    const isSettled = async (): Promise<boolean> => {
-      try { return (await pub.readContract({ address: ADDR.degenEntropy, abi: mockEntropyAbi, functionName: "fulfilled", args: [seq] })) as boolean; }
-      catch { return false; }
-    };
-    // The result (multiplier + payout) lives in the CaseOpened event; read it only once settled.
-    const readOpened = async (): Promise<{ multBps: number; payoutShares: bigint; seq: bigint } | null> => {
-      try {
-        const logs = await pub.getLogs({ address: ADDR.degenCases, event: caseOpenedItem, args: { seq }, fromBlock: buyRcpt.blockNumber });
-        if (!logs.length) return null;
-        const { multiplierBps, payoutShares } = logs[0].args as { multiplierBps: bigint; payoutShares: bigint };
-        return { multBps: Number(multiplierBps), payoutShares, seq };
-      } catch { return null; }
-    };
-
-    // Wait for the keeper to settle (poll the cheap bool; the reel keeps spinning meanwhile). ~30s.
-    // Once settled, retry the event read a few times — getLogs can lag a block or two behind state.
-    onStage?.("sealing");
-    for (let i = 0; i < 15; i++) {
-      await new Promise((r) => setTimeout(r, 2_000));
-      if (await isSettled()) {
-        for (let j = 0; j < 6; j++) { const r = await readOpened(); if (r) return r; await new Promise((res) => setTimeout(res, 1_200)); }
-        break;
-      }
-    }
-    // No keeper answered in time — settle it ourselves so the roll always finishes (a rare extra sig).
-    onStage?.("revealing");
-    try {
-      await send(a, ADDR.degenEntropy, mockEntropyAbi, "fulfill", [seq]);
-    } catch (e) {
-      if (await isSettled()) { const r = await readOpened(); if (r) return r; } // keeper beat us — recover
-      throw e;
-    }
-    const r = await readOpened();
-    if (r) return r;
-    throw new Error("settled but no CaseOpened event found");
-  },
-  degenWithdraw: (a: Address): Promise<Hex> => send(a, ADDR.degenCases, degenAbi, "withdraw"),
 
   // ---- Essey Private (Phase 0): stealth-address payments ----
 
@@ -1120,61 +992,6 @@ export const flows = {
       if (e instanceof RelayUnavailableSignal) throw new RelayerUnavailableError(e.detail, selfSubmit);
       throw e;
     }
-  },
-
-  /// The whole gacha: buy, wait out the draw commitment (parent-chain blocks tick ~12s wall-clock
-  /// on this stack), open, decode the winner. onStage lets the arcade narrate honestly.
-  openCase: async (a: Address, onStage: (s: string) => void): Promise<{ token: Address; amount: bigint; tx: Hex }> => {
-    onStage("approving");
-    await ensureAllowance(a, ADDR.esseyV1, ADDR.cases, PRICE.casePrice); // legacy v1 $ESSEY (Cases pre-date the Dons stack) — one-time
-    await ensureAllowance(a, ADDR.usdg, ADDR.cases, PRICE.caseFee); // one-time
-    onStage("buying");
-    // The buy is the only signature the buyer needs. The keeper reveals (open delivers to the buyer);
-    // a self-open fallback keeps it working — well within the 256-block window — if no keeper answers.
-    const buyTx = await send(a, ADDR.cases, casesAbi, "buy");
-    const buyRcpt = await pub.getTransactionReceipt({ hash: buyTx });
-    const bought = buyRcpt.logs.find((l) => l.address.toLowerCase() === ADDR.cases.toLowerCase());
-    const caseId = bought ? BigInt(bought.topics[1] ?? "0x0") : 0n;
-
-    // Reliable "did the keeper open it" signal: the case's `opened` flag (cheap eth_call, never throws).
-    const isOpened = async (): Promise<boolean> => {
-      try { const c = await pub.readContract({ address: ADDR.cases, abi: casesAbi, functionName: "cases", args: [caseId] }) as readonly [Address, bigint, bigint, boolean]; return c[3]; }
-      catch { return false; }
-    };
-    // The drawn stock + amount live in the CaseOpened event; read it only once opened.
-    const readOpened = async (): Promise<{ token: Address; amount: bigint; tx: Hex } | null> => {
-      try {
-        const logs = await pub.getLogs({ address: ADDR.cases, event: fairCaseOpenedItem, args: { caseId }, fromBlock: buyRcpt.blockNumber });
-        if (!logs.length) return null;
-        const { token, amount } = logs[0].args as { token: Address; amount: bigint };
-        return { token, amount, tx: logs[0].transactionHash as Hex };
-      } catch { return null; }
-    };
-
-    // Wait for the keeper to reveal (poll the cheap bool; also waits out the one-block draw commit). ~30s.
-    // Once opened, retry the event read a few times — getLogs can lag a block or two behind state.
-    onStage("sealing");
-    let opened = false;
-    for (let i = 0; i < 15; i++) {
-      await new Promise((r) => setTimeout(r, 2_000));
-      if (await isOpened()) {
-        for (let j = 0; j < 6; j++) { const r = await readOpened(); if (r) return r; await new Promise((res) => setTimeout(res, 1_200)); }
-        opened = true; break;
-      }
-    }
-    // No keeper answered in time — open it ourselves (a rare extra sig). If it reverts AlreadyOpened the
-    // keeper beat us, so re-read rather than surfacing an error.
-    if (!opened) onStage("opening");
-    try {
-      if (!opened) await send(a, ADDR.cases, casesAbi, "open", [caseId]);
-    } catch (e) {
-      const r = await readOpened();
-      if (r) return r;
-      throw e;
-    }
-    const r = await readOpened();
-    if (r) return r;
-    throw new Error("open succeeded but no CaseOpened event found");
   },
 };
 

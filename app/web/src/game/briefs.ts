@@ -5,7 +5,7 @@
 //   cumSuccessPpm <= roll < cumPartialPpm => PARTIAL ("the job went sideways" — partialPay)
 //   else                                  => FAIL    (nothing lands; provision burned at dispatch)
 // Payouts are SCRIP minted to the House hopper; dispatch fee + provision burn from the vault.
-export type BriefKey = "paper" | "glass" | "pow" | "zero";
+export type BriefKey = "paper" | "glass" | "pow" | "zero" | "sprint" | "windowjob";
 
 /// Scrip amount with 2-dp precision → 18-dec bigint.
 const S = (x: number): bigint => BigInt(Math.round(x * 100)) * 10n ** 16n;
@@ -24,7 +24,7 @@ export type GameBrief = {
   betaBps: bigint;        // success-payout boost per provisioned Scrip, in bps
 };
 
-export const BRIEF_ORDER: BriefKey[] = ["paper", "glass", "pow", "zero"];
+export const BRIEF_ORDER: BriefKey[] = ["paper", "glass", "pow", "zero", "sprint", "windowjob"];
 
 /// On-chain briefId for a lore archetype — the posted ids, verbatim.
 export const briefIdFor = (key: BriefKey): bigint => BRIEFS[key].chainId;
@@ -73,6 +73,33 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
     word: "The fridge cycle gives you one warm hour in twenty-four; the prototype travels in a dewar the size of a coffin and complains about vibration. A full day exposed, long odds, and a number on the other side with more zeros than sense. That's not a warning. That's the pitch.",
     odds: [12, 23, 65],
     successPay: S(2775), partialPay: S(222), dispatchFee: S(5.76), provisionCap: S(200), betaBps: 75000n,
+  },
+  // ── PROVING-GROUND WIRES (testnet only, founder-requested faucet 2026-08-13): the admin-posted
+  // fast briefs 5/6, surfaced so testers can bankroll Hitters + raids without waiting out a 3h job.
+  // The 75s run IS the Scrip faucet — it flows through the real mission engine (budget-minted,
+  // worst-case reserved) instead of a side-door mint the sealed controller couldn't add anyway.
+  // STRIP BOTH before any real-value season.
+  sprint: {
+    key: "sprint", chainId: 5n, no: "9105", code: "MILK RUN", tab: "proving ground · 75s", arch: "Proving Ground · The Milk Run",
+    durationH: 0.021, rating: "low", ratingLabel: "TRAINING", featured: true,
+    riskBlocks: 1, exhibit: "PROVING GROUND · the testnet training wire",
+    job: "A 75-second answer for the family bankroll. Run it once, fund your whole night.",
+    takeLine: "6,000 Scrip on a clean run: a Hitter off the rack is 900, a hit order is 50. Do the math.",
+    risk: "Training wire. The city looks the other way.",
+    word: "Every recruit runs the milk route once. Nobody talks about it, everybody has done it. The pay is a season-zero courtesy: this wire exists so you can learn the life before the life costs you anything real.",
+    odds: [98.5, 1.45, 0.05],
+    successPay: S(6000), partialPay: S(2400), dispatchFee: S(1), provisionCap: 0n, betaBps: 0n,
+  },
+  windowjob: {
+    key: "windowjob", chainId: 6n, no: "9106", code: "OPEN WINDOW", tab: "proving ground · 20min", arch: "Proving Ground · The Open Window",
+    durationH: 0.33, rating: "low", ratingLabel: "TRAINING", featured: false,
+    riskBlocks: 1, exhibit: "PROVING GROUND · a raidable away window",
+    job: "Twenty minutes in the field, and your House stands open the whole while.",
+    takeLine: "100 Scrip on a clean run. The real pay is the lesson.",
+    risk: "The raid-practice wire: your hopper is exposed for 20 minutes. That is the point.",
+    word: "You want to learn how robberies feel from both sides? Take the window job and tell a friend when you leave. The reveal clock runs ten minutes, the window runs twenty. Arithmetic is a weapon.",
+    odds: [98.5, 1.45, 0.05],
+    successPay: S(100), partialPay: S(40), dispatchFee: S(1), provisionCap: 0n, betaBps: 0n,
   },
 };
 

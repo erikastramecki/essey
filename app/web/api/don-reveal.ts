@@ -12,8 +12,8 @@
 // is NX (first record wins; any valid record for a hash decodes to the same rendered art, because the
 // hash IS the resolver key's keccak). Worst case for an attacker: they reveal someone's art earlier
 // than the owner would have — reveal is disclosure, not authority.
-import { builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, json, persistPreimage, preKey, store, type Preimage } from "./_don-lib";
-import { resolveSelection } from "../src/pfp-resolve";
+import { builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, json, persistPreimage, preKey, store, type Preimage } from "./_don-lib.js";
+import { resolveSelection } from "../src/pfp-resolve.js";
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") return json(405, { error: "method" });

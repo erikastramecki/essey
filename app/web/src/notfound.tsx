@@ -18,8 +18,8 @@ export function NotFoundPage() {
         </p>
         <div className="hero-cta" style={{ justifyContent: "center" }}>
           <Link className="btn btn-gold" to="/">Home</Link>
-          <Link className="btn btn-ghost" to="/builder">Build a Don</Link>
-          <Link className="btn btn-ghost" to="/how-it-works">How it works</Link>
+          <Link className="btn btn-ghost" to="/game">The Game</Link>
+          <Link className="btn btn-ghost" to="/how-to-play">How to Play</Link>
         </div>
       </div>
     </section>

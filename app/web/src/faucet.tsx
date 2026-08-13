@@ -42,7 +42,7 @@ export function FaucetPage() {
     setBusy(true); setMsg(null);
     try {
       await flows.drip(addr);
-      setMsg({ ok: true, text: "✓ 100,000 $ESSEY + 1,000 USDG dripped. You're funded (enough to stake your first Bell tier). Come back in 8h for more." });
+      setMsg({ ok: true, text: "✓ 100,000 $ESSEY + 1,000 USDG dripped. You're funded — get a Don and head for the Game. Come back in 8h for more." });
       await refresh(addr);
     } catch (e) {
       setMsg({ ok: false, text: niceError(e) });

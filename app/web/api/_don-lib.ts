@@ -15,8 +15,8 @@
 //   3. Chain reads against the Don stack (addresses from don-config, env-overridable) for verification.
 import { Redis } from "@upstash/redis";
 import { createPublicClient, http, keccak256, toHex, parseAbi } from "viem";
-import { DON_NET, donChain } from "../src/don-config";
-import { resolveSelection, type BuilderData, type Resolved } from "../src/pfp-resolve";
+import { DON_NET, donChain } from "../src/don-config.js";
+import { resolveSelection, type BuilderData, type Resolved } from "../src/pfp-resolve.js";
 
 export const DON_ADDR = (process.env.DON_ADDR || DON_NET.don) as `0x${string}`;
 export const DISTRIBUTOR_ADDR = (process.env.DISTRIBUTOR_ADDR || DON_NET.distributor) as `0x${string}`;

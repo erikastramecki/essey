@@ -1,0 +1,162 @@
+/* /how-to-play — the walkthrough. Reuses the game's dossier grammar (game.css tokens + g-*
+   classes, imported via game/game.css) OUTSIDE the phone frame: case files stack down a scroll
+   page instead of sliding over the desk. Everything is scoped under .htp so none of these
+   overrides can leak back into /game. */
+
+.game-root.htp {
+  display: block;
+  padding: 0 0 calc(70px + env(safe-area-inset-bottom));
+}
+.htp-wrap { max-width: 780px; margin: 0 auto; padding: 40px 14px 64px; }
+
+/* the case files become static, full-height paper sections */
+.htp .g-file {
+  position: relative;
+  left: auto; right: auto; top: auto; bottom: auto;
+  transform: none;
+  transition: none;
+  pointer-events: auto;
+  z-index: auto;
+  margin-top: 34px;
+}
+.htp .g-sheet {
+  flex: none;
+  overflow: visible;
+  border-bottom: 1px solid var(--g-paper-edge);
+  border-radius: 10px;
+  padding: 18px 20px 28px 34px;
+}
+.htp .g-xbtn { display: none; } /* nothing to close — the page is the stack */
+
+/* ---- the ink-world intro ---- */
+.htp-hero { text-align: center; padding: 8px 6px 0; }
+.htp-hero .htp-kicker {
+  font-family: var(--g-mono);
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--g-gold);
+}
+.htp-hero h1 {
+  font-family: var(--g-serif);
+  font-size: clamp(30px, 6vw, 44px);
+  margin: 10px 0 12px;
+  color: var(--g-tx);
+  line-height: 1.12;
+}
+.htp-hero .htp-lede { color: var(--g-tx-mut); max-width: 620px; margin: 0 auto; font-size: 15.5px; }
+.htp-honest {
+  margin: 18px auto 0;
+  max-width: 640px;
+  border: 1px dashed var(--g-gold-line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-family: var(--g-mono);
+  font-size: 12px;
+  color: var(--g-tx-mut);
+  background: var(--g-gold-dim);
+}
+.htp-honest b { color: var(--g-gold-hi); }
+
+/* ---- inside the sheets ---- */
+.htp-step-no {
+  font-family: var(--g-mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: var(--g-stamp);
+  text-transform: uppercase;
+  margin: 2px 0 6px;
+}
+.htp p.g-word { font-family: var(--g-mono); font-size: 12.5px; line-height: 1.65; color: var(--g-ink-type); margin: 8px 0; }
+.htp p.g-word .lbl { color: var(--g-ink-type-mut); letter-spacing: 0.16em; font-size: 9.5px; margin-right: 8px; text-transform: uppercase; }
+.htp .htp-table-scroll { overflow-x: auto; }
+.htp table.htp-table {
+  width: 100%;
+  min-width: 460px;
+  border-collapse: collapse;
+  font-family: var(--g-mono);
+  font-size: 11.5px;
+  color: var(--g-ink-type);
+  margin: 10px 0;
+}
+.htp table.htp-table th {
+  text-align: left;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--g-ink-type-mut);
+  border-bottom: 2px solid var(--g-ink-type);
+  padding: 4px 8px 4px 0;
+}
+.htp table.htp-table td { border-bottom: 1px solid rgba(38, 34, 26, 0.22); padding: 5px 8px 5px 0; vertical-align: top; }
+.htp table.htp-table td.n, .htp table.htp-table th.n { text-align: right; }
+.htp table.htp-table td.k { font-weight: 700; }
+
+.htp details {
+  margin: 10px 0;
+  border: 1px solid rgba(38, 34, 26, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.htp details summary {
+  cursor: pointer;
+  font-family: var(--g-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-ink-type-mut);
+  padding: 8px 12px;
+  list-style: none;
+}
+.htp details summary::before { content: "▸ "; color: var(--g-stamp); }
+.htp details[open] summary::before { content: "▾ "; }
+.htp details > div { padding: 0 14px 12px; }
+
+/* the brief-picker tabs reuse the provisioning-button look, full-width row */
+.htp .htp-briefs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.htp .htp-briefs button {
+  all: unset;
+  cursor: pointer;
+  font-family: var(--g-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 6px 10px;
+  border: 1.5px solid rgba(38, 34, 26, 0.4);
+  border-radius: 4px;
+  color: var(--g-ink-type);
+  text-transform: uppercase;
+}
+.htp .htp-briefs button[aria-pressed="true"] { border-color: var(--g-stamp); color: var(--g-stamp); font-weight: 700; }
+
+/* the cooldown toy */
+.htp .htp-cool { margin: 12px 0 4px; }
+.htp .htp-cool input[type="range"] { width: 100%; accent-color: #a8352a; }
+.htp .htp-cool-read {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--g-mono);
+  font-size: 11.5px;
+  color: var(--g-ink-type);
+  margin-top: 4px;
+}
+.htp .htp-cool-read b { color: var(--g-stamp); }
+
+/* sacred callout (BANK IT) */
+.htp .htp-sacred {
+  border: 2.5px solid var(--g-stamp-ok);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  font-family: var(--g-mono);
+  font-size: 12px;
+  color: var(--g-ink-type);
+  background: rgba(46, 107, 79, 0.07);
+}
+.htp .htp-sacred b { color: var(--g-stamp-ok); }
+
+/* practice-seal center row */
+.htp .htp-sealrow { text-align: center; margin: 6px 0 2px; }
+
+/* closing CTA reuses the desk's dark card */
+.htp .htp-cta { margin-top: 34px; }
+.htp .htp-cta .g-cta-btn { margin: 6px 6px 0 0; }

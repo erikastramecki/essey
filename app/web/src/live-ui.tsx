@@ -149,7 +149,7 @@ export function LiveExchange() {
                     <Link className="btn btn-gold amm-next-btn" to="/faucet">Get $ESSEY on the Faucet →</Link>
                   ) : (
                     <button className="btn btn-gold amm-next-btn" disabled={!!busy || float_ === 0n || !quote}
-                      onClick={() => act("buy", () => flows.buyDon(a!).then(({ id }) => setMsg(`✓ Don #${id} is yours. Your 8% fee just fed the club. Next: stake a Tier at the Bell to start earning.`)), "✓ Don purchased")}>
+                      onClick={() => act("buy", () => flows.buyDon(a!).then(({ id }) => setMsg(`✓ Don #${id} is yours. Next: take him to the Game — the desk is waiting.`)), "✓ Don purchased")}>
                       {busy === "buy" ? "buying…"
                         : float_ === 0n ? "Pool is empty"
                         : quote ? `Buy next · ${fmt(quote.buyTotal)} $ESSEY` : "quoting…"}
@@ -172,7 +172,7 @@ export function LiveExchange() {
                         <Link className="btn btn-gold" to="/faucet">Get $ESSEY on the Faucet →</Link>
                       ) : (
                         <button className="btn btn-gold" disabled={!!busy || !quote}
-                          onClick={() => act("snipe", () => flows.snipeDon(a!, pick).then(() => { setMsg(`✓ Don #${pick} is yours. The 12% snipe fee fed the club. Stake it at the Bell to earn.`); setPick(null); }), "✓ sniped")}>
+                          onClick={() => act("snipe", () => flows.snipeDon(a!, pick).then(() => { setMsg(`✓ Don #${pick} is yours. Take him to the Game — the desk is waiting.`); setPick(null); }), "✓ sniped")}>
                           {busy === "snipe" ? "sniping…" : `Confirm snipe · ${quote ? fmt(quote.snipeTotal) : "…"}`}
                         </button>
                       )}
@@ -382,12 +382,12 @@ export function LiveBell() {
                 <div className="live-card bell-step">
                   <div className="bell-step-h"><span className="bell-step-n">2</span> Ring the Bell
                     <span className="bell-step-cur num">pot: {pot !== null ? fmt(pot, 2) : "…"} USDG</span></div>
-                  <div className="live-note">When the pot's worth it, <b>anyone</b> can ring it. Ringing costs only gas and pays the ringer nothing; the whole pot splits across all staked Dons (by tier). The pot grows from trades, Cases, and loan interest.</div>
+                  <div className="live-note">When the pot's worth it, <b>anyone</b> can ring it. Ringing costs only gas and pays the ringer nothing; the whole pot splits across all staked Dons (by tier). The pot grows from protocol fees: trades and loan interest.</div>
                   <button className="btn btn-gold" disabled={!!busy || (pot ?? 0n) === 0n}
                     onClick={() => act("ring", () => flows.ringBell(a!), "✓ rung. The pot split across staked Dons")}>
                     {busy === "ring" ? "ringing…" : (pot ?? 0n) === 0n ? "Pot is empty, grow it first" : "Ring the Bell"}
                   </button>
-                  {(pot ?? 0n) === 0n && <div className="live-note"><Link to="/market">→ Trade on the Exchange</Link> or open a <Link to="/cases">Case</Link> to grow the pot, then come back to ring.</div>}
+                  {(pot ?? 0n) === 0n && <div className="live-note"><Link to="/market">→ Trade on the Exchange</Link> to grow the pot, then come back to ring.</div>}
                 </div>
 
                 {/* Step 3 — claim */}

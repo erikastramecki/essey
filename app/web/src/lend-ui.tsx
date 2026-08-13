@@ -169,7 +169,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
           kept borrowing closed rather than open a position we can't price honestly. It's on the roadmap; supplying
           USDG to earn (above) works today.</div>
       ) : !haveStock ? (
-        <div className="live-note">You don't hold any stock to borrow against yet. <Link to="/cases">Open a Case →</Link> to draw some AAPL or NVDA, then come back.</div>
+        <div className="live-note">You don't hold any stock (AAPL / NVDA tokens) in this wallet to borrow against yet.</div>
       ) : (
         <>
           <div className="live-note">Lock stock you won as collateral, borrow USDG against it, and repay anytime to get the stock back.</div>

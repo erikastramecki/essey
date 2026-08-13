@@ -14,8 +14,8 @@
 // deployed, and POST/GET also report combos already minted on-chain (`minted: true`).
 import { Redis } from "@upstash/redis";
 import { createPublicClient, http, defineChain, parseAbi, keccak256, toHex } from "viem";
-import { resolveSelection } from "../src/pfp-resolve";
-import { persistPreimage } from "./_don-lib";
+import { resolveSelection } from "../src/pfp-resolve.js";
+import { persistPreimage } from "./_don-lib.js";
 
 const HOLD_TTL_S = 30 * 60; // a builder session's soft hold
 

@@ -13,8 +13,8 @@
 // requests cache short. ETag = combo hash either way. Unrevealed/unknown falls to a branded placeholder
 // (inline SVG, no external assets) — never a broken image.
 import sharp from "sharp";
-import { assetOrigin, builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, json, preKey, store, ZERO32, type Preimage } from "../_don-lib";
-import { posOffset, posYOffset, resolveSelection, type BuilderData, type Resolved } from "../../src/pfp-resolve";
+import { assetOrigin, builderData, chainClient, comboHash, donReadAbi, DISTRIBUTOR_ADDR, DON_ADDR, json, preKey, store, ZERO32, type Preimage } from "../_don-lib.js";
+import { posOffset, posYOffset, resolveSelection, type BuilderData, type Resolved } from "../../src/pfp-resolve.js";
 
 const CANVAS = 900;
 const CACHE_LONG = "public, max-age=3600, s-maxage=31536000, immutable";
