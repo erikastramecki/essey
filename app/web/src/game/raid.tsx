@@ -129,7 +129,9 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
   // One open hit order per Don (gate-audit hardening): a second commit from the same Don would
   // overwrite the first raid's stored preimage, making it unrevealable — its 50-Scrip fee forfeits.
   const pending = g.address && attacker ? loadRaidSecret(g.address, attacker.id) : null;
-  const pendingLive = pending !== null && now <= pending.committedAt + REVEAL_WINDOW_MS
+  // raidId === "" means the commit tx never landed (rejected prompt / revert) — that secret protects
+  // nothing (reveal needs a raidId), so it must never gate other targets (review fix: phantom lockout).
+  const pendingLive = pending !== null && pending.raidId !== "" && now <= pending.committedAt + REVEAL_WINDOW_MS
     && pending.targetDonId !== targetDonId.toString();
   const gate =
     !g.configured ? "THE ENGINE OPENS WITH THE SEASON · CONTRACTS PENDING" :
@@ -162,6 +164,10 @@ export function HitOrderFile({ targetDonId, open, onClose }: { targetDonId: bigi
       setSecret(s);
       setPhase("committed");
     } catch (e) {
+      // The save-first design stored the preimage before the tx; if the commit never landed the
+      // secret is a phantom (raidId "") — remove it so it can't confuse a later session (review fix).
+      const phantom = g.address && attacker ? loadRaidSecret(g.address, attacker.id) : null;
+      if (phantom !== null && phantom.raidId === "") clearRaidSecret(g.address, attacker.id);
       setPhase("error"); setErr(niceError(e));
     }
   };
