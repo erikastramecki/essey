@@ -96,10 +96,30 @@ const POOL_ABI = [
   { type: "function", name: "repay", stateMutability: "nonpayable",
     inputs: [{ type: "uint256" }, { type: "uint256" }], outputs: [] },
   { type: "function", name: "debtOf", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "uint256" }] },
+  // Position is { token, collateralRaw, principal, indexSnapshot, collIndexSnapshot } — ONE address
+  // and four uint256s. An earlier version of this file declared a leading `borrower` address, which
+  // has never existed: EsseyPool.sol:59 says the borrower is deliberately not stored, because the
+  // position is a bearer instrument and authority follows note.ownerOf(id) at execution time. The
+  // extra field shifted every decode and made essey_health fail against any real pool.
   { type: "function", name: "positions", stateMutability: "view", inputs: [{ type: "uint256" }],
-    outputs: [{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }] },
+    outputs: [{ type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }] },
+  { type: "function", name: "note", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "totalAssets", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ];
+
+const NOTE_ABI = [
+  { type: "function", name: "ownerOf", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "address" }] },
+];
+
+/// Reverts should reach the agent as a sentence it can act on, never as an undecodable selector.
+/// `quote` had this discipline from the start; the other three did not, so they leaked raw errors.
+function explain(e, fallback) {
+  const m = String(e?.shortMessage || e?.message || e);
+  if (/out of bounds|position .* does not exist/i.test(m)) return "no such position";
+  if (/stale|price|oracle|feed/i.test(m)) return "no usable price right now (stale feed, or the market is closed)";
+  if (/insufficient/i.test(m)) return "the pool does not have enough liquidity for this right now";
+  return `${fallback} (${m.split("\n")[0].slice(0, 160)})`;
+}
 
 const ERC20_ABI = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
@@ -121,9 +141,14 @@ async function quote({ stockToken, amount, wallet }) {
   ]);
   if (!mkt.enabled) return { ok: false, reason: `${stockToken} is not an enabled market` };
 
-  const raw = amount !== undefined
-    ? parseUnits(String(amount), mkt.collateralDecimals)
-    : await read(stockToken, ERC20_ABI, "balanceOf", [wallet]);
+  if (amount === undefined && !wallet)
+    return { ok: false, reason: "give either `wallet` (to price its whole balance) or `amount` (to price that many shares)" };
+  let raw;
+  try {
+    raw = amount !== undefined
+      ? parseUnits(String(amount), mkt.collateralDecimals)
+      : await read(stockToken, ERC20_ABI, "balanceOf", [wallet]);
+  } catch (e) { return { ok: false, reason: explain(e, "could not read the collateral balance") }; }
   if (raw === 0n) return { ok: false, reason: "wallet holds none of this Stock Token" };
 
   const [symbol, canBorrow] = await Promise.all([
@@ -189,8 +214,21 @@ async function borrowTx({ stockToken, collateralAmount, borrowAmount }) {
 
 async function health({ positionId }) {
   const id = BigInt(positionId);
-  const [borrower, token, collateralRaw, principal] = await read(POOL, POOL_ABI, "positions", [id]);
+  let token, collateralRaw, principal;
+  try {
+    [token, collateralRaw, principal] = await read(POOL, POOL_ABI, "positions", [id]);
+  } catch (e) {
+    return { ok: false, reason: explain(e, `could not read position ${positionId}`) };
+  }
   if (principal === 0n) return { ok: false, reason: `position ${positionId} is closed or does not exist` };
+
+  // The borrower is not a stored field. The position is a bearer instrument, so the party with
+  // repay authority and the right to the returned collateral is whoever holds the Note right now.
+  let holder = null;
+  try {
+    const noteAddr = await read(POOL, POOL_ABI, "note");
+    holder = await read(noteAddr, NOTE_ABI, "ownerOf", [id]);
+  } catch { /* a closed position has no holder; the rest of the reading still stands */ }
   const [debt, assetDec, mkt] = await Promise.all([
     read(POOL, POOL_ABI, "debtOf", [id]),
     read(MARKETS, MARKETS_ABI, "assetDecimals"),
@@ -203,7 +241,9 @@ async function health({ positionId }) {
   } catch { priceKnown = false; }
 
   return {
-    ok: true, positionId, borrower,
+    ok: true, positionId,
+    holder,
+    holderNote: "Repay authority and the returned collateral follow whoever holds the position's Note NFT, not the original borrower. A transferred Note transfers the position.",
     debt: `${formatUnits(debt, assetDec)} ${CFG.assetSymbol}`,
     collateral: formatUnits(collateralRaw, mkt.collateralDecimals),
     ...(priceKnown
@@ -244,7 +284,7 @@ const TOOLS = [
       "Quote a loan against a Robinhood Stock Token. Returns collateral value, max borrow, whether borrowing is currently possible, and the risks of this collateral. Call this before essey_borrow.",
     inputSchema: { type: "object", properties: {
       stockToken: { type: "string", description: "Stock Token contract address" },
-      wallet: { type: "string", description: "Wallet address, to price its whole balance" },
+      wallet: { type: "string", description: "Wallet address, to price its whole balance. Give this OR amount." },
       amount: { type: "number", description: "Optional: quote this many shares instead of the balance" },
     }, required: ["stockToken"] } },
   { name: "essey_borrow", description:
@@ -260,7 +300,19 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { positionId: { type: "number" } }, required: ["positionId"] } },
 ];
 
-const HANDLERS = { essey_quote: quote, essey_borrow: borrowTx, essey_health: health, essey_repay: repayTx, ...GAME_HANDLERS };
+// borrowTx/repayTx build calldata from live reads, so a bad market or a stale feed surfaces as a
+// revert mid-build. Wrap them so the agent gets a sentence instead of a selector.
+const guarded = (fn, what) => async (args) => {
+  try { return await fn(args); } catch (e) { return { ok: false, reason: explain(e, what) }; }
+};
+
+const HANDLERS = {
+  essey_quote: guarded(quote, "could not quote this loan"),
+  essey_borrow: guarded(borrowTx, "could not build the borrow transactions"),
+  essey_health: guarded(health, "could not read this position"),
+  essey_repay: guarded(repayTx, "could not build the repay transactions"),
+  ...GAME_HANDLERS,
+};
 
 // What a connecting client is told before it calls anything. Without this the server looks like four
 // lending endpoints and nothing else, and an agent has no reason to know the game exists at all.
