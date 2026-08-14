@@ -22,6 +22,7 @@ import { HouseFile } from "./house";
 import { StakeoutFile, HitOrderFile } from "./raid";
 import { CrewFile } from "./crew";
 import { DonFile } from "./donfile";
+import { SpreadStrip } from "./spread";
 import "./game.css";
 
 const TABS = [["desk", "DESK"], ["jobs", "JOBS"], ["raid", "RAID"], ["crew", "CREW"], ["house", "HOUSE"]] as const;
@@ -216,6 +217,10 @@ function Desk() {
               </>
             )}
           </div>
+
+          {/* THE SPREAD — the family-wide view under the selected Don's ledger. Same reads, one
+              level up: how the whole family's Scrip sits across its Houses (OG-4). */}
+          <SpreadStrip />
 
           <div className="g-tapefeed">
             {don?.away && (

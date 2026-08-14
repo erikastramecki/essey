@@ -231,6 +231,63 @@
 }
 .g-ledgerstrip .g-cap span:last-child { color: var(--g-tx-faint); }
 
+/* THE SPREAD (OG-4) — the same ledger strip, one row per House. Read-only; the bar widths are
+   shares of the family's on-the-table Scrip, so the row set sums to the whole table. */
+.g-spread { margin-top: 10px; }
+.g-sp-row {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: pointer;
+  padding: 6px 7px 7px;
+  margin: 0 -7px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.g-sp-row.on { border-color: var(--g-gold-line); background: var(--g-gold-dim); }
+.g-sp-row:active { transform: translateY(1px); }
+.g-sp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--g-tx-mut); }
+.g-sp-head .who { color: var(--g-tx); letter-spacing: 0.04em; }
+.g-sp-head .who i { font-style: normal; font-size: 8.5px; letter-spacing: 0.14em; color: var(--g-good); }
+.g-sp-head .who i.away { color: var(--g-crit); }
+.g-sp-head .amt { color: var(--g-tx); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.g-sp-bar {
+  display: flex;
+  height: 7px;
+  margin: 5px 0 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--g-line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.g-sp-bar i { display: block; height: 100%; }
+.g-sp-bar i.dep { background: var(--g-gold); }
+.g-sp-bar i.hop { background: var(--g-warn); }
+.g-sp-legs { font-size: 10px; letter-spacing: 0.02em; color: var(--g-tx-faint); font-variant-numeric: tabular-nums; }
+/* the rule that separates the per-House rows from the family totals (the first .g-lrow always
+   follows either the last House row or the nothing-on-the-table note) */
+.g-spread .g-sp-row + .g-lrow,
+.g-spread .g-sp-note + .g-lrow { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--g-line-2); }
+.g-sp-note {
+  margin: 9px 0 0;
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: var(--g-tx-mut);
+  letter-spacing: 0.01em;
+}
+.g-sp-note b { color: var(--g-tx); font-weight: 500; }
+.g-sp-note.warn { color: var(--g-warn); }
+.g-sp-fine {
+  margin: 8px 0 0;
+  padding-top: 7px;
+  border-top: 1px dashed var(--g-line-2);
+  font-size: 9.5px;
+  line-height: 1.65;
+  color: var(--g-tx-faint);
+  letter-spacing: 0.01em;
+}
+
 /* tape feed */
 .g-tapefeed { margin: 14px 0 0; }
 .g-tape-row {
