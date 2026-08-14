@@ -67,12 +67,14 @@ const missionDue = new Map<string, number>();      // missionId → due (ms), fr
 export const missionDueMs = (mid: bigint): number | null => missionDue.get(mid.toString()) ?? null;
 
 const codename = (briefId: bigint | undefined) => (briefId !== undefined && briefInfo.get(briefId.toString())?.codename) || `brief #${briefId ?? "?"}`;
-/// Jackpot tier = ABSOLUTE ZERO's posted tier (brief 4); falls back to the briefId itself.
+/// Jackpot tier = ABSOLUTE ZERO's posted tier (brief 4) OR ABOVE — the wildcard DEEP RUN posts at
+/// tier 5 and its clean band is the same fat-tail shape, so it earns the same stamp. Falls back to
+/// the known jackpot briefIds until the BriefPosted scan fills the tiers in.
 const isJackpotBrief = (briefId: bigint | undefined): boolean => {
   if (briefId === undefined) return false;
   const zt = briefInfo.get("4")?.tier ?? -1;
   const t = briefInfo.get(briefId.toString())?.tier ?? -2;
-  return zt >= 0 ? t === zt : briefId === 4n;
+  return zt >= 0 ? t >= zt : briefId === 4n || briefId === 7n;
 };
 
 // ---------------------------------------------------------------------------------------------

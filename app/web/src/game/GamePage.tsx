@@ -15,7 +15,7 @@ import { niceError } from "../live";
 import { pub, gameSend, GAME_ADDR, loadGarrisonSecret } from "./gameChain";
 import { missionBoardAbi } from "./gameAbi";
 import { GameCtx, useGame, useGameStateValue, useCountdown } from "./useGame";
-import { BRIEFS, SEASON, HOUSE_TIERS, type BriefKey } from "./briefs";
+import { BRIEFS, BRIEF_ORDER, SEASON, HOUSE_TIERS, type BriefKey } from "./briefs";
 import { DonImg, Stamp, fmtAmt } from "./bits";
 import { JobBoardFile, DossierFile } from "./jobs";
 import { HouseFile } from "./house";
@@ -25,6 +25,11 @@ import { DonFile } from "./donfile";
 import "./game.css";
 
 const TABS = [["desk", "DESK"], ["jobs", "JOBS"], ["raid", "RAID"], ["crew", "CREW"], ["house", "HOUSE"]] as const;
+
+/// The Tape's postings count, derived so it can never drift from the board again (it read "four"
+/// through two brief additions). Falls back to the digit past the spelled-out range.
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const WIRE_COUNT_WORD = NUMBER_WORDS[BRIEF_ORDER.length] ?? String(BRIEF_ORDER.length);
 
 export function GamePage() {
   const state = useGameStateValue();
@@ -218,7 +223,7 @@ function Desk() {
                 <span>your Don is in the field — <b>the House stands open</b>. both facts print on the Tape.</span></div>
             )}
             <div className="g-tape-row"><span className="t">—</span>
-              <span>word is out: <b>{SEASON.name.toUpperCase()}</b> {g.configured ? "is live" : "posts soon"}. four wires on the board, and the doors are already getting kicked.</span></div>
+              <span>word is out: <b>{SEASON.name.toUpperCase()}</b> {g.configured ? "is live" : "posts soon"}. {WIRE_COUNT_WORD} wires on the board, and the doors are already getting kicked.</span></div>
             <div className="g-tape-row"><span className="t">—</span>
               <span>the dispatcher never lies. open <b>JOBS</b> and read THE WORD for yourself.</span></div>
             <div className="g-tape-row"><span className="t">—</span>

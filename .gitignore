@@ -37,3 +37,6 @@ app/web/public/builder/
 app/web/.reservations.json
 .vercel
 app/web/public/allowlist/
+
+# keeper runtime state (low-water marks)
+rh-chain/.keeper-state/

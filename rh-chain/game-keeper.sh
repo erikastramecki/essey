@@ -22,9 +22,15 @@ RPC="${RH_TESTNET_RPC:-https://rpc.testnet.chain.robinhood.com}"
 ENTROPY="0xc9e6B140C10e6DcDAE7a2d2a9FdD1BB82Ca1F047"   # game MockEntropy (46630)
 BOARD="0xA4839CA4b595c768636E05bF37E32b167e482d99"     # MissionBoard
 RAID="0xf497AAb709952FF061AEC34390Dad281649D1a2a"      # RaidEngine
-WINDOW=15   # recent seqs / missions / raids re-scanned each pass (full-loop verify: 40-serial was ~60s/pass)
+WINDOW=60   # trailing re-scan for SHORT-LIVED objects (entropy seqs, raids: reveal ≤40min, garrison ≤1h)
 INTERVAL="${GAME_KEEPER_INTERVAL:-2}"
 GARRISON_TIMEOUT=3600
+# Missions get a persisted LOW-WATER MARK instead of a trailing window: a long brief (DEEP RUN is 16h)
+# falls out of any fixed window before its bell, which stranded missions 13/14/16/21/28/29. The mark is
+# the lowest unsettled id; it advances past the settled prefix, so the scan stays small and nothing ages out.
+STATE_DIR=".keeper-state"; mkdir -p "$STATE_DIR"
+MISSION_LO_FILE="$STATE_DIR/mission.lo"
+[ -f "$MISSION_LO_FILE" ] || echo 1 > "$MISSION_LO_FILE"
 
 echo "game-keeper: entropy $ENTROPY / board $BOARD / raid $RAID every ${INTERVAL}s"
 while true; do
@@ -49,7 +55,8 @@ while true; do
   (
   mcount=$(cast call "$BOARD" 'missionCount()(uint64)' --rpc-url "$RPC" 2>/dev/null)
   if [[ "$mcount" =~ ^[0-9]+$ ]] && [ "$mcount" -ge 1 ]; then
-    mstart=1; [ "$mcount" -gt "$WINDOW" ] && mstart=$((mcount - WINDOW + 1))
+    mstart=$(cat "$MISSION_LO_FILE" 2>/dev/null); [[ "$mstart" =~ ^[0-9]+$ ]] || mstart=1
+    newlo=0   # first id still unsettled this pass; becomes the next low-water mark
     fee=$(cast call "$BOARD" 'entropyFee()(uint256)' --rpc-url "$RPC" 2>/dev/null | awk '{print $1}')
     for ((mid = mstart; mid <= mcount; mid++)); do
       # Mission fields: donId briefId departAt due garrisonHash provision reserved entropyRequested settled
@@ -58,6 +65,7 @@ while true; do
       requested=$(echo "$m" | sed -n '8p')
       settled=$(echo "$m" | sed -n '9p')
       [ "$settled" = "true" ] && continue
+      [ "$newlo" -eq 0 ] && newlo=$mid               # lowest still-unsettled id seen this pass
       [ "$requested" = "true" ] && continue          # word in flight; duty 1 finishes it
       [[ "$due" =~ ^[0-9]+$ ]] || continue
       [ "$now" -lt "$due" ] && continue
@@ -65,6 +73,9 @@ while true; do
         echo "$(date -u +%H:%M:%S) bell rung mission $mid"
       fi
     done
+    # everything below newlo is settled for good; nothing settled at all => start past the current tail
+    [ "$newlo" -eq 0 ] && newlo=$((mcount + 1))
+    echo "$newlo" > "$MISSION_LO_FILE"
   fi
 
   ) &

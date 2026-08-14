@@ -1,5 +1,6 @@
-// The job-board data — reconciled to the AS-BUILT MissionBoard: 4 briefs seeded at deploy
-// (ids 1-4, immutable once posted), each with a FIXED duration and one cumPpm odds ladder.
+// The job-board data — reconciled to the AS-BUILT MissionBoard: 4 core briefs seeded at deploy
+// (ids 1-4), 2 testnet proving-ground wires (ids 5-6) and the DEEP RUN expedition (id 7), each
+// immutable once posted, each with a FIXED duration and one cumPpm odds ladder.
 // Contract semantics (MissionBoard.entropyCallback): roll ∈ [0, 1e6);
 //   roll < cumSuccessPpm                 => SUCCESS  (successPay + provision × betaBps / 1e4)
 //   cumSuccessPpm <= roll < cumPartialPpm => PARTIAL ("the job went sideways" — partialPay)
@@ -7,14 +8,14 @@
 // Payouts are SCRIP minted to the House hopper; dispatch fee + provision burn from the vault.
 import type { SceneKey } from "./stills";
 
-export type BriefKey = "paper" | "glass" | "pow" | "zero" | "sprint" | "windowjob";
+export type BriefKey = "paper" | "glass" | "pow" | "zero" | "deeprun" | "sprint" | "windowjob";
 
 /// Scrip amount with 2-dp precision → 18-dec bigint.
 const S = (x: number): bigint => BigInt(Math.round(x * 100)) * 10n ** 16n;
 
 export type GameBrief = {
   key: BriefKey;
-  chainId: bigint;        // the posted on-chain briefId (1..4)
+  chainId: bigint;        // the posted on-chain briefId (1..7)
   no: string; code: string; tab: string; arch: string;
   durationH: number;      // FIXED per brief on-chain (Brief.duration)
   rating: "low" | "std" | "steep" | "unins"; ratingLabel: string;
@@ -26,7 +27,7 @@ export type GameBrief = {
   betaBps: bigint;        // success-payout boost per provisioned Scrip, in bps
 };
 
-export const BRIEF_ORDER: BriefKey[] = ["paper", "glass", "pow", "zero", "sprint", "windowjob"];
+export const BRIEF_ORDER: BriefKey[] = ["paper", "glass", "pow", "zero", "deeprun", "sprint", "windowjob"];
 
 /// On-chain briefId for a lore archetype — the posted ids, verbatim.
 export const briefIdFor = (key: BriefKey): bigint => BRIEFS[key].chainId;
@@ -75,6 +76,22 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
     word: "The fridge cycle gives you one warm hour in twenty-four; the prototype travels in a dewar the size of a coffin and complains about vibration. A full day exposed, long odds, and a number on the other side with more zeros than sense. That's not a warning. That's the pitch.",
     odds: [12, 23, 65],
     successPay: S(2775), partialPay: S(222), dispatchFee: S(5.76), provisionCap: S(200), betaBps: 75000n,
+  },
+  // ── THE EXPEDITION (brief 7, posted 2026-08-13). The ONE sanctioned exception to the flat-90
+  // provision rule every other brief obeys: betaBps 9000 against a 12% success band is a marginal
+  // provision RTP of 10.8%, i.e. a real-loss stake. Opt-in wildcard tier (tier 5 on-chain), and the
+  // player copy has to say so plainly — this is the only posting where provisioning is -EV.
+  // Worst-case reservation at full provision: 800 + 500 × 0.9 = 1,250 Scrip.
+  deeprun: {
+    key: "deeprun", chainId: 7n, no: "4477", code: "DEEP RUN", tab: "the expedition · past the grid", arch: "The Expedition · Past The Grid",
+    durationH: 16, rating: "unins", ratingLabel: "WILDCARD", featured: true,
+    riskBlocks: 8, exhibit: "EXHIBIT 7-D · the last lit block, 04:10", scene: "armored-run",
+    job: "Take the long haul past the last lit block, out where the grid stops and the map gives up.",
+    takeLine: "800 Scrip if you come back loaded, 60 for scraps. Seven runs in ten come back with neither.",
+    risk: "The only posting on the board where your stake is a real loss. Provision the full 500 and a clean return adds 450 on top, but clean lands 12% of the time: about 54 Scrip back on 500 staked. Every other brief hands back 90 on the hundred. This one does not, and that is the trade you are opting into.",
+    word: "Sixteen hours out, sixteen hours your House stands open, and no wire to tell you how it's going. Nobody watches the Deep Run because there is nothing out there to watch from. Most crews come back with a story and an empty truck. About one in eight comes back with the thing that pays for the year. Provision it or don't. The dispatcher has seen both endings and won't pretend to know which one is yours.",
+    odds: [12, 18, 70],
+    successPay: S(800), partialPay: S(60), dispatchFee: S(1.6), provisionCap: S(500), betaBps: 9000n,
   },
   // ── PROVING-GROUND WIRES (testnet only, founder-requested faucet 2026-08-13): the admin-posted
   // fast briefs 5/6, surfaced so testers can bankroll Hitters + raids without waiting out a 3h job.
