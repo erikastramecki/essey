@@ -19,6 +19,23 @@
 //
 //   3. ADVISE, NEVER ACT. Read-only. No calldata, no signing, no key — the same law the lending half
 //      holds. The player takes every action themselves.
+//
+// ── STANDING RULE (founder): THIS FILE SHIPS WITH EVERY GAME CHANGE ──────────────────────────────
+// An advisor that describes a game we no longer run is worse than no advisor, because it is
+// confidently wrong. So this file is part of the definition of done for any game change, not a
+// follow-up. Whenever any of the following moves, the matching thing here moves in the same change:
+//
+//   contracts redeployed          -> GAME addresses below
+//   any read signature changed    -> the ABI fragments below
+//   a mechanic added or retired   -> donPlaybook() AND the instructions block in essey-mcp.mjs
+//   payout / odds / fee semantics -> the EV arithmetic in donBoard()
+//   a new hidden-information rule -> the "whatNobodyCanDo" list (the fog firewall is a promise)
+//   currency or denomination      -> the scrip() helper and every label that says "Scrip"
+//
+// KNOWN PENDING (v2): GameController, Scrip, HouseDeed, MissionBoard, RaidEngine, HouseEscrow and
+// HitterNFT are all being redeployed as one new generation, and the economy moves from Scrip to real
+// assets with a PvP-first loop. Every address, every ABI fragment, the playbook and the instructions
+// block all change with that deploy. Verify against chain before shipping, never against a doc.
 
 import { createPublicClient, http, defineChain, formatUnits } from "viem";
 
