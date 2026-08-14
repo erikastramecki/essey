@@ -22,6 +22,7 @@
 // user's wallet to sign — this server never takes a private key.
 
 import { createPublicClient, http, defineChain, encodeFunctionData, formatUnits, parseUnits } from "viem";
+import { GAME_TOOLS, GAME_HANDLERS } from "./essey-game.mjs";
 
 // ---------------------------------------------------------------- chains
 
@@ -259,7 +260,39 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { positionId: { type: "number" } }, required: ["positionId"] } },
 ];
 
-const HANDLERS = { essey_quote: quote, essey_borrow: borrowTx, essey_health: health, essey_repay: repayTx };
+const HANDLERS = { essey_quote: quote, essey_borrow: borrowTx, essey_health: health, essey_repay: repayTx, ...GAME_HANDLERS };
+
+// What a connecting client is told before it calls anything. Without this the server looks like four
+// lending endpoints and nothing else, and an agent has no reason to know the game exists at all.
+const INSTRUCTIONS = `Essey is two products on Robinhood Chain, and this server serves both.
+
+LENDING. A user buys a stock through Robinhood's own MCP, the Stock Token settles into their
+self-custody wallet, and essey_quote / essey_borrow let them borrow against it without either
+service ever custodying the collateral. essey_quote always returns the real risks; repeat them.
+
+D.O.N. — the game. Players own Don NFTs and play a competitive extraction game against each other.
+Scrip sits in one of three places and choosing between them IS the game: banked in the Don's vault
+(untouchable, earns nothing), deployed as working capital (earns, partly reachable), or sitting in
+the hopper (unbanked winnings, the most exposed money they have). Sending a Don on a job makes it
+AWAY for that job's duration, and away is the only state in which another player's raid can land.
+Banking is free and total protection, which is why banking is the real skill.
+
+If someone tells you their Don, call don_state. If they are choosing a job, call don_board, which
+returns live contract odds and expected value at each provision level. Call don_playbook before
+giving strategy advice.
+
+HOW TO ADVISE WELL HERE:
+- Use the live numbers. Never quote odds or payouts from memory; the board changes.
+- Provision is burned at dispatch and only returns through the success branch. Say what a provision
+  is really worth before recommending one.
+- Weigh return against exposure time, not headline payout. A long job is a long open window.
+- Be honest about what nobody can know: a defender's garrison is a hash until revealed, pending raids
+  do not name their target, and the randomness does not exist until settlement. You can compute the
+  odds; you cannot tell a bait House from a fat one, and you should say so.
+- These tools are read-only by design. Never claim to have acted; the player takes every action.
+
+Everything here is public chain data, free to everyone. This server never holds a private key, and
+every fund-moving lending tool returns unsigned calldata for the user's own wallet to sign.`;
 
 function send(msg) { process.stdout.write(JSON.stringify(msg) + "\n"); }
 
@@ -278,14 +311,15 @@ process.stdin.on("data", async (chunk) => {
         send({ jsonrpc: "2.0", id: req.id, result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "essey", version: "0.1.0" },
+          serverInfo: { name: "essey", version: "0.2.0" },
+          instructions: INSTRUCTIONS,
         } });
       } else if (req.method === "tools/list") {
-        send({ jsonrpc: "2.0", id: req.id, result: { tools: TOOLS } });
+        send({ jsonrpc: "2.0", id: req.id, result: { tools: [...TOOLS, ...GAME_TOOLS] } });
       } else if (req.method === "tools/call") {
         const fn = HANDLERS[req.params.name];
         if (!fn) throw new Error(`unknown tool ${req.params.name}`);
-        if (!POOL || !MARKETS) throw new Error("ESSEY_POOL and ESSEY_MARKETS must be set");
+        if (!GAME_HANDLERS[req.params.name] && (!POOL || !MARKETS)) throw new Error("ESSEY_POOL and ESSEY_MARKETS must be set");
         const out = await fn(req.params.arguments || {});
         send({ jsonrpc: "2.0", id: req.id, result: { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] } });
       } else if (req.id !== undefined) {
