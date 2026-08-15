@@ -24,11 +24,11 @@ import { createPublicClient, http, defineChain, formatUnits } from "viem";
 // Dons people actually own.
 const GAME = {
   don:         "0x582E4B8E3A783B1FE09409AEDa3C6533782dB53c",
-  missionBoard:"0xA4839CA4b595c768636E05bF37E32b167e482d99",
-  houseDeed:   "0xe180dbda25966Cd6AE372C967200F0EB6D003368",
-  houseEscrow: "0x869cbc012C37F7655FA5eA8F655E862Aa631C93C",
-  hitter:      "0x219fafE26FB865b8dA4F55EF38ee99a91Ef969Cf",
-  scrip:       "0xAE8AEB1E0eA9A6E6A55b469107DD5c7cbf28F1F6",
+  missionBoard:"0x15D607638BeEcF9d62E6eC00a37601A89E72CDF1",
+  houseDeed:   "0x689dF249cEFF6e28d3EB7dDE125CEa7f7f29700d",
+  houseEscrow: "0x24cB6Db8F4d52d78742bc0304B08710B053cdB7e",
+  hitter:      "0x5C714163454D525906Ab6273d1cec701A5399103",
+  scrip:       "0x31D04bd5b1c1eAE56698F1A90C3fEe3e590f6E93",
   affinity:    "0x2d9CC510D464977F0Eb597237F467b453CB3e484",
 };
 
@@ -69,22 +69,32 @@ const read = (address, abi, functionName, args = []) => client.readContract({ ad
 
 // ---------------------------------------------------------------- don_sheet
 
+// Every reading is what the stat WILL govern. The deployed Phase-0 MissionBoard and RaidEngine do
+// not read this registry — verified on chain, they have no registry pointer at all — so nothing here
+// moves an outcome yet. Present-tense phrasing would be a lie to a player deciding what to buy.
 const STAT_READING = {
-  rpBps: "attack — raises power when THIS Don is the raider",
-  hdBps: "defense — raises power when this Don is the one being hit",
-  hdFlat: "flat defense, applied before the percentage",
-  nrvBps: "nerve — shifts mission success directly, in points of probability",
-  lckBps: "luck — nudges discrete lotteries, not mission odds",
-  cmdGarrisonBps: "command — makes each garrison hitter count for more",
-  cmdFactionBps: "command — mission success on faction jobs only",
-  cmdCooldownBps: "command — cuts the crew hunt cooldown",
-  feeDiscBps: "yield — cuts fees the Don pays, capped at 25%",
-  resHospBps: "resilience — cuts this Don's OWN hospital lockout",
-  resPetrifyBps: "resilience — lengthens a FAILED attacker's lockout",
-  resAmbushBps: "resilience — cuts the chance of being ambushed in the field",
-  guiTier: "guile — how deep a read the Scout returns, 0 to 2",
+  rpBps: "attack — will raise power when THIS Don is the raider",
+  hdBps: "defense — will raise power when this Don is the one being hit",
+  hdFlat: "flat defense, will apply before the percentage",
+  nrvBps: "nerve — will shift mission success directly, in points of probability",
+  lckBps: "luck — will nudge discrete lotteries, not mission odds",
+  cmdGarrisonBps: "command — will make each garrison hitter count for more",
+  cmdFactionBps: "command — will raise mission success on faction jobs only",
+  cmdCooldownBps: "command — will cut the crew hunt cooldown",
+  feeDiscBps: "yield — will cut fees the Don pays, capped at 25%",
+  resHospBps: "resilience — will cut this Don's OWN hospital lockout",
+  resPetrifyBps: "resilience — will lengthen a FAILED attacker's lockout",
+  resAmbushBps: "resilience — will cut the chance of being ambushed in the field",
+  guiTier: "guile — how deep a read the Scout will return, 0 to 2",
   yldCapSteps: "yield — extra deploy/provision headroom",
 };
+
+const NOT_LIVE =
+  "NOT YET LIVE IN PLAY. This sheet is real and permanently committed — it decodes deterministically " +
+  "from the Don's on-chain traits and can never change under it. But the deployed Phase-0 contracts " +
+  "do not read it: MissionBoard and RaidEngine hold no registry pointer, so no job, raid or garrison " +
+  "outcome is affected by any number here today. Treat it as what this Don WILL be, never as an edge " +
+  "it currently has, and never tell a player a stat improved their odds on a job they just ran.";
 
 export async function donSheet({ donId }) {
   const r = await fetch(`${SITE}/api/don/${Number(donId)}`).catch(() => null);
@@ -107,6 +117,7 @@ export async function donSheet({ donId }) {
     sheet: d.stats,
     traits: d.attributes ?? [],
     strengths: nonZero.map(([k, v]) => ({ stat: k, value: v, means: STAT_READING[k] })),
+    notYetLive: NOT_LIVE,
     law: "Edge Budget: every sheet is saturated onto the SAME total budget. A rarer Don shifts WHERE its edge sits, never how much edge it has. There is no strictly stronger Don, so never tell a player one build beats another outright — tell them which jobs and which fights their edge actually fits.",
   };
 }
@@ -236,9 +247,10 @@ export async function donPlaybook() {
       "Whether to raid, and whom. A raid costs a fee that burns on a miss, so a bad target is a real loss.",
     ],
     theBuild: [
-      "A Don's traits are its stats, not decoration. Read them with don_sheet before advising anything.",
+      "NOT YET LIVE: the stat sheet is committed and readable, but the deployed Phase-0 MissionBoard and RaidEngine do not consult it. No number on a sheet changes a job, raid or garrison outcome today. Say this before any advice that leans on traits.",
+      "A Don's traits are its stats, not decoration — they are what the Don WILL bring when the sheet is wired in. Read them with don_sheet.",
       "EDGE BUDGET, the law that governs every sheet: all stats are saturated onto the same total budget, so a rarer Don shifts WHERE its edge sits and never how much edge it has. No build is strictly stronger than another.",
-      "So the honest question is never 'is this Don good' but 'what is this Don's edge FOR'. Attack and command point at raiding. Defense, flat defense and petrify point at being a hard target worth turtling. Nerve points at running more jobs. Guile buys deeper Scout reads. Yield cuts the fees a heavy player pays most.",
+      "So the honest question is never 'is this Don good' but 'what is this Don's edge WILL BE for'. Attack and command point at raiding. Defense, flat defense and petrify point at being a hard target worth turtling. Nerve points at running more jobs. Guile buys deeper Scout reads. Yield cuts the fees a heavy player pays most.",
       "Archetype is a label FOR that shape, resolved deterministically from the sheet. It is a summary, not an extra power.",
       "A Don with no recorded preimage has no sheet at all. Say so and stop; never estimate stats from the picture.",
     ],

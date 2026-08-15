@@ -20,8 +20,8 @@ set -a; . ./.env; set +a
 PK="${TESTNET_DEPLOYER_PK:?set TESTNET_DEPLOYER_PK in rh-chain/.env}"
 RPC="${RH_TESTNET_RPC:-https://rpc.testnet.chain.robinhood.com}"
 ENTROPY="0xc9e6B140C10e6DcDAE7a2d2a9FdD1BB82Ca1F047"   # game MockEntropy (46630)
-BOARD="0xA4839CA4b595c768636E05bF37E32b167e482d99"     # MissionBoard
-RAID="0xf497AAb709952FF061AEC34390Dad281649D1a2a"      # RaidEngine
+BOARD="0x15D607638BeEcF9d62E6eC00a37601A89E72CDF1"     # MissionBoard
+RAID="0xc4B372ff6b3c2Ba511FB8Affa54f88F3Bdc1b2f6"      # RaidEngine
 WINDOW=60   # trailing re-scan for SHORT-LIVED objects (entropy seqs, raids: reveal ≤40min, garrison ≤1h)
 INTERVAL="${GAME_KEEPER_INTERVAL:-2}"
 GARRISON_TIMEOUT=3600

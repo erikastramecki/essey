@@ -147,7 +147,24 @@ Owner = deployer `0x976EBff4…993D`. Drip retunable via `setDrips(essey, usdg, 
 Supersedes the 5k-drip faucets (0x2ac1…8C91, 0x11c6…ded2). Audit CLEAN (money paths + access + logic). Frontend
 ADDR.faucet + copy update handled with the faucet-UI fix.
 
-### D.O.N. game — Skirmish Phase 0 (2026-08-13, Scrip-only, plays the live Dons)
+### D.O.N. game — Skirmish Phase 0, TRAITS LIVE (2026-08-15, plays the live Dons)
+Redeployed so MissionBoard and RaidEngine read AffinityRegistry: NRV widens the mission success
+band, RP scales a raider's crew, HD/CMD scale a defender. The 2026-08-13 stack below is SUPERSEDED —
+its sealed controller could only be re-pointed through a 2-day timelock, so the modules were
+redeployed instead. Dons did not move; every contract binds the same collection 0x582E…dB53c.
+
+| Contract | Address |
+|---|---|
+| GameController | `0x9Bcdbe576347eD8666f125072210cc340492a203` |
+| Scrip | `0x31D04bd5b1c1eAE56698F1A90C3fEe3e590f6E93` |
+| HouseDeed | `0x689dF249cEFF6e28d3EB7dDE125CEa7f7f29700d` |
+| HouseEscrow | `0x24cB6Db8F4d52d78742bc0304B08710B053cdB7e` |
+| MissionBoard (reads NRV) | `0x15D607638BeEcF9d62E6eC00a37601A89E72CDF1` |
+| RaidEngine (reads RP/HD/CMD) | `0xc4B372ff6b3c2Ba511FB8Affa54f88F3Bdc1b2f6` |
+| HitterNFT | `0x5C714163454D525906Ab6273d1cec701A5399103` |
+| AffinityRegistry (shared, unchanged) | `0x2d9CC510D464977F0Eb597237F467b453CB3e484` |
+
+### SUPERSEDED — D.O.N. game Skirmish Phase 0 (2026-08-13, Scrip-only, trait-blind)
 | Contract | Address |
 |---|---|
 | GameController (role registry, sealed, 2-day re-point timelock) | `0xe2BEA5db063EA57F73D6bA8294592d7f60CBec9f` |
