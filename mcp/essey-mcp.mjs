@@ -16,7 +16,8 @@
 // today; Sui is wired to the existing Move deployment. Adding a chain means adding an adapter,
 // not forking this server.
 //
-//   ESSEY_CHAIN=rh-testnet ESSEY_POOL=0x... ESSEY_MARKETS=0x... node mcp/essey-mcp.mjs
+//   node mcp/essey-mcp.mjs                        # testnet, addresses defaulted, game tools ready
+//   ESSEY_CHAIN=rh-testnet ESSEY_POOL=0x... ESSEY_MARKETS=0x... node mcp/essey-mcp.mjs   # override
 //
 // Read-only tools work with no key. Anything that moves funds returns UNSIGNED CALLDATA for the
 // user's wallet to sign — this server never takes a private key.
@@ -57,8 +58,17 @@ const CHAIN_KEY = process.env.ESSEY_CHAIN || "rh-testnet";
 const CFG = CHAINS[CHAIN_KEY];
 if (!CFG) throw new Error(`unknown ESSEY_CHAIN "${CHAIN_KEY}" (have: ${Object.keys(CHAINS).join(", ")})`);
 
-const POOL = process.env.ESSEY_POOL;
-const MARKETS = process.env.ESSEY_MARKETS;
+// Committed testnet defaults so the server is useful with no configuration. A tester connecting to
+// play the game should not have to know an address; ops still overrides both per chain.
+const DEFAULTS = {
+  "rh-testnet": {
+    pool: "0x764525bE0e90cB02afFB93ccA63bB94333c43EEF",
+    markets: "0x6dAE0540bcC78756BB7b2e936ACBFA9cA5439732",
+  },
+};
+
+const POOL = process.env.ESSEY_POOL || DEFAULTS[CHAIN_KEY]?.pool;
+const MARKETS = process.env.ESSEY_MARKETS || DEFAULTS[CHAIN_KEY]?.markets;
 
 const chain = defineChain({
   id: CFG.id,
