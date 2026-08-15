@@ -781,6 +781,47 @@ to you. What you risk: less than the men, which is the entire point, and it stil
 
 ---
 
+## Bring a consigliere: play with Claude
+
+Every Don is entitled to counsel. If you run Claude, you can hand it the board and let it do the
+arithmetic while you make the calls.
+
+It reads three things from the chain: your Don's position, the live job board with real odds, and the
+rules. It computes expected value on any brief at any provision, tells you what a raider could reach
+right now, and compares jobs on return per hour of exposure rather than headline payout. Ask it "my
+Don is 103, what should I run tonight" and it will answer from the contract, not from this page.
+
+Setup takes about two minutes.
+
+```bash
+git clone -b feat/essey-market-layer https://github.com/erikastramecki/essey.git
+cd essey/mcp && npm install
+```
+
+The branch matters. The game tools live there, not on the default branch.
+
+Then add this to your Claude MCP config and restart:
+
+```json
+{ "mcpServers": { "essey": { "command": "node", "args": ["/absolute/path/to/essey/mcp/essey-mcp.mjs"] } } }
+```
+
+No key, no wallet connection, no configuration. The game tools are read only.
+
+**Three honest limits, because a consigliere who oversells is worse than none.**
+
+It cannot see a garrison before it opens. That is a sealed commitment, and it is sealed to the tool
+exactly as it is to you. It cannot see who else has a knock committed on your mark. And it cannot
+predict a roll, because the roll does not exist until the moment it lands.
+
+So it will tell you the odds and it will not tell you whether the fat House across the street is a
+trap. That part is still yours, and it always will be.
+
+It is free, it is public, and every number it reads is a number any other player can read too. The
+edge is in reading them faster, not in reading them alone.
+
+---
+
 ## The house rules: what we owe you
 
 This game sits next to real money, so it holds itself to the standard the city is named for.
