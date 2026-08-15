@@ -82,10 +82,10 @@ const MORE_ITEMS: NavLeaf[] = [
 ];
 const NAV: NavItem[] = [
   { to: "/game", label: "The Game" },
-  { to: "/docs/game-guide", label: "Game Guide" },
-  { to: "/how-to-play", label: "How to Play" },
   { to: "/builder", label: "Mint" },
   { to: "/market", label: "Trade" },
+  { to: "/how-to-play", label: "How to Play" },
+  { to: "/docs/game-guide", label: "Game Guide" },
   { label: "Learn", items: LEARN_ITEMS },
   { label: "More", items: MORE_ITEMS },
 ];
