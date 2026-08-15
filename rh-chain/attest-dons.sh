@@ -18,7 +18,10 @@ TO="${2:-200}"
 
 ok=0; skipped=0; nopre=0; failed=0
 for ((id = FROM; id <= TO; id++)); do
-  pre=$(curl -sf "$SITE/api/don/$id" | python3 -c 'import json,sys
+  # The endpoint does a chain read, a KV read and an RPC previewSheet, so it is slow enough that a
+  # bare `curl -sf` under a tight loop reports a timeout as an ABSENT preimage and silently skips a
+  # Don that has one. Retry and allow real time before believing a Don has no record.
+  pre=$(curl -sf --retry 4 --retry-delay 2 --retry-all-errors -m 25 "$SITE/api/don/$id" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("preimage") or "")
 except Exception: print("")' 2>/dev/null || true)
 
@@ -32,6 +35,14 @@ except Exception: print("")' 2>/dev/null || true)
     ok=$((ok + 1)); echo "#$id attested"
   elif grep -q "AlreadyAttested" <<<"$out"; then
     skipped=$((skipped + 1))
+  elif grep -q "nonce too low" <<<"$out"; then
+    sleep 2
+    if cast send "$AFFINITY" "attest(uint256,bytes)" "$id" "0x$hex" \
+        --rpc-url "$RPC" --private-key "$TESTNET_DEPLOYER_PK" --gas-limit 400000 >/dev/null 2>&1; then
+      ok=$((ok + 1)); echo "#$id attested (after nonce retry)"
+    else
+      failed=$((failed + 1)); echo "#$id FAILED: nonce"
+    fi
   else
     failed=$((failed + 1)); echo "#$id FAILED: $(head -c 120 <<<"$out")"
   fi
