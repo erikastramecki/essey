@@ -111,7 +111,7 @@ If the Keeper ever stalls, anyone can settle a stuck job two hours past its wind
 sideways floor, never at zero. The valve is never better than a real roll, so it cannot be gamed, only
 un-stuck.
 
-### The Skirmish board: the four briefs
+### The Skirmish board: the posted briefs
 
 | Codename | The job | Window | Clean | Sideways | Bust | Clean pays | Sideways pays | Door fee |
 |---|---|---|---:|---:|---:|---:|---:|---:|
@@ -119,6 +119,16 @@ un-stuck.
 | **GLASS HARVEST · RUSH** | walk finished wafers out of the fab through Dock 4, one shift (NVDA) | 5h | 70% | 18% | 12% | 75 Scrip | 30 Scrip | 0.87 Scrip |
 | **PROOF OF WORK** | cut the Rig's output over to your wallet for one power cycle (CLSK) | 12h | 60% | 22% | 18% | 236 Scrip | 94.4 Scrip | 2.44 Scrip |
 | **ABSOLUTE ZERO** | lift the prototype from the lab that isn't in the Registry (IONQ/RGTI) | 24h | 12% | 23% | 65% | **2,775 Scrip** | 222 Scrip | 5.76 Scrip |
+| **DEEP RUN** | the long haul out past the county line, and whatever is waiting at the end of it | 16h | 12% | 18% | 70% | 800 Scrip | 60 Scrip | 1.60 Scrip |
+
+Two more folders sit on the board for anyone still finding their feet: **MILK RUN**, a 75 second job
+that hands you working capital, and **OPEN WINDOW**, a 20 minute posting for practising the knock.
+Neither is a career. Both exist so nobody has to learn this game broke.
+
+**DEEP RUN is the wildcard, and it breaks a rule the other folders keep.** Every brief above hands back
+about 90 on the hundred you provision. This one hands back roughly eleven. You are not buying a better
+success rate, you are buying a bigger number on a thinner chance, and the folder does not pretend
+otherwise. Nobody has to run it. That is the whole point of it being there.
 
 Read the table honestly and it tells you three things. Longer jobs pay more per hour: that is the exposure
 premium, the city paying you for time spent robbable. Longer jobs fail more: risk and reward rise together
