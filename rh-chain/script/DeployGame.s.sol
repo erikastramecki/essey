@@ -170,5 +170,21 @@ contract DeployGame is Script {
         // T4 "Long Con" — ABSOLUTE ZERO (Quantum Grab, IONQ, 24h lottery): 12/23/65,
         // jackpot 2,775 / consolation 222 Scrip (the lottery shape, jackpot = 7.2x EV).
         board_.postBrief("ABSOLUTE ZERO", 4, 24 hours, 120_000, 350_000, 2_775e18, 222e18, 5.76e18, 200e18, 75_000);
+        _seedBoardTail(board_);
+    }
+
+    /// Briefs 5-7. These were posted by hand on the old board and were NOT in this script, so the
+    /// 2026-08-15 redeploy stood up a board of four against a UI that addresses seven by id — all
+    /// three reverted BriefNotLive until they were re-posted. postBrief assigns ids by ++briefCount,
+    /// so the ORDER below is load-bearing: it is what makes these land on the chainIds briefs.ts
+    /// hardcodes. Adding a brief above this call renumbers every row under it.
+    function _seedBoardTail(MissionBoard board_) internal {
+        // 5-6: proving-ground training wires. Testnet courtesies — strip these before a real-value
+        // season, and renumber DEEP RUN in briefs.ts if you do.
+        board_.postBrief("MILK RUN", 1, 75 seconds, 985_000, 999_500, 6_000e18, 2_400e18, 1e18, 0, 0);
+        board_.postBrief("OPEN WINDOW", 1, 20 minutes, 985_000, 999_500, 100e18, 40e18, 1e18, 0, 0);
+        // 7 "Wildcard" — DEEP RUN (The Expedition, 16h): 12/18/70, pays 800 / 60 Scrip. The one
+        // sanctioned real-loss provision (betaBps 9_000 against a 12% band ~ 10.8% marginal RTP).
+        board_.postBrief("DEEP RUN", 5, 16 hours, 120_000, 300_000, 800e18, 60e18, 1.6e18, 500e18, 9_000);
     }
 }
