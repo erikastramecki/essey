@@ -4030,3 +4030,76 @@ main#top {
   min-width: 180px;
   margin-right: 8px;
 }
+
+.soon {
+  max-width: 980px;
+  margin: 0 auto;
+}
+.soon-stamp {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.soon-lede {
+  margin: 14px 0 26px;
+  max-width: 68ch;
+  color: var(--dim);
+}
+.soon-h {
+  margin: 34px 0 14px;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.soon-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.soon-card {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 16px 18px;
+}
+.soon-card h3 {
+  margin: 8px 0 8px;
+  font-size: 17px;
+  text-wrap: balance;
+}
+.soon-card p {
+  margin: 0;
+  max-width: 60ch;
+}
+.soon-tag {
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.soon-note {
+  margin-top: 10px !important;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--dim);
+}
+.soon-foot {
+  margin-top: 36px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.soon-foot p {
+  max-width: 68ch;
+}
+.soon-cta {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px !important;
+  flex-wrap: wrap;
+}

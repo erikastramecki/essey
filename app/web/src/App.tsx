@@ -33,6 +33,7 @@ import { ExplorerPage } from "./explorer";
 import { BuilderPage } from "./builder";
 import { HowToPlayPage } from "./howtoplay";
 import { FaucetPage } from "./faucet";
+import { ComingPage } from "./coming";
 import { NotFoundPage } from "./notfound";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { GamePage } from "./game/GamePage";
@@ -86,6 +87,7 @@ const NAV: NavItem[] = [
   { to: "/market", label: "Trade" },
   { to: "/how-to-play", label: "How to Play" },
   { to: "/docs/game-guide", label: "Game Guide" },
+  { to: "/coming", label: "Coming Soon" },
   { label: "Learn", items: LEARN_ITEMS },
   { label: "More", items: MORE_ITEMS },
 ];
@@ -108,6 +110,11 @@ const MOBILE_NAV: [string, NavLeaf[]][] = [
         to: "/how-to-play",
         label: "How to Play",
         desc: "the walkthrough, file by file",
+      },
+      {
+        to: "/coming",
+        label: "Coming Soon",
+        desc: "the real-asset era, and what is still designed",
       },
       { to: "/builder", label: "Mint", desc: "build your Don" },
       { to: "/market", label: "Trade", desc: "buy · snipe · sell" },
@@ -183,6 +190,14 @@ export default function App() {
               element={
                 <AppPage title="PFP Builder">
                   <BuilderPage />
+                </AppPage>
+              }
+            />
+            <Route
+              path="/coming"
+              element={
+                <AppPage title="Coming to Solvency">
+                  <ComingPage />
                 </AppPage>
               }
             />
