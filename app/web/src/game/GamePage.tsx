@@ -22,7 +22,13 @@ import {
   HOUSE_TIERS,
   type BriefKey,
 } from "./briefs";
-import { DonTraits, traitText, useTraitIndex } from "../don-traits";
+import {
+  DonStats,
+  DonTraits,
+  SORTS,
+  traitText,
+  useTraitIndex,
+} from "../don-traits";
 import { DonImg, Stamp, fmtAmt } from "./bits";
 import { JobBoardFile, DossierFile } from "./jobs";
 import { HouseFile } from "./house";
@@ -150,11 +156,15 @@ function Desk() {
   const navigate = useNavigate();
   const [deskOpen, setDeskOpen] = useState(false);
   const [deskQ, setDeskQ] = useState("");
+  const [deskHome, setDeskHome] = useState(false);
+  const [compare, setCompare] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState("");
   const don = g.selected;
   const traitIndex = useTraitIndex(
     deskOpen ? (g.dons ?? []).map((d) => d.id) : [],
   );
   const shown = (g.dons ?? []).filter((d) => {
+    if (deskHome && d.away) return false;
     const q = deskQ.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -163,6 +173,25 @@ function Desk() {
       traitText(traitIndex[String(d.id)]).includes(q)
     );
   });
+  const sorter = SORTS.find((x) => x.key === sortBy);
+  if (sorter) {
+    // Sheets arrive progressively, so the order settles as they land; un-sheeted Dons sink to the
+    // bottom rather than reading as zeroes ranked alongside a genuine zero.
+    shown.sort((a, b) => {
+      const sa = traitIndex[String(a.id)]?.stats;
+      const sb = traitIndex[String(b.id)]?.stats;
+      return (sb ? sorter.of(sb) : -1) - (sa ? sorter.of(sa) : -1);
+    });
+  }
+  const away = (g.dons ?? []).filter((d) => d.away).length;
+  const toggleCompare = (id: string) =>
+    setCompare((c) =>
+      c.includes(id)
+        ? c.filter((x) => x !== id)
+        : c.length >= 3
+          ? c
+          : [...c, id],
+    );
   const cd = useCountdown(don?.away ? don.dueMs : null);
   const [resolving, setResolving] = useState(false);
   const [resolveErr, setResolveErr] = useState<string | null>(null);
@@ -363,32 +392,107 @@ function Desk() {
                   placeholder="filter by trait, name or №"
                   onChange={(e) => setDeskQ(e.target.value)}
                 />
+                <button
+                  className={"g-desk-toggle" + (deskHome ? " on" : "")}
+                  onClick={() => setDeskHome((v) => !v)}
+                  disabled={!away}
+                  title={
+                    away ? `${away} out on jobs` : "every Don you hold is home"
+                  }
+                >
+                  {deskHome
+                    ? "showing home only"
+                    : away
+                      ? `hide the ${away} away`
+                      : "all home"}
+                </button>
+                <select
+                  className="g-desk-sort"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="">no order</option>
+                  {SORTS.map((x) => (
+                    <option key={x.key} value={x.key}>
+                      by {x.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="g-desk-grid">
                 {shown.map((d) => (
-                  <button
-                    key={d.id.toString()}
-                    className={"g-desk-card" + (don?.id === d.id ? " on" : "")}
-                    onClick={() => {
-                      g.setSelectedId(d.id);
-                      setDeskOpen(false);
-                    }}
-                  >
-                    <span className="g-desk-ph">
-                      <DonImg id={d.id} alt="" />
+                  <div key={d.id.toString()} className="g-desk-slot">
+                    <span
+                      role="checkbox"
+                      tabIndex={0}
+                      aria-checked={compare.includes(d.id.toString())}
+                      className={
+                        "g-desk-pick" +
+                        (compare.includes(d.id.toString()) ? " on" : "")
+                      }
+                      title={
+                        compare.length >= 3 &&
+                        !compare.includes(d.id.toString())
+                          ? "three at a time — drop one first"
+                          : "hold side by side (up to 3)"
+                      }
+                      onClick={() => toggleCompare(d.id.toString())}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && toggleCompare(d.id.toString())
+                      }
+                    >
+                      vs
                     </span>
-                    <span className="g-desk-h">
-                      №{d.id.toString()}{" "}
-                      <i className={d.away ? "away" : ""}>
-                        {d.away ? "AWAY" : "HOME"}
-                      </i>
-                    </span>
-                    <DonTraits id={d.id} only={4} />
-                  </button>
+                    <button
+                      className={
+                        "g-desk-card" + (don?.id === d.id ? " on" : "")
+                      }
+                      onClick={() => {
+                        g.setSelectedId(d.id);
+                        setDeskOpen(false);
+                      }}
+                    >
+                      <span className="g-desk-ph">
+                        <DonImg id={d.id} alt="" />
+                      </span>
+                      <span className="g-desk-h">
+                        №{d.id.toString()}{" "}
+                        <i className={d.away ? "away" : ""}>
+                          {d.away ? "AWAY" : "HOME"}
+                        </i>
+                      </span>
+                      <DonTraits id={d.id} only={4} />
+                    </button>
+                  </div>
                 ))}
               </div>
               {!shown.length && (
                 <div className="live-note">No Don matches that filter.</div>
+              )}
+              {compare.length > 1 && (
+                <div className="g-vs">
+                  <div className="g-cap">
+                    <span>Side by side</span>
+                    <button
+                      className="g-desk-toggle"
+                      onClick={() => setCompare([])}
+                    >
+                      clear
+                    </button>
+                  </div>
+                  <div className="g-vs-row">
+                    {compare.map((id) => (
+                      <div key={id} className="g-vs-col">
+                        <div className="g-vs-h">
+                          <DonImg id={BigInt(id)} alt="" />
+                          <span>№{id}</span>
+                        </div>
+                        <DonStats id={BigInt(id)} />
+                        <DonTraits id={BigInt(id)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}

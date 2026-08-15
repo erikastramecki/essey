@@ -2,13 +2,48 @@ import { useEffect, useState } from "react";
 
 export type Attr = { trait_type: string; value: string };
 
+/// The stat sheet AffinityRegistry.previewSheet decodes from the Don's trait preimage. Null when the
+/// preimage was never recorded or the registry is unreachable — traits still render either way.
+export type Stats = {
+  rpBps: number;
+  hdBps: number;
+  hdFlat: number;
+  nrvBps: number;
+  lckBps: number;
+  cmdGarrisonBps: number;
+  cmdFactionBps: number;
+  cmdCooldownBps: number;
+  feeDiscBps: number;
+  resHospBps: number;
+  resPetrifyBps: number;
+  resAmbushBps: number;
+  guiTier: number;
+  yldCapSteps: number;
+  archetype: string;
+  flags: number;
+};
+
+export type Don = { attrs: Attr[]; stats: Stats | null };
+
+/// What the desk sorts by. bps are probability points, so /100 reads as a percentage.
+export const SORTS: { key: string; label: string; of: (s: Stats) => number }[] =
+  [
+    { key: "rp", label: "attack", of: (s) => s.rpBps },
+    { key: "hd", label: "defense", of: (s) => s.hdBps + s.hdFlat * 100 },
+    { key: "nrv", label: "nerve", of: (s) => s.nrvBps },
+    { key: "lck", label: "luck", of: (s) => s.lckBps },
+    { key: "gui", label: "scout", of: (s) => s.guiTier },
+    { key: "fee", label: "fee cut", of: (s) => s.feeDiscBps },
+  ];
+
 // Testers are expected to hold 5-10 Dons each and the pool holds ~83, so the same metadata gets asked
 // for repeatedly across the desk, the picker and the filter. Cached at module scope: a combo's traits
 // never change, and an in-flight promise is shared rather than refetched.
-const cache = new Map<string, Attr[]>();
-const inflight = new Map<string, Promise<Attr[]>>();
+const cache = new Map<string, Don>();
+const inflight = new Map<string, Promise<Don>>();
+const EMPTY: Don = { attrs: [], stats: null };
 
-export function fetchTraits(id: bigint | number): Promise<Attr[]> {
+export function fetchDon(id: bigint | number): Promise<Don> {
   const key = String(id);
   const hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
@@ -17,24 +52,45 @@ export function fetchTraits(id: bigint | number): Promise<Attr[]> {
   const p = fetch(`/api/don/${key}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      const attrs: Attr[] = d?.attributes ?? [];
-      cache.set(key, attrs);
-      return attrs;
+      const rec: Don = { attrs: d?.attributes ?? [], stats: d?.stats ?? null };
+      cache.set(key, rec);
+      return rec;
     })
-    .catch(() => [] as Attr[])
+    .catch(() => EMPTY)
     .finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
 }
 
-export function useTraits(id: bigint | number | null) {
-  const [attrs, setAttrs] = useState<Attr[] | null>(
-    id === null ? [] : (cache.get(String(id)) ?? null),
+export const fetchTraits = (id: bigint | number) =>
+  fetchDon(id).then((d) => d.attrs);
+
+export function useDon(id: bigint | number | null) {
+  const [rec, setRec] = useState<Don | null>(
+    id === null ? EMPTY : (cache.get(String(id)) ?? null),
   );
   useEffect(() => {
     if (id === null) return;
     const hit = cache.get(String(id));
-    if (hit) return setAttrs(hit);
+    if (hit) return setRec(hit);
+    let live = true;
+    setRec(null);
+    void fetchDon(id).then((d) => live && setRec(d));
+    return () => {
+      live = false;
+    };
+  }, [id]);
+  return rec;
+}
+
+export function useTraits(id: bigint | number | null) {
+  const [attrs, setAttrs] = useState<Attr[] | null>(
+    id === null ? [] : (cache.get(String(id))?.attrs ?? null),
+  );
+  useEffect(() => {
+    if (id === null) return;
+    const hit = cache.get(String(id));
+    if (hit) return setAttrs(hit.attrs);
     let live = true;
     setAttrs(null);
     void fetchTraits(id).then((a) => live && setAttrs(a));
@@ -48,7 +104,7 @@ export function useTraits(id: bigint | number | null) {
 /// Traits for many Dons, resolved progressively so a 400-Don desk paints as it loads rather than
 /// blocking on the slowest request. Capped concurrency keeps a big pool from opening 83 sockets.
 export function useTraitIndex(ids: (bigint | number)[], limit = 8) {
-  const [index, setIndex] = useState<Record<string, Attr[]>>({});
+  const [index, setIndex] = useState<Record<string, Don>>({});
   const key = ids.map(String).join(",");
   useEffect(() => {
     let live = true;
@@ -56,8 +112,8 @@ export function useTraitIndex(ids: (bigint | number)[], limit = 8) {
     const next = async (): Promise<void> => {
       const id = queue.shift();
       if (id === undefined || !live) return;
-      const attrs = await fetchTraits(id);
-      if (live) setIndex((m) => ({ ...m, [String(id)]: attrs }));
+      const rec = await fetchDon(id);
+      if (live) setIndex((m) => ({ ...m, [String(id)]: rec }));
       return next();
     };
     void Promise.all(
@@ -70,8 +126,8 @@ export function useTraitIndex(ids: (bigint | number)[], limit = 8) {
   return index;
 }
 
-export const traitText = (attrs?: Attr[]) =>
-  (attrs ?? [])
+export const traitText = (d?: Don) =>
+  (d?.attrs ?? [])
     .map((a) => `${a.trait_type} ${a.value}`)
     .join(" ")
     .toLowerCase();
@@ -105,6 +161,39 @@ export function DonTraits({
       {only && attrs.length > only ? (
         <span className="don-trait more">+{attrs.length - only}</span>
       ) : null}
+    </div>
+  );
+}
+
+/// The sheet as a player reads it. bps are probability points; the flat defense addend is a raw
+/// number rather than a rate, so it is labelled separately instead of being folded into the percent.
+export function DonStats({ id }: { id: bigint | number | null }) {
+  const stats = useDon(id)?.stats ?? null;
+  if (id === null) return null;
+  if (!stats)
+    return <div className="live-note">No stat sheet — traits unrevealed.</div>;
+  const cells: [string, string][] = [
+    ["attack", `+${stats.rpBps / 100}%`],
+    [
+      "defense",
+      `+${stats.hdBps / 100}%${stats.hdFlat ? ` +${stats.hdFlat}` : ""}`,
+    ],
+    ["nerve", `+${stats.nrvBps / 100}pp`],
+    ["luck", `+${stats.lckBps / 100}pp`],
+    ["scout", `tier ${stats.guiTier}`],
+    ["fee cut", `${stats.feeDiscBps / 100}%`],
+  ];
+  return (
+    <div className="don-sheet">
+      <div className="don-arch">{stats.archetype}</div>
+      <div className="don-stats">
+        {cells.map(([k, v]) => (
+          <div key={k} className="don-stat">
+            <em>{k}</em>
+            <b>{v}</b>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

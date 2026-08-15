@@ -2110,3 +2110,99 @@
 .don-trait.more {
   opacity: 0.6;
 }
+.g-desk-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.g-desk-toggle:hover:not(:disabled) {
+  opacity: 1;
+}
+.g-desk-toggle.on {
+  border-color: var(--gold);
+  color: var(--gold);
+  opacity: 1;
+}
+.g-desk-toggle:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* The card is a button, so the compare control sits beside it rather than inside — nesting a button
+   in a button is invalid and the outer click swallows the inner one. */
+.g-desk-slot {
+  position: relative;
+}
+.g-desk-pick {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  cursor: pointer;
+  opacity: 0.55;
+}
+.g-desk-pick:hover,
+.g-desk-pick:focus-visible {
+  opacity: 1;
+}
+.g-desk-pick.on {
+  border-color: var(--gold);
+  color: var(--gold);
+  opacity: 1;
+}
+
+.g-vs {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.g-vs-row {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.g-vs-col {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px;
+}
+.g-vs-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.g-vs-h img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+}
+.g-desk-sort {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 6px;
+  opacity: 0.75;
+}

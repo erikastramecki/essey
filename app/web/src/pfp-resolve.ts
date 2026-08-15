@@ -3,50 +3,124 @@
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 
-export type Leaf = { z: number; category: string; path: string; file: string; bbox: number[]; blend: string };
+export type Leaf = {
+  z: number;
+  category: string;
+  path: string;
+  file: string;
+  bbox: number[];
+  blend: string;
+};
 export type TreeNode = {
-  name: string; group: boolean; z?: number; rarity?: number | null; vis?: boolean;
-  blend?: string; file?: string; children?: TreeNode[];
+  name: string;
+  group: boolean;
+  z?: number;
+  rarity?: number | null;
+  vis?: boolean;
+  blend?: string;
+  file?: string;
+  children?: TreeNode[];
 };
 export type Rules = {
-  DIMS: Record<string, string[]>; DIM_PRIORITY: string[];
-  FAMILY_TO_FACEID: Record<string, string>; FACEMOD_COVER: Record<string, string>;
-  SUPPRESS: string[]; OPTIONAL: Record<string, number>;
-  POS_OFFSET: Record<string, number>; Z_UNDER: Record<string, string>;
+  DIMS: Record<string, string[]>;
+  DIM_PRIORITY: string[];
+  FAMILY_TO_FACEID: Record<string, string>;
+  FACEMOD_COVER: Record<string, string>;
+  SUPPRESS: string[];
+  OPTIONAL: Record<string, number>;
+  POS_OFFSET: Record<string, number>;
+  Z_UNDER: Record<string, string>;
   SUPPRESS_IN?: Record<string, string[]>;
-  HIDE_LEAF?: string[]; CROP_TOP?: Record<string, number>; CROP_BOTTOM?: Record<string, number>;
-  FEMALE_HAT_BLOCK?: string[]; FEMALE_HAT_HAIR_CROP?: Record<string, number>; FEMALE_HAT_HAIR_CROP_STYLES?: string[];
+  HIDE_LEAF?: string[];
+  CROP_TOP?: Record<string, number>;
+  CROP_BOTTOM?: Record<string, number>;
+  FEMALE_HAT_BLOCK?: string[];
+  FEMALE_HAT_HAIR_CROP?: Record<string, number>;
+  FEMALE_HAT_HAIR_CROP_STYLES?: string[];
   FEMALE_STYLE_BLOCK?: Record<string, string[]>;
 };
 export type BuilderData = {
-  gender: string; leaves: Leaf[]; tree: TreeNode[];
+  gender: string;
+  leaves: Leaf[];
+  tree: TreeNode[];
   cats: Record<string, { group: boolean; role: string | null }>;
-  rules: Rules; hand_conflicts: { cane_grip?: [string, string][]; snake_grip?: string[]; cane_snake?: [string, string][] };
+  rules: Rules;
+  hand_conflicts: {
+    cane_grip?: [string, string][];
+    snake_grip?: string[];
+    cane_snake?: [string, string][];
+  };
 };
-export type RenderLeaf = { file: string; bbox: number[]; blend: string; category: string; zEff: number; cropTop?: number; cropBottom?: number };
-export type Resolved = { render: RenderLeaf[]; picks: Record<string, string>; drivers: Record<string, string | null>; key: string };
+export type RenderLeaf = {
+  file: string;
+  bbox: number[];
+  blend: string;
+  category: string;
+  zEff: number;
+  cropTop?: number;
+  cropBottom?: number;
+};
+export type Resolved = {
+  render: RenderLeaf[];
+  picks: Record<string, string>;
+  drivers: Record<string, string | null>;
+  key: string;
+  preimage: string;
+};
 
 // ---- seeded RNG (choices/choice/random) ----
 function mulberry32(seed: number) {
-  return () => { let t = (seed += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 class RNG {
   r: () => number;
-  constructor(seed: number) { this.r = mulberry32(seed >>> 0); }
-  random() { return this.r(); }
-  choice<T>(a: T[]): T { return a[Math.floor(this.r() * a.length)]; }
-  choices<T>(a: T[], w: number[]): T { const s = w.reduce((x, y) => x + y, 0); let t = this.r() * s; for (let i = 0; i < a.length; i++) { t -= w[i]; if (t <= 0) return a[i]; } return a[a.length - 1]; }
+  constructor(seed: number) {
+    this.r = mulberry32(seed >>> 0);
+  }
+  random() {
+    return this.r();
+  }
+  choice<T>(a: T[]): T {
+    return a[Math.floor(this.r() * a.length)];
+  }
+  choices<T>(a: T[], w: number[]): T {
+    const s = w.reduce((x, y) => x + y, 0);
+    let t = this.r() * s;
+    for (let i = 0; i < a.length; i++) {
+      t -= w[i];
+      if (t <= 0) return a[i];
+    }
+    return a[a.length - 1];
+  }
 }
 
 const fw = (n: string) => (n ? n.split(/\s+/)[0] : "");
-const isPart = (c: TreeNode) => { const nl = (c.name || "").toLowerCase(); return nl.includes("shadow") || ["mouth", "eyes", "8 mouth", "9 eyes"].includes(nl); };
+const isPart = (c: TreeNode) => {
+  const nl = (c.name || "").toLowerCase();
+  return (
+    nl.includes("shadow") || ["mouth", "eyes", "8 mouth", "9 eyes"].includes(nl)
+  );
+};
 
-function coupleDim(children: TreeNode[], R: Rules): [string | null, Record<string, TreeNode[]> | null] {
+function coupleDim(
+  children: TreeNode[],
+  R: Rules,
+): [string | null, Record<string, TreeNode[]> | null] {
   for (const dim of R.DIM_PRIORITY) {
     const hit: Record<string, TreeNode[]> = {};
     for (const c of children) {
       const nl = (c.name || "").toLowerCase();
-      for (const v of R.DIMS[dim]) { if (nl.includes(v.toLowerCase())) { (hit[v] ||= []).push(c); break; } }
+      for (const v of R.DIMS[dim]) {
+        if (nl.includes(v.toLowerCase())) {
+          (hit[v] ||= []).push(c);
+          break;
+        }
+      }
     }
     if (Object.keys(hit).length >= 2) return [dim, hit];
   }
@@ -54,219 +128,424 @@ function coupleDim(children: TreeNode[], R: Rules): [string | null, Record<strin
 }
 
 class Sel {
-  rng: RNG; R: Rules; forced: Record<string, string>;
-  leaves: TreeNode[] = []; picks: Record<string, string> = {}; drivers: Record<string, string | null> = {};
-  constructor(rng: RNG, R: Rules, forced: Record<string, string> = {}) { this.rng = rng; this.R = R; this.forced = forced; }
-  emit(node: TreeNode, path: string) { if (node.group) this.select(node.children || [], path); else this.leaves.push(node); }
+  rng: RNG;
+  R: Rules;
+  forced: Record<string, string>;
+  leaves: TreeNode[] = [];
+  picks: Record<string, string> = {};
+  drivers: Record<string, string | null> = {};
+  constructor(rng: RNG, R: Rules, forced: Record<string, string> = {}) {
+    this.rng = rng;
+    this.R = R;
+    this.forced = forced;
+  }
+  emit(node: TreeNode, path: string) {
+    if (node.group) this.select(node.children || [], path);
+    else this.leaves.push(node);
+  }
   couplePick(children: TreeNode[]): TreeNode | null {
     const [dim, hit] = coupleDim(children, this.R);
     if (!dim || !hit) return null;
     const v = (this.drivers[dim] || "").toLowerCase();
     if (!v) return null;
-    for (const val of Object.keys(hit)) { const vl = val.toLowerCase(); if (v.includes(vl) || vl.includes(v)) return hit[val][0]; }
+    for (const val of Object.keys(hit)) {
+      const vl = val.toLowerCase();
+      if (v.includes(vl) || vl.includes(v)) return hit[val][0];
+    }
     return null;
   }
   select(children: TreeNode[], path: string) {
     const parts = children.filter(isPart);
     let rest = children.filter((c) => !isPart(c));
-    const kept = rest.filter((c) => !this.R.SUPPRESS.some((x) => (c.name || "").toLowerCase().includes(x)));
+    const kept = rest.filter(
+      (c) =>
+        !this.R.SUPPRESS.some((x) => (c.name || "").toLowerCase().includes(x)),
+    );
     if (kept.length) rest = kept;
     const si = this.R.SUPPRESS_IN?.[path.split("/")[0]];
-    if (si) { const k2 = rest.filter((c) => !si.includes((c.name || "").toLowerCase())); if (k2.length) rest = k2; }
+    if (si) {
+      const k2 = rest.filter((c) => !si.includes((c.name || "").toLowerCase()));
+      if (k2.length) rest = k2;
+    }
     for (const c of parts) this.emit(c, path);
     if (!rest.length) return;
     // USER-FORCED pick at a category top-level (builder): override random selection.
     if (this.forced[path] !== undefined) {
       const want = this.forced[path].toLowerCase();
-      if (want === "none" || want === "__none__") { this.picks[path] = "None"; return; } // explicit absent
+      if (want === "none" || want === "__none__") {
+        this.picks[path] = "None";
+        return;
+      } // explicit absent
       // EXACT-first: a forced value is a bare option name, so an exact leaf-name match must win over
       // any substring sibling ("MVHQ Martini" must beat "Martini"; "Knowledge Throne" beat "Throne";
       // female ring "Bar" beat a longer "Bar…"). Only fall back to a one-directional substring match
       // (option name contains the forced value) — never `want.includes(name)`, which is what let a
       // longer forced name collapse onto a shorter sibling.
-      const c = rest.find((x) => (x.name || "").toLowerCase() === want)
-        ?? rest.find((x) => (x.name || "").toLowerCase().includes(want));
+      const c =
+        rest.find((x) => (x.name || "").toLowerCase() === want) ??
+        rest.find((x) => (x.name || "").toLowerCase().includes(want));
       if (c) {
         // The category-wrapper node carries the category's own name, which can substring-contain a
         // forced option ("20 Rings" ⊃ "Ring", "2 The hawk" ⊃ "Hawk", "24 Laser Eye" ⊃ "Laser Eye").
         // Matching it here would consume the forced pick at the wrapper and random-pick a child. Instead
         // descend at the SAME path so the still-live forced key resolves against the real options below.
-        if (c.name === path) { this.emit(c, path); return; }
-        this.picks[path] = c.name; this.emit(c, path + "/" + c.name); return;
+        if (c.name === path) {
+          this.emit(c, path);
+          return;
+        }
+        this.picks[path] = c.name;
+        this.emit(c, path + "/" + c.name);
+        return;
       }
     }
     const [dim, hit] = coupleDim(rest, this.R);
     if (dim && this.drivers[dim]) {
       const pick = this.couplePick(rest);
-      if (pick) { this.picks[path] = pick.name; this.emit(pick, path + "/" + pick.name); return; }
-      const nm = rest.map((c) => c.name || "").join(" ").toLowerCase();
+      if (pick) {
+        this.picks[path] = pick.name;
+        this.emit(pick, path + "/" + pick.name);
+        return;
+      }
+      const nm = rest
+        .map((c) => c.name || "")
+        .join(" ")
+        .toLowerCase();
       if (nm.includes("tattoo") || nm.includes("beard")) return; // optional coupled: no match -> absent
     }
     const weighted = rest.filter((c) => c.rarity != null);
     if (weighted.length) {
-      const pick = this.rng.choices(weighted, weighted.map((c) => c.rarity as number));
-      this.picks[path] = pick.name; this.emit(pick, path + "/" + pick.name); return;
+      const pick = this.rng.choices(
+        weighted,
+        weighted.map((c) => c.rarity as number),
+      );
+      this.picks[path] = pick.name;
+      this.emit(pick, path + "/" + pick.name);
+      return;
     }
     if (dim && hit) {
       const cands = Object.values(hit).flat();
-      const pick = cands.length ? this.rng.choice(cands) : this.rng.choice(rest);
-      this.picks[path] = pick.name; this.emit(pick, path + "/" + pick.name); return;
+      const pick = cands.length
+        ? this.rng.choice(cands)
+        : this.rng.choice(rest);
+      this.picks[path] = pick.name;
+      this.emit(pick, path + "/" + pick.name);
+      return;
     }
     const vis = rest.filter((c) => c.vis);
-    if (vis.length === rest.length) { for (const c of rest) this.emit(c, path); }
-    else {
+    if (vis.length === rest.length) {
+      for (const c of rest) this.emit(c, path);
+    } else {
       const pick = vis.length ? vis[0] : this.rng.choice(rest);
       // Category-wrapper node (a vis=false top-level category whose sole `rest` member is itself):
       // when the user has FORCED this category, descend at the SAME path so the forced key (the bare
       // category name) still matches the real options one level down. Gated on forced -> random untouched.
-      if (pick.name === path && this.forced[path] !== undefined) { this.emit(pick, path); }
-      else { this.picks[path] = pick.name; this.emit(pick, path + "/" + pick.name); }
+      if (pick.name === path && this.forced[path] !== undefined) {
+        this.emit(pick, path);
+      } else {
+        this.picks[path] = pick.name;
+        this.emit(pick, path + "/" + pick.name);
+      }
     }
   }
-  selectCategory(cat: TreeNode): string | null { this.select([cat], cat.name); return this.picks[cat.name] ?? null; }
+  selectCategory(cat: TreeNode): string | null {
+    this.select([cat], cat.name);
+    return this.picks[cat.name] ?? null;
+  }
 }
 
 const roleOf = (name: string): string | null => {
   const n = name.toLowerCase();
   if (n.endsWith("body")) return "body";
   if (n.endsWith("suit") || n.endsWith("suits")) return "suit";
-  if (n.endsWith("hair") && !n.includes("hat") && !n.includes("rear")) return "hair";
+  if (n.endsWith("hair") && !n.includes("hat") && !n.includes("rear"))
+    return "hair";
   if (n.includes("eye mod")) return "eyemod";
   if (n.endsWith("hat") && !n.includes("hair")) return "hat";
   return null;
 };
-const PRI: Record<string, number> = { body: 0, suit: 1, hair: 2, eyemod: 3, hat: 4 };
+const PRI: Record<string, number> = {
+  body: 0,
+  suit: 1,
+  hair: 2,
+  eyemod: 3,
+  hat: 4,
+};
 
-function generate(data: BuilderData, rng: RNG, forced: Record<string, string> = {}): Sel {
-  const R = data.rules; const s = new Sel(rng, R, forced);
+function generate(
+  data: BuilderData,
+  rng: RNG,
+  forced: Record<string, string> = {},
+): Sel {
+  const R = data.rules;
+  const s = new Sel(rng, R, forced);
   const cats: Record<string, TreeNode> = {};
   for (const c of data.tree) if (c.group) cats[c.name] = c;
   const roles: Record<string, string | null> = {};
   for (const name of Object.keys(cats)) roles[name] = roleOf(name);
-  const drivers = Object.keys(cats).filter((n) => roles[n]).sort((a, b) => PRI[roles[a]!] - PRI[roles[b]!]);
+  const drivers = Object.keys(cats)
+    .filter((n) => roles[n])
+    .sort((a, b) => PRI[roles[a]!] - PRI[roles[b]!]);
   const order = [...drivers, ...Object.keys(cats).filter((c) => !roles[c])];
   for (const name of order) {
-    if (name in R.OPTIONAL && forced[name] === undefined) {   // random rarity gate (unless user forced it)
+    if (name in R.OPTIONAL && forced[name] === undefined) {
+      // random rarity gate (unless user forced it)
       if (rng.random() >= R.OPTIONAL[name]) continue;
       if (s.couplePick(cats[name].children || []) === null) continue;
     }
     // FEMALE_HAT_BLOCK (engine.py): Medusa's snakes / the Afro break every female hat -> skip the
     // hat category entirely for a blocked hair style, so preview + uniqueness key match the engine.
-    if (name === "10 Hat" && R.FEMALE_HAT_BLOCK && typeof s.drivers.hair_style === "string"
-      && R.FEMALE_HAT_BLOCK.includes(s.drivers.hair_style)) continue;
+    if (
+      name === "10 Hat" &&
+      R.FEMALE_HAT_BLOCK &&
+      typeof s.drivers.hair_style === "string" &&
+      R.FEMALE_HAT_BLOCK.includes(s.drivers.hair_style)
+    )
+      continue;
     // FEMALE_STYLE_BLOCK (engine.py): a hair style that breaks this accessory (Devilish horn on
     // Curl/Afro/Medusa, Neko mask on Medusa) -> skip the category, same semantics as the hat block.
-    if (R.FEMALE_STYLE_BLOCK && typeof s.drivers.hair_style === "string"
-      && (R.FEMALE_STYLE_BLOCK[name] || []).includes(s.drivers.hair_style)) continue;
-    const top = s.selectCategory(cats[name]); const r = roles[name];
+    if (
+      R.FEMALE_STYLE_BLOCK &&
+      typeof s.drivers.hair_style === "string" &&
+      (R.FEMALE_STYLE_BLOCK[name] || []).includes(s.drivers.hair_style)
+    )
+      continue;
+    const top = s.selectCategory(cats[name]);
+    const r = roles[name];
     if (r === "body" && top) {
-      const fam = fw(top); s.drivers.family = fam;
+      const fam = fw(top);
+      s.drivers.family = fam;
       if (R.FAMILY_TO_FACEID[fam]) s.drivers.faceid = R.FAMILY_TO_FACEID[fam];
       if (fam === "Zombie" || fam === "Golden") s.drivers.build = fam;
-      else { const sub = s.picks[name + "/" + top] || top; s.drivers.build = R.DIMS.build.find((b) => sub.split(/\s+/).includes(b)) || null; }
-    } else if (r === "suit" && top) { s.drivers.suit = top; }
-    else if (r === "hair" && top) {
-      const cw = s.picks[name + "/" + top] || ""; const full = (top + " " + cw).toLowerCase();
-      s.drivers.hair_color = R.DIMS.hair_color.find((c) => full.includes(c.toLowerCase())) || null;
-      s.drivers.hair_style = R.DIMS.hair_style.find((st) => full.includes(st.toLowerCase())) || fw(top);
-      if (!s.drivers.hair_color) s.drivers.hair_color = rng.choice(["Black", "Red", "White"]);
+      else {
+        const sub = s.picks[name + "/" + top] || top;
+        s.drivers.build =
+          R.DIMS.build.find((b) => sub.split(/\s+/).includes(b)) || null;
+      }
+    } else if (r === "suit" && top) {
+      s.drivers.suit = top;
+    } else if (r === "hair" && top) {
+      const cw = s.picks[name + "/" + top] || "";
+      const full = (top + " " + cw).toLowerCase();
+      s.drivers.hair_color =
+        R.DIMS.hair_color.find((c) => full.includes(c.toLowerCase())) || null;
+      s.drivers.hair_style =
+        R.DIMS.hair_style.find((st) => full.includes(st.toLowerCase())) ||
+        fw(top);
+      if (!s.drivers.hair_color)
+        s.drivers.hair_color = rng.choice(["Black", "Red", "White"]);
     } else if (r === "eyemod") {
-      const vals = Object.entries(s.picks).filter(([k]) => k.startsWith(name)).map(([, v]) => v).join(" ").toLowerCase();
-      s.drivers.eyemod = R.DIMS.eyemod.find((m) => vals.includes(m.toLowerCase())) || null;
-    } else if (r === "hat" && top && top.toLowerCase() !== "none") { s.drivers.hat = fw(top); }
+      const vals = Object.entries(s.picks)
+        .filter(([k]) => k.startsWith(name))
+        .map(([, v]) => v)
+        .join(" ")
+        .toLowerCase();
+      s.drivers.eyemod =
+        R.DIMS.eyemod.find((m) => vals.includes(m.toLowerCase())) || null;
+    } else if (r === "hat" && top && top.toLowerCase() !== "none") {
+      s.drivers.hat = fw(top);
+    }
     if (name.toLowerCase().endsWith("face") && top) s.drivers.faceid = fw(top);
   }
   return s;
 }
 
 function applyConflicts(data: BuilderData, s: Sel) {
-  const R = data.rules; const meta: Record<number, Leaf> = {}; for (const e of data.leaves) meta[e.z] = e;
+  const R = data.rules;
+  const meta: Record<number, Leaf> = {};
+  for (const e of data.leaves) meta[e.z] = e;
   const HC = data.hand_conflicts || {};
   const CG = new Set((HC.cane_grip || []).map((p) => p.join("")));
   const SG = new Set(HC.snake_grip || []);
   const CS = new Set((HC.cane_snake || []).map((p) => p.join("")));
-  const picks = s.picks, dr = s.drivers;
+  const picks = s.picks,
+    dr = s.drivers;
   const fm = picks["17 Face Mod"] || "None";
-  const cover = fm.toLowerCase() !== "none" ? R.FACEMOD_COVER[fm.split(/\s+/)[0]] : undefined;
+  const cover =
+    fm.toLowerCase() !== "none"
+      ? R.FACEMOD_COVER[fm.split(/\s+/)[0]]
+      : undefined;
   const laser = (picks["24 Laser Eye"] || "None").toLowerCase() !== "none";
   let hat = !!dr.hat;
-  const hideCats = new Set<string>(); const hidePaths: string[] = [];
+  const hideCats = new Set<string>();
+  const hidePaths: string[] = [];
   const fam = dr.family;
   if (fam === "Zombie" || fam === "Golden" || fam === "Glitch") {
-    ["10 Nose", "11 Tattoos", "12 Beard", "13 Hair", "13.5 Hat Hair", "14 Eyebrow", "15 Eye Mod", "16 Glasses", "17 Face Mod", "22 Hat", "23 Ceasar", "24 Laser Eye"].forEach((c) => hideCats.add(c));
+    [
+      "10 Nose",
+      "11 Tattoos",
+      "12 Beard",
+      "13 Hair",
+      "13.5 Hat Hair",
+      "14 Eyebrow",
+      "15 Eye Mod",
+      "16 Glasses",
+      "17 Face Mod",
+      "22 Hat",
+      "23 Ceasar",
+      "24 Laser Eye",
+    ].forEach((c) => hideCats.add(c));
     if (fam === "Glitch") hideCats.add("7 Face");
   }
-  if (cover === "full") { ["16 Glasses", "15 Eye Mod", "14 Eyebrow", "10 Nose", "12 Beard"].forEach((c) => hideCats.add(c)); hidePaths.push("8 Mouth", "9 Eyes"); }
-  else if (cover === "eyes") { hideCats.add("16 Glasses"); hideCats.add("15 Eye Mod"); }
-  else if (cover === "lower") { hideCats.add("12 Beard"); hidePaths.push("8 Mouth"); }
-  if (laser) { hideCats.add("16 Glasses"); hideCats.add("15 Eye Mod"); }
+  if (cover === "full") {
+    ["16 Glasses", "15 Eye Mod", "14 Eyebrow", "10 Nose", "12 Beard"].forEach(
+      (c) => hideCats.add(c),
+    );
+    hidePaths.push("8 Mouth", "9 Eyes");
+  } else if (cover === "eyes") {
+    hideCats.add("16 Glasses");
+    hideCats.add("15 Eye Mod");
+  } else if (cover === "lower") {
+    hideCats.add("12 Beard");
+    hidePaths.push("8 Mouth");
+  }
+  if (laser) {
+    hideCats.add("16 Glasses");
+    hideCats.add("15 Eye Mod");
+  }
   // A hat and a laurel crown can't share the head; female: the Devilish horn (z499) and the Neko
   // mask ears (z670) always pierce every hat crown/brim (male-precedent conflict idiom).
-  if (hat) { hideCats.add("23 Ceasar"); hideCats.add("11 Devilish"); hideCats.add("16 Neko"); }
-  if (fm.split(/\s+/)[0] === "Doom") { ["22 Hat", "13.5 Hat Hair", "13 Hair", "23 Ceasar"].forEach((c) => hideCats.add(c)); hat = false; }
+  if (hat) {
+    hideCats.add("23 Ceasar");
+    hideCats.add("11 Devilish");
+    hideCats.add("16 Neko");
+  }
+  if (fm.split(/\s+/)[0] === "Doom") {
+    ["22 Hat", "13.5 Hat Hair", "13 Hair", "23 Ceasar"].forEach((c) =>
+      hideCats.add(c),
+    );
+    hat = false;
+  }
 
   const variant = (cat: string): string | null => {
-    for (const lf of s.leaves) { const m = meta[lf.z!]; if (m && m.category === cat) { const p = m.path.split("/"); return p.length > 1 ? p[1] : p[0]; } }
+    for (const lf of s.leaves) {
+      const m = meta[lf.z!];
+      if (m && m.category === cat) {
+        const p = m.path.split("/");
+        return p.length > 1 ? p[1] : p[0];
+      }
+    }
     return null;
   };
-  let grip = variant("19 Hand Grip"), cane = variant("18 Canes"), snake = variant("25 Snake");
-  if (grip && cane) { hideCats.add("18 Canes"); cane = null; }
-  if (grip && snake && SG.has(grip)) { hideCats.add("25 Snake"); snake = null; }
-  if (cane && snake && CS.has(cane + "" + snake)) { hideCats.add("25 Snake"); snake = null; }
+  let grip = variant("19 Hand Grip"),
+    cane = variant("18 Canes"),
+    snake = variant("25 Snake");
+  if (grip && cane) {
+    hideCats.add("18 Canes");
+    cane = null;
+  }
+  if (grip && snake && SG.has(grip)) {
+    hideCats.add("25 Snake");
+    snake = null;
+  }
+  if (cane && snake && CS.has(cane + "" + snake)) {
+    hideCats.add("25 Snake");
+    snake = null;
+  }
   const addLeaves: TreeNode[] = [];
   hideCats.add("6 Snake Tail");
   if (snake) {
     const col = snake.toLowerCase().includes("red") ? "red" : "green";
-    const tail = data.leaves.find((e) => e.category === "6 Snake Tail" && e.path.toLowerCase().includes(col));
+    const tail = data.leaves.find(
+      (e) =>
+        e.category === "6 Snake Tail" && e.path.toLowerCase().includes(col),
+    );
     if (tail) addLeaves.push({ name: "tail", group: false, z: tail.z });
   }
-  if (fam !== "Zombie" && fam !== "Golden" && fam !== "Glitch") hideCats.add(hat ? "13 Hair" : "13.5 Hat Hair");
+  if (fam !== "Zombie" && fam !== "Golden" && fam !== "Glitch")
+    hideCats.add(hat ? "13 Hair" : "13.5 Hat Hair");
 
   const HL = R.HIDE_LEAF || [];
-  const keep = (lf: TreeNode) => { const m = meta[lf.z!]; if (!m) return true; if (hideCats.has(m.category)) return false; if (hidePaths.some((hp) => m.path.includes(hp))) return false; if (HL.some((h) => m.path.includes(h))) return false; return true; };
+  const keep = (lf: TreeNode) => {
+    const m = meta[lf.z!];
+    if (!m) return true;
+    if (hideCats.has(m.category)) return false;
+    if (hidePaths.some((hp) => m.path.includes(hp))) return false;
+    if (HL.some((h) => m.path.includes(h))) return false;
+    return true;
+  };
   const kept = [...s.leaves.filter(keep), ...addLeaves];
 
   // effective z: earrings under hair (Z_UNDER); order + attach render info
   const tz: Record<string, number> = {};
   for (const [cat, under] of Object.entries(R.Z_UNDER)) {
-    const zs = kept.map((lf) => meta[lf.z!]).filter((m) => m && m.category === under).map((m) => m.z);
+    const zs = kept
+      .map((lf) => meta[lf.z!])
+      .filter((m) => m && m.category === under)
+      .map((m) => m.z);
     if (zs.length) tz[cat] = Math.min(...zs) - 0.5;
   }
   // FEMALE_HAT_HAIR_CROP (engine.py): female hats keep the full '9 Hair'; Gem/Updo/Lush poke above
   // the crown -> crop those styles' hair at the chosen hat's crown line (same cut the PSD's per-hat
   // 'Hat Hair' variants use), so the preview + uniqueness key match the engine.
-  const FHC = R.FEMALE_HAT_HAIR_CROP, FHCS = R.FEMALE_HAT_HAIR_CROP_STYLES;
-  const femHairCrop = (FHC && FHCS && typeof dr.hat === "string" && FHC[dr.hat] !== undefined
-    && typeof dr.hair_style === "string" && FHCS.includes(dr.hair_style)) ? FHC[dr.hat] : undefined;
+  const FHC = R.FEMALE_HAT_HAIR_CROP,
+    FHCS = R.FEMALE_HAT_HAIR_CROP_STYLES;
+  const femHairCrop =
+    FHC &&
+    FHCS &&
+    typeof dr.hat === "string" &&
+    FHC[dr.hat] !== undefined &&
+    typeof dr.hair_style === "string" &&
+    FHCS.includes(dr.hair_style)
+      ? FHC[dr.hat]
+      : undefined;
 
   const render: RenderLeaf[] = [];
   for (const lf of kept) {
     const m = meta[lf.z!];
     if (!m || !m.file) continue;
-    const rl: RenderLeaf = { file: m.file, bbox: m.bbox.slice(), blend: m.blend, category: m.category, zEff: tz[m.category] ?? (lf.z as number) };
-    const ct = R.CROP_TOP ? Object.entries(R.CROP_TOP).find(([k]) => m.path.includes(k))?.[1] : undefined;
+    const rl: RenderLeaf = {
+      file: m.file,
+      bbox: m.bbox.slice(),
+      blend: m.blend,
+      category: m.category,
+      zEff: tz[m.category] ?? (lf.z as number),
+    };
+    const ct = R.CROP_TOP
+      ? Object.entries(R.CROP_TOP).find(([k]) => m.path.includes(k))?.[1]
+      : undefined;
     if (ct !== undefined) rl.cropTop = ct;
-    if (femHairCrop !== undefined && m.category === "9 Hair") rl.cropTop = femHairCrop;
-    const cb = R.CROP_BOTTOM ? Object.entries(R.CROP_BOTTOM).find(([k]) => m.path.includes(k))?.[1] : undefined;
+    if (femHairCrop !== undefined && m.category === "9 Hair")
+      rl.cropTop = femHairCrop;
+    const cb = R.CROP_BOTTOM
+      ? Object.entries(R.CROP_BOTTOM).find(([k]) => m.path.includes(k))?.[1]
+      : undefined;
     if (cb !== undefined) rl.cropBottom = cb;
     render.push(rl);
   }
   render.sort((a, b) => a.zEff - b.zEff);
 
-  const visiblePaths = kept.map((lf) => meta[lf.z!]?.path).filter(Boolean).sort();
-  const key = bytesToHex(sha256(data.gender + "\n" + visiblePaths.join("\n")));
-  return { render, picks: s.picks, drivers: s.drivers, key } as Resolved;
+  const visiblePaths = kept
+    .map((lf) => meta[lf.z!]?.path)
+    .filter(Boolean)
+    .sort();
+  // AffinityTraits.decode reads this exact byte string, and its commitmentOf hashes it the same way
+  // comboHash does — so the preimage the art is keyed by is also the one the stat sheet decodes from.
+  const preimage = data.gender + "\n" + visiblePaths.join("\n");
+  const key = bytesToHex(sha256(preimage));
+  return {
+    render,
+    picks: s.picks,
+    drivers: s.drivers,
+    key,
+    preimage,
+  } as Resolved;
 }
 
 export function resolveRandom(data: BuilderData, seed: number): Resolved {
   const s = generate(data, new RNG(seed));
   return applyConflicts(data, s);
 }
-export function resolveSelection(data: BuilderData, forced: Record<string, string>, seed: number): Resolved {
+export function resolveSelection(
+  data: BuilderData,
+  forced: Record<string, string>,
+  seed: number,
+): Resolved {
   const s = generate(data, new RNG(seed), forced);
   return applyConflicts(data, s);
 }
-export function posOffset(data: BuilderData, category: string): number { return data.rules.POS_OFFSET[category] || 0; }
+export function posOffset(data: BuilderData, category: string): number {
+  return data.rules.POS_OFFSET[category] || 0;
+}
 
 // Vertical position override for female AR (17 AR): every variant was authored at canvas-top
 // (bbox y=0), so the holo HUD floats ABOVE the head instead of at eye level (male 26 AR is authored
@@ -276,10 +555,17 @@ export function posOffset(data: BuilderData, category: string): number { return 
 // The SINGLE source consumed by every renderer: pfp-compositor.ts (preview) and api/don-img (served),
 // and kept numerically in sync with pfp/engine.py AR_Y_OFFSET (mint). Deliberately NOT in the exported
 // rules JSON: category-keyed POS_OFFSET can't carry a per-variant value, and the JSON shape is frozen.
-const AR_Y_OFFSET: Record<string, number> = { "MVHQ AR": 323, "Wash Trade": 280, "Whale": 182, "Stonks": 280, "The Dev": 323 };
+const AR_Y_OFFSET: Record<string, number> = {
+  "MVHQ AR": 323,
+  "Wash Trade": 280,
+  Whale: 182,
+  Stonks: 280,
+  "The Dev": 323,
+};
 export function posYOffset(category: string, file: string): number {
   if (category !== "17 AR") return 0;
-  for (const variant in AR_Y_OFFSET) if (file.includes(variant.replace(/ /g, "_"))) return AR_Y_OFFSET[variant];
+  for (const variant in AR_Y_OFFSET)
+    if (file.includes(variant.replace(/ /g, "_"))) return AR_Y_OFFSET[variant];
   return 0;
 }
 
@@ -290,15 +576,18 @@ export function posYOffset(category: string, file: string): number {
 export function catOptions(data: BuilderData): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   const S = data.rules.SUPPRESS || [];
-  for (const cat of data.tree) if (cat.group) {
-    const si = data.rules.SUPPRESS_IN?.[cat.name] || [];
-    out[cat.name] = (cat.children || []).map((c) => c.name).filter((n) => {
-      const nl = n.toLowerCase();
-      if (S.some((x) => nl.includes(x))) return false;
-      if (si.includes(nl)) return false;
-      return true;
-    });
-  }
+  for (const cat of data.tree)
+    if (cat.group) {
+      const si = data.rules.SUPPRESS_IN?.[cat.name] || [];
+      out[cat.name] = (cat.children || [])
+        .map((c) => c.name)
+        .filter((n) => {
+          const nl = n.toLowerCase();
+          if (S.some((x) => nl.includes(x))) return false;
+          if (si.includes(nl)) return false;
+          return true;
+        });
+    }
   return out;
 }
 
@@ -310,26 +599,55 @@ export function catOptions(data: BuilderData): Record<string, string[]> {
 // the RNG-chosen context (grip, family, hair, …) can't shift, then flip the single
 // option under test and ask the resolver whether that option's category actually
 // paints. Available <=> renders in the current preview; unavailable <=> never does.
-const stripName = (v: string) => v.replace(/#\d+/g, "").replace(/^[\d.]+\s+/, "").trim();
+const stripName = (v: string) =>
+  v
+    .replace(/#\d+/g, "")
+    .replace(/^[\d.]+\s+/, "")
+    .trim();
 
 function availReason(
-  data: BuilderData, male: boolean, cat: string, cx: {
-    grip: string | null; cane: string | null; family: string; cover?: string;
-    facemod: string; laser: boolean; hat: boolean; hairStyle: string; SG: Set<string>;
-  }): string {
+  data: BuilderData,
+  male: boolean,
+  cat: string,
+  cx: {
+    grip: string | null;
+    cane: string | null;
+    family: string;
+    cover?: string;
+    facemod: string;
+    laser: boolean;
+    hat: boolean;
+    hairStyle: string;
+    SG: Set<string>;
+  },
+): string {
   const HAT = male ? "22 Hat" : "10 Hat";
-  const ZH = new Set(["13 Hair", "15 Eye Mod", "16 Glasses", "17 Face Mod", "22 Hat", "23 Ceasar", "24 Laser Eye"]);
+  const ZH = new Set([
+    "13 Hair",
+    "15 Eye Mod",
+    "16 Glasses",
+    "17 Face Mod",
+    "22 Hat",
+    "23 Ceasar",
+    "24 Laser Eye",
+  ]);
   if (["Zombie", "Golden", "Glitch"].includes(cx.family) && ZH.has(cat))
     return `${cx.family} bodies show no face or head accessories`;
-  if (cat === "18 Canes") return cx.grip ? `needs a free hand (you're holding the ${stripName(cx.grip)})` : `needs a free hand`;
+  if (cat === "18 Canes")
+    return cx.grip
+      ? `needs a free hand (you're holding the ${stripName(cx.grip)})`
+      : `needs a free hand`;
   if (cat === "25 Snake") {
-    if (cx.grip && cx.SG.has(cx.grip)) return `won't drape over the ${stripName(cx.grip)} in your hand`;
-    if (cx.cane) return `can't share the hand with your ${stripName(cx.cane)} cane`;
+    if (cx.grip && cx.SG.has(cx.grip))
+      return `won't drape over the ${stripName(cx.grip)} in your hand`;
+    if (cx.cane)
+      return `can't share the hand with your ${stripName(cx.cane)} cane`;
     return `unavailable with your current hand`;
   }
   if (cat === "16 Glasses" || cat === "15 Eye Mod") {
     if (cx.laser) return `hidden behind your laser eyes`;
-    if (cx.cover === "full" || cx.cover === "eyes") return `covered by the ${stripName(cx.facemod)} face mod`;
+    if (cx.cover === "full" || cx.cover === "eyes")
+      return `covered by the ${stripName(cx.facemod)} face mod`;
   }
   if (cat === HAT) {
     if (cx.facemod === "Doom") return `the Doom helmet covers your whole head`;
@@ -339,18 +657,25 @@ function availReason(
         : `your ${cx.hairStyle} is too big for any hat`;
   }
   if (cat === "23 Ceasar") {
-    if (cx.facemod === "Doom") return `the Doom helmet leaves no room for a crown`;
+    if (cx.facemod === "Doom")
+      return `the Doom helmet leaves no room for a crown`;
     if (cx.hat) return `can't wear a laurel crown under a hat`;
   }
   if (cat === "11 Devilish") {
-    if ((data.rules.FEMALE_STYLE_BLOCK?.["11 Devilish"] || []).includes(cx.hairStyle))
+    if (
+      (data.rules.FEMALE_STYLE_BLOCK?.["11 Devilish"] || []).includes(
+        cx.hairStyle,
+      )
+    )
       return cx.hairStyle === "Medusa"
         ? `the horn can't share the head with Medusa's snakes`
         : `the horn has nowhere to anchor in your ${cx.hairStyle}`;
     if (cx.hat) return `the horn would pierce your hat`;
   }
   if (cat === "16 Neko") {
-    if ((data.rules.FEMALE_STYLE_BLOCK?.["16 Neko"] || []).includes(cx.hairStyle))
+    if (
+      (data.rules.FEMALE_STYLE_BLOCK?.["16 Neko"] || []).includes(cx.hairStyle)
+    )
       return `the mask would bury Medusa's snake-crown`;
     if (cx.hat) return `the mask's ears would pierce your hat`;
   }
@@ -360,7 +685,10 @@ function availReason(
 // cat -> (option name -> short reason) for every option that would NOT render if picked now.
 // `forced`/`seed` must match what the live preview resolves with, so availability == the preview.
 export function unavailableOptions(
-  data: BuilderData, forced: Record<string, string>, seed: number): Map<string, Map<string, string>> {
+  data: BuilderData,
+  forced: Record<string, string>,
+  seed: number,
+): Map<string, Map<string, string>> {
   const out = new Map<string, Map<string, string>>();
   const male = data.gender === "male";
   const base = resolveSelection(data, forced, seed);
@@ -372,18 +700,26 @@ export function unavailableOptions(
   const rendered: Record<string, string> = {};
   for (const l of base.render) {
     if (rendered[l.category] !== undefined) continue;
-    const p = fileToPath[l.file]; const parts = p ? p.split("/") : [];
-    rendered[l.category] = parts.length > 1 ? parts[1] : (parts[0] ?? l.category);
+    const p = fileToPath[l.file];
+    const parts = p ? p.split("/") : [];
+    rendered[l.category] =
+      parts.length > 1 ? parts[1] : (parts[0] ?? l.category);
   }
-  const rOpt = (cat: string): string | null => rendered[cat] ?? base.picks[cat] ?? null;
+  const rOpt = (cat: string): string | null =>
+    rendered[cat] ?? base.picks[cat] ?? null;
   const gripCat = male ? "19 Hand Grip" : "13 Hand Grip";
-  const grip = rendered[gripCat] ?? null;                 // rendered grip (picked OR randomly rolled)
+  const grip = rendered[gripCat] ?? null; // rendered grip (picked OR randomly rolled)
   const cane = rendered["18 Canes"] ?? null;
   const family = (base.drivers.family as string) || "";
   const fmFull = rendered["17 Face Mod"] || "None";
   const facemod = fmFull.split(/\s+/)[0];
-  const cover = fmFull.toLowerCase() !== "none" ? data.rules.FACEMOD_COVER[facemod] : undefined;
-  const laser = !!rendered["24 Laser Eye"] && rendered["24 Laser Eye"].toLowerCase() !== "none";
+  const cover =
+    fmFull.toLowerCase() !== "none"
+      ? data.rules.FACEMOD_COVER[facemod]
+      : undefined;
+  const laser =
+    !!rendered["24 Laser Eye"] &&
+    rendered["24 Laser Eye"].toLowerCase() !== "none";
   const hat = !!base.drivers.hat;
   const hairStyle = (base.drivers.hair_style as string) || "";
   const SG = new Set(data.hand_conflicts?.snake_grip || []);
@@ -398,16 +734,26 @@ export function unavailableOptions(
   // lets the test resolve re-roll a different sub-style (POC -> Afro), which would phantom-block
   // options (e.g. every hat) that are perfectly available with the sub-style actually on screen.
   const nested: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base.picks)) if (k.includes("/")) nested[k] = v;
+  for (const [k, v] of Object.entries(base.picks))
+    if (k.includes("/")) nested[k] = v;
 
   for (const cat of Object.keys(opts)) {
     const nestedSafe: Record<string, string> = {};
-    for (const [k, v] of Object.entries(nested)) if (!k.startsWith(cat + "/")) nestedSafe[k] = v;
+    for (const [k, v] of Object.entries(nested))
+      if (!k.startsWith(cat + "/")) nestedSafe[k] = v;
     for (const opt of opts[cat]) {
       if (!opt || opt.toLowerCase() === "none") continue; // ∅ None is always a valid choice
-      const test = resolveSelection(data, { ...pinned, ...nestedSafe, [cat]: opt }, seed);
+      const test = resolveSelection(
+        data,
+        { ...pinned, ...nestedSafe, [cat]: opt },
+        seed,
+      );
       if (new Set(test.render.map((l) => l.category)).has(cat)) continue; // it renders -> available
-      let m = out.get(cat); if (!m) { m = new Map(); out.set(cat, m); }
+      let m = out.get(cat);
+      if (!m) {
+        m = new Map();
+        out.set(cat, m);
+      }
       m.set(opt, availReason(data, male, cat, cx));
     }
   }
@@ -417,19 +763,39 @@ export function unavailableOptions(
 // which category panels to gray-out given the current selection (a pick there won't render).
 // `seed` (when given) must match the live preview's: female hair styles can live one level below
 // the forced pick ("9 Hair": "POC" -> style Afro), so the style is read off the RESOLVED driver.
-export function blockedCats(data: BuilderData, forced: Record<string, string>, seed?: number): Set<string> {
+export function blockedCats(
+  data: BuilderData,
+  forced: Record<string, string>,
+  seed?: number,
+): Set<string> {
   const b = new Set<string>();
   const male = data.gender === "male";
-  const HAT = male ? "22 Hat" : "10 Hat", EYEMOD = "15 Eye Mod", GLASSES = "16 Glasses",
-    CEASAR = "23 Ceasar", LASER = "24 Laser Eye", FACEMOD = "17 Face Mod";
+  const HAT = male ? "22 Hat" : "10 Hat",
+    EYEMOD = "15 Eye Mod",
+    GLASSES = "16 Glasses",
+    CEASAR = "23 Ceasar",
+    LASER = "24 Laser Eye",
+    FACEMOD = "17 Face Mod";
   const fm = forced[FACEMOD] || "None";
   const cover = data.rules.FACEMOD_COVER[fm.split(/\s+/)[0]];
-  if (fm.split(/\s+/)[0] === "Doom") { b.add(HAT); b.add(CEASAR); }
-  if (cover === "full" || cover === "eyes") { b.add(GLASSES); b.add(EYEMOD); }
-  const laser = forced[LASER]; if (laser && laser.toLowerCase() !== "none") { b.add(GLASSES); b.add(EYEMOD); }
-  const hat = forced[HAT]; if (hat && hat.toLowerCase() !== "none") b.add(CEASAR);
+  if (fm.split(/\s+/)[0] === "Doom") {
+    b.add(HAT);
+    b.add(CEASAR);
+  }
+  if (cover === "full" || cover === "eyes") {
+    b.add(GLASSES);
+    b.add(EYEMOD);
+  }
+  const laser = forced[LASER];
+  if (laser && laser.toLowerCase() !== "none") {
+    b.add(GLASSES);
+    b.add(EYEMOD);
+  }
+  const hat = forced[HAT];
+  if (hat && hat.toLowerCase() !== "none") b.add(CEASAR);
   const fam = (forced[male ? "4 Body" : "3 Body"] || "").split(/\s+/)[0];
-  if (["Zombie", "Golden", "Glitch"].includes(fam)) [FACEMOD, HAT, CEASAR, GLASSES, EYEMOD, LASER].forEach((x) => b.add(x));
+  if (["Zombie", "Golden", "Glitch"].includes(fam))
+    [FACEMOD, HAT, CEASAR, GLASSES, EYEMOD, LASER].forEach((x) => b.add(x));
   if (!male) {
     // Resolved hair style: an explicit "9 Hair" pick may carry the style one level down (POC -> Afro),
     // so consult the resolver's driver when a seed is available; fall back to the forced first word.
@@ -439,12 +805,18 @@ export function blockedCats(data: BuilderData, forced: Record<string, string>, s
       if (typeof st === "string" && st) hairStyle = st;
     }
     // FEMALE_HAT_BLOCK: a blocked hair style (Medusa/Afro) breaks every female hat -> no hat renders.
-    if (hairStyle && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle)) b.add(HAT);
+    if (hairStyle && (data.rules.FEMALE_HAT_BLOCK || []).includes(hairStyle))
+      b.add(HAT);
     // FEMALE_STYLE_BLOCK: a hair style that breaks an accessory (Devilish horn / Neko mask).
-    for (const [cat, styles] of Object.entries(data.rules.FEMALE_STYLE_BLOCK || {}))
+    for (const [cat, styles] of Object.entries(
+      data.rules.FEMALE_STYLE_BLOCK || {},
+    ))
       if (hairStyle && styles.includes(hairStyle)) b.add(cat);
     // A hat hides the Devilish horn and the Neko mask (ears/horn pierce every crown/brim).
-    if (hat && hat.toLowerCase() !== "none") { b.add("11 Devilish"); b.add("16 Neko"); }
+    if (hat && hat.toLowerCase() !== "none") {
+      b.add("11 Devilish");
+      b.add("16 Neko");
+    }
   }
   return b;
 }

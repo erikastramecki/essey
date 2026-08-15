@@ -14,6 +14,7 @@ export const DON_NET = {
   exchange: "0x9Cec219bCdA1a901D4a7154B55648bdAE5433582",
   loan: "0x764525bE0e90cB02afFB93ccA63bB94333c43EEF",
   feeRouter: "0x0000000000000000000000000000000000000000",
+  affinity: "0x2d9CC510D464977F0Eb597237F467b453CB3e484",
 } as const;
 
 /// The RH testnet as a viem chain, for createPublicClient/createWalletClient anywhere Don flows run.
@@ -74,9 +75,15 @@ export const donAbi = parseAbi([
 
 /// WL proofs ship as a static asset (public/allowlist/proofs.json, gitignored like the art —
 /// uploaded by the vercel deploy). Shape: { [walletLowercase]: { stage, allocation, proof: hex[] } }.
-export async function fetchWlProof(wallet: string): Promise<{ stage: number; allocation: number; proof: `0x${string}`[] } | null> {
+export async function fetchWlProof(wallet: string): Promise<{
+  stage: number;
+  allocation: number;
+  proof: `0x${string}`[];
+} | null> {
   try {
-    const all = await fetch("/allowlist/proofs.json").then((r) => (r.ok ? r.json() : null));
+    const all = await fetch("/allowlist/proofs.json").then((r) =>
+      r.ok ? r.json() : null,
+    );
     return all?.[wallet.toLowerCase()] ?? null;
   } catch {
     return null;

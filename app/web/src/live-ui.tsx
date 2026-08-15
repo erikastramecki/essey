@@ -1,7 +1,7 @@
 // Live testnet UI: the live Exchange and the Bell. Everything here talks to the REAL deployed
 // Dons contracts on 46630 — labeled TESTNET throughout, play money only.
 import { useCallback, useEffect, useState } from "react";
-import { DonTraits, traitText, useTraitIndex } from "./don-traits";
+import { DonStats, DonTraits, traitText, useTraitIndex } from "./don-traits";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
@@ -313,44 +313,45 @@ export function LiveExchange() {
                       more than buying the next one at 8%. Same live floor
                       either way.
                     </div>
+                    <DonStats id={pick} />
                     <DonTraits id={pick} />
-                  </div>
-                  <div className="amm-confirm-act">
-                    {!ready ? (
-                      <ConnectButton />
-                    ) : shortSnipe ? (
-                      <Link className="btn btn-gold" to="/faucet">
-                        Get $ESSEY on the Faucet →
-                      </Link>
-                    ) : (
+                    <div className="amm-confirm-act">
+                      {!ready ? (
+                        <ConnectButton />
+                      ) : shortSnipe ? (
+                        <Link className="btn btn-gold" to="/faucet">
+                          Get $ESSEY on the Faucet →
+                        </Link>
+                      ) : (
+                        <button
+                          className="btn btn-gold"
+                          disabled={!!busy || !quote}
+                          onClick={() =>
+                            act(
+                              "snipe",
+                              () =>
+                                flows.snipeDon(a!, pick).then(() => {
+                                  setMsg(
+                                    `✓ Don #${pick} is yours. Take him to the Game — the desk is waiting.`,
+                                  );
+                                  setPick(null);
+                                }),
+                              "✓ sniped",
+                            )
+                          }
+                        >
+                          {busy === "snipe"
+                            ? "sniping…"
+                            : `Confirm snipe · ${quote ? fmt(quote.snipeTotal) : "…"}`}
+                        </button>
+                      )}
                       <button
-                        className="btn btn-gold"
-                        disabled={!!busy || !quote}
-                        onClick={() =>
-                          act(
-                            "snipe",
-                            () =>
-                              flows.snipeDon(a!, pick).then(() => {
-                                setMsg(
-                                  `✓ Don #${pick} is yours. Take him to the Game — the desk is waiting.`,
-                                );
-                                setPick(null);
-                              }),
-                            "✓ sniped",
-                          )
-                        }
+                        className="btn btn-ghost"
+                        onClick={() => setPick(null)}
                       >
-                        {busy === "snipe"
-                          ? "sniping…"
-                          : `Confirm snipe · ${quote ? fmt(quote.snipeTotal) : "…"}`}
+                        Cancel
                       </button>
-                    )}
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => setPick(null)}
-                    >
-                      Cancel
-                    </button>
+                    </div>
                   </div>
                 </div>
               )}
