@@ -120,10 +120,16 @@ un-stuck.
 | **PROOF OF WORK** | cut the Rig's output over to your wallet for one power cycle (CLSK) | 12h | 60% | 22% | 18% | 236 Scrip | 94.4 Scrip | 2.44 Scrip |
 | **ABSOLUTE ZERO** | lift the prototype from the lab that isn't in the Registry (IONQ/RGTI) | 24h | 12% | 23% | 65% | **2,775 Scrip** | 222 Scrip | 5.76 Scrip |
 
-Those four are the whole board this season. **DEEP RUN, MILK RUN and OPEN WINDOW are not currently
-posted** — they ran on the previous board and did not carry across the stack redeploy of 2026-08-15.
-The dispatcher does not list what it cannot send you on, so they are off the board rather than
-sitting there reverting. They come back when they are posted again.
+| **DEEP RUN** | the long haul out past the county line, and whatever is waiting at the end of it | 16h | 12% | 18% | 70% | 800 Scrip | 60 Scrip | 1.60 Scrip |
+
+Two more folders sit on the board for anyone still finding their feet: **MILK RUN**, a 75 second job
+that hands you working capital, and **OPEN WINDOW**, a 20 minute posting for practising the knock.
+Neither is a career. Both exist so nobody has to learn this game broke.
+
+**DEEP RUN is the wildcard, and it breaks a rule the other folders keep.** Every brief above hands back
+about 90 on the hundred you provision. This one hands back roughly eleven. You are not buying a better
+success rate, you are buying a bigger number on a thinner chance, and the folder does not pretend
+otherwise. Nobody has to run it. That is the whole point of it being there.
 
 ### Your first hour
 

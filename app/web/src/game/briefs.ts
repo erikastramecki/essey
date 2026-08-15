@@ -40,10 +40,18 @@ export type GameBrief = {
   betaBps: bigint; // success-payout boost per provisioned Scrip, in bps
 };
 
-/// Only the four DeployGame.s.sol launch briefs are posted on chain. sprint/windowjob mirror the
-/// E2E harness rows (GameE2E.s.sol) and deeprun has no counterpart at all — listing any of them
-/// sends players at a briefId that reverts BriefNotLive. Re-add a key here only once it is posted.
-export const BRIEF_ORDER: BriefKey[] = ["paper", "glass", "pow", "zero"];
+/// Every key here MUST be posted on chain — an unposted briefId reverts BriefNotLive at depart, and
+/// the UI is the only thing that decides what a player can click. Briefs 5-7 were re-posted
+/// 2026-08-15 after the traits-live redeploy dropped them; verify against briefCount before adding.
+export const BRIEF_ORDER: BriefKey[] = [
+  "paper",
+  "glass",
+  "pow",
+  "zero",
+  "deeprun",
+  "sprint",
+  "windowjob",
+];
 
 /// On-chain briefId for a lore archetype — the posted ids, verbatim.
 export const briefIdFor = (key: BriefKey): bigint => BRIEFS[key].chainId;

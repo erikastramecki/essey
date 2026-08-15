@@ -53,15 +53,16 @@ export function JobBoardFile({
       <button
         className="g-target"
         style={{ width: "100%", marginBottom: 10, textAlign: "left" }}
-        onClick={() => navigate("/game/jobs/paper")}
+        onClick={() => navigate("/game/jobs/sprint")}
       >
         <div className="g-tmeta" style={{ width: "100%" }}>
           <b>NEW IN TOWN? START HERE.</b> Scrip is earned, never claimed. Your
           first job mints a free Safehouse and a <b>◫ 50</b> starter stake, so
-          run <b>PAPER ROUTE</b> (3 hours, pays <b>◫ 36</b> clean) and carry
-          what you can afford — the seal tells you if a carry is too big. When
-          pay lands, <b>BANK IT</b> at the House desk: it sits in the hopper,
-          raidable, until you do.
+          run the <b>MILK RUN</b> (75 seconds, pays <b>◫ 6,000</b> on a
+          near-sure wire) and you can retain a Hitter (◫ 900), file hit orders
+          (◫ 50), and build the House — all off one job. When it lands,{" "}
+          <b>BANK IT</b> at the House desk: it sits in the hopper, raidable,
+          until you do.
         </div>
       </button>
       <div className="g-drawer">

@@ -291,7 +291,7 @@ export function HitOrderFile({
         : pendingLive
           ? `THIS DON HAS AN OPEN HIT ORDER ON №${pending.targetDonId} — KICK THAT DOOR FIRST`
           : attacker.vaultScrip < COMMIT_FEE
-            ? `THE ORDER COSTS ◫ ${fmtAmt(COMMIT_FEE)} · VAULT SHORT — RUN A JOB ON THE BOARD, THEN BANK THE HOPPER AT THE HOUSE`
+            ? `THE ORDER COSTS ◫ ${fmtAmt(COMMIT_FEE)} · VAULT SHORT — RUN THE MILK RUN ON THE JOB BOARD, THEN BANK IT`
             : available.length === 0
               ? "NO CREW AVAILABLE — VISIT THE RAP SHEETS"
               : picked.size === 0
