@@ -3,42 +3,21 @@ pragma solidity ^0.8.28;
 
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 
-/// Oracle gate for Robinhood Chain Stock Tokens.
+/// Oracle gate for Stock Tokens. Fails CLOSED everywhere: a revert is the correct outcome for an
+/// unknown price.
 ///
-/// WHY THIS EXISTS. Robinhood markets Stock Tokens as 24/7 tradeable, but the PRICE is not 24/7:
-/// Chainlink equity feeds update 24/5, following US market hours, and go stale nights and
-/// weekends. Lending against a Friday-close price through a weekend is the classic RWA blowup —
-/// the stock gaps on Monday open and there was no window in which to liquidate.
+/// Stock Tokens trade 24/7 but Chainlink equity feeds run 24/5, so the price goes stale nights and
+/// weekends. Lending against a Friday close through a weekend is the classic RWA blowup.
 ///
-/// Redundancy does not fix this. A second oracle (Pyth) reports the same closed market, so the
-/// failures are correlated. The one uncorrelated source — the Stock Token's own 24/7 DEX price on
-/// this chain — is thin and manipulable, and reintroduces exactly the flash-loan surface that
-/// picking a signed-publisher oracle was meant to avoid. So the honest response to off-hours is
-/// "there is no fresh price", not "synthesise one".
+/// Rejected: a second oracle (Pyth) reports the same closed market, so failures correlate. The
+/// Stock Token's own 24/7 DEX price is thin and manipulable, reintroducing the flash-loan surface
+/// a signed-publisher oracle avoids. Off-hours the honest answer is "no fresh price", not one we
+/// synthesise.
 ///
-/// GROUNDED IN THE REAL FEED PARAMETERS. Every Chainlink feed on Robinhood Chain — all 34 equity
-/// feeds and the crypto feeds alike — runs a **86400s (24h) heartbeat with a 0.5% deviation
-/// trigger**. That is the actual contract, read from Chainlink's feed directory, and it shapes
-/// this design:
-///
-///   - A staleness bound TIGHTER than the heartbeat is wrong and would revert constantly. An
-///     earlier draft of this file used 3600s in-session and 300s off-hours; both would have
-///     bricked the protocol every night, because a feed that has not moved 0.5% legitimately
-///     does not update for up to 24 hours.
-///   - The freshness guarantee that actually protects a lender is the DEVIATION threshold, not
-///     the heartbeat: a price up to 24h old means "this has not moved more than 0.5% since".
-///     The staleness bound therefore exists to catch a BROKEN oracle, not a quiet market, and is
-///     set to heartbeat + grace.
-///   - Off-hours protection cannot come from a tighter staleness bound, because when the market
-///     is closed the price genuinely is not moving and no update is due. It comes from the
-///     session flag: no new borrows, and no liquidations at a price nobody can verify.
-///
-/// This contract therefore does three things, and refuses to guess:
-///   1. checks the L2 sequencer is up (and has been up long enough to trust)
-///   2. checks the feed has not gone silent past heartbeat + grace (a broken-oracle check)
-///   3. reports session state, so callers gate borrows and liquidations on a live market
-///
-/// It fails CLOSED everywhere. A revert is the correct outcome for an unknown price.
+/// Every feed here runs an 86400s heartbeat with a 0.5% deviation trigger. So the staleness bound
+/// catches a BROKEN oracle, not a quiet market, and must be >= heartbeat + grace — an earlier draft
+/// used 3600s/300s and would have bricked the protocol nightly. Off-hours protection comes from the
+/// session flag instead: no new borrows, no liquidations at a price nobody can verify.
 contract StaleFeedGuard {
     error SequencerDown();
     error SequencerGracePeriod(uint256 secondsRemaining);
@@ -48,13 +27,10 @@ contract StaleFeedGuard {
     error FeedNotConfigured(address token);
     error StalenessBelowHeartbeat(uint32 given, uint32 heartbeat);
 
-    /// Per-token oracle configuration. Heartbeats come from Chainlink's Robinhood feeds page and
-    /// differ per feed — never hardcode a single global value.
+    /// Heartbeats differ per feed — never hardcode a global value.
     struct FeedConfig {
         AggregatorV3Interface feed;
-        /// Must be >= the feed's heartbeat, plus grace. On Robinhood Chain every feed is 86400s,
-        /// so this is ~90000s. Anything tighter reverts on a quiet market rather than on a
-        /// broken one.
+        /// Must be >= heartbeat + grace (~90000s here); tighter reverts on a quiet market.
         uint32 maxStaleness;
         uint8 decimals;
         bool configured;

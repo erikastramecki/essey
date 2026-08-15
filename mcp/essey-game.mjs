@@ -1,41 +1,19 @@
 // Essey MCP — the game half (D.O.N.), read-only.
 //
-// The lending tools in essey-mcp.mjs let an agent borrow against a Stock Token. These let an agent
-// help someone actually PLAY: read a Don's position, read the live job board with real odds, and
-// reason about the trade-offs. The pitch is the same shape as the lending half — an agent that can
-// see the real numbers gives better advice than one working from a wiki.
+// Three laws this file holds to:
+//   1. FREE AND PUBLIC — an edge only some players have is a whale advantage.
+//   2. FOG FIREWALL — expose only what a stranger with an RPC URL could already derive. The game's
+//      hidden state is hidden cryptographically; an advisor that leaked it would kill the game.
+//   3. ADVISE, NEVER ACT — read-only, no key, no calldata.
 //
-// THREE RULES THIS FILE HOLDS TO, and they are the whole design:
-//
-//   1. FREE AND PUBLIC. There is no key, no auth, no tier. An edge available to only some players is
-//      a whale advantage; available to everyone it just raises the floor.
-//
-//   2. THE FOG FIREWALL. Every read here is something a stranger with an RPC URL could already
-//      compute. Nothing in this file may surface anything our own registries know that the chain does
-//      not. The game's hidden information (garrison contents, raid targets before reveal, the entropy
-//      that has not been drawn yet) is hidden CRYPTOGRAPHICALLY, and an advisor that leaked it would
-//      quietly kill the game it is meant to help. So: public reads only, and the tools say plainly
-//      what cannot be known.
-//
-//   3. ADVISE, NEVER ACT. Read-only. No calldata, no signing, no key — the same law the lending half
-//      holds. The player takes every action themselves.
-//
-// ── STANDING RULE (founder): THIS FILE SHIPS WITH EVERY GAME CHANGE ──────────────────────────────
-// An advisor that describes a game we no longer run is worse than no advisor, because it is
-// confidently wrong. So this file is part of the definition of done for any game change, not a
-// follow-up. Whenever any of the following moves, the matching thing here moves in the same change:
-//
-//   contracts redeployed          -> GAME addresses below
-//   any read signature changed    -> the ABI fragments below
-//   a mechanic added or retired   -> donPlaybook() AND the instructions block in essey-mcp.mjs
-//   payout / odds / fee semantics -> the EV arithmetic in donBoard()
-//   a new hidden-information rule -> the "whatNobodyCanDo" list (the fog firewall is a promise)
-//   currency or denomination      -> the scrip() helper and every label that says "Scrip"
-//
-// KNOWN PENDING (v2): GameController, Scrip, HouseDeed, MissionBoard, RaidEngine, HouseEscrow and
-// HitterNFT are all being redeployed as one new generation, and the economy moves from Scrip to real
-// assets with a PvP-first loop. Every address, every ABI fragment, the playbook and the instructions
-// block all change with that deploy. Verify against chain before shipping, never against a doc.
+// SHIPS WITH EVERY GAME CHANGE. When one of these moves, so does the other, in the same commit:
+//   contracts redeployed        -> GAME addresses
+//   read signature changed      -> ABI fragments
+//   mechanic added or retired   -> donPlaybook() AND the instructions block in essey-mcp.mjs
+//   payout/odds/fee semantics   -> the EV arithmetic in donBoard()
+//   new hidden-information rule -> the whatNobodyCanDo list
+//   denomination changed        -> every unit helper and label
+// v2 pending: the whole game layer redeploys and Scrip is removed. Verify against chain, not docs.
 
 import { createPublicClient, http, defineChain, formatUnits } from "viem";
 
@@ -85,8 +63,6 @@ const read = (address, abi, functionName, args = []) => client.readContract({ ad
 
 // ---------------------------------------------------------------- don_state
 
-// Where a Don's money is, and therefore what is at risk. The three-state split IS the game: banked
-// money is untouchable but idle, hopper money is what a raider can actually reach.
 export async function donState({ donId }) {
   const id = BigInt(donId);
   const [vault, owner] = await Promise.all([
@@ -136,15 +112,12 @@ export async function donState({ donId }) {
 
 // ---------------------------------------------------------------- don_board
 
-// The live job board, with the odds read off the contract rather than off a wiki. Expected value is
-// computed both ways because the provision decision is the only real choice a brief offers.
 export async function donBoard() {
   const count = await read(GAME.missionBoard, ABI.board, "briefCount");
   const ids = Array.from({ length: Number(count) }, (_, i) => BigInt(i + 1));
   const raw = await Promise.all(ids.map((i) => read(GAME.missionBoard, ABI.board, "briefs", [i])));
 
   const jobs = raw.map((b, i) => {
-    // viem returns the tuple positionally, so read it in the order the contract declares.
     const [live, tier, duration, cumSuccessPpm, cumPartialPpm,
            successPay, partialPay, dispatchFee, provisionCap, betaBps, codename] = b;
     const pSuccess = Number(cumSuccessPpm) / 1e6;
@@ -156,8 +129,6 @@ export async function donBoard() {
     const success = scrip(successPay);
     const partial = scrip(partialPay);
 
-    // Bare: pay the fee, provision nothing. Loaded: provision the cap, which is burned at dispatch
-    // and only pays back through the success branch.
     const evBare = pSuccess * success + pPartial * partial - fee;
     const evLoaded = pSuccess * (success + cap * beta) + pPartial * partial - fee - cap;
     const marginalRtp = pSuccess * beta;
@@ -196,7 +167,6 @@ export async function donBoard() {
 
 // ---------------------------------------------------------------- don_playbook
 
-// The rules an advisor needs in order to be useful, and the honest boundaries of what advice can do.
 export async function donPlaybook() {
   return {
     theShape: [
