@@ -5,6 +5,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IEntropy, IEntropyConsumer} from "../market/EsseyCasesDegen.sol";
 import {IDonLike, IGameController, IScrip, IHouseEscrow, GameRoles} from "./GameTypes.sol";
+import {IAffinityRegistry} from "./IAffinityRegistry.sol";
 
 /// MissionBoard — depart/resolve on the Cases/Degen engine. "The Degen
 /// case IS a mission with no theme": pay in, reserve the worst case from a real budget, request
@@ -82,9 +83,15 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
     IEntropy public immutable entropy;
     address public immutable entropyProvider;
     uint32 public immutable callbackGasLimit;
+    /// Zero address = traits off. statsOf() returns a zero sheet for an unattested Don, so an
+    /// un-attested player simply gets the published odds rather than an error.
+    IAffinityRegistry public immutable affinity;
 
     uint256 internal constant PPM = 1_000_000;
     uint256 internal constant BPS = 10_000;
+    /// NRV is bps of PROBABILITY (100 = +1pp) and the bands are ppm, so 1 bps of probability is
+    /// 100 ppm. The Edge Budget caps a whole sheet at 1000 bps, i.e. +10pp of success at most.
+    uint256 internal constant BPS_TO_PPM = 100;
     /// Unresolved past due + grace => anyone may floor-settle at PARTIAL (the Degen
     /// reclaim philosophy: the valve is never better than a real roll, so it only un-sticks).
     uint256 public constant RECLAIM_GRACE = 2 hours;
@@ -163,7 +170,8 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         IHouseEscrow escrow_,
         IEntropy entropy_,
         address entropyProvider_,
-        uint32 callbackGasLimit_
+        uint32 callbackGasLimit_,
+        IAffinityRegistry affinity_
     ) {
         if (
             address(controller_) == address(0) || address(scrip_) == address(0)
@@ -171,6 +179,7 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
                 || address(entropy_) == address(0) || callbackGasLimit_ == 0
         ) revert BadConfig();
         controller = controller_;
+        affinity = affinity_;
         scrip = scrip_;
         don = don_;
         escrow = escrow_;
@@ -347,12 +356,13 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         Brief storage b = briefs[m.briefId];
 
         uint256 roll = uint256(randomNumber) % PPM;
+        uint256 cumSuccess = _successBandFor(m.donId, b);
         uint8 outcome;
         uint256 payout;
-        if (roll < b.cumSuccessPpm) {
+        if (roll < cumSuccess) {
             outcome = 0;
             payout = b.successPay + (m.provision * b.betaBps) / BPS;
-        } else if (roll < b.cumPartialPpm) {
+        } else if (roll < _maxUint(cumSuccess, b.cumPartialPpm)) {
             outcome = 1;
             payout = b.partialPay;
         } else {
@@ -361,6 +371,30 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         }
         _settle(m, payout);
         emit Resolved(missionId, m.donId, outcome, payout);
+    }
+
+    /// NRV widens the success band. Two things this must never do, and does not:
+    ///   - break solvency. depart() reserves the BEST outcome from a funded budget before any roll
+    ///     exists, so shifting probability toward success can only spend a reservation that was
+    ///     already made. It cannot create an unfunded liability.
+    ///   - erase the partial band. Success is capped at cumPartialPpm, so PARTIAL can shrink to
+    ///     nothing but FAIL always keeps whatever cumPartialPpm left it.
+    /// An unattested Don reads a zero sheet and gets exactly the published odds.
+    function _successBandFor(uint256 donId, Brief storage b) internal view returns (uint256) {
+        if (address(affinity) == address(0)) return b.cumSuccessPpm;
+        uint256 nrvBps;
+        try affinity.statsOf(donId) returns (IAffinityRegistry.Stats memory st) {
+            nrvBps = uint256(st.nrvBps);
+        } catch {
+            return b.cumSuccessPpm; // a registry fault must never strand a settlement
+        }
+        if (nrvBps == 0) return b.cumSuccessPpm;
+        uint256 widened = uint256(b.cumSuccessPpm) + nrvBps * BPS_TO_PPM;
+        return widened > b.cumPartialPpm ? b.cumPartialPpm : widened;
+    }
+
+    function _maxUint(uint256 a, uint256 c) private pure returns (uint256) {
+        return a > c ? a : c;
     }
 
     /// The floor valve (permissionless, the Degen `reclaim` philosophy): a mission unresolved past

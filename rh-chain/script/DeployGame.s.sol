@@ -29,6 +29,8 @@ import {Scrip} from "../src/game/Scrip.sol";
 import {HouseDeed} from "../src/game/HouseDeed.sol";
 import {HouseEscrow} from "../src/game/HouseEscrow.sol";
 import {MissionBoard} from "../src/game/MissionBoard.sol";
+import {AffinityRegistry} from "../src/game/AffinityRegistry.sol";
+import {IAffinityRegistry, IDonTraits} from "../src/game/IAffinityRegistry.sol";
 import {RaidEngine} from "../src/game/RaidEngine.sol";
 import {HitterNFT} from "../src/game/HitterNFT.sol";
 import {
@@ -114,6 +116,13 @@ contract DeployGame is Script {
             IDonLike(donAddr),
             IHouseDeed(address(deed))
         );
+        // Traits become live gameplay here: the board reads NRV off the attested sheet. Reuse an
+        // existing registry via AFFINITY when re-deploying only the modules.
+        address affinityAddr = vm.envOr("AFFINITY", address(0));
+        AffinityRegistry affinity = affinityAddr == address(0)
+            ? new AffinityRegistry(IGameController(address(controller)), IDonTraits(donAddr))
+            : AffinityRegistry(affinityAddr);
+
         board = new MissionBoard(
             IGameController(address(controller)),
             IScrip(address(scrip)),
@@ -121,7 +130,8 @@ contract DeployGame is Script {
             IHouseEscrow(address(escrow)),
             IEntropy(entropy),
             provider,
-            CALLBACK_GAS
+            CALLBACK_GAS,
+            IAffinityRegistry(address(affinity))
         );
         hitter = new HitterNFT(
             IGameController(address(controller)),
@@ -142,6 +152,8 @@ contract DeployGame is Script {
             IEntropy(entropy),
             provider,
             CALLBACK_GAS
+        ,
+            IAffinityRegistry(address(affinity))
         );
     }
 

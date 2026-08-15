@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {IAffinityRegistry, IDonTraits} from "../src/game/IAffinityRegistry.sol";
+import {AffinityRegistry} from "../src/game/AffinityRegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {IEntropy} from "../src/market/EsseyCasesDegen.sol";
 import {GameController} from "../src/game/GameController.sol";
@@ -43,6 +45,21 @@ contract MockDon {
 
     function vaultOf(uint256 id) public pure returns (address) {
         return address(uint160(uint256(keccak256(abi.encode("don-vault", id)))));
+    }
+
+    /// AffinityRegistry binds to the collection's trait commitment; the mock lets a test set one.
+    mapping(uint256 => bytes32) public traits;
+
+    function setTraits(uint256 id, bytes32 combo) external {
+        traits[id] = combo;
+    }
+
+    /// The collection freezes art on stake; the registry reads this to decide whether a sheet can
+    /// ever go stale. Unstaked is the interesting case here, so it stays false unless a test sets it.
+    mapping(uint256 => bool) public locked;
+
+    function setLocked(uint256 id, bool v) external {
+        locked[id] = v;
     }
 }
 
@@ -90,6 +107,7 @@ abstract contract GameBase is Test {
     HouseDeed deed;
     HouseEscrow escrow;
     MissionBoard board;
+    AffinityRegistry affinity;
     RaidEngine raid;
     HitterNFT hitter;
     MockDon don;
@@ -130,6 +148,7 @@ abstract contract GameBase is Test {
             IDonLike(address(don)),
             IHouseDeed(address(deed))
         );
+        affinity = new AffinityRegistry(IGameController(address(controller)), IDonTraits(address(don)));
         board = new MissionBoard(
             IGameController(address(controller)),
             IScrip(address(scrip)),
@@ -138,6 +157,8 @@ abstract contract GameBase is Test {
             IEntropy(address(oracle)),
             address(0xDACE),
             200_000
+        ,
+            IAffinityRegistry(address(affinity))
         );
         hitter = new HitterNFT(
             IGameController(address(controller)),
@@ -158,6 +179,8 @@ abstract contract GameBase is Test {
             IEntropy(address(oracle)),
             address(0xDACE),
             200_000
+        ,
+            IAffinityRegistry(address(affinity))
         );
 
         controller.setModule(GameRoles.MISSION_MODULE, address(board));

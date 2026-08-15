@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {AffinityTraits} from "../src/game/AffinityTraits.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {GameBase} from "./GameBase.t.sol";
 import {RaidEngine} from "../src/game/RaidEngine.sol";
@@ -484,5 +485,44 @@ contract GameRaidTest is GameBase {
         vm.prank(alice);
         vm.expectRevert(RaidEngine.WrongState.selector);
         raid.reveal{value: ENTROPY_FEE}(raidId, crew, bobDon, bytes32("s"));
+    }
+
+    // ================================================================== traits move raid power
+
+    /// 5 Suit/The General grants 2 sp RP — the attack stat.
+    function _attestGeneral(uint256 donId) internal {
+        bytes memory pre = bytes("male\n5 Suit/The General");
+        don.setTraits(donId, AffinityTraits.commitmentOf(pre));
+        affinity.attest(donId, pre);
+    }
+
+    function _attackPowerOf(uint64 raidId) internal view returns (uint256 ap) {
+        (,,,,,, ap,,,,,) = raid.raids(raidId);
+    }
+
+    function _defensePowerOf(uint64 raidId) internal view returns (uint256 dp) {
+        (,,,,,,, dp,,,,) = raid.raids(raidId);
+    }
+
+    /// The claim: RP raises the raider's crew power. Same Don, same crew, same target — attested
+    /// second. The p_hit curve is untouched; only the A it consumes moves.
+    function test_Traits_AttackRaisesCrewPower() public {
+        _targetAway(bytes32(0));
+        uint64 bare = _commitAndReveal(aliceDon, alicePk, aliceHitter, bobDon);
+        uint256 bareAttack = _attackPowerOf(bare);
+
+        _attestGeneral(aliceDon);
+        vm.warp(block.timestamp + 30 hours); // clear the per-pair cooldown
+        uint64 buffed = _commitAndReveal(aliceDon, alicePk, aliceHitter, bobDon);
+
+        assertGt(_attackPowerOf(buffed), bareAttack, "RP did not raise the raider's crew power");
+    }
+
+    /// And the defender's side: an unattested target defends at exactly the House number, so the
+    /// attack test above cannot be passing because defense silently moved.
+    function test_Traits_UnattestedTargetDefendsAtHouseValue() public {
+        _targetAway(bytes32(0));
+        uint64 r = _commitAndReveal(aliceDon, alicePk, aliceHitter, bobDon);
+        assertEq(_defensePowerOf(r), deed.defenseOf(bobDon) * 1_000_000, "unattested defense must be the House alone");
     }
 }

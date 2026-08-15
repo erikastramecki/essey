@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {IAffinityRegistry, IDonTraits} from "../src/game/IAffinityRegistry.sol";
+import {AffinityRegistry} from "../src/game/AffinityRegistry.sol";
+import {AffinityTraits} from "../src/game/AffinityTraits.sol";
 import {GameBase} from "./GameBase.t.sol";
 import {MissionBoard} from "../src/game/MissionBoard.sol";
 import {IEntropy} from "../src/market/EsseyCasesDegen.sol";
@@ -99,6 +102,8 @@ contract GameMissionBoardTest is GameBase {
             IEntropy(address(oracle)),
             address(0xDACE),
             200_000
+        ,
+            IAffinityRegistry(address(0))
         );
         poor.postBrief("PAPER ROUTE", 1, 3 hours, 780_000, 930_000, 36e18, 14.4e18, 0.45e18, 15e18, 11_538);
         controller.setModule(GameRoles.MISSION_MODULE, address(poor));
@@ -350,5 +355,47 @@ contract GameMissionBoardTest is GameBase {
         assertLe(payout, reserved);
         assertEq(board.outstandingReserved(), 0);
         assertEq(board.missionBudget(), budget0 - payout);
+    }
+
+    // ================================================================== NRV shifts real outcomes
+
+    /// Attest `aliceDon` to a Windsor sheet — 5 Suit/Windsor grants 2 sp NRV, i.e. +2pp success.
+    function _attestWindsor(uint256 donId) internal returns (uint256 nrvBps) {
+        bytes memory pre = bytes("male\n5 Suit/Windsor");
+        don.setTraits(donId, AffinityTraits.commitmentOf(pre));
+        affinity.attest(donId, pre);
+        nrvBps = uint256(affinity.statsOf(donId).nrvBps);
+    }
+
+    /// The claim: a roll that lands in PARTIAL on the published ladder lands in SUCCESS once the
+    /// Don's NRV widens the band. PAPER ROUTE publishes success < 780000; +2pp moves it to 800000,
+    /// so 790000 is PARTIAL bare and SUCCESS attested.
+    function test_Nerve_WidensSuccessBand_FlipsPartialToSuccess() public {
+        uint256 nrvBps = _attestWindsor(aliceDon);
+        assertEq(nrvBps, 200, "Windsor must grant 2sp NRV or the rest of this test proves nothing");
+
+        _fund(aliceDon, 100e18);
+        uint64 m = _depart(alicePk, aliceDon, PAPER_ROUTE, 0, bytes32(0));
+        _resolveWith(m, 790_000);
+        assertEq(escrow.hopperOf(aliceDon), 36e18, "nerve did not widen the success band");
+    }
+
+    /// The other direction, which is what makes the test above mean anything: the SAME roll on the
+    /// SAME board with an UNATTESTED Don still reads the published ladder and lands in PARTIAL.
+    function test_Nerve_UnattestedDonKeepsPublishedOdds() public {
+        _fund(bobDon, 100e18);
+        uint64 m = _depart(bobPk, bobDon, PAPER_ROUTE, 0, bytes32(0));
+        _resolveWith(m, 790_000);
+        assertEq(escrow.hopperOf(bobDon), 14.4e18, "an unattested Don must get exactly the published odds");
+    }
+
+    /// NRV may shrink PARTIAL to nothing but must never eat into FAIL: success is capped at the
+    /// published cumPartialPpm, so a roll past that band fails however much nerve a Don has.
+    function test_Nerve_CannotReachIntoTheFailBand() public {
+        _attestWindsor(aliceDon);
+        _fund(aliceDon, 100e18);
+        uint64 m = _depart(alicePk, aliceDon, PAPER_ROUTE, 0, bytes32(0));
+        _resolveWith(m, 950_000);
+        assertEq(escrow.hopperOf(aliceDon), 0, "nerve must not convert a FAIL into a payout");
     }
 }

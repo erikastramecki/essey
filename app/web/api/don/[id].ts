@@ -157,6 +157,7 @@ export default async function handler(req: NodeReq, res: NodeRes) {
           combo,
           attributes: attributesFrom(r, pre.gender, locked, liened),
           stats: await sheetFrom(r.preimage),
+          preimage: r.preimage, // attest() is permissionless; these are the bytes it verifies
         },
         {
           "cache-control":

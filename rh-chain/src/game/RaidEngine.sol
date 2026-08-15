@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IEntropy, IEntropyConsumer} from "../market/EsseyCasesDegen.sol";
+import {IAffinityRegistry} from "./IAffinityRegistry.sol";
 import {
     IDonLike,
     IGameController,
@@ -86,6 +87,9 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     uint256 public constant P_MAX_PPM = 700_000; // 70% ceiling — never a sure thing
     uint256 public constant KILL_BASE_PPM = 150_000;
     uint256 public constant KILL_SLOPE_PPM = 350_000;
+    /// Zero address = traits off. An unattested Don reads a zero sheet and fights at base power.
+    IAffinityRegistry public immutable affinity;
+
     uint256 public constant BASE_POWER = 50; // HitterPower at L1 (levels are Phase 1)
     uint256 public constant GARRISON_EFF_BPS = 9_500; // defenders fight at 0.95x
     uint256 public constant MAX_CREW = 5; // the crew cap
@@ -165,9 +169,11 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         IHitterGame hitter_,
         IEntropy entropy_,
         address entropyProvider_,
-        uint32 callbackGasLimit_
+        uint32 callbackGasLimit_,
+        IAffinityRegistry affinity_
     ) {
         controller = controller_;
+        affinity = affinity_;
         scrip = scrip_;
         don = don_;
         deed = deed_;
@@ -243,7 +249,7 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         r.targetDon = targetDonId;
         r.revealedAt = uint64(block.timestamp);
         r.state = RaidState.Revealed;
-        r.attackPower = _settleCrew(raidId, hitterIds);
+        r.attackPower = _withAttack(r.attackerDon, _settleCrew(raidId, hitterIds));
 
         // The fee is sunk the moment the attempt is real — entropy + keeper resources are
         // consumed whether or not the hit lands.
@@ -255,12 +261,42 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         if (g == bytes32(0)) {
             // Openly ungarrisoned: defense is the House alone, settle as soon as the word lands.
             r.garrisonRevealed = true;
-            r.defensePower = deed.defenseOf(targetDonId) * PPM;
+            r.defensePower = _withDefense(targetDonId, deed.defenseOf(targetDonId) * PPM, 0);
             emit GarrisonRevealed(raidId, targetDonId, r.defensePower);
         }
 
         seq = _requestRoll(raidId);
         emit RaidRevealed(raidId, r.attackerDon, targetDonId, r.attackPower, seq);
+    }
+
+    /// RP scales the raider's crew. Powers are x1e6 and the sheet is bps, so this is a pure
+    /// multiplier on a number the existing p_hit curve already consumed — the odds formula is
+    /// untouched, only its inputs move. A registry fault leaves the raid at base power rather than
+    /// bricking a reveal that has already burned its fee.
+    function _withAttack(uint256 donId, uint256 power) internal view returns (uint256) {
+        if (address(affinity) == address(0)) return power;
+        try affinity.statsOf(donId) returns (IAffinityRegistry.Stats memory st) {
+            return power + (power * uint256(st.rpBps)) / 10_000;
+        } catch {
+            return power;
+        }
+    }
+
+    /// HD scales the defender, with the flat addend applied BEFORE the percentage (the sheet's own
+    /// stated order), and CMD scaling only the garrison portion rather than the House itself.
+    function _withDefense(uint256 donId, uint256 power, uint256 garrisonPower)
+        internal
+        view
+        returns (uint256)
+    {
+        if (address(affinity) == address(0)) return power;
+        try affinity.statsOf(donId) returns (IAffinityRegistry.Stats memory st) {
+            uint256 p = power + uint256(st.hdFlat) * PPM;
+            p += (garrisonPower * uint256(st.cmdGarrisonBps)) / 10_000;
+            return p + (p * uint256(st.hdBps)) / 10_000;
+        } catch {
+            return power;
+        }
     }
 
     /// Validate the crew and lock in attack power (x1e6): each Hitter contributes BASE_POWER scaled
@@ -318,14 +354,18 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
 
         address defender = don.ownerOf(r.targetDon);
         uint256 power = deed.defenseOf(r.targetDon) * PPM;
+        uint256 garrisonPower;
         for (uint256 i = 0; i < garrisonIds.length; i++) {
             uint256 id = garrisonIds[i];
             if (i > 0 && id <= garrisonIds[i - 1]) revert BadCrew();
             if (hitter.ownerOf(id) != defender) continue;
             if (block.timestamp < hitter.hospitalUntil(id)) continue;
-            power += (BASE_POWER * PPM * GARRISON_EFF_BPS) / 10_000;
+            uint256 slot = (BASE_POWER * PPM * GARRISON_EFF_BPS) / 10_000;
+            power += slot;
+            garrisonPower += slot;
         }
         r.garrisonRevealed = true;
+        power = _withDefense(r.targetDon, power, garrisonPower);
         r.defensePower = power;
         emit GarrisonRevealed(raidId, r.targetDon, power);
 
