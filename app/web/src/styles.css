@@ -4018,3 +4018,15 @@ main#top {
   font-size: 9px;
   letter-spacing: 0.04em;
 }
+
+.amm-find {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  min-width: 180px;
+  margin-right: 8px;
+}

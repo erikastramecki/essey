@@ -1,6 +1,7 @@
 // Live testnet UI: the live Exchange and the Bell. Everything here talks to the REAL deployed
 // Dons contracts on 46630 — labeled TESTNET throughout, play money only.
 import { useCallback, useEffect, useState } from "react";
+import { DonTraits, traitText, useTraitIndex } from "./don-traits";
 import { Link } from "react-router-dom";
 import type { Address } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
@@ -98,54 +99,21 @@ function DonThumb({ id }: { id: bigint }) {
   );
 }
 
-/// The live Exchange, sudoswap-style: SEE the Dons in the pool (Buy) or in your wallet (Sell), click one,
-/// confirm. Real float, real fees feeding the real pot. The two buy paths are made explicit — buy the next
-/// Don at 8%, or snipe an exact one at the 12% premium — so the trade-off is never hidden behind a click.
-/// Traits are gameplay, not decoration: a buyer picking a Don for missions needs the sheet before
-/// they pay. Reads the same metadata the tokenURI serves.
-export function DonTraits({ id }: { id: bigint | null }) {
-  const [attrs, setAttrs] = useState<
-    { trait_type: string; value: string }[] | null
-  >(null);
-  useEffect(() => {
-    if (id === null) return;
-    setAttrs(null);
-    let live = true;
-    fetch(`/api/don/${id}`)
-      .then((r) => r.json())
-      .then((d) => live && setAttrs(d?.attributes ?? []))
-      .catch(() => live && setAttrs([]));
-    return () => {
-      live = false;
-    };
-  }, [id]);
-  if (id === null) return null;
-  if (attrs === null)
-    return <div className="don-traits live-note">reading traits…</div>;
-  if (!attrs.length)
-    return (
-      <div className="don-traits live-note">
-        Traits unrevealed for this Don.
-      </div>
-    );
-  return (
-    <div className="don-traits">
-      {attrs.map((t) => (
-        <span key={t.trait_type} className="don-trait">
-          <em>{t.trait_type}</em>
-          {t.value}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export function LiveExchange() {
   const w = useWallet();
   const { bal, refresh } = useBalances();
   const [tab, setTab] = useState<"buy" | "sell">("buy");
   const [float_, setFloat] = useState<bigint | null>(null);
   const [poolIds, setPoolIds] = useState<bigint[] | null>(null);
+  const [poolQ, setPoolQ] = useState("");
+  const poolTraits = useTraitIndex(poolIds ?? []);
+  const poolShown = (poolIds ?? []).filter((id) => {
+    const q = poolQ.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(id).includes(q) || traitText(poolTraits[String(id)]).includes(q)
+    );
+  });
   const [owned, setOwned] = useState<OwnedDon[] | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [pick, setPick] = useState<bigint | null>(null); // selected pool Don → snipe confirm
@@ -399,13 +367,21 @@ export function LiveExchange() {
               ) : (
                 <>
                   <div className="amm-grid-h live-note">
+                    <input
+                      className="amm-find"
+                      value={poolQ}
+                      placeholder="filter by trait, e.g. Medusa"
+                      onChange={(e) => setPoolQ(e.target.value)}
+                    />
                     Tap a Don to snipe that exact # (12%)
-                    {float_ !== null && poolIds.length < Number(float_)
-                      ? ` · showing ${poolIds.length} of ${float_.toString()}`
-                      : ""}
+                    {poolQ.trim()
+                      ? ` · ${poolShown.length} match`
+                      : float_ !== null && poolIds.length < Number(float_)
+                        ? ` · showing ${poolIds.length} of ${float_.toString()}`
+                        : ""}
                   </div>
                   <div className="amm-grid">
-                    {poolIds.map((id) => (
+                    {poolShown.map((id) => (
                       <button
                         key={id.toString()}
                         className={"amm-card" + (pick === id ? " on" : "")}

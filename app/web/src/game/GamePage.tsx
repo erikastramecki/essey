@@ -22,7 +22,7 @@ import {
   HOUSE_TIERS,
   type BriefKey,
 } from "./briefs";
-import { DonTraits } from "../live-ui";
+import { DonTraits, traitText, useTraitIndex } from "../don-traits";
 import { DonImg, Stamp, fmtAmt } from "./bits";
 import { JobBoardFile, DossierFile } from "./jobs";
 import { HouseFile } from "./house";
@@ -148,9 +148,22 @@ function Desk() {
   const g = useGame();
   const w = useWallet();
   const navigate = useNavigate();
-  const don = g.selected;
-  const cd = useCountdown(don?.away ? don.dueMs : null);
   const [deskOpen, setDeskOpen] = useState(false);
+  const [deskQ, setDeskQ] = useState("");
+  const don = g.selected;
+  const traitIndex = useTraitIndex(
+    deskOpen ? (g.dons ?? []).map((d) => d.id) : [],
+  );
+  const shown = (g.dons ?? []).filter((d) => {
+    const q = deskQ.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      `№${d.id}`.includes(q) ||
+      String(d.id).includes(q) ||
+      traitText(traitIndex[String(d.id)]).includes(q)
+    );
+  });
+  const cd = useCountdown(don?.away ? don.dueMs : null);
   const [resolving, setResolving] = useState(false);
   const [resolveErr, setResolveErr] = useState<string | null>(null);
 
@@ -334,17 +347,49 @@ function Desk() {
                 className="g-chip g-chip-more"
                 onClick={() => setDeskOpen((o) => !o)}
               >
-                {deskOpen ? "hide traits" : "compare traits"}
+                {deskOpen ? "close desk" : `open the desk (${g.dons.length})`}
               </button>
             </div>
           )}
-          {deskOpen && don && (
-            <div className="g-deskexpand">
+          {deskOpen && (
+            <div className="g-desk">
               <div className="g-cap">
-                <span>№{don.id.toString()} — the sheet you are sending</span>
-                <span>traits</span>
+                <span>
+                  The desk — {shown.length} of {g.dons.length}
+                </span>
+                <input
+                  className="g-desk-find"
+                  value={deskQ}
+                  placeholder="filter by trait, name or №"
+                  onChange={(e) => setDeskQ(e.target.value)}
+                />
               </div>
-              <DonTraits id={don.id} />
+              <div className="g-desk-grid">
+                {shown.map((d) => (
+                  <button
+                    key={d.id.toString()}
+                    className={"g-desk-card" + (don?.id === d.id ? " on" : "")}
+                    onClick={() => {
+                      g.setSelectedId(d.id);
+                      setDeskOpen(false);
+                    }}
+                  >
+                    <span className="g-desk-ph">
+                      <DonImg id={d.id} alt="" />
+                    </span>
+                    <span className="g-desk-h">
+                      №{d.id.toString()}{" "}
+                      <i className={d.away ? "away" : ""}>
+                        {d.away ? "AWAY" : "HOME"}
+                      </i>
+                    </span>
+                    <DonTraits id={d.id} only={4} />
+                  </button>
+                ))}
+              </div>
+              {!shown.length && (
+                <div className="live-note">No Don matches that filter.</div>
+              )}
             </div>
           )}
 

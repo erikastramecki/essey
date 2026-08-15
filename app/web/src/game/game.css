@@ -2042,3 +2042,71 @@
   border: 1px solid var(--line);
   border-radius: 4px;
 }
+
+.g-desk {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.g-desk-find {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  min-width: 190px;
+}
+.g-desk-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.g-desk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.g-desk-card.on {
+  border-color: var(--gold);
+}
+.g-desk-card:hover {
+  border-color: var(--dim);
+}
+.g-desk-ph img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+}
+.g-desk-h {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.g-desk-h i {
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+.g-desk-h i.away {
+  color: var(--gold);
+  opacity: 1;
+}
+.don-trait.more {
+  opacity: 0.6;
+}
