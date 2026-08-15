@@ -10,6 +10,7 @@
 //   contracts redeployed        -> GAME addresses
 //   read signature changed      -> ABI fragments
 //   mechanic added or retired   -> donPlaybook() AND the instructions block in essey-mcp.mjs
+//   trait -> stat mapping changes -> STAT_READING in donSheet() AND the build guidance in donPlaybook()
 //   payout/odds/fee semantics   -> the EV arithmetic in donBoard()
 //   new hidden-information rule -> the whatNobodyCanDo list
 //   denomination changed        -> every unit helper and label
@@ -28,7 +29,12 @@ const GAME = {
   houseEscrow: "0x869cbc012C37F7655FA5eA8F655E862Aa631C93C",
   hitter:      "0x219fafE26FB865b8dA4F55EF38ee99a91Ef969Cf",
   scrip:       "0xAE8AEB1E0eA9A6E6A55b469107DD5c7cbf28F1F6",
+  affinity:    "0x2d9CC510D464977F0Eb597237F467b453CB3e484",
 };
+
+// The sheet decodes from the trait preimage, which lives server-side, so it comes from the site
+// rather than from a chain read. previewSheet is the same pure function either way.
+const SITE = process.env.ESSEY_SITE || "https://essey.xyz";
 
 const rhTestnet = defineChain({
   id: 46630,
@@ -61,6 +67,50 @@ const ABI = {
 const scrip = (v) => Number(formatUnits(v, 18));
 const read = (address, abi, functionName, args = []) => client.readContract({ address, abi, functionName, args });
 
+// ---------------------------------------------------------------- don_sheet
+
+const STAT_READING = {
+  rpBps: "attack — raises power when THIS Don is the raider",
+  hdBps: "defense — raises power when this Don is the one being hit",
+  hdFlat: "flat defense, applied before the percentage",
+  nrvBps: "nerve — shifts mission success directly, in points of probability",
+  lckBps: "luck — nudges discrete lotteries, not mission odds",
+  cmdGarrisonBps: "command — makes each garrison hitter count for more",
+  cmdFactionBps: "command — mission success on faction jobs only",
+  cmdCooldownBps: "command — cuts the crew hunt cooldown",
+  feeDiscBps: "yield — cuts fees the Don pays, capped at 25%",
+  resHospBps: "resilience — cuts this Don's OWN hospital lockout",
+  resPetrifyBps: "resilience — lengthens a FAILED attacker's lockout",
+  resAmbushBps: "resilience — cuts the chance of being ambushed in the field",
+  guiTier: "guile — how deep a read the Scout returns, 0 to 2",
+  yldCapSteps: "yield — extra deploy/provision headroom",
+};
+
+export async function donSheet({ donId }) {
+  const r = await fetch(`${SITE}/api/don/${Number(donId)}`).catch(() => null);
+  const d = r && r.ok ? await r.json().catch(() => null) : null;
+  if (!d) return { donId: Number(donId), sheet: null, note: "Could not reach the metadata service." };
+  if (!d.stats)
+    return {
+      donId: Number(donId),
+      sheet: null,
+      traits: d.attributes ?? [],
+      note: "This Don has no stat sheet: its trait preimage was never recorded, so nothing can be decoded. The owner can restore it by re-opening the builder. Do not guess its stats.",
+    };
+
+  const nonZero = Object.entries(d.stats).filter(
+    ([k, v]) => typeof v === "number" && v > 0 && k in STAT_READING,
+  );
+  return {
+    donId: Number(donId),
+    archetype: d.stats.archetype,
+    sheet: d.stats,
+    traits: d.attributes ?? [],
+    strengths: nonZero.map(([k, v]) => ({ stat: k, value: v, means: STAT_READING[k] })),
+    law: "Edge Budget: every sheet is saturated onto the SAME total budget. A rarer Don shifts WHERE its edge sits, never how much edge it has. There is no strictly stronger Don, so never tell a player one build beats another outright — tell them which jobs and which fights their edge actually fits.",
+  };
+}
+
 // ---------------------------------------------------------------- don_state
 
 export async function donState({ donId }) {
@@ -80,11 +130,15 @@ export async function donState({ donId }) {
   ]);
 
   const exposed = scrip(hopper) + scrip(deployed);
+  const sheet = await donSheet({ donId }).catch(() => null);
   return {
     donId: Number(id),
     owner,
     vault,
     away,
+    archetype: sheet?.archetype ?? null,
+    sheet: sheet?.sheet ?? null,
+    strengths: sheet?.strengths ?? [],
     houseTier: Number(tier),
     garrisonSlots: Number(garrison),
     damageBps: Number(damage),
@@ -181,16 +235,25 @@ export async function donPlaybook() {
       "How long a job to take. Longer jobs pay more and leave you reachable for longer.",
       "Whether to raid, and whom. A raid costs a fee that burns on a miss, so a bad target is a real loss.",
     ],
+    theBuild: [
+      "A Don's traits are its stats, not decoration. Read them with don_sheet before advising anything.",
+      "EDGE BUDGET, the law that governs every sheet: all stats are saturated onto the same total budget, so a rarer Don shifts WHERE its edge sits and never how much edge it has. No build is strictly stronger than another.",
+      "So the honest question is never 'is this Don good' but 'what is this Don's edge FOR'. Attack and command point at raiding. Defense, flat defense and petrify point at being a hard target worth turtling. Nerve points at running more jobs. Guile buys deeper Scout reads. Yield cuts the fees a heavy player pays most.",
+      "Archetype is a label FOR that shape, resolved deterministically from the sheet. It is a summary, not an extra power.",
+      "A Don with no recorded preimage has no sheet at all. Say so and stop; never estimate stats from the picture.",
+    ],
     whatAnAdvisorCanDo: [
       "Compute expected value on any brief at any provision level, from live contract odds.",
       "Read your exposure and tell you what a raider could actually reach right now.",
       "Compare briefs on return per hour of exposure rather than on headline payout.",
+      "Read a Don's sheet and say which jobs and which fights its edge actually suits — and, when buying, which of two Dons fits the way that player already plays.",
     ],
     whatNobodyCanDo: [
       "See a defender's garrison before it is revealed. It is committed as a hash, so it is unreadable until they open it.",
       "See who else has a raid committed against a target. Pending raids do not name their target on chain.",
       "Predict any outcome. The randomness does not exist until the moment of settlement.",
       "Tell a bait House from a fat one. That is the core skill the game refuses to automate, and an advisor that claimed otherwise would be lying to you.",
+      "Rank Dons by raw power. The Edge Budget makes that question meaningless, and answering it anyway would sell someone a Don on a false premise.",
     ],
     risks: [
       "This is a competitive game where other players take real positions from you. Advice improves your odds; it does not remove the risk.",
@@ -205,6 +268,9 @@ export const GAME_TOOLS = [
   { name: "don_state", description:
       "Read one Don's live position in the D.O.N. game: banked, deployed and hopper Scrip, whether it is away, its House tier and garrison slots. Use this first when someone tells you which Don is theirs.",
     inputSchema: { type: "object", properties: { donId: { type: "number", description: "The Don's token id" } }, required: ["donId"] } },
+  { name: "don_sheet", description:
+      "Read a Don's stat sheet — archetype plus every stat the traits actually grant, with what each one does. Use this before advising on which jobs to run, whether to raid or turtle, or which Don to buy. Traits are not cosmetic; they are the build.",
+    inputSchema: { type: "object", properties: { donId: { type: "number", description: "The Don's token id" } }, required: ["donId"] } },
   { name: "don_board", description:
       "The live job board with odds and payouts read from the contract, plus expected value with and without provision. Use this to compare briefs or to advise on a provision amount.",
     inputSchema: { type: "object", properties: {} } },
@@ -213,4 +279,4 @@ export const GAME_TOOLS = [
     inputSchema: { type: "object", properties: {} } },
 ];
 
-export const GAME_HANDLERS = { don_state: donState, don_board: donBoard, don_playbook: donPlaybook };
+export const GAME_HANDLERS = { don_state: donState, don_sheet: donSheet, don_board: donBoard, don_playbook: donPlaybook };
