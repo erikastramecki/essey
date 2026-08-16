@@ -174,7 +174,10 @@ export function CrewFile({
       : !don
         ? "a crew signs to a family — take a seat at the Registry first"
         : don.vaultScrip < MINT_PRICE
-          ? `the retainer is ◫ ${fmtAmt(MINT_PRICE)} — the vault is short. run the MILK RUN on the job board (75s, pays ◫ 6,000), then BANK IT at the house`
+          ? `the retainer is ◫ ${fmtAmt(MINT_PRICE)} and it burns from DON №${don.id.toString()}'s VAULT, which holds ◫ ${fmtAmt(don.vaultScrip, 1)}` +
+            (don.hopperScrip > 0n
+              ? ` — ◫ ${fmtAmt(don.hopperScrip, 1)} is sitting UNBANKED in this Don's hopper. bank it at the House desk and it becomes spendable.`
+              : `. Scrip is per-Don, not per-wallet: bank a job's pay at the House desk, or switch to the Don holding it.`)
           : null;
   const expanded =
     g.hitters.find((h) => h.id.toString() === expandedId) ??
