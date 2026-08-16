@@ -289,13 +289,14 @@ export function HouseFile({
             {don.garrisonSlots > 0
               ? `${Math.min(garrisonIds.length, don.garrisonSlots)} of ${don.garrisonSlots} chairs filled`
               : "chairs come with the deed"}{" "}
-            · hidden to rivals
+            · seating them arrives with a later posting
           </p>
           <div className="g-garrison">
             {don.garrisonSlots === 0 ? (
               <p className="g-provnote">
-                a Safehouse deed seats the first chairs. the garrison signs at
-                depart — free, frozen for the window.
+                a Safehouse deed seats the first chairs. seating a Hitter in one
+                arrives with a later posting — until then every House departs
+                openly ungarrisoned.
               </p>
             ) : (
               Array.from({ length: don.garrisonSlots }, (_, i) => {
@@ -303,11 +304,15 @@ export function HouseFile({
                 return seated !== undefined ? (
                   <ChairSlot key={i} label={`№${seated}`} />
                 ) : (
-                  <ChairSlot key={i} label="+ SIGNS AT DEPART" empty />
+                  <ChairSlot key={i} label="LATER POSTING" empty />
                 );
               })
             )}
           </div>
+          <p className="g-provnote">
+            the chain already takes a garrison roster, frozen at depart. there
+            is no way to pick one yet, so every door this season is undefended.
+          </p>
 
           <hr className="g-dashrule" />
           <p className="g-pcap-h">ROBBERY LOG — the cork board</p>

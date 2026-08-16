@@ -555,7 +555,7 @@ function Desk() {
                       don.garrisonSlots,
                     )}
                     /{don.garrisonSlots || "—"}{" "}
-                    <span className="ok">on the door</span>
+                    <span className="warnc">seating: later posting</span>
                   </b>
                 </div>
               </>

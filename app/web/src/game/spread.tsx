@@ -188,15 +188,17 @@ export function SpreadStrip() {
               {top.id.toString()}.
             </b>{" "}
             raid caps key on the target, not on the raider: one House cools for
-            8 hours after any hit and cannot be big-scored again for 48 hours.
-            moving some of that pile behind another door means a single raid
-            reaches less of it, and the second door carries its own cooldown.
+            8 hours after any attempt on it, landed or not, and cannot be
+            big-scored again for 48 hours. moving some of that pile behind
+            another door means a single raid reaches less of it, and the second
+            door carries its own cooldown.
           </>
         ) : (
           <>
             no single door holds more than {round(topShare)}% of what is on the
             table. the caps are per House, so a raider has to kick every door
-            separately, and each one it kicks goes cool for 8 hours.
+            separately, and each one it tries goes cool for 8 hours whether or
+            not the hit lands.
           </>
         )}
       </p>

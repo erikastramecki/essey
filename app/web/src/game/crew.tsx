@@ -291,7 +291,10 @@ export function CrewFile({
                 </div>
                 <div className="g-tf">
                   <label>Carries</label>
-                  <b>— · takeable once carried</b>
+                  <b>
+                    — · gear, and losing it on a miss, arrive with a later
+                    posting
+                  </b>
                 </div>
                 <div className="g-tf">
                   <label>The Favor</label>

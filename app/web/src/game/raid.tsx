@@ -66,7 +66,8 @@ export function StakeoutFile({
       <p className="g-typed" style={{ marginBottom: 10 }}>
         every depart prints on the Tape, and a House can only be hit while its
         Don is away. exposure shows in <b>bands, not numbers</b>. garrisons stay
-        redacted; the commit was frozen at their depart.
+        redacted; the commit was frozen at their depart. seating a garrison
+        arrives with a later posting, so every door this season is undefended.
       </p>
       {!g.configured ? (
         <div className="g-typed">
@@ -472,7 +473,7 @@ export function HitOrderFile({
               </div>
               <div className="g-tf">
                 <label>Odds</label>
-                <b>vs UNKNOWN garrison — 5–70%, crew vs the door</b>
+                <b>5–70%, crew vs the door. no House can seat a garrison yet</b>
               </div>
               <div className="g-tf">
                 <label>Stakes</label>

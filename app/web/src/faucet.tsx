@@ -91,12 +91,13 @@ export function FaucetPage() {
             <p>
               <b>Looking for Scrip (the game's points)?</b> Scrip never drips
               from a faucet — it is earned on the job board. Your first dispatch
-              mints a free Safehouse and a <b>◫ 50</b> starter stake, and the
-              training wire pays like a faucet: the <b>MILK RUN</b> takes 75
-              seconds and pays <b>◫ 6,000</b> on a near-sure roll. That funds a
-              Hitter (◫ 900), hit orders (◫ 50), and your House in one go. When
-              a job lands, <b>bank the hopper</b> at the House desk — pay isn't
-              spendable until banked, and it is raidable until it is.{" "}
+              mints a free Safehouse and, while the stipend budget lasts, a{" "}
+              <b>◫ 50</b> starter stake, and the training wire pays like a
+              faucet: the <b>MILK RUN</b> takes 75 seconds and pays{" "}
+              <b>◫ 6,000</b> on a near-sure roll. That funds a Hitter (◫ 900),
+              hit orders (◫ 50), and your House in one go. When a job lands,{" "}
+              <b>bank the hopper</b> at the House desk — pay isn't spendable
+              until banked, and it is raidable until it is.{" "}
               <a href="/game/jobs/sprint">Run the Milk Run →</a>
             </p>
           </div>

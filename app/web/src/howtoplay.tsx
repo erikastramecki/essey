@@ -348,21 +348,21 @@ export function HowToPlayPage() {
                   <td className="n">◫ 4,000</td>
                   <td className="n">◫ 40,000</td>
                   <td className="n">3</td>
-                  <td>opening soon</td>
+                  <td>later posting</td>
                 </tr>
                 <tr>
                   <td className="k">Estate</td>
                   <td className="n">◫ 12,000</td>
                   <td className="n">◫ 100,000</td>
                   <td className="n">4</td>
-                  <td>opening soon</td>
+                  <td>later posting</td>
                 </tr>
                 <tr>
                   <td className="k">Compound</td>
                   <td className="n">◫ 40,000</td>
                   <td className="n">◫ 250,000</td>
                   <td className="n">5</td>
-                  <td>opening soon</td>
+                  <td>later posting</td>
                 </tr>
               </tbody>
             </table>
@@ -370,6 +370,11 @@ export function HowToPlayPage() {
           <W lbl="Start small">
             Deploy a little, take a short job, come home, bank. Upgrades level
             the deed in place — nothing is lost climbing.
+          </W>
+          <W lbl="This season">
+            Only the first two rungs are on the chain. The Row House upgrade
+            works; asking for anything above it reverts. Brownstone, Estate and
+            Compound are priced and designed, and arrive with a later posting.
           </W>
         </File>
 
@@ -389,7 +394,10 @@ export function HowToPlayPage() {
             <b>clean</b> — full pay. <b>sideways</b> — the job went sideways;
             the partial pay printed on the folder. <b>bust</b> — nothing lands,
             provisions gone. The chain rolls one number against the published
-            bands; nothing about your gear, level, or luck ever moves them.
+            bands. Provision never moves them, and neither does your level. Your
+            Don's <b>NRV</b> trait stat does: it widens the success band by up
+            to <b>+5 percentage points</b>, taken out of the sideways band,
+            never out of bust.
           </W>
           <W lbl="The live board">
             The four posted briefs, verbatim from the chain — tap through:
@@ -407,9 +415,11 @@ export function HowToPlayPage() {
             </i>{" "}
             The contract verifies that signature on-chain; nothing departs
             without it, and nobody can alter what you signed after the fact. The
-            garrison commit rides inside the same signature — which is why your
-            defense is frozen for the whole window, and why nobody conjures
-            guards at the last second.
+            garrison commit rides inside the same signature, which is why a
+            defense is frozen for the whole window.{" "}
+            <b>Picking that roster arrives with a later posting</b> — this
+            season every Don departs openly ungarrisoned, and the signature
+            carries an empty roster.
           </W>
           <PracticeSeal />
           <hr className="g-dashrule" />
@@ -478,18 +488,21 @@ export function HowToPlayPage() {
           <W>
             A Don works jobs. A <b>crew</b> does the other thing. A Hitter mints
             for <b>◫ 900</b>, burned from your Don's vault — no ETH, a pure
-            Scrip sink. Crew cap: five. And every Hitter is either{" "}
-            <b>on the hunt</b> or <b>on the door</b>, never both: a garrisoned
-            Hitter adds real defense but cannot rob anyone while he stands
-            there.
+            Scrip sink. You may own as many Hitters as you care to pay for — the{" "}
+            <b>five</b> is the most any single hit order can take through a
+            door, not a cap on your bench. Putting a Hitter on the door instead
+            of on the hunt arrives with a later posting.
           </W>
           <div style={{ textAlign: "center", margin: "12px 0" }}>
             <BigEnvelope />
           </div>
           <W lbl="The favor">
             Clipped inside every Hitter's dossier is a sealed envelope from the
-            family. It opens on his first job, never before, and the odds are
-            published on-chain before a single one is sold:
+            family. <b>You</b> open it, whenever you like, with one transaction
+            from the rap sheet — a sealed Hitter can raid perfectly well, so
+            there is no rush. Leave it sealed 30 days and anyone may force it
+            open at Empty, which is the only reason to get there first. The odds
+            are published on-chain before a single one is sold:
           </W>
           <div className="htp-table-scroll">
             <table className="htp-table">
@@ -509,25 +522,29 @@ export function HowToPlayPage() {
                 <tr>
                   <td className="k">A small favor</td>
                   <td className="n">20%</td>
-                  <td>one minor edge</td>
+                  <td>one minor edge · later posting</td>
                 </tr>
                 <tr>
                   <td className="k">A real favor</td>
                   <td className="n">8.5%</td>
-                  <td>one real edge</td>
+                  <td>one real edge · later posting</td>
                 </tr>
                 <tr>
                   <td className="k">The Don owes you</td>
                   <td className="n">1.5%</td>
-                  <td>a named signature edge, announced citywide. 1 in 67</td>
+                  <td>
+                    a named signature edge, announced citywide. 1 in 67 · later
+                    posting
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <W>
-            A sealed Hitter can't be sold sealed (no secondary market in
-            secrets), nothing ever re-rolls an envelope, and favors bend odds,
-            never money.
+            Nothing ever re-rolls an envelope. The band is committed at mint and
+            drawn at reveal, and what each band actually <i>does</i> arrives
+            with a later posting: today the Favor is recorded on the Hitter and
+            changes no roll.
           </W>
         </File>
 
@@ -551,16 +568,19 @@ export function HowToPlayPage() {
           </W>
           <W lbl="The window">
             You reveal the target <b>10 to 40 minutes</b> after the commit, and
-            not before. You're attacking blind: the defender's garrison was
-            frozen in their depart signature and stays fog until you're through
-            the door.
+            not before — a 30-minute window, and missing it forfeits the 50. The
+            defender's garrison was frozen in their depart signature and stays
+            fog until you're through the door. This season that roster is always
+            empty, because seating one arrives with a later posting.
           </W>
           <W lbl="What a hit takes">
             If you get in, a second roll decides the night: <b>92%</b> — the
             common hit: the hopper (every unbanked Scrip in the till), and the
             House earns −40% until repaired.
             <b> 8%</b> — the big score: 15–30% of <i>deployed</i> holdings
-            (average ~20%), hard-capped, one big score per House per 48 hours.
+            (average ~20%), hard-capped, and it leaves no damage behind. One big
+            score per House per 48 hours: a big roll inside that lockout settles
+            as a common hit instead, so the rate you actually see is under 8%.
             The Vault — never. The city takes <b>7.5%</b> of every transferred
             score; the Floor eats with the winners.
           </W>
@@ -622,7 +642,7 @@ export function HowToPlayPage() {
                       <td className="k">Garrison</td>
                       <td>
                         frozen at depart — the roster you sign is the roster for
-                        the whole window
+                        the whole window. seating one: later posting
                       </td>
                     </tr>
                     <tr>
@@ -663,8 +683,11 @@ export function HowToPlayPage() {
         >
           <W>
             <b>Every roll's odds are published on-chain before you pay</b> —
-            mission ladders, robbery bands, the Favor's four bands. Odds never
-            change mid-season; a new table is a new posting, never a quiet edit.{" "}
+            mission ladders, robbery bands, the Favor's four bands. A posted
+            ladder never changes mid-season; a new table is a new posting, never
+            a quiet edit. The one thing that shifts a posted band is your Don's
+            own trait sheet, itself published and capped: NRV moves mission
+            success by at most +5 points, RP moves raid power by at most +8%.{" "}
             <b>The house keeps an edge and we say the number</b>: roughly 10 of
             every 100 Scrip staked on a gamble stays with the house.{" "}
             <b>

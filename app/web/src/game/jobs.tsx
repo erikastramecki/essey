@@ -62,12 +62,12 @@ export function JobBoardFile({
       >
         <div className="g-tmeta" style={{ width: "100%" }}>
           <b>NEW IN TOWN? START HERE.</b> Scrip is earned, never claimed. Your
-          first job mints a free Safehouse and a <b>◫ 50</b> starter stake, so
-          run the <b>MILK RUN</b> (75 seconds, pays <b>◫ 6,000</b> on a
-          near-sure wire) and you can retain a Hitter (◫ 900), file hit orders
-          (◫ 50), and build the House — all off one job. When it lands,{" "}
-          <b>BANK IT</b> at the House desk: it sits in the hopper, raidable,
-          until you do.
+          first job mints a free Safehouse and, while the stipend budget lasts,
+          a <b>◫ 50</b> starter stake, so run the <b>MILK RUN</b> (75 seconds,
+          pays <b>◫ 6,000</b> on a near-sure wire) and you can retain a Hitter
+          (◫ 900), file hit orders (◫ 50), and build the House — all off one
+          job. When it lands, <b>BANK IT</b> at the House desk: it sits in the
+          hopper, raidable, until you do.
         </div>
       </button>
       <div className="g-drawer">

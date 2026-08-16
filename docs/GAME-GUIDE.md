@@ -23,9 +23,10 @@ and a game where the jobs are timed, the odds are published, and nothing bleeds 
    earns daily and can be robbed while you are out. Start small.
 5. **Take your first job.** Open the board, pick PAPER ROUTE, the 3-hour escort run. Reading the folder is
    reading the odds: the dossier is the risk disclosure.
-6. **Dispatching prints your first line on the Tape.** This season the Keeper also attests your Starting
-   Kit class on the record at first dispatch; the kit's mint into the wallet, and the Don's sealed Edge
-   envelope, carry the stamp: · ARRIVES WITH A LATER POSTING · (see Your Don is the loadout).
+6. **Dispatching prints your first line on the Tape.** Your Don's trait sheet is already live and read by
+   the contracts. The Keeper attests your Starting Kit class to the record once that first job resolves;
+   the kit's mint into the wallet, and the Don's sealed Edge envelope, carry the stamp:
+   · ARRIVES WITH A LATER POSTING · (see Your Don is the loadout).
 7. **Come back when the window closes.** Your pay lands in the House hopper.
 8. **Bank it.** Hopper to Vault, free, forever. Banked money is sacred. Bank before you brag.
 
@@ -100,7 +101,7 @@ is the odds: the folder prints the on-chain table verbatim.
 
 **How a job works:** pick a brief, choose your provisions, dispatch. Your Don departs, locked and visibly
 away, which the whole street can read on the Tape. At the window's end the Keeper rolls the outcome against
-the published ladder and pays the House hopper. Three outcomes on every folder: **clean** (full pay),
+the published ladder, widened by your Don's NRV if he has any, and pays the House hopper. Three outcomes on every folder: **clean** (full pay),
 **sideways** (the job went sideways: the partial pay printed on the folder), **bust** (nothing,
 provisions gone).
 
@@ -131,8 +132,9 @@ otherwise. Nobody has to run it.
 ### Your first hour
 
 Your first dispatch does three things at once, and none of them cost you anything: it mints your free
-**Safehouse**, pays a one-time **◫ 50 starter stake** into the Don's vault, and sends him out. So you
-start with 50 Scrip and no way to lose it before you have spent it.
+**Safehouse**, pays a one-time **◫ 50 starter stake** into the Don's vault, and sends him out. The
+stake comes out of a funded stipend budget rather than thin air, so if that budget is dry the Safehouse
+still mints and the stake does not. Check the vault before you count on it.
 
 Fifty is enough for **PAPER ROUTE** (0.45 door fee, provision cap 15) or **GLASS HARVEST** (0.87, cap
 30) at any carry. It is **not** enough for a full carry on PROOF OF WORK (2.44 + 80) or for any carry
@@ -449,9 +451,12 @@ Every family in Solvency is in two businesses. This is the second one.
 2. **File the job, sealed.** Your Hitter commits to a target without naming it in public: a sealed filing,
    plus **50 Scrip, sunk win or lose**. Walk away without kicking the door and the 50 burns at the city
    incinerator.
-3. **Kick the door.** Reveal inside the 10-to-40-minute window. The defense that counts is the roster
-   the defender signed at depart: the House cannot change shape mid-window, so nobody conjures guards
-   at the last second. You are attacking blind: garrison composition is fog until you are through the door.
+3. **Kick the door.** Reveal between 10 and 40 minutes after the commit — a 30-minute window, and
+   missing it forfeits the fee. The defense that counts is the roster the defender signed at depart: the
+   House cannot change shape mid-window, so nobody conjures guards at the last second. You are attacking
+   blind: garrison composition is fog until you are through the door. **· ARRIVES WITH A LATER POSTING ·**
+   the picker that lets a defender seat that roster. Until it ships every House departs openly
+   ungarrisoned, and every door in the city is undefended.
 4. **The roll.** One published ladder, two stages: did you get in, and what did you find.
 
 ### What a hit takes
@@ -461,10 +466,12 @@ If you get in, a second roll decides what kind of night it was:
 | Outcome | Odds | What moves | What it does NOT touch |
 |---|---:|---|---|
 | **The common hit** ("they cracked the back office") | **92%** | the House's **hopper**: every unbanked Scrip in the till, plus the House earns **-40% until repaired** | deployed principal, the Vault |
-| **The big score** ("they found the safe") | **8%** | **15% to 30% of DEPLOYED holdings** (rolled: 15% + 15% x u squared, average 20%). One big score in 20 crits for 1.5x, hard-capped at 30% | the Vault, ever |
+| **The big score** ("they found the safe") | **8%** rolled, less realized | **15% to 30% of DEPLOYED holdings** (rolled: 15% + 15% x u squared, average 20%, hard-capped at 30%). Leaves no damage behind | the Vault, ever, and the hopper |
 
 - **The 7.5% tax.** The city takes 7.5% of every transferred score. The Floor eats with the winners.
 - **The safe gets moved.** One big score per House per **48 hours**, maximum, no matter who is knocking.
+  A big roll inside that lockout settles as a common hit instead, which is why the big score's *realized*
+  rate sits under the 8% it rolls at.
   **· ARRIVES WITH A LATER POSTING ·** the real-asset seasons keep this same 48-hour lockout, but the
   bite becomes skill-scaled: a marginal win stays in this same modest band, while a dominant crew that
   scouted a wide-open House can reach a rare, earned ceiling of 65% of DEPLOYED. The Vault is never
@@ -478,10 +485,11 @@ If you get in, a second roll decides what kind of night it was:
 Attack strength comes from your Hitter; defense comes from the House and its garrison. The success band
 is clamped: never below 5%, never above 70%. There are no sure things in Solvency, in either direction.
 
-**The Skirmish truth first:** levels and gear carry the stamp, · ARRIVES WITH A LATER POSTING ·, so this
-season every Hitter swings at base power and the door runs richer than the mature table below. One fresh
-Hitter kicking an undefended starter House lands about **40%** right now; a full crew of five pushes the
-same door to about **62%**. The 5% / 70% clamps still apply. The table is the worked outlook for a seasoned, kitted Hitter of later seasons, printed so you
+**The Skirmish truth first:** levels and gear carry the stamp, · ARRIVES WITH A LATER POSTING ·, and so
+does seating a garrison — so this season every Hitter swings at base power, **every House in the city is
+undefended**, and the door runs richer than the mature table below. One fresh Hitter kicking an
+undefended starter House lands about **40%** right now; a full crew of five pushes the same door to about
+**62%**. The 5% / 70% clamps still apply. Your Don's RP trait raises attack power by up to +8% on top. The table is the worked outlook for a seasoned, kitted Hitter of later seasons, printed so you
 can see where the road goes. Illustrative, not this season's roll:
 
 | The door you're kicking | Hit chance |
@@ -523,7 +531,7 @@ Hitter at about 1.2 real attempts a day.
 | Same attacker, same target | 1 attempt per 24h |
 | Target heat | 8h immunity the moment an attempt is filed against you, from anyone |
 | Big-score lockout | 1 per House per 48h (Skirmish); 72h in real-asset seasons |
-| Garrison | frozen at depart. The guard roster you sign is the roster for the whole window |
+| Garrison | frozen at depart. The guard roster you sign is the roster for the whole window. Seating one: · ARRIVES WITH A LATER POSTING · |
 | Mission dispatches | 1 active job per Don at a time |
 
 ### Getting back up: the comeback kit · ARRIVES WITH A LATER POSTING ·
@@ -551,13 +559,18 @@ A Don works jobs. A **crew** does the other thing. Every Hitter is either **on t
 door**, never both, and offense and defense hire from the same bench.
 
 - **One SKU, 9 marks, sealed.** Every Hitter mints with one slot unrevealed.
-- **Crew cap: 5.** Slots unlock at posted prices as you build up the House.
+- **Five through the door, and that is the only five.** `MAX_CREW = 5` is the most Hitters one hit order
+  may take through one door. It is **not** a cap on how many you own: the contract has no per-owner
+  limit and no supply cap, so mint as deep a bench as you want to pay for.
 - A garrisoned Hitter adds real defense (see the door-odds table) but cannot hunt while he stands there.
+  **· ARRIVES WITH A LATER POSTING ·** the picker that seats him. `revealGarrison` is live on chain and
+  works; there is simply no way to choose a roster yet, so no Hitter is on any door this season.
 
 ### The Favor: the sealed slot
 
-Clipped inside every Hitter's dossier is an unopened envelope from the family. It opens on his first job,
-and not before. The odds are published on-chain before a single one is sold:
+Clipped inside every Hitter's dossier is an unopened envelope from the family. **You** open it, with
+one transaction, whenever you like — a sealed Hitter raids perfectly well, so nothing forces your hand.
+The odds are published on-chain before a single one is sold:
 
 | The envelope | Odds | Inside |
 |---|---:|---|
@@ -566,15 +579,20 @@ and not before. The odds are published on-chain before a single one is sold:
 | **A real favor** | **8.5%** | one real edge: +5% job success, or +1 garrison defense point, or -15% repairs |
 | **The Don owes you** | **1.5%** | a named, capped signature edge, announced citywide when it opens. 1 in 67 |
 
+**· ARRIVES WITH A LATER POSTING ·** every effect in the "Inside" column. The bands and their odds are
+live and drawn on chain right now, and the band your Hitter drew is recorded on him permanently — but
+nothing reads it yet, so no Favor changes any roll this season. The percentages are real. The perks post
+later, at these published shapes.
+
 The rules that keep it an edge and not a wall:
 
 - **Odds on the button.** The four bands print on the purchase screen itself, and the assignment is
   committed at mint: fixed before anyone, including us, can see or steer it.
-- **Transfer opens the envelope.** A sealed Hitter cannot be sold sealed. No secondary market in secrets.
 - **Sealed once, ever.** Nothing re-seals, nothing re-rolls the envelope.
 - **Favors bend odds, never money.** No Favor touches yields, the Bell, or what a robbery can take.
 - **The 30-day rule.** An envelope left sealed 30 days can be opened by anyone, and a forced envelope
-  always comes up empty. Pay for your own reveal and you keep the full odds ladder.
+  always comes up Empty. Pay for your own reveal and you keep the full odds ladder. That valve exists so
+  no Hitter stays sealed forever, and it is the only clock on the envelope.
 
 **· ARRIVES WITH A LATER POSTING ·** Dons will run the same ritual from the other side: the custom
 builder sells determinism, and the random path carries its own sealed Edge envelope at the same published
@@ -588,16 +606,21 @@ this season's chain yet; when it posts, the odds post first.
 ![The Trait Chart: every trait mapped to its in-game effect, the eight stats, and the six build archetypes](/charts/trait-chart.png)
 
 The art was the item system all along. Whatever your Don holds in his portrait, whatever he wears, whatever
-stares back from his eyes: it plays. One honest stamp over this whole wing of the guide: the item and
-trait mechanics below carry the mark, **· ARRIVES WITH A LATER POSTING ·**. This season the Keeper attests
-your kit class on the record at first dispatch, so your place in line is provable now; the mints and the
-combat effects post later, at these published shapes.
+stares back from his eyes: it plays.
+
+**Two of these stats are live right now**, and the rest are not. `MissionBoard` reads **NRV** off your
+sheet on every resolve and widens the success band by up to +5 points; `RaidEngine` reads **RP** and
+raises attack power by up to +8%. Both come straight off the trait sheet, both are capped by the Edge
+Budget below, and both are checkable on chain. Every other stat on the chart, and every **item** mechanic
+in this wing, carries the mark **· ARRIVES WITH A LATER POSTING ·**: the sheet commits them permanently,
+nothing reads them yet.
 
 ### The Starting Kit · ARRIVES WITH A LATER POSTING ·
 
-At first dispatch, alongside the Favor, your Don takes the item painted in his hand **off the canvas and
-into his wallet**: a real token, minted once, ever. (This season: the kit class prints on the record at
-first dispatch by Keeper attestation; the token itself mints with a later posting.) Rarer paint mints a
+When it opens, your Don takes the item painted in his hand **off the canvas and into his wallet**: a
+real token, minted once, ever. (This season the Keeper attests the kit's *class* to the record after your
+first job resolves — `attestKit` latches one number and mints nothing. The token itself, and every effect
+in the chart below, arrive with a later posting.) Rarer paint mints a
 rarer item; the portrait's own rarity table is the loot table, publicly verifiable from the art. One kit per Don for all time. Rerolling
 your art before first dispatch re-aims the future kit; rerolling after changes the wardrobe, never the
 inventory. And if your Don holds nothing? **The Empty Hand** mints instead: the badge for a short quest
@@ -725,11 +748,16 @@ how hard the place is to crack.
 |---|---:|---:|---:|---|---:|---|
 | **Safehouse** | free | 50 marks | 2 | base | 0.11 | **open** |
 | **Row House** | 15 marks | 150 | 3 | + | 0.34 | **open** |
-| **Brownstone** | 40 marks | 400 | 3 | ++ | 0.90 | opening soon |
-| **Estate** | 120 marks | 1,000 | 4 | +++ | 2.25 | opening soon |
-| **Compound** | 400 marks | 2,500 | 5 | ++++ | 5.63 | opening soon |
+| **Brownstone** | 40 marks | 400 | 3 | ++ | 0.90 | · ARRIVES WITH A LATER POSTING · |
+| **Estate** | 120 marks | 1,000 | 4 | +++ | 2.25 | · ARRIVES WITH A LATER POSTING · |
+| **Compound** | 400 marks | 2,500 | 5 | ++++ | 5.63 | · ARRIVES WITH A LATER POSTING · |
 
 (1 mark = 100 Scrip. Skirmish prices post in test funds; this is the standing rate card.)
+
+**Two rungs are on the chain today**, and the contract says so itself: `MAX_TIER = 1`. The Safehouse is
+free and auto-claimed, the Row House upgrade works, and calling `upgrade` again reverts `AtMaxTier`.
+The three tiers above are priced and designed, not deployed. Their caps, chairs and defense post with
+them.
 
 - **A bigger house earns nothing by itself.** It raises the cap on what you may expose. Every Scrip earned
   still traces to a deploy choice and a job window. The ladder sells capacity, never yield.
@@ -830,8 +858,12 @@ It is free, it is public, and every number it reads is a number any other player
 This game sits next to real money, so it holds itself to the standard the city is named for.
 
 1. **Every roll's odds are published on-chain before you pay.** Mission ladders, robbery bands, the
-   Favor's four bands, the big-score curve: all of it, posted, versioned, checkable by anyone. Odds never
-   change mid-season. A new table is a new posting, never a quiet edit.
+   Favor's four bands, the big-score curve: all of it, posted, versioned, checkable by anyone. A posted
+   ladder never changes mid-season. A new table is a new posting, never a quiet edit. What *does* shift a
+   posted band is your Don's own trait sheet, which is itself published and capped: **NRV** widens the
+   mission success band by at most **+5 points**, taken from the sideways band and never from bust, and
+   **RP** raises raid attack power by at most **+8%**. Both are read live by the contracts today. Nothing
+   else moves a number: not provision, not standing, not the Favor.
 2. **The Floor takes its cut, and we say the number.** On every gamble in the city, roughly 10 of every
    100 staked stays with the house. Mission wages are funded pay for time; the gambling lives in
    provisioning, crates, and the door, and it carries that edge. If you play purely to profit, the Floor

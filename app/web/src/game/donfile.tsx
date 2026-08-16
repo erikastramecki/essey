@@ -79,9 +79,9 @@ export function DonFile({
         <div className="g-evi-dot" style={{ left: "38%", top: "72%" }} />
         <div className="g-evi-tag" style={{ right: "2%", top: "78%" }}>
           <b>EXHIBIT A</b>
-          whatever the locked portrait holds in hand. <u>comes equipped:</u> the
-          painted kit mints into the family Vault at first dispatch. never
-          buyable, never lost.
+          whatever the locked portrait holds in hand. the Keeper records its
+          class on the record after your first job resolves. the kit itself
+          mints, and plays, with a later posting.
         </div>
       </div>
       {away && (
@@ -124,12 +124,12 @@ export function DonFile({
           </b>
         </div>
         <div className="g-tf">
-          <label>Equipped from art</label>
-          <b>reads off the locked portrait (counts: 1 gear slot)</b>
+          <label>Kit class</label>
+          <b>recorded from the portrait once your first job resolves</b>
         </div>
         <div className="g-tf">
-          <label>Class affinity</label>
-          <b>resolves at first dispatch — the suit knows its district</b>
+          <label>Traits</label>
+          <b>live — NRV widens this Don's mission success band, up to +5pp</b>
         </div>
       </div>
     </CaseFile>
