@@ -43,10 +43,10 @@ const disposition = (
 
 /// FavorRevealed band names (HitterNFT._bandName) — 70 / 20 / 8.5 / 1.5.
 const FAVOR_BANDS = [
-  "AN EMPTY ENVELOPE — 70% are. the ticket was the thrill",
-  "A SMALL FAVOR — the family remembers little things",
-  "A REAL FAVOR — one genuine edge, on the record",
-  "THE DON OWES YOU — say it quietly",
+  "AN EMPTY ENVELOPE — 70%",
+  "A SMALL FAVOR — 20%",
+  "A REAL FAVOR — 8.5%",
+  "THE DON OWES YOU — 1.5%",
 ] as const;
 
 export function CrewFile({
@@ -193,18 +193,17 @@ export function CrewFile({
       onClose={onClose}
     >
       <p className="g-typed" style={{ marginBottom: 10 }}>
-        no photographs on file. the crews prefer it that way, and so does the
-        fog. a Hitter is a <b>rap sheet, not a face</b> — faceless muscle is the
-        theme, not a gap.
+        no photographs on file. what a rap sheet carries is his{" "}
+        <b>disposition</b> — at the slick, cooling off, or in hospital — and the
+        Favor sealed in his envelope.
       </p>
 
       {g.hitters.length === 0 ? (
         <div className="g-typed">
           <p>
-            <span className="lbl">NO CREW ON FILE</span>
-            every family keeps a crew: the people who watch houses, mind doors,
-            case jobs, and — when a rival Don is out — do the other thing.
-            retain your first Hitter below.
+            <span className="lbl">NO CREW ON FILE</span>a raid needs Hitters: a
+            hit order takes one to five of them through a rival's door while
+            that Don is away. retain your first below.
           </p>
         </div>
       ) : (
@@ -225,7 +224,7 @@ export function CrewFile({
                 <RedactedMug />
                 <div className="g-hname">№{h.id.toString()}</div>
                 <div className="g-hstat">
-                  carries <b>—</b> · gear ships with the ItemVault
+                  carries <b>—</b> · gear arrives with a later posting
                 </div>
                 <div className="g-hstamp">
                   <RatingStamp rating={d.rating}>{d.label}</RatingStamp>
@@ -259,8 +258,7 @@ export function CrewFile({
         <p className="g-provnote" style={{ marginTop: 6 }}>
           the retainer burns from your Don's vault. every mint arrives with one{" "}
           <b>sealed slot — the Favor</b>: an unopened envelope from the family,
-          committed at mint against published odds (70 / 20 / 8.5 / 1.5). maybe
-          nothing. maybe an edge.
+          committed at mint against published odds (70 / 20 / 8.5 / 1.5).
         </p>
       </div>
       {err && <div className="g-err">{err}</div>}
@@ -285,9 +283,7 @@ export function CrewFile({
               <div className="g-typedfields">
                 <div className="g-tf">
                   <label>Codename</label>
-                  <b>
-                    №{expanded.id.toString()} — the Tape declines to elaborate
-                  </b>
+                  <b>№{expanded.id.toString()}</b>
                 </div>
                 <div className="g-tf">
                   <label>Disposition</label>
@@ -301,7 +297,7 @@ export function CrewFile({
                   <label>The Favor</label>
                   <b className={expanded.sealed ? undefined : "ok"}>
                     {expanded.sealed
-                      ? "SEALED ✉ — contents unknown to rivals"
+                      ? "SEALED ✉ — unknown until you open it"
                       : (favorBand ?? "REVEALED — the Favor is on the record")}
                   </b>
                 </div>
@@ -330,8 +326,8 @@ export function CrewFile({
                 color: "var(--g-ink-type-mut)",
               }}
             >
-              what you carry on the job, you carried on the job. nobody mourns a
-              lost crowbar. they mourn the good coat.
+              any raid attempt puts this Hitter on a 20h cooldown, and a miss
+              can put him in hospital for 48h.
             </p>
           </div>
         </>

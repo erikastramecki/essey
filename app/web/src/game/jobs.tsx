@@ -127,7 +127,7 @@ export function JobBoardFile({
         </div>
       </div>
       <p className="g-note" style={{ marginTop: 14 }}>
-        the dispatcher never lies. if the odds are bad, THE WORD says so.
+        every folder prints its odds, its pay and its window before you sign.
       </p>
     </CaseFile>
   );
@@ -311,12 +311,7 @@ export function DossierFile({
           </div>
           <div className="g-tf">
             <label>Rating</label>
-            <b>
-              {brief.ratingLabel}
-              {brief.rating === "unins"
-                ? " — the Fixer declines"
-                : " (the Fixer quotes on request)"}
-            </b>
+            <b>{brief.ratingLabel}</b>
           </div>
         </div>
       </div>
@@ -358,8 +353,8 @@ export function DossierFile({
         DURATION — fixed by the posting
       </p>
       <div className="g-exposure">
-        exposure window: {brief.durationH}h — your House is robbable while
-        you're away. that sentence is always on the folder.
+        exposure window: {brief.durationH}h — your House is robbable for the
+        whole window, and only while your Don is away.
       </div>
 
       <p className="g-pcap-h" style={{ marginTop: 14 }}>
@@ -383,8 +378,9 @@ export function DossierFile({
         })}
       </div>
       <p className="g-provnote">
-        provisions are consumed win or lose — the gamble. success pays +◫{" "}
-        {fmtAmt(boost, 1)} on top of the posted take. odds never move.
+        provisions burn at dispatch, win or lose. success pays +◫{" "}
+        {fmtAmt(boost, 1)} on top of the posted take. provision never moves the
+        odds.
       </p>
 
       <div className="g-feeline">
@@ -408,7 +404,6 @@ export function DossierFile({
           </Stamp>
           <p className="g-provnote" style={{ marginTop: 10 }}>
             folder is now the active case — read-only, reachable from the desk.
-            the resolve arrives as a stamp, not a popup.
           </p>
         </div>
       )}

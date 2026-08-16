@@ -18,9 +18,9 @@ and a game where the jobs are timed, the odds are published, and nothing bleeds 
    from the Faucet.
 2. **Get a Don.** Whitelist claim, a reroll, or build your own in the builder. Your Don is your character,
    your seat, and your wallet in one.
-3. **Claim your Safehouse.** Free with every Don. It is small. Nobody sneers at a Safehouse.
+3. **Claim your Safehouse.** Free with every Don.
 4. **Deploy a little Scrip to the House.** Vault money earns nothing and can never be touched. House money
-   earns daily and can be robbed while you are out. That choice is the whole game. Start small.
+   earns daily and can be robbed while you are out. Start small.
 5. **Take your first job.** Open the board, pick PAPER ROUTE, the 3-hour escort run. Reading the folder is
    reading the odds: the dossier is the risk disclosure.
 6. **Dispatching prints your first line on the Tape.** This season the Keeper also attests your Starting
@@ -29,7 +29,7 @@ and a game where the jobs are timed, the odds are published, and nothing bleeds 
 7. **Come back when the window closes.** Your pay lands in the House hopper.
 8. **Bank it.** Hopper to Vault, free, forever. Banked money is sacred. Bank before you brag.
 
-That is the loop: deploy, work, come home, bank. Everything else in this guide is how to do it with style.
+That is the loop: deploy, work, come home, bank.
 
 ---
 
@@ -59,7 +59,6 @@ have not printed yet. The city's entire criminal economy lives in that gap, in t
 walking out his front door and the Tape saying where he went.
 
 **The Keeper** resolves the jobs and rings the Bell. The Keeper can be slow. The Keeper cannot steal.
-The city checked. Twice.
 
 **Why your Don is a portfolio:** your Don carries his own wallet. His Vault balance, his House deed, his
 kit, his crew's loot: all of it lives inside the token. Sell the Don and the estate goes with him. A Don
@@ -87,11 +86,9 @@ The core decision of the game, drawn as a floor plan:
 - **Your House can only be hit while your Don is away.** Home means untouchable, and home means you can
   bank the hopper instantly. The whole defensive art is: bank often, garrison well, choose your windows.
 - **Banking is free. Forever.** No fee, no delay, no future knob. Every exit in this game is free: bank,
-  claim, withdraw, unstake. The city charges you to take risks and to buy services. It never charges you
-  to stop.
+  claim, withdraw, unstake.
 
-The lazy man's summary: the Vault is a mattress, the House is a business, the hopper is the till. Robbers
-go for the till. Empty it nightly.
+The Vault is a mattress, the House is a business, the hopper is the till. Robbers go for the till.
 
 ---
 
@@ -99,7 +96,7 @@ go for the till. Empty it nightly.
 
 A job arrives as a **dossier**: a case file over the map, your Don's portrait clipped to the corner, the
 brief typed inside. One screen, one decision, one transaction. The folder shows the odds because the folder
-is the odds: the dossier is the on-chain table wearing a trench coat, and the dispatcher never lies.
+is the odds: the folder prints the on-chain table verbatim.
 
 **How a job works:** pick a brief, choose your provisions, dispatch. Your Don departs, locked and visibly
 away, which the whole street can read on the Tape. At the window's end the Keeper rolls the outcome against
@@ -129,7 +126,7 @@ Neither is a career. Both exist so nobody has to learn this game broke.
 **DEEP RUN is the wildcard, and it breaks a rule the other folders keep.** Every brief above hands back
 about 90 on the hundred you provision. This one hands back roughly eleven. You are not buying a better
 success rate, you are buying a bigger number on a thinner chance, and the folder does not pretend
-otherwise. Nobody has to run it. That is the whole point of it being there.
+otherwise. Nobody has to run it.
 
 ### Your first hour
 
@@ -148,8 +145,7 @@ CLEAN branch, so a carry is a bet on the good outcome, never insurance against t
 Read the table honestly and it tells you three things. Longer jobs pay more per hour: that is the exposure
 premium, the city paying you for time spent robbable. Longer jobs fail more: risk and reward rise together
 because time exposed is the unit of both. And ABSOLUTE ZERO is not a job, it is a lottery with a
-dossier: 65% of the time you get nothing and your provisions are gone. The folder says so. The folder
-always says so.
+dossier: 65% of the time you get nothing and your provisions are gone.
 
 Every brief is pegged to a real ticker because in later seasons the take will BE the ticker: the chip-fab
 job pays the chip company. This season the take is Scrip, marked to the peg. The full quest log, with
@@ -168,8 +164,7 @@ you walk in empty-handed or loaded to the cap. What a provision buys is a fatter
 outcome, and only the clean outcome: the payout grows by your provision times the folder's posted beta,
 IF the job lands. Go sideways or bust and the provision is simply gone. You are pressing the bet: same
 door, same odds, bigger swing. And the city's cut applies: across the whole city, every 100 Scrip
-provisioned returns about 90 in expectation. Provision because you like the job, not because it beats
-the math. It does not. Nothing here does; see The house rules.
+provisioned returns about 90 in expectation; see The house rules.
 
 | Brief | Provision cap | Posted beta | A full carry adds to the clean take |
 |---|---:|---:|---|
@@ -179,7 +174,7 @@ the math. It does not. Nothing here does; see The house rules.
 | ABSOLUTE ZERO | 200 Scrip | 7.5x | 1,500 Scrip on the jackpot, IF the 12% hits |
 
 Run the arithmetic on that last row and understand what you are buying: burn 200, and 65% of the time it
-was a bonfire. Variance is the product. The odds were never for sale.
+was a bonfire.
 
 ### The Moonshot and the Big Pot · ARRIVES WITH A LATER POSTING ·
 
@@ -195,9 +190,8 @@ same expected pay, entirely different shape:
 | Door fee | 5.76 Scrip | **20 Scrip** |
 
 The Moonshot's fat door fee is not a rake: 80% of the premium goes into **the Big Pot**, a citywide
-progressive pot. Every Moonshot resolution has an independent **0.4%** chance to win the entire pot. Some
-days it pays in hours. Some weeks it builds into a number the whole city watches. When it goes, the Tape
-prints a name.
+progressive pot. Every Moonshot resolution has an independent **0.4%** chance to win the entire pot.
+When it goes, the Tape prints a name.
 
 ### Reputation: how leveling works · ARRIVES WITH A LATER POSTING ·
 
@@ -215,8 +209,7 @@ the standing system as it will post:
 
 Odds never scale with standing. A level-21 Don busts 7% of escort runs like everybody else; his envelope is
 just thicker. One published ladder per tier, same for every Don in the city, auditable at a glance. One
-rule that is already the law this season: **one active job per Don at a time.** Even legends work single
-file.
+rule that is already the law this season: **one active job per Don at a time.**
 
 ---
 
@@ -224,19 +217,17 @@ file.
 
 The quest log, in full. Every brief in Solvency is **pegged to a real tokenized stock with a live price
 wire**, and no two payout curves are alike because no two charts are alike: the take's personality is not
-a design decision, it is the asset's own volatility, read off the wire. A traditional game can theme a
-heist on a chip fab. Only here can the loot BE the chip company, because the company's token actually
-exists on-chain, and we print the address so you can check.
+a design decision, it is the asset's own volatility, read off the wire. The loot can BE the chip
+company, because the company's token actually exists on-chain, and we print the address so you can check.
 
 > **Read this before the flex.** The contracts below are the pegged assets' verified main-network
 > contracts. Every printed token passed a four-check proof read directly off the chain (official
 > registry beacon, 18 decimals, live multiplier, not paused). Impostor tokens with identical display
 > names exist out there, which is why we never list from an explorer label, and why a ticker whose
 > token has not yet cleared the proof is marked **pending the proof** instead of guessed at.
-> And the honest line, in bold so nobody misses it: **the season you are playing settles in Scrip,
-> marked to these wires on test-network stand-ins. The seasons that settle in the tokens themselves
-> are the roadmap.** Every mission already knows its token. That is the flex. It is not a promise of
-> tomorrow morning.
+> And the honest line: **the season you are playing settles in Scrip, marked to these wires on
+> test-network stand-ins. The seasons that settle in the tokens themselves are the roadmap.** Every
+> mission already knows its token. It is not a promise of tomorrow morning.
 
 ### How the take pays
 
@@ -337,7 +328,7 @@ to look bored. You have five hours, not twelve. The rush is the mercy.
 | Token | pending the proof; prints here the day it clears |
 | Price wire | live on the city wire |
 
-THE WORD: The name of the job is the whole philosophy of this town. You did the work. Here's the proof.
+THE WORD: You did the work. Here's the proof.
 
 ---
 
@@ -457,7 +448,7 @@ Every family in Solvency is in two businesses. This is the second one.
    open for 12 hours, and everyone knows it.
 2. **File the job, sealed.** Your Hitter commits to a target without naming it in public: a sealed filing,
    plus **50 Scrip, sunk win or lose**. Walk away without kicking the door and the 50 burns at the city
-   incinerator. Cowardice is a fee like everything else.
+   incinerator.
 3. **Kick the door.** Reveal inside the 10-to-40-minute window. The defense that counts is the roster
    the defender signed at depart: the House cannot change shape mid-window, so nobody conjures guards
    at the last second. You are attacking blind: garrison composition is fog until you are through the door.
@@ -502,16 +493,12 @@ can see where the road goes. Illustrative, not this season's roll:
 | Full garrison, upgraded House | 12% |
 | Anything, floor / ceiling | 5% / 70% |
 
-Read it plainly: **robbing negligence is a profession; robbing a defended House is a donation.** The math
-is built so that every victim is one garrison decision away from making you unprofitable. Their move.
-
 ### What you risk when you knock
 
 A failed attempt is not free. On a bust, your Hitter risks being taken: **20%** against a naked house,
 up to **43%** against a full crew. Taken means a **48-hour hospital stay**, benched and useless while
 the street keeps moving. In later seasons the stakes climb further: a taken Hitter's equipped kit will
-transfer to the defender. What you carry on the job, you will have carried on the job. For now, in
-Skirmish, the hospital bed is the bill.
+transfer to the defender. For now, in Skirmish, the hospital bed is the bill.
 
 ### The cooldown curve: patience is a weapon
 
@@ -525,9 +512,8 @@ You should not:
 | 15h | 56% |
 | 20h | **100%** |
 
-The curve is quadratic, which means spam is self-punishing: two hasty attempts are worth less than one
-patient one, always. The math caps a Hitter at about 1.2 real attempts a day, and no bookkeeping is
-needed to enforce it. The curve is the law.
+The curve is quadratic, so two hasty attempts are worth less than one patient one. The math caps a
+Hitter at about 1.2 real attempts a day.
 
 **The full cap stack**, for the spreadsheet crowd:
 
@@ -561,14 +547,12 @@ real-asset seasons.
 
 ## Hitters and the Favor
 
-A Don works jobs. A **crew** does the other thing. Hitters are the Nation's working class of the working
-class, and every one is either **on the hunt** or **on the door**, never both. Offense and defense hire
-from the same bench, and that choice is the whole profession.
+A Don works jobs. A **crew** does the other thing. Every Hitter is either **on the hunt** or **on the
+door**, never both, and offense and defense hire from the same bench.
 
 - **One SKU, 9 marks, sealed.** Every Hitter mints with one slot unrevealed.
 - **Crew cap: 5.** Slots unlock at posted prices as you build up the House.
 - A garrisoned Hitter adds real defense (see the door-odds table) but cannot hunt while he stands there.
-  His foregone hunting is the price of your safety. Everything in this city costs its alternative.
 
 ### The Favor: the sealed slot
 
@@ -587,8 +571,7 @@ The rules that keep it an edge and not a wall:
 - **Odds on the button.** The four bands print on the purchase screen itself, and the assignment is
   committed at mint: fixed before anyone, including us, can see or steer it.
 - **Transfer opens the envelope.** A sealed Hitter cannot be sold sealed. No secondary market in secrets.
-- **Sealed once, ever.** Nothing re-seals, nothing re-rolls the envelope. There is no slot machine here,
-  only one envelope per soul.
+- **Sealed once, ever.** Nothing re-seals, nothing re-rolls the envelope.
 - **Favors bend odds, never money.** No Favor touches yields, the Bell, or what a robbery can take.
 - **The 30-day rule.** An envelope left sealed 30 days can be opened by anyone, and a forced envelope
   always comes up empty. Pay for your own reveal and you keep the full odds ladder.
@@ -618,7 +601,7 @@ first dispatch by Keeper attestation; the token itself mints with a later postin
 rarer item; the portrait's own rarity table is the loot table, publicly verifiable from the art. One kit per Don for all time. Rerolling
 your art before first dispatch re-aims the future kit; rerolling after changes the wardrobe, never the
 inventory. And if your Don holds nothing? **The Empty Hand** mints instead: the badge for a short quest
-line ("get yourself a piece") ending in a Common item of your chosen class. Nothing in this city is a dud.
+line ("get yourself a piece") ending in a Common item of your chosen class.
 
 ### The kit chart · ARRIVES WITH A LATER POSTING ·
 
@@ -657,11 +640,10 @@ Legendary.** Weapons add raid and garrison power by tier; everything else does w
 | .357 | Weapon | the collection's only revolver | **Rare** |
 | Doggy | Companion | "the Doberman": +20 flat House defense while she's away | **Epic** |
 
-Note the accident the archive was hiding: the shotgun is common and the healing Peach is rare. The art was
-balanced like a loot table before anyone knew it was one.
+Note that the shotgun is common and the healing Peach is rare.
 
 Your kit is property: equippable, lendable to your crew, and losable. Carry it on a job and it can be
-taken like anything else carried. The exposure law applies to sentiment too.
+taken like anything else carried.
 
 ### The Callings · ARRIVES WITH A LATER POSTING ·
 
@@ -704,18 +686,17 @@ Rare paint, real perks. Each one line, each inside the caps:
 | **Horseshoe** | once a week, redraw a brief's posted jitter |
 | **Neko** | cat reflexes: harder to jump in the field |
 
-Everything not listed is cosmetic, and we say so out loud. "Every trait secretly matters" is how a game
-becomes a spreadsheet with a lawsuit attached.
+Everything not listed is cosmetic.
 
 ### The Donna's edge · ARRIVES WITH A LATER POSTING ·
 
-The women of Solvency run the systems that decide games: information, command, and resilience. Not a
-bonus. A boss. Four powers, every one of them mechanical:
+The women of Solvency run the systems that decide games: information, command, and resilience. Four
+powers, every one of them mechanical:
 
 | Power | What it does |
 |---|---|
 | **Counter-recon** | every Donna is hard to time: any scouting report covering her returns her away-window as a noisy band, +/-25%, and never her exposure. What a man needs a 1-in-5,000 background for, every woman has by identity |
-| **The Matriarch's House** | a House deed she holds runs better: **defense +15%, repairs -15%**. A Donna on a Compound is the hardest target in the city, as the fiction demands |
+| **The Matriarch's House** | a House deed she holds runs better: **defense +15%, repairs -15%**. A Donna on a Compound is the hardest target in the city |
 | **The Con line** | con-family briefs run **+5 points** success and **+1 provisioning step** for her. Offense, not just defense |
 | **Outfit leadership** | a crew organization led by a Donna grants members **+2% job success** (the Ceasar laurel gives +1: the two leadership traits, deliberately ranked). Lands with the Syndicate update |
 
@@ -724,21 +705,21 @@ And her signature riders: **Medusa** (a failed attacker against her garrison is 
 and stands back up), **Neko** (cat reflexes), **Devilish** (the Table's icon: Moonshot fee -20%).
 
 His identity is breadth: more edges, more volume, more variance. Hers is depth: know more, lose less.
-The optimal family is mixed, which is exactly the point.
+The optimal family is mixed.
 
 ### The Edge Budget: why gear is an edge and not a wall · ARRIVES WITH A LATER POSTING ·
 
 Everything stacks on one curve with a hard ceiling: **no combination of traits, Favors, and items ever
 shifts a roll more than +10 points**, item power saturates at **1.35x**, fee discounts stack to **25%**
 maximum, and nothing, ever, touches the published ladders, the 7.5% tax, or what a robbery can take.
-"Maxed edge" is a real, reachable, knowable state. Screenshot it when you get there.
+"Maxed edge" is a real, reachable, knowable state.
 
 ---
 
 ## The House ladder
 
-Your address is your biography. Every tier raises three things together: how much you may deploy, how many
-doors your crew can hold, and how hard the place is to crack.
+Every tier raises three things together: how much you may deploy, how many doors your crew can hold, and
+how hard the place is to crack.
 
 | Deed | Price | Deploy cap | Garrison slots | Defense | Repair (full scar) | This season |
 |---|---:|---:|---:|---|---:|---|
@@ -784,25 +765,23 @@ month-of-play amplitude for a mid-sized bankroll, not promises.
 
 **THE GRINDER.** Free Don, Safehouse, PAPER ROUTE on repeat, bank every night. How it feels: quiet
 compounding competence; the city's honest workman. What you risk: nearly nothing, and you earn like it.
-Every empire in Solvency started exactly here.
 
 **THE RAIDER.** No deployment, a lean crew, the Tape open all evening reading depart lines. How it feels:
 predatory chess with a stopwatch; the best skill-payout channel in the game. What you risk: 50 Scrip a
-knock, your Hitter's coat, and long dry runs when the city gets disciplined. You eat because others get
-lazy. Some weeks nobody is lazy.
+knock, your Hitter's coat, and long dry runs when the city gets disciplined.
 
 **THE LANDLORD.** Climb the deed ladder, deploy to the cap, garrison heavy, repair fast, bank twice a
 day. How it feels: running a real estate empire that shoots back; the defended House quietly out-earns
 everything. What you risk: robbery drag if you slack on discipline, and the tallest deed draws the most
-planning. Every statement in this city eventually gets audited.
+planning.
 
 **THE WILDCARD.** Joker suit, Table gear, Moonshots and the Big Pot, Grudge Contracts on anyone who
 touches you. How it feels: the loudest seat in the room; a heart monitor with a wardrobe. What you risk:
-the widest swings on this page, by design. The comeback kit exists because of you.
+the widest swings on this page, by design.
 
 **THE DONNA.** Counter-recon, the Matriarch's House, the con line, and eventually the head of the table.
 How it feels: everyone else plays cards; you play the room. Lose less, know more, and make the meta come
-to you. What you risk: less than the men, which is the entire point, and it still isn't nothing.
+to you. What you risk: less than the men, and it still isn't nothing.
 
 ---
 
@@ -840,10 +819,9 @@ exactly as it is to you. It cannot see who else has a knock committed on your ma
 predict a roll, because the roll does not exist until the moment it lands.
 
 So it will tell you the odds and it will not tell you whether the fat House across the street is a
-trap. That part is still yours, and it always will be.
+trap. That part is still yours.
 
-It is free, it is public, and every number it reads is a number any other player can read too. The
-edge is in reading them faster, not in reading them alone.
+It is free, it is public, and every number it reads is a number any other player can read too.
 
 ---
 
@@ -857,8 +835,7 @@ This game sits next to real money, so it holds itself to the standard the city i
 2. **The Floor takes its cut, and we say the number.** On every gamble in the city, roughly 10 of every
    100 staked stays with the house. Mission wages are funded pay for time; the gambling lives in
    provisioning, crates, and the door, and it carries that edge. If you play purely to profit, the Floor
-   wins slowly. Play because it is a good table with real loot on it, and know the number going in. The
-   number is on every folder.
+   wins slowly. The number is on every folder.
 3. **Banked is sacred.** Nothing in this game, no mechanic, no robbery, no admin, can touch your Vault.
    What can be lost is exactly what you chose to expose: deployed Scrip, the hopper, provisions carried,
    items carried, and fees paid. Clause two is the whole trust model.
@@ -867,7 +844,7 @@ This game sits next to real money, so it holds itself to the standard the city i
 5. **The Keeper cannot steal.** It resolves jobs and refreshes prices. If it stalls, your job settles at
    the sideways floor and your money remains yours. Slow is possible. Theft is not.
 6. **No pity mechanics are hidden, because none exist.** The 1.5% is really 1.5%. Streaks are real
-   randomness, verifiable per roll. We would rather you trust a cold table than doubt a warm one.
+   randomness, verifiable per roll.
 7. **This season is testnet.** Scrip and test funds only, no real value at stake, and the Skirmish exists
    precisely to prove the loop before real assets ride it.
 
@@ -875,7 +852,7 @@ This game sits next to real money, so it holds itself to the standard the city i
 
 ## Coming to Solvency
 
-No dates. The city does not promise schedules, it prints arrivals.
+No dates.
 
 ![The D.O.N. Economy Stack: how fees, prizes, raids and insurance fit together. Solid lines are this season; dashed lines are the real-asset road](/charts/economy-stack.png)
 
@@ -929,8 +906,8 @@ Vault is never touched, at any number, and **banking is, and always will be, the
 for the working capital you chose to leave exposed, there is the Fixer's Book: buy a policy before you
 leave an exposed House, and a bad night is cushioned, roughly a quarter of the loss handed back. The Book
 pays for itself four ways: the premiums people pay, a slice of the tax on every landed raid, a small skim
-off the city's whole fee stream, and a season seed to open the doors. Banking is the real skill and the
-free armor; the Book is the second net for the money you deliberately put to work.
+off the city's whole fee stream, and a season seed to open the doors. Banking stays free; the Book is a
+second net for the money you deliberately put to work.
 
 ### The self-refilling board: the pool you win from is the pool you feed · ARRIVES WITH A LATER POSTING ·
 

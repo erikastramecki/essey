@@ -64,17 +64,15 @@ export function StakeoutFile({
       onClose={onClose}
     >
       <p className="g-typed" style={{ marginBottom: 10 }}>
-        every depart prints on the Tape: somewhere, work is getting done — and
-        back there, a House is standing open. exposure shows in{" "}
-        <b>bands, not numbers</b>. garrisons stay redacted; the commit was
-        frozen at their depart.
+        every depart prints on the Tape, and a House can only be hit while its
+        Don is away. exposure shows in <b>bands, not numbers</b>. garrisons stay
+        redacted; the commit was frozen at their depart.
       </p>
       {!g.configured ? (
         <div className="g-typed">
           <p>
             <span className="lbl">THE WORD</span>the stakeout ledger opens with
-            the season. contracts pending — nothing to case yet, and casing
-            nothing is free.
+            the season. contracts pending — there is nothing to case yet.
           </p>
         </div>
       ) : targets === null ? (
@@ -83,7 +81,7 @@ export function StakeoutFile({
         <div className="g-typed">
           <p>
             <span className="lbl">THE WORD</span>every Don in the city is home
-            tonight. patience is also a strategy.
+            tonight. no target is raidable until one departs.
           </p>
         </div>
       ) : (
@@ -474,10 +472,7 @@ export function HitOrderFile({
               </div>
               <div className="g-tf">
                 <label>Odds</label>
-                <b>
-                  vs UNKNOWN garrison — 5–70%, crew vs the door. a range,
-                  because fog.
-                </b>
+                <b>vs UNKNOWN garrison — 5–70%, crew vs the door</b>
               </div>
               <div className="g-tf">
                 <label>Stakes</label>
@@ -531,9 +526,8 @@ export function HitOrderFile({
             </div>
           )}
           <p className="g-provnote">
-            the order seals the crew list. nobody — including you — can change
-            it after the wax takes the die. ⏳ = cooling: allowed, at (t/20h)²
-            odds.
+            the order seals the crew list: it cannot be changed after you sign.
+            ⏳ = cooling: allowed, at (t/20h)² odds.
           </p>
           {err && <div className="g-err">{err}</div>}
           <WaxSeal
@@ -552,9 +546,8 @@ export function HitOrderFile({
             style={{ textAlign: "center", maxWidth: "38ch" }}
           >
             <span className="lbl">THE ENVELOPE IS SEALED</span>
-            committed {fmtHMS((now - secret.committedAt) / 1000)} ago. the
-            reveal window is 10–40 minutes after the commit — it kills mempool
-            sniping in both directions.
+            committed {fmtHMS((now - secret.committedAt) / 1000)} ago. you can
+            reveal between 10 and 40 minutes after the commit, and not before.
           </p>
           {windowMissed && (
             <p className="g-err">
@@ -608,15 +601,14 @@ export function HitOrderFile({
               {outcome !== null && OUTCOME_STAMP[outcome] ? (
                 OUTCOME_STAMP[outcome].ok ? (
                   <p>
-                    <span className="lbl">THE TAKE</span>the door gave. hit tax
-                    burned at the cage; the rest landed in your Don's vault —
-                    already banked, already yours.
+                    <span className="lbl">THE TAKE</span>the door gave. the 7.5%
+                    hit tax burned; the rest landed in your Don's vault.
                   </p>
                 ) : (
                   <p>
                     <span className="lbl">THE DOOR HELD</span>the House was
-                    waiting. check the hospital ward — returning fire is real,
-                    and the defended punish hard.
+                    waiting. check the rap sheets — a miss can put a Hitter in
+                    hospital for 48h.
                   </p>
                 )
               ) : (
@@ -628,9 +620,8 @@ export function HitOrderFile({
                 </p>
               )}
               <p>
-                <span className="lbl">CREW</span>cooldown starts now. hunting
-                early is allowed — at sharply reduced odds. that's strategy, not
-                a gate.
+                <span className="lbl">CREW</span>cooldown starts now. sending
+                one out before 20h is allowed, at (t/20h)² of full odds.
               </p>
             </div>
           </div>

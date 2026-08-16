@@ -287,7 +287,7 @@ function Desk() {
       ) : g.dons === null ? (
         <div className="g-cta">
           <div className="g-cta-h">PULLING THE FILES…</div>
-          <p>reading the Ledger. it has never once been wrong.</p>
+          <p>reading the Ledger.</p>
         </div>
       ) : g.dons.length === 0 ? (
         <div className="g-cta">
@@ -594,8 +594,8 @@ function Desk() {
                 <span className="t">now</span>
                 <span className="fresh">▸</span>
                 <span>
-                  your Don is in the field — <b>the House stands open</b>. both
-                  facts print on the Tape.
+                  your Don is in the field — <b>the House stands open</b> until
+                  he returns.
                 </span>
               </div>
             )}
@@ -604,20 +604,21 @@ function Desk() {
               <span>
                 word is out: <b>{SEASON.name.toUpperCase()}</b>{" "}
                 {g.configured ? "is live" : "posts soon"}. {WIRE_COUNT_WORD}{" "}
-                wires on the board, and the doors are already getting kicked.
+                wires on the board.
               </span>
             </div>
             <div className="g-tape-row">
               <span className="t">—</span>
               <span>
-                the dispatcher never lies. open <b>JOBS</b> and read THE WORD
-                for yourself.
+                open <b>JOBS</b>: every folder prints its odds, its pay and its
+                window before you sign.
               </span>
             </div>
             <div className="g-tape-row">
               <span className="t">—</span>
               <span>
-                the Snitch was retained. by whom, the Tape declines to say.
+                a raid only lands on a Don who is away. bank the hopper before
+                you depart.
               </span>
             </div>
           </div>
