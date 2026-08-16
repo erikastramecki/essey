@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>xyz.essey.game-keeper</string>
+
+  <!-- The script sources ./.env relative to cwd, so the working directory is load-bearing. -->
+  <key>WorkingDirectory</key>
+  <string>/Users/erikastramecki/Developer/assay/rh-chain</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/erikastramecki/Developer/assay/rh-chain/game-keeper.sh</string>
+  </array>
+
+  <!-- launchd starts with a minimal PATH and cast is not on it; without this every
+       chain call fails silently and the keeper looks alive while doing nothing. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/erikastramecki/.foundry/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/erikastramecki/Developer/assay/rh-chain/.keeper-state/keeper.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/erikastramecki/Developer/assay/rh-chain/.keeper-state/keeper.err</string>
+</dict>
+</plist>

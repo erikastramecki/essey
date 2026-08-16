@@ -86,6 +86,27 @@ echo 1 > rh-chain/.keeper-state/mission.lo
 cd rh-chain && nohup ./game-keeper.sh > /tmp/game-keeper.log 2>&1 &
 ```
 
+- **The keeper is supervised by launchd** (`rh-chain/xyz.essey.game-keeper.plist`, installed at
+  `~/Library/LaunchAgents/`). `KeepAlive` restarts it on crash and `RunAtLoad` survives reboot. The
+  `PATH` entry is load-bearing: launchd starts with a minimal PATH and `cast` lives in
+  `~/.foundry/bin`, so without it every chain call fails and the keeper looks alive while doing
+  nothing. After editing the script, restart the job rather than the process:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/xyz.essey.game-keeper
+```
+
+- **Then run the health check.** launchd only catches a crash; it cannot see the failure that
+  actually happened on 2026-08-15, where the process was up and logging while resolving nothing:
+
+```bash
+./rh-chain/check-keeper.sh          # exits 1 on a stale mission or an ENTROPY mismatch
+```
+
+  It checks the symptom (a mission past due and unsettled) rather than the process, and it compares
+  `board.entropy()` against the address in `game-keeper.sh` — the exact 08-15 defect. Verified in
+  both directions: green on a healthy board, exit 1 when the old entropy address is put back.
+
 - Read back that missions actually settle — do not trust the process being alive:
 
 ```bash
