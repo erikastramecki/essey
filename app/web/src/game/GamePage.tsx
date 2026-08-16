@@ -239,15 +239,9 @@ function Desk() {
         </div>
         <div
           className="g-scrip"
-          title="Total banked across every Don's vault. Scrip is spent PER DON — a mint or a fee draws only on the selected Don's vault, never on the family total."
+          title="season Scrip — the settlement points of the current season"
         >
           ◫ SCRIP <b>{g.scrip !== null ? fmtAmt(g.scrip) : "—"}</b>
-          {don && (g.dons?.length ?? 0) > 1 && (
-            <i className="g-scrip-sel">
-              {" "}
-              · №{don.id.toString()} holds ◫ {fmtAmt(don.vaultScrip)}
-            </i>
-          )}
         </div>
       </div>
       <div className="g-season">
