@@ -1004,18 +1004,6 @@
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
-  filter: saturate(0.4) contrast(0.95) brightness(0.9) blur(0.4px);
-}
-.g-surv::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(20, 25, 40, 0.16) 0 2px,
-    transparent 2px 5px
-  );
-  pointer-events: none;
 }
 .g-surv .g-ts {
   position: absolute;

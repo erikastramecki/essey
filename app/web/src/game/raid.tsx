@@ -129,7 +129,6 @@ function TargetRow({
       style={hot ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
     >
       <div className="g-surv">
-        <span className="g-ts">CAM 2 · LIVE</span>
         <DonImg
           id={donId}
           alt={`surveillance still — Don №${donId.toString()}`}
