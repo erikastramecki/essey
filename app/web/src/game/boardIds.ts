@@ -21,6 +21,19 @@ const norm = (s: string): string =>
 let cache: LiveBriefIds | null = null;
 let inflight: Promise<LiveBriefIds> | null = null;
 
+// Retry rather than degrade to the hardcoded chainId on one blip. Fail-OPEN is deliberate:
+// blocking every depart on a transient RPC error is worse than the stale-id revert it prevents.
+async function loadWithRetry(tries = 3): Promise<LiveBriefIds> {
+  for (let i = 1; ; i++) {
+    try {
+      return await load();
+    } catch (err) {
+      if (i >= tries) throw err;
+      await new Promise((r) => setTimeout(r, 400 * i));
+    }
+  }
+}
+
 async function load(): Promise<LiveBriefIds> {
   const count = (await pub.readContract({
     address: GAME_ADDR.missionBoard,
@@ -56,7 +69,7 @@ export function useLiveBriefIds(): LiveBriefIds | null {
   useEffect(() => {
     if (cache) return;
     let alive = true;
-    inflight ??= load();
+    inflight ??= loadWithRetry();
     inflight
       .then((r) => {
         if (alive) setIds(r);
