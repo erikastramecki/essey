@@ -19,7 +19,10 @@ export PATH="$HOME/.foundry/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 set -a; . ./.env; set +a
 PK="${TESTNET_DEPLOYER_PK:?set TESTNET_DEPLOYER_PK in rh-chain/.env}"
 RPC="${RH_TESTNET_RPC:-https://rpc.testnet.chain.robinhood.com}"
-ENTROPY="0xc9e6B140C10e6DcDAE7a2d2a9FdD1BB82Ca1F047"   # game MockEntropy (46630)
+# MUST equal board.entropy() / raid.entropy() — read it back, never copy it forward. The 08-15
+# re-point updated BOARD and RAID and left this on the old stack's MockEntropy, so every word was
+# delivered to a contract nothing was waiting on and no mission ever settled.
+ENTROPY="0x2a1193A7D654D9311dd0b2aE3C44A870D497e521"   # game MockEntropy (46630)
 BOARD="0x15D607638BeEcF9d62E6eC00a37601A89E72CDF1"     # MissionBoard
 RAID="0xc4B372ff6b3c2Ba511FB8Affa54f88F3Bdc1b2f6"      # RaidEngine
 WINDOW=60   # trailing re-scan for SHORT-LIVED objects (entropy seqs, raids: reveal ≤40min, garrison ≤1h)
@@ -30,6 +33,8 @@ GARRISON_TIMEOUT=3600
 # the lowest unsettled id; it advances past the settled prefix, so the scan stays small and nothing ages out.
 STATE_DIR=".keeper-state"; mkdir -p "$STATE_DIR"
 MISSION_LO_FILE="$STATE_DIR/mission.lo"
+# The board the low-water mark was computed against. A mark is meaningless against a different board.
+MISSION_BOARD_FILE="$STATE_DIR/mission.board"
 [ -f "$MISSION_LO_FILE" ] || echo 1 > "$MISSION_LO_FILE"
 
 echo "game-keeper: entropy $ENTROPY / board $BOARD / raid $RAID every ${INTERVAL}s"
@@ -56,6 +61,16 @@ while true; do
   mcount=$(cast call "$BOARD" 'missionCount()(uint64)' --rpc-url "$RPC" 2>/dev/null)
   if [[ "$mcount" =~ ^[0-9]+$ ]] && [ "$mcount" -ge 1 ]; then
     mstart=$(cat "$MISSION_LO_FILE" 2>/dev/null); [[ "$mstart" =~ ^[0-9]+$ ]] || mstart=1
+    # 2026-08-15: a redeploy left this mark at 73 from a 72-mission board. The new board had 37, so
+    # the scan range was empty, nothing ever resolved, and the mark then CONVERGED to mcount+1 —
+    # indistinguishable from healthy. Comparing the mark to the count is not enough; it has to be
+    # tied to the board it was computed against.
+    prevboard=$(cat "$MISSION_BOARD_FILE" 2>/dev/null || true)
+    if [ "$prevboard" != "$BOARD" ] || [ "$mstart" -gt $((mcount + 1)) ]; then
+      echo "$(date -u +%H:%M:%S) KEEPER RESET · mark $mstart vs missionCount $mcount · board ${prevboard:-none} -> $BOARD · rescanning from 1"
+      mstart=1
+      echo "$BOARD" > "$MISSION_BOARD_FILE"
+    fi
     newlo=0   # first id still unsettled this pass; becomes the next low-water mark
     fee=$(cast call "$BOARD" 'entropyFee()(uint256)' --rpc-url "$RPC" 2>/dev/null | awk '{print $1}')
     for ((mid = mstart; mid <= mcount; mid++)); do

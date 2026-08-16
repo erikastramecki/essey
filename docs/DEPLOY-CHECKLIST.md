@@ -57,7 +57,16 @@ Top up with `fundMissionBudget` / the stipend funder (admin, instant, no timeloc
 
 This one cost a whole night. All three parts are required and the failure is completely silent.
 
-- Update addresses in `rh-chain/game-keeper.sh`.
+- Update addresses in `rh-chain/game-keeper.sh` — **all four, and `ENTROPY` is the one that gets
+  missed.** The 08-15 re-point updated `BOARD` and `RAID` and left `ENTROPY` on the old stack, so the
+  keeper delivered every word to a contract nothing was waiting on. Missions sat at
+  `entropyRequested=true, settled=false` forever and the keeper log looked perfectly busy. Read it
+  off the contracts rather than copying it forward:
+
+```bash
+cast call $BOARD 'entropy()(address)' --rpc-url $RPC   # must equal ENTROPY in game-keeper.sh
+cast call $RAID  'entropy()(address)' --rpc-url $RPC   # and so must this
+```
 - **Kill the running keeper.** A long-running bash loop holds the old script in memory, so editing
   the file changes nothing until the process restarts. Check its start time against the file mtime:
 
