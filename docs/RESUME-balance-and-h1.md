@@ -204,6 +204,29 @@ side, since a defender who never calls `revealGarrison` inside the window loses 
 their whole HD sheet via `floorSettle` (`RaidEngine.sol:453`). Deliverable: the UX for both halves,
 the storage/secret handling, and what a defender sees when the window is open.
 
+### Order 3a — settle the offensive/defensive weight simulations (agent: `essey-auditor`)
+
+**Runs BEFORE Order 3 and gates it.** Two agents produced contradictory results on 2026-08-15 and
+neither saw the other's work, so nothing may change `edgeOf` or any odds weight until this is
+re-derived independently:
+
+- **Auditor H-3** — inert stats (`cmdFactionBps`, `lckBps`, charged by `edgeOf` at
+  `AffinityRegistry.sol:182-186` and read by NO deployed engine) dilute the live stats through the
+  proportional `_clamp`, costing ~1.9pp of defensive odds. Its worked example sits at edge **1380**.
+- **Economist** — running the real resolver over all 8,888 Dons, max realized edge is **808 of
+  1000, and 0 of 8,888 clamp.** If that holds, `_clamp` never fires on a mintable Don and H-3 has
+  zero practical effect — a real mispricing in the design, inert in the collection.
+
+Simulate, do not reason: re-derive `edgeOf` across the whole minted collection and answer (1) does
+the clamp EVER fire on a reachable sheet, (2) what does each of `rpBps` / `hdBps` / `hdFlat` /
+`cmdGarrisonBps` actually buy in pp per unit of budget across every house tier and crew size 1-5,
+and (3) which stats are charged budget while being read by no engine. Nine of fourteen sheet stats
+were reported inert — confirm or refute that list against the deployed contracts.
+
+**Re-derive AFTER picking Order 3's new caps, or in the same pass**, because raising `RP_CAP` and
+`HD_PCT_CAP` moves realized edge and can push sheets into the clamp for the first time — which would
+make H-3 live precisely when the magnitude work lands.
+
 ### Order 3 — trait magnitude (agent: `don-economist`, re-scoped)
 
 The ±10-point ruling above, built. **Explicitly out of scope: anything Scrip-denominated** — no
