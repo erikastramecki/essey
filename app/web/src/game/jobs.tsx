@@ -15,6 +15,7 @@ import {
   randomSalt,
 } from "./loadout";
 import { BRIEFS, BRIEF_ORDER, type BriefKey } from "./briefs";
+import { useLiveBriefIds } from "./boardIds";
 import { useGame } from "./useGame";
 import {
   CaseFile,
@@ -41,6 +42,10 @@ export function JobBoardFile({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  const liveIds = useLiveBriefIds();
+  // Until the board answers we show the full order rather than flashing an empty drawer; once it
+  // does, a brief the chain does not have is not a folder anyone can open.
+  const shown = liveIds ? BRIEF_ORDER.filter((k) => liveIds[k]) : BRIEF_ORDER;
   return (
     <CaseFile
       open={open}
@@ -66,7 +71,7 @@ export function JobBoardFile({
         </div>
       </button>
       <div className="g-drawer">
-        {BRIEF_ORDER.map((k) => {
+        {shown.map((k) => {
           const j = BRIEFS[k];
           return (
             <button
@@ -155,6 +160,7 @@ export function DossierFile({
   onClose: () => void;
 }) {
   const g = useGame();
+  const liveIds = useLiveBriefIds();
   const brief = briefKey ? BRIEFS[briefKey] : null;
   const [provIdx, setProvIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -182,6 +188,9 @@ export function DossierFile({
   const provision = (brief.provisionCap * step.num) / step.den;
   const boost = (provision * brief.betaBps) / 10_000n;
 
+  // The id the CHAIN gives this codename, not the one briefs.ts hardcodes — see boardIds.ts.
+  const briefId = (briefKey && liveIds?.[briefKey]) || brief.chainId;
+
   const cost = brief.dispatchFee + provision;
   const spendable =
     (don?.vaultScrip ?? 0n) + (don && don.deedId === 0n ? STIPEND : 0n);
@@ -189,17 +198,19 @@ export function DossierFile({
   // Why the seal might be inert — one honest sentence at a time.
   const gate = !g.configured
     ? "THE BOARD POSTS WITH THE SEASON · CONTRACTS PENDING"
-    : !g.connected
-      ? "CONNECT A WALLET TO SIGN"
-      : !don
-        ? "NO DON ON THE DESK — VISIT THE REGISTRY"
-        : don.away
-          ? (g.dons ?? []).some((d) => !d.away)
-            ? "THIS DON IS IN THE FIELD — SWITCH OPERATIVES AT THE DESK"
-            : "YOUR DON IS IN THE FIELD"
-          : cost > spendable
-            ? `THIS RUN COSTS ◫ ${fmtAmt(cost, 1)} · THE VAULT HOLDS ◫ ${fmtAmt(spendable, 1)} — CARRY LESS`
-            : null;
+    : liveIds && briefKey && !liveIds[briefKey]
+      ? "THIS POSTING IS NOT ON THE BOARD THIS SEASON"
+      : !g.connected
+        ? "CONNECT A WALLET TO SIGN"
+        : !don
+          ? "NO DON ON THE DESK — VISIT THE REGISTRY"
+          : don.away
+            ? (g.dons ?? []).some((d) => !d.away)
+              ? "THIS DON IS IN THE FIELD — SWITCH OPERATIVES AT THE DESK"
+              : "YOUR DON IS IN THE FIELD"
+            : cost > spendable
+              ? `THIS RUN COSTS ◫ ${fmtAmt(cost, 1)} · THE VAULT HOLDS ◫ ${fmtAmt(spendable, 1)} — CARRY LESS`
+              : null;
 
   const depart = async () => {
     if (gate || !don || !g.address || busy || departed) return;
@@ -219,12 +230,7 @@ export function DossierFile({
           : (("0x" + "0".repeat(64)) as `0x${string}`);
       saveGarrisonSecret(g.address, don.id, { hitterIds: [], salt });
       // 2. The EIP-712 loadout: binds briefId + provision + garrison commit in one signature.
-      const loadout = await buildLoadout(
-        don.id,
-        brief.chainId,
-        provision,
-        gHash,
-      );
+      const loadout = await buildLoadout(don.id, briefId, provision, gHash);
       setPhase("signing");
       const sig = await signLoadout(g.address, loadout);
       // 3. The one tx: depart(loadout, sig). No ETH — entropy is requested at resolve, not here.
