@@ -117,6 +117,27 @@ EIP-712 `verifyingContract`, so a missed update breaks every depart signature, n
 
 Then deploy per section B.
 
+### 8. Copy + MCP reconciliation — MANDATORY, every contract deploy
+
+**Founder ruling 2026-08-16: this runs on every contract deploy, without exception.** A deploy is
+the thing that makes player-facing copy false, so the audit belongs here rather than on a calendar.
+
+Dispatch one agent (`don-designer` — it needs the mechanics, not just the prose) with this brief:
+
+> Re-read every player-facing surface against the contracts **as deployed right now**, and reconcile:
+> `app/web/src/game/*.tsx`, `app/web/src/howtoplay.tsx`, `app/web/src/faucet.tsx`,
+> `app/web/src/game/briefs.ts`, `docs/GAME-GUIDE.md`, and the `INSTRUCTIONS` block in
+> `mcp/essey-mcp.mjs`. For every claim: **wrong about something built → fix it against source;
+> not built but scoped → mark "arrives with a later posting"; not built and not planned → delete.**
+> Verify every number by reading the contract, never by recall. If a claim is false and the correct
+> replacement is not derivable, REPORT it — do not invent one. Voice rule: say the mechanic, cut the
+> aphorism.
+
+**Why this is not optional.** On 2026-08-15 traits went live and both the site and the MCP kept
+telling players traits did nothing. The first run of this audit (2026-08-16) found **six** false
+claims, including "Crew cap: five" — which is not a rule at all, cost a live tester real time, and
+had the founder being told one thing by the docs and another by the desk.
+
 ---
 
 ## B. Site deploy

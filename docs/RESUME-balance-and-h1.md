@@ -237,6 +237,18 @@ value of the escape, which is why this runs last. Deliverable: the constant set,
 that pin defence (auditor H-2: six mutations of `_withDefense` currently survive all 161 tests), and
 the reachable maxima after the change.
 
+### Order 5 — copy + MCP reconciliation (agent: `don-designer`)
+
+**Runs LAST, after the contract work has landed and deployed** — the deploy is what invalidates the
+copy, so auditing before it is wasted. Full brief lives in `docs/DEPLOY-CHECKLIST.md` section A.8,
+which is now a **mandatory step on every contract deploy**, not a one-off.
+
+Expect this pass to have real work: H-1 changes when a raid settles, the garrison picker turns four
+"arrives with a later posting" stamps into live copy and introduces the 1-hour `GARRISON_TIMEOUT`
+wait that no player copy mentions today, and the magnitude change makes every trait figure stale —
+including the two the 2026-08-16 pass deliberately left alone (the hospital-risk range and the
+five-crew door odds, both of which assume garrisons that cannot exist yet).
+
 ## First commands in a fresh session
 
 ```bash
