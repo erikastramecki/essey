@@ -175,6 +175,45 @@ gitignored, so a git-sourced build ships an art-less site that returns healthy 2
 deployment). **After every deploy run `./app/web/check-deploy-assets.sh`** (`07d8d17`, unpushed) — it
 asserts content type, not status code, and was verified red against the build that broke production.
 
+## WORK ORDERS — dispatch these on 2026-08-19 when credits reset
+
+Founder ruling 2026-08-16: scope each of the three **individually, by agent**, ready to run. Do NOT
+scope them before that date. The ordering below is a dependency chain, not a preference — each one
+is why the next is worth doing.
+
+**Cross-cutting constraint, state it in every brief:** all three are contract changes, so all three
+need a stack redeploy, which costs re-attestation of every Don, a keeper reset, and everything in
+`docs/DEPLOY-CHECKLIST.md`. Landing them as ONE redeploy is far cheaper than three.
+
+### Order 1 — fix H-1 (agent: `essey-auditor`, which produced the finding and the PoCs)
+
+Scope the fix for the defender-side free escape. Preferred shape is already identified: request the
+entropy **after** the garrison window closes rather than at reveal, so no word is ever readable
+before the defence is fixed and settlement becomes one tx no player controls. The minimal
+alternative — snapshot `hopperOf`/`deployedOf` into the `Raid` struct at reveal and settle against
+`min(snapshot, live)` — is the fallback if the first proves invasive. **Do not gate `bank()`.**
+Deliverable: a diff-level plan, the tests that would pin it, and confirmation the three PoCs go red.
+
+### Order 2 — ship the garrison picker (agent: `don-designer`)
+
+**Blocked on Order 1 and the brief must say so.** Today `jobs.tsx` commits `garrisonIds: []` and an
+empty garrison goes up as `bytes32(0)`, which settles instantly — that is the ONLY reason H-1 is
+currently dormant. Shipping a picker hands every player the exploit on the same day. Scope both
+halves: choosing Hitters at depart (commit rides the existing loadout signature) AND the reveal
+side, since a defender who never calls `revealGarrison` inside the window loses the garrison and
+their whole HD sheet via `floorSettle` (`RaidEngine.sol:453`). Deliverable: the UX for both halves,
+the storage/secret handling, and what a defender sees when the window is open.
+
+### Order 3 — trait magnitude (agent: `don-economist`, re-scoped)
+
+The ±10-point ruling above, built. **Explicitly out of scope: anything Scrip-denominated** — no
+hopper EV, no rake, no break-even tables; the founder ruled those disposable before live assets.
+The brief is parity AND magnitude: percentage-of-own-power on both sides with equal caps, so maxed
+vs maxed cancels exactly. Include the H-1 interaction — a bigger defensive lever multiplies the
+value of the escape, which is why this runs last. Deliverable: the constant set, the mutation tests
+that pin defence (auditor H-2: six mutations of `_withDefense` currently survive all 161 tests), and
+the reachable maxima after the change.
+
 ## First commands in a fresh session
 
 ```bash
