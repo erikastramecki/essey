@@ -9,6 +9,10 @@
 #   ./rh-chain/check-keeper.sh [graceMinutes]
 set -euo pipefail
 
+# Resolve paths against the script, not the caller: run from the repo root this grepped a
+# game-keeper.sh that was not there and reported a false ENTROPY mismatch.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 BOARD="${BOARD:-0x15D607638BeEcF9d62E6eC00a37601A89E72CDF1}"
 RPC="${RH_TESTNET_RPC:-https://rpc.testnet.chain.robinhood.com/rpc}"
 GRACE=$(( ${1:-15} * 60 ))
@@ -33,7 +37,7 @@ done
 # The keeper is the only thing that pokes the entropy the ENGINES name. A mismatch is the exact
 # 2026-08-15 failure and is worth reporting even when nothing has gone stale yet.
 want=$(cast call "$BOARD" 'entropy()(address)' --rpc-url "$RPC")
-have=$(grep -oE '^ENTROPY="0x[0-9a-fA-F]{40}"' game-keeper.sh | grep -oE '0x[0-9a-fA-F]{40}' || true)
+have=$(grep -oE '^ENTROPY="0x[0-9a-fA-F]{40}"' "$SCRIPT_DIR/game-keeper.sh" | grep -oE '0x[0-9a-fA-F]{40}' || true)
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; } # macOS ships bash 3.2 — no ${x,,}
 if [ "$(lower "$want")" != "$(lower "$have")" ]; then
   printf 'MISMATCH  board.entropy()=%s but game-keeper.sh holds %s\n' "$want" "${have:-none}"
