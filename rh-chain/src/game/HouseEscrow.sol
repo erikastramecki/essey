@@ -289,7 +289,7 @@ contract HouseEscrow is ReentrancyGuard {
     }
 
     /// DEAD IN THIS GENERATION (kept so source matches the 2026-08-13 testnet bytecode): the H-1
-    /// audit fix rewired RaidEngine.floorSettle to run the real roll, so nothing calls this anymore.
+    /// audit fixes made the garrison-timeout path run the real roll, so nothing calls this anymore.
     /// Still onlyRaid-gated => harmless. REMOVE at the next generational deploy.
     function applyDamage(uint256 targetDonId) external onlyRaid nonReentrant {
         _accrue();

@@ -36,13 +36,19 @@ import {
 /// power, so patience strictly dominates and ~1.2 full-odds attempts/day/Hitter is the natural rate
 /// limit — the curve IS the bookkeeping.
 ///
+/// THE ROLL IS DRAWN LAST (audit fix — H-1, 2026-08-19): no entropy is requested until the defence
+/// is FIXED, so the word lands and settles in one transaction. Requesting at reveal published it
+/// into the public `raids` mapping an hour early, which priced two free options for the defender:
+/// open the garrison to flip a known hit, or come home and bank ahead of it.
+///
 /// Liveness (the Degen reclaim ethic — the keeper can grief liveness, never solvency, never exits):
-///   - garrison never revealed  => floor settle: the REAL roll runs with the garrison counting for
-///     zero (House defends alone, worst p_hit). Suppressing the reveal never dodges loot/principal —
-///     it only forfeits the defensive bonus a reveal would have proven (logic-lens H-1 fix).
+///   - garrison never revealed  => the roll is drawn at the floor: it runs with the garrison
+///     counting for zero (House defends alone, worst p_hit). Suppressing the reveal never dodges
+///     loot/principal — it only forfeits the defensive bonus a reveal would have proven.
 ///   - entropy withheld         => reclaim: MISS outcome, no transfers, cooldowns stand. The commit
 ///     fee stays sunk (sunk win-or-lose — the rate card is canonical over an earlier
 ///     "stake returned" sketch; a refund would need a mint, and raids never mint).
+///   - roll never drawn         => the same reclaim, clocked from when it BECAME drawable.
 ///   - no reveal in the window  => forfeit: the held fee burns. (Bonding the fee to the target needs
 ///     the target's identity, which only the reveal discloses — flagged as a Phase-0 deviation.)
 contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
@@ -75,9 +81,9 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     uint256 public constant PAIR_COOLDOWN = 24 hours;
     /// Scrip-mode big-score lockout: 48h per House.
     uint256 public constant BIG_SCORE_LOCKOUT = 48 hours;
-    /// Garrison unrevealed this long after the word lands => floor settle.
+    /// Garrison unrevealed this long after the raid reveal => the roll is drawable at the floor.
     uint256 public constant GARRISON_TIMEOUT = 1 hours;
-    /// Entropy withheld this long after reveal => reclaim (miss).
+    /// Entropy withheld this long after the roll became drawable => reclaim (miss).
     uint256 public constant RECLAIM_TIMEOUT = 2 hours;
 
     // The power/odds constants (ppm / bps where rolled on-chain).
@@ -120,6 +126,9 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
 
     uint64 public raidCount;
     mapping(uint64 => Raid) public raids;
+    /// 0 until the roll is drawn; non-zero implies the defence was already fixed. Kept beside the
+    /// struct, not in it: a 13th field overflows the stack in every caller decoding `raids`.
+    mapping(uint64 => uint64) public rollRequestedAt;
     mapping(uint64 => uint256[]) internal _crew; // raidId => attacker hitter ids
     mapping(uint64 => uint64) public seqToRaid;
 
@@ -134,7 +143,9 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         uint64 indexed raidId, uint256 indexed attackerDon, uint256 indexed targetDon, uint256 attackPower, uint64 seq
     );
     event GarrisonRevealed(uint64 indexed raidId, uint256 indexed targetDon, uint256 defensePower);
-    /// outcome: 0 MISS / 1 COMMON hit / 2 BIG score / 3 FLOOR (garrison unrevealed) / 4 RECLAIMED (entropy withheld)
+    /// outcome: 0 MISS / 1 COMMON hit / 2 BIG score / 4 RECLAIMED (entropy withheld). A suppressed
+    /// garrison is not its own outcome — it settles as the real roll it always was, at House-only
+    /// defense, so 3 is retired and never emitted.
     event RaidSettled(uint64 indexed raidId, uint8 outcome, uint256 pHitPpm, uint256 taken, uint256 tax);
     event HitterDown(uint64 indexed raidId, uint256 indexed hitterId);
     event RaidForfeited(uint64 indexed raidId);
@@ -218,7 +229,10 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
 
     /// Open the commit inside the [10, 40] min window, prove the target is exposed (away-window
     /// law), lock in the crew's cooldown-diminished attack power, note every Hitter's attempt
-    /// (cooldown restarts win or lose), burn the fee, and request the roll.
+    /// (cooldown restarts win or lose), and burn the fee.
+    ///
+    /// The roll is drawn here only against an openly ungarrisoned target, whose defence is already
+    /// final. Behind a live garrison commit the fee is returned and the roll waits (H-1).
     function reveal(uint64 raidId, uint256[] calldata hitterIds, uint256 targetDonId, bytes32 salt)
         external
         payable
@@ -265,8 +279,28 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
             emit GarrisonRevealed(raidId, targetDonId, r.defensePower);
         }
 
-        seq = _requestRoll(raidId);
+        if (r.garrisonRevealed) {
+            seq = _drawRoll(raidId);
+        } else {
+            _refund(msg.value);
+        }
         emit RaidRevealed(raidId, r.attackerDon, targetDonId, r.attackPower, seq);
+    }
+
+    /// Draw the roll — permissionless and payable, the rail `MissionBoard.resolve` already runs on.
+    /// The gate is the whole H-1 fix: never while the defence can still move. Past the window an
+    /// unproven garrison earns no credit, exactly as the 2026-08-12 suppression fix intended.
+    function requestRoll(uint64 raidId) external payable nonReentrant returns (uint64 seq) {
+        Raid storage r = raids[raidId];
+        if (r.attackerDon == 0) revert UnknownRaid();
+        if (r.state != RaidState.Revealed || rollRequestedAt[raidId] != 0) revert WrongState();
+        if (!r.garrisonRevealed) {
+            if (block.timestamp < r.revealedAt + GARRISON_TIMEOUT) revert NotYetTimedOut();
+            r.garrisonRevealed = true;
+            r.defensePower = deed.defenseOf(r.targetDon) * PPM;
+            emit GarrisonRevealed(raidId, r.targetDon, r.defensePower);
+        }
+        seq = _drawRoll(raidId);
     }
 
     /// RP scales the raider's crew. Powers are x1e6 and the sheet is bps, so this is a pure
@@ -325,17 +359,20 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         return (lin * lin) / PPM;
     }
 
-    function _requestRoll(uint64 raidId) internal returns (uint64 seq) {
+    function _drawRoll(uint64 raidId) internal returns (uint64 seq) {
         uint256 fee = entropyFee();
         if (msg.value < fee) revert InsufficientFee();
+        rollRequestedAt[raidId] = uint64(block.timestamp);
         bytes32 userRandom = keccak256(abi.encodePacked(msg.sender, raidId, blockhash(block.number - 1)));
         seq = entropy.requestV2{value: fee}(entropyProvider, userRandom, callbackGasLimit);
         seqToRaid[seq] = raidId;
-        uint256 refund = msg.value - fee;
-        if (refund > 0) {
-            (bool ok,) = msg.sender.call{value: refund}("");
-            if (!ok) revert RefundFailed();
-        }
+        _refund(msg.value - fee);
+    }
+
+    function _refund(uint256 amount) internal {
+        if (amount == 0) return;
+        (bool ok,) = msg.sender.call{value: amount}("");
+        if (!ok) revert RefundFailed();
     }
 
     // ---------------------------------------------------------------- garrison reveal
@@ -345,6 +382,8 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
     /// stall a reveal but never monopolize it (the gas-law fallback). Garrison Hitters no longer
     /// owned by the defender (sold mid-window) or hospitalized contribute zero rather than reverting
     /// — a stale plaintext must never brick the reveal.
+    /// It fixes the defence and stops — drawing the roll carries the fee, so a defender opening
+    /// their own garrison is never made to fund the attack against them.
     function revealGarrison(uint64 raidId, uint256[] calldata garrisonIds, bytes32 salt) external nonReentrant {
         Raid storage r = raids[raidId];
         if (r.attackerDon == 0) revert UnknownRaid();
@@ -368,8 +407,6 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         power = _withDefense(r.targetDon, power, garrisonPower);
         r.defensePower = power;
         emit GarrisonRevealed(raidId, r.targetDon, power);
-
-        if (r.wordReceived) _settle(raidId);
     }
 
     // ---------------------------------------------------------------- entropy + settlement
@@ -380,8 +417,8 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
         if (raidId == 0 || r.state != RaidState.Revealed || r.wordReceived) revert AlreadyDelivered();
         r.word = randomNumber;
         r.wordReceived = true;
-        if (r.garrisonRevealed) _settle(raidId);
-        // else: wait for revealGarrison, or the floor path after GARRISON_TIMEOUT.
+        // Unconditional — the H-1 invariant: `word` is only ever written in a tx that also settles.
+        _settle(raidId);
     }
 
     /// The full roll — one word, partitioned reads.
@@ -437,41 +474,27 @@ contract RaidEngine is IEntropyConsumer, ReentrancyGuard {
 
     // ---------------------------------------------------------------- liveness valves
 
-    /// Garrison never revealed before the timeout: settle the REAL roll with the garrison counting for
-    /// ZERO — the House defends ALONE (deed.defenseOf), the strongest p_hit the defender can face.
-    ///
-    /// (Audit fix — logic lens H-1, 2026-08-12.) The old floor path was damage-only, which made
-    /// SUPPRESSING the reveal strictly dominant for any defender with exposure: eat a cheap, repairable
-    /// −40% debuff and never lose the hopper or a slice of principal. Revealing only ever helped the
-    /// ATTACKER (it enabled the transfer) while at best shaving the defender's own p_hit — so a rational
-    /// defender never revealed and the whole loot/big-score economy was opt-out. Now non-reveal =
-    /// garrison contributes nothing = worst defense = full roll runs against you. Revealing is therefore
-    /// the defender's OWN interest (it can only lower p_hit), the attacker always gets a real roll, and
-    /// the keeper/relayer reveal rail is a defender-favouring convenience, not a precondition for loss.
-    /// Permissionless: the attacker calls it to claim the roll a stalling defender tried to deny.
-    function floorSettle(uint64 raidId) external nonReentrant {
-        Raid storage r = raids[raidId];
-        if (r.attackerDon == 0) revert UnknownRaid();
-        if (r.state != RaidState.Revealed || !r.wordReceived || r.garrisonRevealed) revert WrongState();
-        if (block.timestamp < r.revealedAt + GARRISON_TIMEOUT) revert NotYetTimedOut();
-        // Unproven garrison earns no defense credit: the House stands alone. Then the real roll runs
-        // (transfer + kills included) exactly as a revealed raid would — suppression buys nothing.
-        r.garrisonRevealed = true;
-        r.defensePower = deed.defenseOf(r.targetDon) * PPM;
-        _settle(raidId);
-    }
-
     /// Entropy withheld: settle as a MISS with no kill rolls (no word => no roll). Cooldowns stand
     /// (the attempt was public), the fee stays sunk. Anyone may call — a dead keeper can never
     /// strand a raid.
+    ///
+    /// Clocked from when the roll BECAME drawable, not the reveal: from the reveal, a suppressed
+    /// garrison would get one hour of grace instead of two, and a late draw could be reclaimed as a
+    /// miss minutes after it.
     function reclaimRaid(uint64 raidId) external nonReentrant {
         Raid storage r = raids[raidId];
         if (r.attackerDon == 0) revert UnknownRaid();
-        if (r.state != RaidState.Revealed || r.wordReceived) revert WrongState();
-        if (block.timestamp < r.revealedAt + RECLAIM_TIMEOUT) revert NotYetTimedOut();
+        if (r.state != RaidState.Revealed) revert WrongState();
+        if (block.timestamp < _reclaimableAt(raidId)) revert NotYetTimedOut();
         r.state = RaidState.Settled;
         heatUntil[r.targetDon] = uint64(block.timestamp + HEAT);
         emit RaidSettled(raidId, 4, 0, 0, 0);
+    }
+
+    function _reclaimableAt(uint64 raidId) internal view returns (uint256) {
+        uint64 drawn = rollRequestedAt[raidId];
+        uint256 drawable = drawn == 0 ? raids[raidId].revealedAt + GARRISON_TIMEOUT : drawn;
+        return drawable + RECLAIM_TIMEOUT;
     }
 
     /// Commit abandoned past the reveal window: the held fee burns. Permissionless cleanup.

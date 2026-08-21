@@ -517,56 +517,112 @@ contract GameE2E is Script {
         console.log("[REVEAL] raidId", raidId);
         console.log("         seq", s);
 
-        (,,,,,, uint256 attackPower, uint256 defensePower,, RaidEngine.RaidState st,, bool gRevealed) = raid.raids(raidId);
-        require(st == RaidEngine.RaidState.Revealed, "REVEAL: not revealed");
-        require(attackPower > 0, "REVEAL: no attack power");
         require(scrip.totalBurned() - burned0 == 50e18, "REVEAL: commit fee not burned");
         require(raid.heatUntil(targetDon) > block.timestamp, "REVEAL: heat not claimed at reveal");
         bool ungarrisoned = board.garrisonHashOf(targetDon) == bytes32(0);
-        if (ungarrisoned) {
-            require(gRevealed && defensePower == deed.defenseOf(targetDon) * PPM, "REVEAL: house-alone defense wrong");
+        _assertRevealed(raidId, ungarrisoned ? deed.defenseOf(targetDon) * PPM : 0);
+
+        if (!ungarrisoned) {
+            require(s == 0, "REVEAL: roll drawn against a sealed garrison (H-1)");
+            _custody();
+            return;
         }
 
         vm.startBroadcast(deployerPk);
         _fulfillAll();
         vm.stopBroadcast();
 
-        (,,,,,,,,, RaidEngine.RaidState st2, bool word2,) = raid.raids(raidId);
-        if (ungarrisoned) {
-            require(st2 == RaidEngine.RaidState.Settled, "REVEAL: not settled on word");
-        } else {
-            require(word2, "REVEAL: word not delivered");
-        }
+        require(_rState(raidId) == RaidEngine.RaidState.Settled, "REVEAL: not settled on word");
         _custody();
     }
 
-    /// Flow 11b — defender opens the frozen garrison commit; settle runs if the word already landed.
+    // One named local per decode: the 12-field `raids` getter puts every component on the stack, so
+    // a helper taking two parameters and returning one value already exceeds the 16-slot limit.
+    function _rTarget(uint64 id) internal view returns (uint256 v) {
+        (, v,,,,,,,,,,) = raid.raids(id);
+    }
+
+    function _rState(uint64 id) internal view returns (RaidEngine.RaidState v) {
+        (,,,,,,,,, v,,) = raid.raids(id);
+    }
+
+    function _rAttack(uint64 id) internal view returns (uint256 v) {
+        (,,,,,, v,,,,,) = raid.raids(id);
+    }
+
+    function _rDefense(uint64 id) internal view returns (uint256 v) {
+        (,,,,,,, v,,,,) = raid.raids(id);
+    }
+
+    function _rWord(uint64 id) internal view returns (bytes32 v) {
+        (,,,,,,,, v,,,) = raid.raids(id);
+    }
+
+    function _rGarrisonOpen(uint64 id) internal view returns (bool v) {
+        (,,,,,,,,,,, v) = raid.raids(id);
+    }
+
+    /// No roll drawn and no word anywhere — the H-1 ordering, read as a chain observer would.
+    function _assertNoRollYet(uint64 raidId) internal view {
+        require(_rState(raidId) == RaidEngine.RaidState.Revealed, "H-1: raid not open");
+        require(_rWord(raidId) == bytes32(0), "H-1: roll readable before the defence was fixed");
+        require(raid.rollRequestedAt(raidId) == 0, "H-1: roll drawn before the defence was fixed");
+    }
+
+    /// Post-reveal shape. `houseDefense` non-zero means the target was openly ungarrisoned, so the
+    /// defence was already final at reveal and must equal the House alone.
+    function _assertRevealed(uint64 raidId, uint256 houseDefense) internal view {
+        require(_rState(raidId) == RaidEngine.RaidState.Revealed, "REVEAL: not revealed");
+        require(_rAttack(raidId) > 0, "REVEAL: no attack power");
+        if (houseDefense != 0) {
+            require(_rGarrisonOpen(raidId), "REVEAL: house-alone defense not fixed");
+            require(_rDefense(raidId) == houseDefense, "REVEAL: house-alone defense wrong");
+        } else {
+            require(!_rGarrisonOpen(raidId), "REVEAL: sealed garrison marked as revealed");
+        }
+    }
+
+    /// Flow 11b — defender opens the frozen garrison commit, and only THEN is the roll drawn: the
+    /// H-1 ordering, proven on a real chain. No word may exist while the defence can still move.
     function garrisonPhase(uint256 w, uint64 raidId, uint256[] calldata gIds) external {
         _load();
-        (, uint256 targetDon,,,,,,,,, bool word0,) = raid.raids(raidId);
+        uint256 targetDon = _rTarget(raidId);
         bytes32 salt = keccak256(abi.encode(seed, "garrison-salt", targetDon));
+        require(raid.rollRequestedAt(raidId) == 0, "GARRISON: roll drawn before the defence was fixed (H-1)");
 
         vm.startBroadcast(walletPk[w]);
         raid.revealGarrison(raidId, gIds, salt);
         vm.stopBroadcast();
 
-        (,,,,,,, uint256 defensePower,, RaidEngine.RaidState st, bool word1, bool gRev) = raid.raids(raidId);
-        require(gRev, "GARRISON: not revealed");
         // Fresh, defender-owned garrison: house defense + 47.5 power per Hitter (x1e6).
-        uint256 expected = deed.defenseOf(targetDon) * PPM + gIds.length * 50 * PPM * 9_500 / 10_000;
-        require(defensePower == expected, "GARRISON: defense power wrong");
-        if (word0) require(st == RaidEngine.RaidState.Settled, "GARRISON: word landed but not settled");
+        uint256 defensePower =
+            _assertDefenceFixedAndSealed(raidId, deed.defenseOf(targetDon) * PPM + gIds.length * 475 * PPM / 10);
 
-        if (!word1) {
-            vm.startBroadcast(deployerPk);
-            _fulfillAll();
-            vm.stopBroadcast();
-            (,,,,,,,,, RaidEngine.RaidState st2,,) = raid.raids(raidId);
-            require(st2 == RaidEngine.RaidState.Settled, "GARRISON: not settled");
-        }
+        _drawAndFulfil(w, raidId);
         _custody();
         console.log("[GARRISON] raidId", raidId);
         console.log("           defensePower", defensePower);
+    }
+
+    /// The garrison is open and the defence is final — and there is still no roll. Both halves
+    /// matter: the H-1 ordering is exactly "defence first, entropy second".
+    function _assertDefenceFixedAndSealed(uint64 raidId, uint256 expected) internal view returns (uint256 dp) {
+        require(_rGarrisonOpen(raidId), "GARRISON: not revealed");
+        dp = _rDefense(raidId);
+        require(dp == expected, "GARRISON: defense power wrong");
+        _assertNoRollYet(raidId);
+    }
+
+    /// Draw the roll now that the defence is final, deliver the word, and require it settled in
+    /// that same transaction.
+    function _drawAndFulfil(uint256 w, uint64 raidId) internal {
+        vm.startBroadcast(walletPk[w]);
+        raid.requestRoll{value: raid.entropyFee()}(raidId);
+        vm.stopBroadcast();
+        vm.startBroadcast(deployerPk);
+        _fulfillAll();
+        vm.stopBroadcast();
+        require(_rState(raidId) == RaidEngine.RaidState.Settled, "GARRISON: not settled");
     }
 
     /// Abandoned-commit cleanup (bonus liveness flow): past the reveal window the held fee burns.
@@ -577,8 +633,7 @@ contract GameE2E is Script {
         vm.startBroadcast(walletPk[w]);
         raid.forfeit(raidId);
         vm.stopBroadcast();
-        (,,,,,,,,, RaidEngine.RaidState st,,) = raid.raids(raidId);
-        require(st == RaidEngine.RaidState.Forfeited, "FORFEIT: state wrong");
+        require(_rState(raidId) == RaidEngine.RaidState.Forfeited, "FORFEIT: state wrong");
         require(scrip.totalBurned() - burned0 == 50e18, "FORFEIT: fee not burned");
         require(scrip.balanceOf(address(raid)) == eng0 - 50e18, "FORFEIT: fee not released");
         console.log("[FORFEIT] raidId", raidId);
@@ -656,7 +711,7 @@ contract GameE2E is Script {
     //   forge script script/GameE2E.s.sol:GameE2E --sig "forkProofs()" --rpc-url rh_testnet -vv
     //
     //   F-A mission reclaim   (entropy withheld, due+2h  -> PARTIAL floor, Don comes home)
-    //   F-B raid floorSettle  (garrison never revealed, word+1h -> real roll, house defends alone)
+    //   F-B raid floor roll   (garrison never revealed, reveal+1h -> real roll, house defends alone)
     //   F-C raid reclaim      (entropy withheld, reveal+2h -> MISS, no transfers, fee stays sunk)
     //   F-D favor force-reveal (sealed 30d -> anyone floors it at Common)
     //   F-E reveal-too-late   (past the 40-min window -> revert, then forfeit burns the fee)
@@ -672,7 +727,7 @@ contract GameE2E is Script {
         vm.deal(A, 1 ether);
         vm.deal(B, 1 ether);
 
-        // Cast: two Dons for A (reclaim + floorSettle targets), one for B (attacker), all fork-fresh.
+        // Cast: two Dons for A (reclaim + floor-roll targets), one for B (attacker), all fork-fresh.
         uint256 donA1 = _forkMint(A, "fork-don-a1");
         uint256 donA2 = _forkMint(A, "fork-don-a2");
         uint256 donB = _forkMint(B, "fork-don-b");
@@ -686,7 +741,7 @@ contract GameE2E is Script {
 
         _forkMissionReclaim(A, donA1);
         // A fresh Hitter per raid (a miss can hospitalize it 48h — never reuse across raids).
-        _forkFloorSettle(A, donA2, B, donB, _forkHitter(B, donB));
+        _forkFloorRoll(A, donA2, B, donB, _forkHitter(B, donB));
         _forkRaidReclaim(A, donA1, B, donB, _forkHitter(B, donB));
         _forkForceReveal(B, donB);
         _forkRevealTooLate(B, donB);
@@ -745,34 +800,59 @@ contract GameE2E is Script {
         require(A == don.ownerOf(donId), "F-A: owner sanity");
     }
 
-    /// F-B: garrison suppressed -> after word+1h the REAL roll runs with the house defending alone.
-    function _forkFloorSettle(address A, uint256 targetDon, address B, uint256 attackerDon, uint256 hitId) internal {
+    /// F-B: garrison suppressed -> after reveal+1h the REAL roll is DRAWN with the house defending
+    /// alone. Nothing is rollable before that, which is the H-1 ordering proven on a real fork.
+    function _forkFloorRoll(address A, uint256 targetDon, address B, uint256 attackerDon, uint256 hitId) internal {
         // Defender departs with an unrevealable commit (plaintext never published).
         _forkDepart(FORK_A_PK, targetDon, WINDOW, keccak256("garbage-nobody-knows"));
+        uint64 raidId = _forkRevealAgainst(targetDon, B, attackerDon, hitId);
+        _forkAssertSealed(raidId);
+        _forkDrawFloorRoll(raidId, B);
+        _custody();
+        console.log("[FORK B] floor roll -> real roll, house alone, defense", _forkAssertFloorSettled(raidId, targetDon));
+    }
 
+    function _forkRevealAgainst(uint256 targetDon, address B, uint256 attackerDon, uint256 hitId)
+        internal
+        returns (uint64 raidId)
+    {
         bytes32 salt = keccak256("fork-b-salt");
         uint256[] memory crew = new uint256[](1);
         crew[0] = hitId;
         vm.prank(B);
-        uint64 raidId = raid.commit(attackerDon, keccak256(abi.encode(attackerDon, crew, targetDon, salt)));
+        raidId = raid.commit(attackerDon, keccak256(abi.encode(attackerDon, crew, targetDon, salt)));
         vm.warp(block.timestamp + 11 minutes);
+        vm.prank(B);
+        raid.reveal{value: raid.entropyFee()}(raidId, crew, targetDon, salt);
+    }
+
+    /// Not drawable while the garrison window is open; drawable at the floor once it closes, and it
+    /// settles in the very transaction the word lands in.
+    function _forkDrawFloorRoll(uint64 raidId, address B) internal {
         uint256 rfee = raid.entropyFee();
         vm.prank(B);
-        raid.reveal{value: rfee}(raidId, crew, targetDon, salt);
-        mock.fulfill(mock.nextSeq() - 1); // word lands; garrison still sealed
-
-        (,,,,,,,,, RaidEngine.RaidState st0, bool word0, bool g0) = raid.raids(raidId);
-        require(st0 == RaidEngine.RaidState.Revealed && word0 && !g0, "F-B: precondition wrong");
+        vm.expectRevert(RaidEngine.NotYetTimedOut.selector);
+        raid.requestRoll{value: rfee}(raidId);
 
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(B); // the attacker claims the roll a stalling defender tried to deny
-        raid.floorSettle(raidId);
+        raid.requestRoll{value: rfee}(raidId);
+        mock.fulfill(mock.nextSeq() - 1);
+    }
 
-        (,,,,,,, uint256 dp,, RaidEngine.RaidState st1,, bool g1) = raid.raids(raidId);
-        require(st1 == RaidEngine.RaidState.Settled && g1, "F-B: not settled");
+    /// The H-1 property read exactly as a chain observer would: defence still sealed, and no roll
+    /// drawn, so there is no outcome anywhere for the defender to price a decision on.
+    function _forkAssertSealed(uint64 raidId) internal view {
+        require(!_rGarrisonOpen(raidId), "F-B: garrison not sealed");
+        _assertNoRollYet(raidId);
+    }
+
+    /// Settled at House-alone defence: the unproven garrison earned exactly zero credit.
+    function _forkAssertFloorSettled(uint64 raidId, uint256 targetDon) internal view returns (uint256 dp) {
+        require(_rState(raidId) == RaidEngine.RaidState.Settled, "F-B: not settled");
+        require(_rGarrisonOpen(raidId), "F-B: garrison flag not set");
+        dp = _rDefense(raidId);
         require(dp == deed.defenseOf(targetDon) * PPM, "F-B: garrison credited despite suppression");
-        _custody();
-        console.log("[FORK B] floorSettle -> real roll, house alone, defense", dp);
     }
 
     /// F-C: entropy withheld -> after reveal+2h anyone reclaims: MISS, no transfers, fee stays sunk.
@@ -798,8 +878,7 @@ contract GameE2E is Script {
         vm.prank(makeAddr("anyone"));
         raid.reclaimRaid(raidId);
 
-        (,,,,,,,,, RaidEngine.RaidState st,,) = raid.raids(raidId);
-        require(st == RaidEngine.RaidState.Settled, "F-C: not settled");
+        require(_rState(raidId) == RaidEngine.RaidState.Settled, "F-C: not settled");
         require(escrow.hopperOf(targetDon) == hop0 && escrow.deployedOf(targetDon) == dep0, "F-C: transfers on miss");
         require(scrip.balanceOf(don.vaultOf(attackerDon)) == atk0, "F-C: attacker paid on reclaim");
         require(raid.heatUntil(targetDon) > block.timestamp, "F-C: heat not set");

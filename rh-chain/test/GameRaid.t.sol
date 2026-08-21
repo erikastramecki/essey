@@ -390,15 +390,17 @@ contract GameRaidTest is GameBase {
         assertEq(board.garrisonHashOf(bobDon), gHash);
 
         uint64 raidId = _commitAndReveal(aliceDon, alicePk, aliceHitter, bobDon);
-        oracle.fulfill(oracle.lastSeq(), bytes32(uint256(999_999))); // word lands, waits for garrison
+        assertEq(raid.rollRequestedAt(raidId), 0, "no roll may be drawn against a sealed garrison");
 
         // Wrong plaintext can't open it.
         vm.expectRevert(RaidEngine.GarrisonMismatch.selector);
         raid.revealGarrison(raidId, garrison, bytes32("wrong"));
 
-        // ANYONE with the plaintext reveals (keeper normally) — and the roll settles.
-        vm.recordLogs();
+        // ANYONE with the plaintext reveals (keeper normally) — and only THEN is the roll drawn.
         raid.revealGarrison(raidId, garrison, salt);
+        raid.requestRoll{value: ENTROPY_FEE}(raidId);
+        vm.recordLogs();
+        oracle.fulfill(oracle.lastSeq(), bytes32(uint256(999_999)));
         (, uint256 pHit,,) = _lastSettled(vm.getRecordedLogs());
         // D = 40 + 2 x 50 x 0.95 = 135 => p = 0.72 x 50/185.
         uint256 a = 50 * PPM;
@@ -423,17 +425,18 @@ contract GameRaidTest is GameBase {
         uint64 raidId = _commitAndReveal(aliceDon, alicePk, aliceHitter, bobDon);
         // A common-hit word at the HOUSE-ONLY p_hit (unrevealed garrison => D = HD 40 alone).
         uint256 word = _findRaidWord(_pSolo(40), true, false);
-        oracle.fulfill(oracle.lastSeq(), bytes32(word)); // word lands, waits for a garrison reveal
 
         vm.expectRevert(RaidEngine.NotYetTimedOut.selector);
-        raid.floorSettle(raidId);
+        raid.requestRoll{value: ENTROPY_FEE}(raidId);
 
         uint256 attackerBefore = scrip.balanceOf(don.vaultOf(aliceDon));
         uint256 hopperBefore = escrow.hopperOf(bobDon);
         assertGt(hopperBefore, 0); // there IS loot to lose
         vm.warp(block.timestamp + 1 hours);
+        // Permissionless — the attacker claims the roll a staller tried to deny.
+        raid.requestRoll{value: ENTROPY_FEE}(raidId);
         vm.recordLogs();
-        raid.floorSettle(raidId); // permissionless — the attacker claims the roll a staller denied
+        oracle.fulfill(oracle.lastSeq(), bytes32(word));
         (uint8 outcome, uint256 pHit, uint256 taken,) = _lastSettled(vm.getRecordedLogs());
 
         assertEq(outcome, 1); // COMMON hit — a REAL settlement, not the old damage-only floor
