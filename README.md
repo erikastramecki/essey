@@ -1,5 +1,8 @@
 # Essey — a stock-market club where the odds and the books are both *provable*
 
+**After cloning:** run `./scripts/dev-setup.sh` once — it wires the secret-blocking
+pre-commit hook (`.githooks/`); without it a fresh clone commits ungated.
+
 Essey is an on-chain stock-market club on **Robinhood Chain** (an Arbitrum Orbit L2). Buy a Seat, earn
 Payouts in **real tokenized stock**, open **Cases** for a provably-fair stock draw, borrow against what you
 hold, and move any of it **privately**. Every ring of the Bell, every draw, and every loan is a verifiable

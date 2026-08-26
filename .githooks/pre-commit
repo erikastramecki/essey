@@ -30,6 +30,25 @@ patterns=(
   '(mnemonic|seed_?phrase)["'"'"' ]*[:=]["'"'"' ]*([a-z]+ ){11,}' # 12+ word mnemonic
 )
 
+# EVM keys — the one live secret class this repo orbits (sweep finding F1, 2026-08-26).
+# Separate case-insensitive pass (the main loop is case-sensitive by design: AKIA, sk-ant).
+# Context-gated on keyish words rather than allowlisted — docs legitimately carry 64-hex
+# tx hashes, and an allowlist cannot enumerate future ones.
+patterns_ci=(
+  '(private[_-]?key|[a-z_]*_pk|privkey)[[:space:]]*[:=][[:space:]]*["'"'"']?(0x)?[0-9a-f]{64}'
+  '--private-key[= ]["'"'"']?(0x)?[0-9a-f]{64}'
+)
+
+for p in "${patterns_ci[@]}"; do
+  # -e: a pattern beginning with -- (the CLI-flag rule) must not parse as a grep option
+  hits=$(git diff --cached -U0 -- $staged | grep -E '^\+' | grep -nEiI -e "$p" || true)
+  if [ -n "$hits" ]; then
+    red "BLOCKED: possible EVM private key matching /$p/ in staged changes:"
+    printf '%s\n' "$hits" | head -5 | sed 's/^/  /'
+    fail=1
+  fi
+done
+
 for p in "${patterns[@]}"; do
   # -U keeps binary-ish files from silently passing; only added lines are checked.
   hits=$(git diff --cached -U0 -- $staged | grep -E '^\+' | grep -nEI "$p" || true)
