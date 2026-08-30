@@ -66,6 +66,7 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
     address public keeper; // the only caller allowed to quote + flush the oracle-less $ESSEY leg
 
     uint256 internal constant BPS = 10_000;
+    uint32 public constant FEED_HEARTBEAT = 86_400; // RH equity-feed heartbeat (was StaleFeedGuard.FEED_HEARTBEAT before the per-feed guard)
     /// minOutBps below this would tolerate >10% slippage — indistinguishable from a sandwich allowance.
     uint256 internal constant MIN_OUT_FLOOR_BPS = 9_000;
 
@@ -126,8 +127,8 @@ contract DonFeeRouter is StaleFeedGuard, ReentrancyGuard {
         uint8 efd = c.ethFeed.decimals();
         uint8 ufd = c.usdgFeed.decimals();
         if (efd > 18 || ufd > 18) revert BadBps(); // normalization assumes <= 18 (Chainlink uses 8)
-        _setFeed(address(c.weth), c.ethFeed, FEED_HEARTBEAT + STALENESS_GRACE, efd);
-        _setFeed(address(c.usdg), c.usdgFeed, FEED_HEARTBEAT + STALENESS_GRACE, ufd);
+        _setFeed(address(c.weth), c.ethFeed, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, efd);
+        _setFeed(address(c.usdg), c.usdgFeed, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, ufd);
     }
 
     receive() external payable {} // accept mint-fee ETH

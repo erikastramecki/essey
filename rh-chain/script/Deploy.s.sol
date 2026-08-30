@@ -5,6 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {EsseyPool} from "../src/EsseyPool.sol";
 import {EsseyMarkets} from "../src/EsseyMarkets.sol";
 import {LivenessOracle} from "../src/LivenessOracle.sol";
+import {MarketHealthOracle} from "../src/MarketHealthOracle.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -37,16 +38,25 @@ contract Deploy is Script {
     /// RATES (mainnet-config fix): default to a live curve — 10% base APR (BASE_BPS=1000), 20% reserve
     /// factor (RESERVE_BPS=2000). A zero-rate mainnet pool accrues no interest and funds neither lenders
     /// nor the Bell; override via env only deliberately.
-    function _deployPool(address usdg, EsseyMarkets markets, address admin) internal returns (EsseyPool) {
+    /// One pool per collateral: the isolated-pool model (F1) binds each pool to a single Stock Token at
+    /// construction and admits exactly one active pool per market, so AAPL and NVDA get their own pools.
+    function _deployPool(address usdg, address collateral, EsseyMarkets markets, address admin, string memory sym)
+        internal
+        returns (EsseyPool)
+    {
         return new EsseyPool(
-            IERC20(usdg), markets,
+            IERC20(usdg), collateral, markets,
             vm.envOr("BASE_BPS", uint256(1_000)),
             vm.envOr("SLOPE1_BPS", uint256(0)),
             vm.envOr("SLOPE2_BPS", uint256(0)),
             vm.envOr("RESERVE_BPS", uint256(2_000)),
             vm.envOr("BELL_SINK", address(0)),
             vm.envOr("RESERVE_TREASURY", admin),
-            vm.envOr("BELL_SHARE_BPS", uint256(0))
+            vm.envOr("BELL_SHARE_BPS", uint256(0)),
+            EsseyPool.Identity(
+                string.concat("Essey ", sym, " Pool Share"), string.concat("a", sym),
+                string.concat("Essey ", sym, " Note"), string.concat("n", sym)
+            )
         );
     }
 
@@ -56,6 +66,7 @@ contract Deploy is Script {
     function _proposeMarket(
         EsseyMarkets markets,
         address stock,
+        address pool,
         address feed,
         uint8 feedDec,
         uint8 stockDec,
@@ -67,15 +78,28 @@ contract Deploy is Script {
             liqThresholdBps: 5_500,
             liqBonusBps: 800,
             collateralDecimals: stockDec, // read from the token, never typed by hand
-            cap: uint128(vm.envOr("MARKET_CAP", uint256(10_000)) * (10 ** assetDec))
+            cap: uint128(vm.envOr("MARKET_CAP", uint256(10_000)) * (10 ** assetDec)),
+            maxPositionBps: 2_000 // 20% of cap per position; per-market, tunable later via the timelock
         });
-        markets.proposeMarket(stock, AggregatorV3Interface(feed), 90_000, feedDec, m);
+        // Per-feed heartbeat 86_400s / maxStaleness 90_000s (the RH equity-feed profile). On RH mainnet the
+        // Stock Token carries the ERC-8056 surface itself, so it is its own uiMultiplier source.
+        markets.proposeMarket(stock, AggregatorV3Interface(feed), 86_400, 90_000, feedDec, stock, pool, m);
     }
 
-    /// Read a stock + its feed decimals ON-CHAIN, assert the feed is live, and propose the market. The
-    /// pool constructor separately cross-checks markets.assetDecimals == USDG.decimals (impossible-by-
-    /// construction), and propose+commit cross-check the collateral/feed decimals — so no decimal is trusted.
-    function _addMarket(EsseyMarkets markets, address stock, address feed, uint8 assetDec) internal {
+    /// Read a stock + its feed decimals ON-CHAIN, assert the feed is live, deploy its dedicated pool, and
+    /// propose the market. The pool constructor separately cross-checks markets.assetDecimals == USDG.decimals
+    /// (impossible-by-construction), and propose+commit cross-check the collateral/feed decimals — so no
+    /// decimal is trusted. Returns the pool so the deployer can log it (the multisig references it to commit).
+    function _addMarket(
+        address usdg,
+        EsseyMarkets markets,
+        address admin,
+        address stock,
+        address feed,
+        uint8 assetDec,
+        string memory sym,
+        bool propose
+    ) internal returns (EsseyPool pool) {
         uint8 stockDec = IERC20Metadata(stock).decimals();
         uint8 feedDec = AggregatorV3Interface(feed).decimals();
         require(stockDec > 0 && stockDec <= 36, "bad stock decimals");
@@ -83,8 +107,13 @@ contract Deploy is Script {
         (, int256 answer,, uint256 updatedAt,) = AggregatorV3Interface(feed).latestRoundData();
         require(answer > 0, "feed answer not positive");
         require(updatedAt > 0, "feed never updated");
-        _proposeMarket(markets, stock, feed, feedDec, stockDec, assetDec);
-        console.log("  proposed market for stock", stock);
+        // Pools are permissionless to deploy, so the throwaway deployer stands them up even on mainnet;
+        // proposeMarket is admin-only, so it runs inline only when the deployer IS the admin.
+        pool = _deployPool(usdg, stock, markets, admin, sym);
+        if (propose) {
+            _proposeMarket(markets, stock, address(pool), feed, feedDec, stockDec, assetDec);
+            console.log("  proposed market for stock", stock);
+        }
     }
 
     function run() external {
@@ -112,31 +141,40 @@ contract Deploy is Script {
 
         // 30-minute liveness bound / 15-minute gap / 30-minute post-outage grace (grace <= 4x gap guard).
         LivenessOracle liveness = new LivenessOracle(keeper, guardian, 30 minutes, 30 minutes, 15 minutes);
-        EsseyMarkets markets = new EsseyMarkets(AggregatorV3Interface(sequencer), liveness, admin, assetDec);
-        EsseyPool pool = _deployPool(usdg, markets, admin); // ctor cross-checks markets.assetDecimals == 6
+        // Health oracle admin is the deployer so this broadcast can wireMarkets in the same run (matching
+        // DeployMarkets); its keeper posts depth, its guardian is the cold key.
+        MarketHealthOracle health = new MarketHealthOracle(keeper, guardian, msg.sender);
+        EsseyMarkets markets =
+            new EsseyMarkets(AggregatorV3Interface(sequencer), liveness, health, admin, guardian, assetDec);
+        health.wireMarkets(address(markets)); // one-shot, must run before the ramp starts
 
-        // Markets are ADMIN-only. If the deployer IS the admin (testnet self-admin), propose inline. On
-        // mainnet the admin is the multisig, so it must call proposeMarket AFTER deploy — params logged below.
+        // A dedicated pool per collateral (isolated-pool model). Pools are permissionless to deploy, so the
+        // deployer stands them up even on mainnet; proposeMarket is ADMIN-only, so it runs inline only when
+        // the deployer IS the admin. On mainnet the multisig proposes after deploy — pool addresses logged.
         bool selfAdmin = (admin == msg.sender);
-        if (selfAdmin) {
-            _addMarket(markets, vm.envOr("STOCK", AAPL_MAINNET), vm.envOr("FEED", AAPL_FEED_MAINNET), assetDec);
-            if (!vm.envOr("SKIP_NVDA", false)) {
-                _addMarket(markets, vm.envOr("STOCK2", NVDA_MAINNET), vm.envOr("FEED2", NVDA_FEED_MAINNET), assetDec);
-            }
+        EsseyPool aaplPool =
+            _addMarket(usdg, markets, admin, vm.envOr("STOCK", AAPL_MAINNET), vm.envOr("FEED", AAPL_FEED_MAINNET), assetDec, "AAPL", selfAdmin);
+        EsseyPool nvdaPool;
+        if (!vm.envOr("SKIP_NVDA", false)) {
+            nvdaPool =
+                _addMarket(usdg, markets, admin, vm.envOr("STOCK2", NVDA_MAINNET), vm.envOr("FEED2", NVDA_FEED_MAINNET), assetDec, "NVDA", selfAdmin);
         }
 
         vm.stopBroadcast();
 
         console.log("liveness  ", address(liveness));
+        console.log("health    ", address(health));
         console.log("markets   ", address(markets));
-        console.log("pool      ", address(pool));
+        console.log("pool      ", address(aaplPool)); // AAPL pool — the primary; local-fork.sh reads this line
+        console.log("NVDA pool ", address(nvdaPool));
         console.log("");
         if (selfAdmin) {
             console.log("Markets PROPOSED. After the 2-day timelock: commitMarket(AAPL)+commitMarket(NVDA).");
         } else {
-            console.log("MULTISIG (admin) must now propose the markets, then commit after the 2-day timelock:");
-            console.log("  proposeMarket(AAPL,AAPL_FEED,90000,8,{true,3500,5500,800,18,cap}) -- AAPL", AAPL_MAINNET);
-            console.log("  proposeMarket(NVDA,NVDA_FEED,90000,8,{true,3500,5500,800,18,cap}) -- NVDA", NVDA_MAINNET);
+            console.log("MULTISIG (admin) must now propose the markets against the pools above, then commit after");
+            console.log("the 2-day timelock (heartbeat=86400, maxStaleness=90000, multiplierSource=stock, pool=above):");
+            console.log("  proposeMarket(AAPL,AAPL_FEED,86400,90000,8,AAPL,AAPL_pool,{true,3500,5500,800,18,cap,2000})", AAPL_MAINNET);
+            console.log("  proposeMarket(NVDA,NVDA_FEED,86400,90000,8,NVDA,NVDA_pool,{true,3500,5500,800,18,cap,2000})", NVDA_MAINNET);
         }
         console.log("Then: start the supervised liveness keeper (borrows AND liquidations gate on it), and");
         console.log("wire the FeeRouter + market layer per docs/MAINNET-CONFIG.md.");

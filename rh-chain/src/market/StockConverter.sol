@@ -45,6 +45,7 @@ contract StockConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
     mapping(address => StockConfig) public stocks;
 
     uint256 internal constant BPS = 10_000;
+    uint32 public constant FEED_HEARTBEAT = 86_400; // RH equity-feed heartbeat (was StaleFeedGuard.FEED_HEARTBEAT before the per-feed guard)
     uint256 internal constant MAX_SLIPPAGE_BPS = 500; // 5% hard ceiling on the config
 
     event StockListed(address indexed token, address feed, uint24 uniFee);
@@ -78,7 +79,7 @@ contract StockConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
         // session flag it returns is ignored for the base leg).
         uint8 bfd = baseFeed_.decimals();
         if (bfd > 18) revert BadConfig(); // normalization assumes <= 18 (Chainlink uses 8)
-        _setFeed(address(base_), baseFeed_, FEED_HEARTBEAT + STALENESS_GRACE, bfd);
+        _setFeed(address(base_), baseFeed_, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, bfd);
     }
 
     /// Append-only: list a stock as a payout target. Configs are immutable once listed.
@@ -89,7 +90,7 @@ contract StockConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
         uint8 fd = feed.decimals();
         if (fd > 18) revert BadConfig(); // normalization assumes <= 18 (Chainlink uses 8)
         stocks[token] = StockConfig(uniFee, IERC20Metadata(token).decimals(), true);
-        _setFeed(token, feed, FEED_HEARTBEAT + STALENESS_GRACE, fd);
+        _setFeed(token, feed, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, fd);
         emit StockListed(token, address(feed), uniFee);
     }
 

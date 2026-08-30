@@ -85,6 +85,16 @@ contract DonFeeRouterTest is Test {
 
     // ---------------------------------------------------------------- construction
 
+    /// M-2: the migrated per-feed staleness window must stay pinned (heartbeat 86_400 / maxStaleness
+    /// 90_000) for BOTH constructor-set feeds. Reads the STORED config (not router.FEED_HEARTBEAT(),
+    /// which self-adjusts) so a widening of FEED_HEARTBEAT cannot ship green.
+    function test_feedStalenessWindowIsPinned() public view {
+        assertEq(uint256(router.feedConfig(address(weth)).maxStaleness), 90_000, "ETH feed maxStaleness pinned");
+        assertEq(uint256(router.feedConfig(address(weth)).heartbeat), 86_400, "ETH feed heartbeat pinned");
+        assertEq(uint256(router.feedConfig(address(usdg)).maxStaleness), 90_000, "USDG feed maxStaleness pinned");
+        assertEq(uint256(router.feedConfig(address(usdg)).heartbeat), 86_400, "USDG feed heartbeat pinned");
+    }
+
     function test_ConstructorGuards() public {
         vm.expectRevert(DonFeeRouter.BadBps.selector);
         new DonFeeRouter(_config(IERC20(address(usdg)), 8999)); // >10% slippage allowance refused

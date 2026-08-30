@@ -47,10 +47,26 @@ contract MockStock is ERC20 {
     function totalSupplyUI() external view returns (uint256) { return totalSupply() * uiMultiplier / 1e18; }
 }
 
+/// The minimal shape _assertActivePool duck-types, for markets-only tests that never borrow.
+/// Mutable on purpose: the commit-side re-assert is only testable by a binding that breaks
+/// between propose and commit (a real pool's bindings are immutable).
+contract PoolStub {
+    address public collateralToken;
+    address public markets;
+
+    constructor(address token_, address markets_) {
+        collateralToken = token_;
+        markets = markets_;
+    }
+
+    function setCollateralToken(address t) external { collateralToken = t; }
+    function setMarkets(address m) external { markets = m; }
+}
+
 contract GuardHarness is StaleFeedGuard {
     constructor(AggregatorV3Interface s) StaleFeedGuard(s) {}
-    function setFeed(address t, AggregatorV3Interface f, uint32 maxStale, uint8 d) external {
-        _setFeed(t, f, maxStale, d);
+    function setFeed(address t, AggregatorV3Interface f, uint32 heartbeat, uint32 maxStale, uint8 d) external {
+        _setFeed(t, f, heartbeat, maxStale, d);
     }
 }
 
@@ -61,7 +77,6 @@ contract ReconcilerHarness is CollateralReconciler {
     function effective(address t, uint256 raw, uint256 snap) external view returns (uint256) {
         return _effectiveCollateral(t, raw, snap);
     }
-    function uiAmount(address t, uint256 raw) external view returns (uint256) { return _uiAmount(t, raw); }
     function index(address t) external view returns (uint256) { return _index(t); }
 }
 
@@ -84,7 +99,7 @@ contract StaleFeedGuardTest is Test {
         px = new MockFeed(200e8, 8);
         g = new GuardHarness(seq);
         // heartbeat + grace, matching the real 86400s Robinhood Chain feeds
-        g.setFeed(TOK, px, 90_000, 8);
+        g.setFeed(TOK, px, 86_400, 90_000, 8);
     }
 
     function test_freshPriceInSession() public view {
@@ -127,6 +142,22 @@ contract StaleFeedGuardTest is Test {
         g.priceOf(TOK);
     }
 
+    /// L-1: the staleness gate is STRICT (`age > maxStaleness`). Off-hours (so the holiday guard is
+    /// out of the way), age == maxStaleness is the last fresh instant and must still price; age ==
+    /// maxStaleness + 1 must revert. Pins the exact boundary so a `>`->`>=` flip — which would reject
+    /// a price sitting precisely at the window edge — fails.
+    function test_stalenessAgeBoundaryIsExact() public {
+        uint256 night = (MON_IN_SESSION / 86400) * 86400 + 3 hours; // off-hours
+        assertFalse(g.isUsMarketHours(night), "fixture is off-hours");
+        px.set(200e8, night - 90_000); // age == maxStaleness exactly
+        vm.warp(night);
+        (uint256 p,,) = g.priceOf(TOK); // must NOT revert at the exact bound
+        assertEq(p, 200e8, "age == maxStaleness must still price");
+        px.set(200e8, night - 90_001); // age == maxStaleness + 1
+        vm.expectRevert();
+        g.priceOf(TOK);
+    }
+
     /// Configuring a bound tighter than the heartbeat is a misconfiguration that would look fine
     /// until the first quiet hour. Reject it at config time.
     function test_stalenessBelowHeartbeatIsRejected() public {
@@ -134,7 +165,51 @@ contract StaleFeedGuardTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(StaleFeedGuard.StalenessBelowHeartbeat.selector, uint32(3600), uint32(86_400))
         );
-        g.setFeed(address(0xCC), f2, 3600, 8);
+        g.setFeed(address(0xCC), f2, 86_400, 3600, 8);
+    }
+
+    /// Both bounds are exact: [heartbeat, heartbeat+grace]. The ceiling exists because this bound
+    /// became canLiquidate's freshness gate — looser would widen the price age liquidation acts on.
+    function test_stalenessBoundsAreExact() public {
+        MockFeed f2 = new MockFeed(100e8, 8);
+        g.setFeed(address(0xC1), f2, 86_400, 90_000, 8); // exactly heartbeat + grace
+        g.setFeed(address(0xC2), f2, 86_400, 86_400, 8); // exactly the heartbeat
+        vm.expectRevert(
+            abi.encodeWithSelector(StaleFeedGuard.StalenessAboveCeiling.selector, uint32(90_001), uint32(90_000))
+        );
+        g.setFeed(address(0xC3), f2, 86_400, 90_001, 8);
+        vm.expectRevert(
+            abi.encodeWithSelector(StaleFeedGuard.StalenessBelowHeartbeat.selector, uint32(86_399), uint32(86_400))
+        );
+        g.setFeed(address(0xC4), f2, 86_400, 86_399, 8);
+    }
+
+    /// WS4 #3: the bounds follow the LISTED heartbeat, not a global constant. An Ink equity feed
+    /// beats at 3600s; under the old global 86400s floor its correct 7200s bound was uncommittable,
+    /// and an 86400s bound would have admitted a 24h-old price on a 1h-cadence feed.
+    function test_stalenessBoundsFollowThePerFeedHeartbeat() public {
+        MockFeed f2 = new MockFeed(100e8, 8);
+        g.setFeed(address(0xD1), f2, 3_600, 3_600, 8); // exactly the Ink heartbeat
+        g.setFeed(address(0xD2), f2, 3_600, 7_200, 8); // exactly heartbeat + grace
+        assertEq(g.feedConfig(address(0xD2)).heartbeat, 3_600, "the listed heartbeat is stored");
+        vm.expectRevert(
+            abi.encodeWithSelector(StaleFeedGuard.StalenessBelowHeartbeat.selector, uint32(3_599), uint32(3_600))
+        );
+        g.setFeed(address(0xD3), f2, 3_600, 3_599, 8);
+        vm.expectRevert(
+            abi.encodeWithSelector(StaleFeedGuard.StalenessAboveCeiling.selector, uint32(7_201), uint32(7_200))
+        );
+        g.setFeed(address(0xD4), f2, 3_600, 7_201, 8);
+    }
+
+    /// A zero (or absurdly short) heartbeat would make the staleness bound meaningless.
+    function test_heartbeatFloorIsExact() public {
+        MockFeed f2 = new MockFeed(100e8, 8);
+        g.setFeed(address(0xE1), f2, 60, 60, 8); // exactly the floor
+        vm.expectRevert(abi.encodeWithSelector(StaleFeedGuard.HeartbeatTooShort.selector, uint32(59), uint32(60)));
+        g.setFeed(address(0xE2), f2, 59, 59, 8);
+        vm.expectRevert(abi.encodeWithSelector(StaleFeedGuard.HeartbeatTooShort.selector, uint32(0), uint32(60)));
+        g.setFeed(address(0xE3), f2, 0, 90_000, 8);
     }
 
     function test_sequencerDownRejects() public {
@@ -171,7 +246,7 @@ contract StaleFeedGuardTest is Test {
     /// carried by compensating controls, so it has to be visible rather than silently skipped.
     function test_missingSequencerFeedIsExplicitNotSilent() public {
         GuardHarness g2 = new GuardHarness(AggregatorV3Interface(address(0)));
-        g2.setFeed(TOK, px, 90_000, 8);
+        g2.setFeed(TOK, px, 86_400, 90_000, 8);
         assertTrue(g2.sequencerCheckDisabled(), "must advertise that the check is off");
         (uint256 p,,) = g2.priceOf(TOK); // still functions
         assertEq(p, 200e8);
@@ -260,6 +335,28 @@ contract CollateralReconcilerTest is Test {
         assertEq(r.effective(address(tok), 100e18, snap0), 100e18);
     }
 
+    /// L-1: the index ratchet is STRICT (`actual < expected`). At actual == expected the index must
+    /// NOT move. Constructed with a rounding remainder (scaled=3, a prior burn leaves a non-round
+    /// index) so the boundary is observable: a `<`->`<=` flip would re-floor the index DOWN a third,
+    /// silently haircutting entitlements at a balance that exactly agrees with the ledger.
+    function test_reconcileIndexHoldsAtExactBoundary() public {
+        ReconcilerHarness r2 = new ReconcilerHarness();
+        MockStock t2 = new MockStock();
+        t2.mint(address(r2), 3);
+        r2.credit(address(t2), 3); // scaled = 3, index = 1e18
+        t2.adminBurn(address(r2), 1); // actual 2 < expected 3
+        r2.reconcile(address(t2)); // index -> floor(2e18/3) = 666666666666666666
+        assertEq(r2.collateralIndex(address(t2)), 666666666666666666, "index after the first burn");
+        // expected == floor(3 * 666666666666666666 / 1e18) == 1; burn down to actual == 1 == expected.
+        t2.adminBurn(address(r2), 1); // actual = 1, the EXACT boundary (actual == expected)
+        r2.reconcile(address(t2)); // `actual < expected` is FALSE at equality: index must NOT ratchet
+        assertEq(
+            r2.collateralIndex(address(t2)),
+            666666666666666666,
+            "at actual == expected the index holds (a <= flip would drop it to 333333333333333333)"
+        );
+    }
+
     /// adminBurn is detected and RECORDED, and must not revert — reverting would freeze every
     /// other borrower and turn a partial loss into a total one.
     function test_adminBurnIsDetectedAndRecorded() public {
@@ -317,14 +414,6 @@ contract CollateralReconcilerTest is Test {
         tok.adminBurn(address(r), 100e18);
         assertEq(r.reconcile(address(tok)), 100e18);
         assertEq(r.effective(address(tok), 100e18, snap0), 0); // exactly 0, not dust
-    }
-
-    /// Valuation must follow the corporate-action multiplier: a 4:1 split quadruples the
-    /// share-equivalent, so pricing the RAW balance would understate the position 4x.
-    function test_uiAmountFollowsTheMultiplier() public {
-        assertEq(r.uiAmount(address(tok), 100e18), 100e18);
-        tok.setMultiplier(4e18);
-        assertEq(r.uiAmount(address(tok), 100e18), 400e18);
     }
 
     function test_pendingMultiplierIsVisibleBeforeItFires() public {

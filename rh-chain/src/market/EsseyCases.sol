@@ -104,6 +104,7 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
     uint256 public immutable boosterShareBps; // share of each fee leg routed to the Bell
 
     uint256 internal constant BPS = 10_000;
+    uint32 public constant FEED_HEARTBEAT = 86_400; // RH equity-feed heartbeat (was StaleFeedGuard.FEED_HEARTBEAT before the per-feed guard)
     uint256 internal constant MAX_SPREAD_BPS = 2_000; // 20% ceiling — a "discount", not a rug
     /// Floor: the sell-back round trip crosses TWO oracle deviation bands (stock read high, base read
     /// low — 0.5% each on this chain's feeds compounds to ~100.5 bps of oracle-vs-market edge), so the
@@ -185,7 +186,7 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
 
         uint8 bfd = baseFeed_.decimals();
         if (bfd > 18) revert BadConfig(); // normalization assumes <= 18 (Chainlink uses 8)
-        _setFeed(address(base_), baseFeed_, FEED_HEARTBEAT + STALENESS_GRACE, bfd);
+        _setFeed(address(base_), baseFeed_, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, bfd);
     }
 
     // ---------------------------------------------------------------- views
@@ -220,7 +221,7 @@ contract EsseyCases is StaleFeedGuard, ReentrancyGuard {
         // math must never overflow (a >77-decimals token would permanently brick its own buyback).
         if (fd > 18 || td > 18) revert BadConfig();
         stocks[token] = StockInfo(unitAmount, td, true);
-        _setFeed(token, feed, FEED_HEARTBEAT + STALENESS_GRACE, fd);
+        _setFeed(token, feed, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, fd);
         emit StockListed(token, address(feed), unitAmount);
     }
 

@@ -2,21 +2,38 @@
 pragma solidity ^0.8.28;
 
 import {EsseyPool} from "../src/EsseyPool.sol";
+import {EsseyMarkets} from "../src/EsseyMarkets.sol";
+import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {EsseyPoolTest} from "./EsseyPool.t.sol";
+import {MockFeed, MockStock} from "./RiskModules.t.sol";
 import {Seat} from "../src/market/Seat.sol";
 import {Bell, ISeatLike} from "../src/market/Bell.sol";
 import {IConverter} from "../src/market/IConverter.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-/// Loan-interest -> Bell routing: the third fee engine. Inherits the full pool harness and swaps in
-/// a rate-bearing pool with a real Bell wired (reward == pool asset, proven by the constructor).
+/// Loan-interest -> Bell routing: the third fee engine. Inherits the full pool harness and adds
+/// rate-bearing, Bell-wired pools with a real Bell wired (reward == pool asset, proven by the
+/// constructor). F1 (isolated pools): the registry admits exactly one active pool per collateral,
+/// so each pool under test gets its OWN collateral token + ramped market rather than sharing the
+/// parent harness's `tok`, whose sole active pool is the parent `pool`.
 contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector; // the e2e test mints a Seat to this contract
     }
 
     EsseyPool rpool; // the rate-bearing, Bell-wired pool under test (parent pool left untouched)
+    EsseyPool p2; // no Bell wired: whole skim to treasury
+    EsseyPool allBell; // share = BPS: whole skim to the Bell
+    EsseyPool noBell; // share = 0: whole skim to treasury even with a sink
+    MockStock ctR;
+    MockStock ctP2;
+    MockStock ctAB;
+    MockStock ctNB;
+    MockFeed fR;
+    MockFeed fP2;
+    MockFeed fAB;
+    MockFeed fNB;
     Seat seat;
     ERC20Mock essey;
     Bell bell;
@@ -24,6 +41,10 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
     address BOB;
 
     uint256 constant BELL_SHARE = 5_000; // 50% of skimmed reserves -> the pot
+
+    function _identity() internal pure returns (EsseyPool.Identity memory) {
+        return EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE");
+    }
 
     function setUp() public override {
         super.setUp();
@@ -40,23 +61,113 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
         // transfer (the coherence the pool constructor enforces).
         bell = new Bell(ISeatLike(address(seat)), essey, usdg, TREASURY, 1e4, 100, fees, weights, IConverter(address(0)), address(0)); // minRing 0.01 USDG
 
-        // A second pool alongside the parent's zero-rate one (so inherited tests still pass
-        // untouched): 10% APR base PLUS a real slope — a flat curve would make the rate-invariance
+        ctR = new MockStock();
+        ctP2 = new MockStock();
+        ctAB = new MockStock();
+        ctNB = new MockStock();
+        fR = new MockFeed(200e8, 8);
+        fP2 = new MockFeed(200e8, 8);
+        fAB = new MockFeed(200e8, 8);
+        fNB = new MockFeed(200e8, 8);
+
+        // Each pool alongside the parent's zero-rate one (so inherited tests still pass untouched):
+        // 10% APR base PLUS a real slope on rpool — a flat curve would make the rate-invariance
         // assertion vacuous (audit R2 note: the rate leg must actually depend on utilization).
-        rpool = new EsseyPool(usdg, mk, 1_000, 2_000, 0, 2_000, address(bell), TREASURY, BELL_SHARE);
+        rpool = new EsseyPool(usdg, address(ctR), mk, 1_000, 2_000, 0, 2_000, address(bell), TREASURY, BELL_SHARE, _identity());
+        p2 = new EsseyPool(usdg, address(ctP2), mk, 1_000, 0, 0, 2_000, address(0), TREASURY, BELL_SHARE, _identity());
+        allBell = new EsseyPool(usdg, address(ctAB), mk, 1_000, 0, 0, 2_000, address(bell), TREASURY, 10_000, _identity());
+        noBell = new EsseyPool(usdg, address(ctNB), mk, 1_000, 0, 0, 2_000, address(bell), TREASURY, 0, _identity());
+
+        _registerAndRamp();
+
+        // LENDER liquidity into rpool; the other pools are funded by address(this) inside their tests
+        // (mirroring the original, deposit-agnostic setup).
         vm.startPrank(LENDER);
         usdg.approve(address(rpool), type(uint256).max);
         rpool.deposit(400_000e6, LENDER); // parent already deposited 500k of LENDER's 1M elsewhere
         vm.stopPrank();
+
+        // ALICE collateral for every dedicated market.
+        _fundAlice(ctR, rpool);
+        _fundAlice(ctP2, p2);
+        _fundAlice(ctAB, allBell);
+        _fundAlice(ctNB, noBell);
+    }
+
+    function _fundAlice(MockStock ct, EsseyPool p) internal {
+        ct.mint(ALICE, 1_000e18);
         vm.startPrank(ALICE);
-        tok.approve(address(rpool), type(uint256).max);
-        usdg.approve(address(rpool), type(uint256).max);
+        ct.approve(address(p), type(uint256).max);
+        usdg.approve(address(p), type(uint256).max);
+        vm.stopPrank();
+    }
+
+    /// Register all four dedicated markets through the real timelocked pipeline, then ride the
+    /// health oracle's from-zero depth ramp so `effectiveCap` (and thus borrowCap) clears the
+    /// small borrows below. No keeper beats inside the ramp loop — liveness is restored at the end,
+    /// exactly as the parent harness's _seedOracle does.
+    function _registerAndRamp() internal {
+        _propose(ctR, fR, rpool);
+        _propose(ctP2, fP2, p2);
+        _propose(ctAB, fAB, allBell);
+        _propose(ctNB, fNB, noBell);
+
+        // Exactly 42 x 12h = 21 whole days: a multiple of 7 preserves the day-of-week the parent
+        // harness relies on, so the inherited tests' own +2-day timelock warps (_installResolver /
+        // _activate) still land inside a US session. Commit the dedicated markets once the 2-day
+        // PARAM_TIMELOCK has elapsed (i >= 4), then keep riding the from-zero depth ramp.
+        bool committed = false;
+        _postAll();
+        for (uint256 i = 0; i < 42; i++) {
+            vm.warp(block.timestamp + 12 hours);
+            _refreshFeeds();
+            _postAll();
+            if (!committed && i >= 4) {
+                vm.startPrank(ADMIN);
+                mk.commitMarket(address(ctR));
+                mk.commitMarket(address(ctP2));
+                mk.commitMarket(address(ctAB));
+                mk.commitMarket(address(ctNB));
+                vm.stopPrank();
+                committed = true;
+            }
+        }
+        _beat();
+        _advanceLive(GRACE);
+        while (!mk.isUsMarketHours(block.timestamp)) _advanceLive(30 minutes);
+        _refreshFeeds();
+    }
+
+    function _propose(MockStock ct, MockFeed f, EsseyPool p) internal {
+        EsseyMarkets.Market memory m = EsseyMarkets.Market({
+            enabled: true, ltvBps: 3_500, liqThresholdBps: 5_500, liqBonusBps: 800,
+            collateralDecimals: 18, cap: 1_000_000e6, maxPositionBps: 10_000
+        });
+        vm.prank(ADMIN);
+        mk.proposeMarket(address(ct), AggregatorV3Interface(address(f)), 86_400, 90_000, 8, address(ct), address(p), m);
+    }
+
+    function _refreshFeeds() internal {
+        px.set(px.answer(), block.timestamp); // keep the parent harness's `tok` price fresh too
+        fR.set(fR.answer(), block.timestamp);
+        fP2.set(fP2.answer(), block.timestamp);
+        fAB.set(fAB.answer(), block.timestamp);
+        fNB.set(fNB.answer(), block.timestamp);
+    }
+
+    function _postAll() internal {
+        _postD(); // the ramp warps past `tok`'s reading age; re-post so the parent market survives it
+        vm.startPrank(KEEPER);
+        hox.postDepth(address(ctR), SEED_DEPTH, uint64(block.number), "skim");
+        hox.postDepth(address(ctP2), SEED_DEPTH, uint64(block.number), "skim");
+        hox.postDepth(address(ctAB), SEED_DEPTH, uint64(block.number), "skim");
+        hox.postDepth(address(ctNB), SEED_DEPTH, uint64(block.number), "skim");
         vm.stopPrank();
     }
 
     function _rborrow(uint256 debt) internal returns (uint256 id) {
         vm.prank(ALICE);
-        id = rpool.borrow(address(tok), 10e18, debt);
+        id = rpool.borrow(10e18, debt);
     }
 
     /// Borrow, let a month of interest accrue, then skim from an uninvolved address.
@@ -124,15 +235,11 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
     /// No Bell wired (pre-market-layer deploys): the whole skim goes to the treasury, even with a
     /// nonzero share configured.
     function test_NoBellMeansAllToTreasury() public {
-        EsseyPool p2 = new EsseyPool(usdg, mk, 1_000, 0, 0, 2_000, address(0), TREASURY, BELL_SHARE);
         usdg.mint(address(this), 1_000e6);
         usdg.approve(address(p2), type(uint256).max);
         p2.deposit(1_000e6, address(this));
-        // Manufacture reserves without a borrow: accrual needs borrows, so borrow via ALICE.
-        vm.startPrank(ALICE);
-        tok.approve(address(p2), type(uint256).max);
-        p2.borrow(address(tok), 10e18, 300e6);
-        vm.stopPrank();
+        vm.prank(ALICE);
+        p2.borrow(10e18, 300e6);
         _advanceLive(30 days);
         p2.accrue();
         uint256 reserves = p2.totalReserves();
@@ -147,10 +254,10 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
     function test_ConstructorGuards() public {
         // Zero treasury rejected.
         vm.expectRevert(EsseyPool.BadSink.selector);
-        new EsseyPool(usdg, mk, 0, 0, 0, 0, address(0), address(0), 0);
+        new EsseyPool(usdg, address(ctR), mk, 0, 0, 0, 0, address(0), address(0), 0, _identity());
         // Share above 100% rejected.
         vm.expectRevert(EsseyPool.BadSink.selector);
-        new EsseyPool(usdg, mk, 0, 0, 0, 0, address(bell), TREASURY, 10_001);
+        new EsseyPool(usdg, address(ctR), mk, 0, 0, 0, 0, address(bell), TREASURY, 10_001, _identity());
         // A Bell whose reward is NOT the pool asset is un-deployable — fees would vanish from its pot.
         Bell wrongReward;
         {
@@ -161,7 +268,7 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
             wrongReward = new Bell(ISeatLike(address(seat)), usdg, essey, TREASURY, 1e18, 100, f, w, IConverter(address(0)), address(0));
         }
         vm.expectRevert(EsseyPool.BadSink.selector);
-        new EsseyPool(usdg, mk, 0, 0, 0, 0, address(wrongReward), TREASURY, BELL_SHARE);
+        new EsseyPool(usdg, address(ctR), mk, 0, 0, 0, 0, address(wrongReward), TREASURY, BELL_SHARE, _identity());
     }
 
     /// The F-1 fix, asserted directly: the borrow rate is skim-timing-invariant, because
@@ -177,18 +284,15 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
 
     /// Boundary shares: 0 (all treasury even with a sink) and 10_000 (all Bell) through a real skim.
     function test_BoundaryShareConfigs() public {
-        EsseyPool allBell = new EsseyPool(usdg, mk, 1_000, 0, 0, 2_000, address(bell), TREASURY, 10_000);
-        EsseyPool noBell = new EsseyPool(usdg, mk, 1_000, 0, 0, 2_000, address(bell), TREASURY, 0);
-        for (uint256 i = 0; i < 2; i++) {
-            EsseyPool p = i == 0 ? allBell : noBell;
-            usdg.mint(address(this), 10_000e6);
-            usdg.approve(address(p), type(uint256).max);
-            p.deposit(10_000e6, address(this));
-            vm.startPrank(ALICE);
-            tok.approve(address(p), type(uint256).max);
-            p.borrow(address(tok), 10e18, 300e6);
-            vm.stopPrank();
-        }
+        usdg.mint(address(this), 20_000e6);
+        usdg.approve(address(allBell), type(uint256).max);
+        usdg.approve(address(noBell), type(uint256).max);
+        allBell.deposit(10_000e6, address(this));
+        noBell.deposit(10_000e6, address(this));
+        vm.startPrank(ALICE);
+        allBell.borrow(10e18, 300e6);
+        noBell.borrow(10e18, 300e6);
+        vm.stopPrank();
         _advanceLive(30 days);
         (uint256 b1, uint256 t1) = allBell.skimReserves();
         assertGt(b1, 0);

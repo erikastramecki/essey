@@ -14,10 +14,12 @@ import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 /// a signed-publisher oracle avoids. Off-hours the honest answer is "no fresh price", not one we
 /// synthesise.
 ///
-/// Every feed here runs an 86400s heartbeat with a 0.5% deviation trigger. So the staleness bound
+/// The heartbeat is PER FEED (Robinhood Chain equity feeds beat at 86400s, Ink's at 3600s — a
+/// global constant would admit a 24h-old price on a 1h-cadence feed), so the staleness bound
 /// catches a BROKEN oracle, not a quiet market, and must be >= heartbeat + grace — an earlier draft
 /// used 3600s/300s and would have bricked the protocol nightly. Off-hours protection comes from the
-/// session flag instead: no new borrows, no liquidations at a price nobody can verify.
+/// session flag instead, and it gates NEW BORROWS ONLY: liquidations run whenever the price is
+/// fresh (inside the staleness bound), session open or not — see EsseyMarkets._liquidationPriceGate.
 contract StaleFeedGuard {
     error SequencerDown();
     error SequencerGracePeriod(uint256 secondsRemaining);
@@ -26,21 +28,32 @@ contract StaleFeedGuard {
     error RoundIncomplete();
     error FeedNotConfigured(address token);
     error StalenessBelowHeartbeat(uint32 given, uint32 heartbeat);
+    error StalenessAboveCeiling(uint32 given, uint32 ceiling);
+    error HeartbeatTooShort(uint32 given, uint32 floor);
+    error HeartbeatTooLong(uint32 given, uint32 ceiling);
 
     /// Heartbeats differ per feed — never hardcode a global value.
     struct FeedConfig {
         AggregatorV3Interface feed;
-        /// Must be >= heartbeat + grace (~90000s here); tighter reverts on a quiet market.
+        /// The feed's own publish cadence, a listing parameter verified against Chainlink's
+        /// directory per market (RH equities 86400s, Ink equities 3600s).
+        uint32 heartbeat;
+        /// In [heartbeat, heartbeat+grace]: tighter reverts on a quiet market; looser would let
+        /// liquidation act on an older price (this bound IS canLiquidate's freshness gate).
         uint32 maxStaleness;
         uint8 decimals;
         bool configured;
     }
 
-    /// Every Robinhood Chain feed publishes on this heartbeat (verified against Chainlink's feed
-    /// directory). Exposed so deployment scripts can assert their config against it.
-    uint32 public constant FEED_HEARTBEAT = 86_400;
-    /// Grace on top of the heartbeat before we call a feed broken.
+    /// Grace on top of the heartbeat before we call a feed broken. Operational slack, not a feed
+    /// property — stays global on purpose.
     uint32 public constant STALENESS_GRACE = 3_600;
+    /// No real Chainlink feed beats sub-minute; a zero heartbeat would make staleness meaningless.
+    uint32 public constant MIN_HEARTBEAT = 60;
+    /// Round-6 A/B: an unbounded heartbeat lets a re-commit treat an arbitrarily old print as
+    /// fresh. 2 days sits above every real equity cadence and below anything that defeats
+    /// staleness — the MIN_RISK_GAP_BPS philosophy applied to liquidation availability.
+    uint32 public constant MAX_HEARTBEAT = 2 days;
 
     /// After a sequencer outage, prices are fresh but the market had no chance to react. Reject
     /// for a grace period rather than liquidating people on a resumed-but-unwound market.
@@ -99,9 +112,9 @@ contract StaleFeedGuard {
     /// The price of one whole unit of `token`, scaled to the feed's own decimals, together with
     /// whether the US equity session is currently open.
     ///
-    /// Callers MUST apply the off-hours haircut when `inSession` is false. This function
-    /// deliberately does not apply it itself: haircuts are a risk-parameter decision owned by the
-    /// market registry, and burying them here would hide them from review.
+    /// `inSession` gates NEW BORROWS only (EsseyMarkets.canBorrow returns it); liquidation ignores
+    /// it and relies on the freshness bound below. No off-hours haircut exists — off-hours the
+    /// protocol declines to lend rather than price the unknown.
     function priceOf(address token) public view returns (uint256 price, uint8 decimals, bool inSession) {
         FeedConfig memory c = _feeds[token];
         if (!c.configured) revert FeedNotConfigured(token);
@@ -191,11 +204,17 @@ contract StaleFeedGuard {
     /// Internal setter — the owning market registry decides access control. Kept internal so this
     /// contract has no admin surface of its own to get wrong.
     /// Reverts if `maxStaleness` is tighter than the heartbeat — a misconfiguration that would
-    /// look like a working system until the first quiet hour and then reject every borrow.
-    function _setFeed(address token, AggregatorV3Interface feed, uint32 maxStaleness, uint8 decimals)
+    /// look like a working system until the first quiet hour and then reject every borrow — or
+    /// looser than heartbeat+grace, which would widen the price age liquidations may act on.
+    function _setFeed(address token, AggregatorV3Interface feed, uint32 heartbeat, uint32 maxStaleness, uint8 decimals)
         internal
     {
-        if (maxStaleness < FEED_HEARTBEAT) revert StalenessBelowHeartbeat(maxStaleness, FEED_HEARTBEAT);
-        _feeds[token] = FeedConfig(feed, maxStaleness, decimals, true);
+        if (heartbeat < MIN_HEARTBEAT) revert HeartbeatTooShort(heartbeat, MIN_HEARTBEAT);
+        if (heartbeat > MAX_HEARTBEAT) revert HeartbeatTooLong(heartbeat, MAX_HEARTBEAT);
+        if (maxStaleness < heartbeat) revert StalenessBelowHeartbeat(maxStaleness, heartbeat);
+        if (maxStaleness > heartbeat + STALENESS_GRACE) {
+            revert StalenessAboveCeiling(maxStaleness, heartbeat + STALENESS_GRACE);
+        }
+        _feeds[token] = FeedConfig(feed, heartbeat, maxStaleness, decimals, true);
     }
 }

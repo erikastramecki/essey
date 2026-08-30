@@ -121,6 +121,18 @@ contract StockConverterTest is Test {
 
     /// The headline mechanic: owner opts into stock, claim converts at oracle-fair rate, stock lands
     /// in the Vault. 990 USDG @ $200/share -> 4.95 shares.
+    /// M-2: the migrated per-feed staleness window MUST stay pinned — heartbeat 86_400s, maxStaleness
+    /// 90_000s. Reads the STORED config (NOT a dynamic FEED_HEARTBEAT() expression, which self-adjusts
+    /// with the constant): a widening (dangerous direction, e.g. 86_400 -> 172_800 => ~49h stale
+    /// window) would otherwise ship green. Also proves a price past the window is refused.
+    function test_feedStalenessWindowIsPinned() public {
+        assertEq(uint256(conv.feedConfig(address(stock)).maxStaleness), 90_000, "maxStaleness pinned");
+        assertEq(uint256(conv.feedConfig(address(stock)).heartbeat), 86_400, "heartbeat pinned");
+        vm.warp(block.timestamp + 90_001); // one second past the window
+        vm.expectRevert();
+        conv.priceOf(address(stock));
+    }
+
     function test_ClaimConvertsToStock() public {
         uint256 id = _oneSeatRung();
         vm.prank(alice);

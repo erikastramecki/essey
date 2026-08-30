@@ -7,7 +7,7 @@ const hb = [...new Set(eq.map((f) => f.heartbeat))];
 const dev = [...new Set(eq.map((f) => f.threshold))];
 console.log(`${eq.length} Robinhood equity feeds | heartbeats: ${hb} | deviation: ${dev}%`);
 if (hb.length !== 1 || hb[0] !== 86400) {
-  console.error("HEARTBEAT CHANGED — StaleFeedGuard.FEED_HEARTBEAT and every configured");
+  console.error("HEARTBEAT CHANGED — each converter's FEED_HEARTBEAT and every configured");
   console.error("maxStaleness must be revisited before deploying.");
   process.exit(1);
 }

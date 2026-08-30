@@ -108,6 +108,13 @@ contract BundleConverterTest is Test {
 
     /// THE HEADLINE: a Seat with NO explicit choice is paid the bundle automatically — 990 USDG split
     /// 495/495 → 2.475 AAPL ($200) + 3.96 NVDA ($125), oracle-fair, straight to the Vault.
+    /// M-2: the migrated per-feed staleness window must stay pinned (heartbeat 86_400 / maxStaleness
+    /// 90_000). Reads the STORED config so a widening of FEED_HEARTBEAT cannot ship green.
+    function test_feedStalenessWindowIsPinned() public view {
+        assertEq(uint256(conv.feedConfig(address(aapl)).maxStaleness), 90_000, "maxStaleness pinned");
+        assertEq(uint256(conv.feedConfig(address(aapl)).heartbeat), 86_400, "heartbeat pinned");
+    }
+
     function test_DefaultPaysBundle() public {
         uint256 id = _oneSeatRung();
         assertEq(bell.payoutTokenOf(id), address(0), "no explicit preference");

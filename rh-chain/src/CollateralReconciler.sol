@@ -121,11 +121,6 @@ abstract contract CollateralReconciler {
         }
     }
 
-    /// Economic value of `rawAmount`, priced via the live corporate-action multiplier.
-    function _uiAmount(address token, uint256 rawAmount) internal view returns (uint256) {
-        return (rawAmount * IScaledUI(token).uiMultiplier()) / 1e18;
-    }
-
     /// Is a corporate action scheduled but not yet effective? Lets the UI and keeper warn before
     /// a split silently rescales every position.
     function pendingMultiplier(address token) external view returns (uint256 newMultiplier, uint256 effectiveAt) {

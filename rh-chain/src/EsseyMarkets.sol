@@ -3,9 +3,17 @@ pragma solidity ^0.8.28;
 
 import {StaleFeedGuard} from "./StaleFeedGuard.sol";
 import {LivenessOracle} from "./LivenessOracle.sol";
+import {MarketHealthOracle} from "./MarketHealthOracle.sol";
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 import {IScaledUI} from "./interfaces/IScaledUI.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
+/// The two bindings commit verifies before a pool becomes activePool. Declared minimally here:
+/// EsseyPool imports this file, so importing it back would be a cycle.
+interface IPoolBinding {
+    function collateralToken() external view returns (address);
+    function markets() external view returns (address);
+}
 
 /// Risk registry: which Stock Tokens are accepted, on what terms, and when.
 ///
@@ -13,13 +21,14 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 /// parameters rather than assumed away:
 ///   - collateral is a Jersey DEBT token, not equity — Robinhood counterparty risk
 ///   - `adminBurn` can destroy it, held by a plain EOA with no multisig or timelock
-///   - the price is blind nights and weekends (86400s heartbeat, 24/5 equity feeds)
+///   - the price is blind nights and weekends (24/5 equity feeds; heartbeat is per-market)
 ///
-/// THE GAP IS THE SAFETY MARGIN, NOT THE LTV. A position can only be liquidated once the market
-/// reopens and the chain is demonstrably live, so the distance between `ltvBps` and
-/// `liqThresholdBps` is what has to absorb an unliquidatable weekend gap or chain outage. That is
-/// why `MIN_RISK_GAP_BPS` is enforced in code: a future parameter change cannot quietly narrow the
-/// one thing protecting lenders.
+/// THE GAP IS THE SAFETY MARGIN, NOT THE LTV. Liquidation needs a FRESH price (age within the
+/// feed's staleness bound, ceiling heartbeat+grace) and a demonstrably live chain — weekday nights
+/// stay actionable, but the feed ages out ~25h after Friday's close so a weekend gap and a chain
+/// outage remain unliquidatable-into. The distance between `ltvBps` and `liqThresholdBps` is what
+/// has to absorb them. That is why `MIN_RISK_GAP_BPS` is enforced in code: a future parameter
+/// change cannot quietly narrow the one thing protecting lenders.
 contract EsseyMarkets is StaleFeedGuard {
     error NotAdmin();
     error MarketNotEnabled(address token);
@@ -27,10 +36,31 @@ contract EsseyMarkets is StaleFeedGuard {
     error NoPendingChange(address token);
     error TimelockNotElapsed(uint256 secondsRemaining);
     error FeedIsImmutable(address token);
+    error FreshnessIsImmutable(address token);
+    error BadMultiplierSource(address token, address source);
+    error MultiplierSourceIsImmutable(address token);
+    error ZeroGuardian();
+    error DeprecationOrderViolated(address token);
+    error BadActivePool(address token, address pool);
 
-    event MarketProposed(address indexed token, uint16 ltvBps, uint16 liqThresholdBps, uint256 effectiveAt);
+    /// The FULL pending payload, not a digest: commit is permissionless, so the log must be enough
+    /// for any watcher to decode exactly what a ripe proposal will install (WS2 #3).
+    event MarketProposed(
+        address indexed token,
+        Market m,
+        AggregatorV3Interface feed,
+        uint32 heartbeat,
+        uint32 maxStaleness,
+        uint8 feedDecimals,
+        address multiplierSource,
+        address pool,
+        uint256 effectiveAt
+    );
+    event MarketProposalCancelled(address indexed token);
     event MarketCommitted(address indexed token, uint16 ltvBps, uint16 liqThresholdBps);
     event MarketDisabled(address indexed token);
+    event ResolverProposed(address indexed resolver, uint256 effectiveAt);
+    event ResolverCommitted(address indexed resolver);
 
     struct Market {
         bool enabled;
@@ -40,13 +70,17 @@ contract EsseyMarkets is StaleFeedGuard {
         /// The collateral token's own decimals. REQUIRED for normalisation — see collateralValue.
         uint8 collateralDecimals;
         uint128 cap; // per-collateral exposure cap, in borrow-asset units
+        uint16 maxPositionBps; // share of `cap` one position may borrow; gates NEW borrows only
     }
 
     struct PendingMarket {
         Market m;
         AggregatorV3Interface feed;
+        uint32 heartbeat;
         uint32 maxStaleness;
         uint8 feedDecimals;
+        address multiplierSource;
+        address pool;
         uint256 effectiveAt;
     }
 
@@ -67,7 +101,11 @@ contract EsseyMarkets is StaleFeedGuard {
     uint256 public constant PARAM_TIMELOCK = 2 days;
 
     address public immutable admin;
+    /// Hot emergency key, safe-direction only: it may call disableMarket and NOTHING else — the
+    /// LivenessOracle.keeper trust shape. Compromise cost is a market outage, never funds.
+    address public immutable guardian;
     LivenessOracle public immutable liveness;
+    MarketHealthOracle public immutable health;
     /// Decimals of the BORROW asset (USDG = 6 on Robinhood Chain). Everything this contract
     /// returns is denominated in these units so debt and collateral are directly comparable.
     uint8 public immutable assetDecimals;
@@ -75,14 +113,40 @@ contract EsseyMarkets is StaleFeedGuard {
     mapping(address => Market) internal _markets;
     mapping(address => PendingMarket) internal _pending;
 
+    /// WS4 #4: where this market's ERC-8056 corporate-action multiplier is read. Robinhood Stock
+    /// Tokens carry the surface themselves (source == token); Backed's Ink 4626 wrapper does not —
+    /// an un-adapted call would revert inside collateralValue and brick canBorrow/canLiquidate for
+    /// good, so such a market lists a ConstantMultiplier adapter instead. Never defaulted silently
+    /// (the 1e12 lesson): commit asserts the source answers uiMultiplier() with a nonzero value.
+    mapping(address => address) public multiplierSource;
+
+    /// F1 (round 6): the ONE pool per token allowed to open NEW borrows. The market gate alone is
+    /// per-token, so after a same-token pool succession the retired pool re-armed — any stranger
+    /// could deposit there and borrow, doubling effective exposure against the shared cap.
+    /// Flips only through the timelocked propose/commit pipeline; nothing else on a superseded
+    /// pool gates on it, so its book winds down through the untouched paths.
+    mapping(address => address) public activePool;
+
+    /// The bad-debt resolver: the ONE address the pools accept writeOff() from, and the recipient of
+    /// written-off collateral. Timelocked like every risk parameter — an atomic admin->resolver swap
+    /// could sweep residual collateral with no warning on-chain.
+    address public resolver;
+    address public pendingResolver;
+    uint256 public pendingResolverEffectiveAt;
+
     constructor(
         AggregatorV3Interface sequencerUptimeFeed_,
         LivenessOracle liveness_,
+        MarketHealthOracle health_,
         address admin_,
+        address guardian_,
         uint8 assetDecimals_
     ) StaleFeedGuard(sequencerUptimeFeed_) {
+        if (guardian_ == address(0)) revert ZeroGuardian();
         liveness = liveness_;
+        health = health_;
         admin = admin_;
+        guardian = guardian_;
         assetDecimals = assetDecimals_;
     }
 
@@ -101,20 +165,36 @@ contract EsseyMarkets is StaleFeedGuard {
     ///
     /// Reverts if the price is unusable (silent oracle, sequencer down). Callers get no price
     /// rather than a stale one — an unknown price must never round to a usable number.
+    /// Requires the market COMMITTED, not currently enabled: disableMarket stops new borrows only,
+    /// and valuation must keep serving liquidation/write-off of the positions that already exist.
     function collateralValue(address token, uint256 rawAmount)
         public
         view
         returns (uint256 value, bool inSession)
     {
-        Market memory mk = _markets[token];
-        if (!mk.enabled) revert MarketNotEnabled(token);
+        Market memory mk = _configuredMarket(token);
         uint256 price;
         uint8 feedDec;
         (price, feedDec, inSession) = priceOf(token);
         // balanceOf is raw and stable; the share-equivalent moves on splits. Pricing the raw
         // amount is correct until the first corporate action and catastrophically wrong after.
-        uint256 uiAmount = (rawAmount * IScaledUI(token).uiMultiplier()) / 1e18;
+        uint256 uiAmount = (rawAmount * IScaledUI(multiplierSource[token]).uiMultiplier()) / 1e18;
         value = (uiAmount * price * (10 ** assetDecimals)) / (10 ** mk.collateralDecimals * 10 ** feedDec);
+    }
+
+    /// The cap the pool enforces: min(timelocked Market.cap, depth-oracle cap). The static cap
+    /// stays the ceiling-of-ceilings (AD-2) — the oracle moves only within it, so a compromised
+    /// depth keeper can never raise exposure past what the 2-day timelock installed.
+    function borrowCap(address token) external view returns (uint256) {
+        uint256 oracleCap = health.effectiveCap(token);
+        uint256 staticCap = _markets[token].cap;
+        return oracleCap < staticCap ? oracleCap : staticCap;
+    }
+
+    /// The stored static cap alone, for the health oracle's from-zero ramp clamp. Deliberately
+    /// NOT borrowCap: that consults the oracle back and would recurse.
+    function marketCap(address token) external view returns (uint256) {
+        return _markets[token].cap;
     }
 
     /// Most that may be borrowed against `rawAmount` of `token`, in borrow-asset units.
@@ -127,7 +207,7 @@ contract EsseyMarkets is StaleFeedGuard {
     /// Is this position liquidatable on VALUE alone? Callers must also check `canLiquidate`,
     /// which covers whether the chain and market are in a state where liquidating is legitimate.
     function isUnderwater(address token, uint256 rawAmount, uint256 debt) external view returns (bool) {
-        Market memory m = _requireEnabled(token);
+        Market memory m = _configuredMarket(token); // liquidation-side: must survive disableMarket
         (uint256 value,) = collateralValue(token, rawAmount);
         return debt > (value * m.liqThresholdBps) / 10_000;
     }
@@ -142,11 +222,16 @@ contract EsseyMarkets is StaleFeedGuard {
     function canBorrow(address token) external view returns (bool) {
         Market memory m = _markets[token];
         if (!m.enabled) return false;
+        // WS3 stage 1: ltvBps == 0 is a market in retirement. maxBorrow is already 0, so without
+        // this a stage-1 market would advertise borrowable and then revert every borrow.
+        if (m.ltvBps == 0) return false;
         // Mainnet-config: gate NEW borrows on chain liveness too (not just liquidation). Under the
         // disabled-sequencer config the price path has no on-chain sequencer gate, so without this a
         // sequencer restart could admit a borrow on a stale pre-outage price. During the post-outage
         // resume grace, declining new borrows is the safe, conservative response.
         if (!liveness.liquidationsAllowed()) return false;
+        // AD-2 pre-flight honesty: a stale/zero depth reading means the pool will refuse anyway.
+        if (health.effectiveCap(token) == 0) return false;
         // Corporate-action desync guard: around a uiMultiplier change the token's multiplier and its
         // Chainlink feed reprice at different instants, opening a ~2x mis-valuation window a borrower could
         // TIME (effectiveAt is public). Refuse new borrows while it holds.
@@ -173,7 +258,7 @@ contract EsseyMarkets is StaleFeedGuard {
     /// seizure; the ~1h gap is absorbed by the 20pp MIN_RISK_GAP_BPS buffer).
     function _desyncGuard(address token) internal view returns (bool) {
         // (a) scheduled action within the window (pre-flip / at-flip while newUIMultiplier still reports it)
-        try IScaledUI(token).newUIMultiplier() returns (uint256, uint256 effectiveAt) {
+        try IScaledUI(multiplierSource[token]).newUIMultiplier() returns (uint256, uint256 effectiveAt) {
             if (effectiveAt != 0) {
                 uint256 d = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
                 if (d <= MULTIPLIER_GUARD_WINDOW) return true;
@@ -184,21 +269,23 @@ contract EsseyMarkets is StaleFeedGuard {
         return movedAt != 0 && block.timestamp - movedAt < MULTIPLIER_GUARD_WINDOW;
     }
 
-    function _liveMultiplier(address token) internal view returns (uint256) {
-        try IScaledUI(token).uiMultiplier() returns (uint256 m) {
+    function _liveMultiplier(address source) internal view returns (uint256) {
+        try IScaledUI(source).uiMultiplier() returns (uint256 m) {
             return m;
         } catch {
             return 0;
         }
     }
 
-    /// Observe the token's live uiMultiplier and stamp the moment it moves. Permissionless + non-view; the
-    /// pool calls it on the borrow/liquidate paths (a keeper may also call it) so `_desyncGuard` sees a
-    /// corporate action the instant it applies — the FIRST action that touches the pool records the move and
-    /// is itself gated by the window.
+    /// Observe the market's live uiMultiplier (at its multiplierSource) and stamp the moment it moves.
+    /// Permissionless + non-view; the pool calls it on the borrow/liquidate paths (a keeper may also
+    /// call it) so `_desyncGuard` sees a corporate action the instant it applies — the FIRST action
+    /// that touches the pool records the move and is itself gated by the window.
     function syncMultiplier(address token) public {
-        uint256 cur = _liveMultiplier(token);
-        if (cur == 0) return; // token without the view / transient read failure — nothing to record
+        address source = multiplierSource[token];
+        if (source == address(0)) return; // never committed — nothing wired to observe
+        uint256 cur = _liveMultiplier(source);
+        if (cur == 0) return; // transient read failure — nothing to record
         uint256 prev = seenMultiplier[token];
         if (prev != 0 && cur != prev) multiplierMovedAt[token] = block.timestamp;
         seenMultiplier[token] = cur;
@@ -206,17 +293,30 @@ contract EsseyMarkets is StaleFeedGuard {
 
     /// Liquidation additionally requires demonstrated chain liveness — see LivenessOracle. A
     /// borrower must not be liquidated in the first block after an outage they could not react to.
+    ///
+    /// Deliberately NO `enabled` conjunct: a disabled market's existing positions must stay
+    /// liquidatable (and write-off-able), or disableMarket would freeze risk exactly when it is
+    /// being managed — with dust surviving, un-write-off-able until a 2-day re-commit (C-M2/B-L1).
+    /// A never-committed market declines FIRST — before _desyncGuard, whose try on a codeless
+    /// token reverts OUTSIDE the catch (the solc >=0.8.10 empty-returndata trap, see NoteArt).
     function canLiquidate(address token) external view returns (bool) {
-        Market memory m = _markets[token];
-        if (!m.enabled) return false;
+        if (!_feeds[token].configured) return false;
         if (!liveness.liquidationsAllowed()) return false;
         // Same corporate-action desync guard as canBorrow — SYMMETRY IS THE POINT: during the ~2x
         // mis-valuation window `collateralValue` reads ~half, which would flip healthy positions to
         // "underwater" and let a liquidator seize (near-)full collateral for half the debt. Declining to
         // liquidate on an unverifiable price (the ~1h window is inside the 20pp gap) beats wrongful seizure.
         if (_desyncGuard(token)) return false;
-        try this.collateralValue(token, 1e18) returns (uint256, bool inSession) {
-            return inSession;
+        return _liquidationPriceGate(token);
+    }
+
+    /// Liquidation's price gate is FRESHNESS, not session: the old inSession gate made every weekday
+    /// night a liquidation outage against a price still inside its staleness bound. Success of the
+    /// price read IS the freshness proof (priceOf reverts PriceStale past `maxStaleness`, which
+    /// _setFeed caps at heartbeat+grace); any revert — stale, silent, sequencer — declines.
+    function _liquidationPriceGate(address token) internal view returns (bool) {
+        try this.collateralValue(token, 1e18) returns (uint256, bool) {
+            return true;
         } catch {
             return false;
         }
@@ -227,26 +327,45 @@ contract EsseyMarkets is StaleFeedGuard {
     function proposeMarket(
         address token,
         AggregatorV3Interface feed,
+        uint32 heartbeat,
         uint32 maxStaleness,
         uint8 feedDecimals,
+        address multiplierSource_,
+        address pool_,
         Market memory m
     ) external {
         if (msg.sender != admin) revert NotAdmin();
         _validate(m);
         _assertRealDecimals(token, m.collateralDecimals, feed, feedDecimals);
-        _pending[token] =
-            PendingMarket(m, feed, maxStaleness, feedDecimals, block.timestamp + PARAM_TIMELOCK);
-        emit MarketProposed(token, m.ltvBps, m.liqThresholdBps, block.timestamp + PARAM_TIMELOCK);
+        _assertMultiplierSource(token, multiplierSource_);
+        _assertActivePool(token, pool_);
+        _pending[token] = PendingMarket(
+            m, feed, heartbeat, maxStaleness, feedDecimals, multiplierSource_, pool_, block.timestamp + PARAM_TIMELOCK
+        );
+        emit MarketProposed(
+            token, m, feed, heartbeat, maxStaleness, feedDecimals, multiplierSource_, pool_,
+            block.timestamp + PARAM_TIMELOCK
+        );
     }
 
+    /// PERMISSIONLESS (WS2 #2): a ripe proposal is executable by anyone. No executor privilege
+    /// exists — every check below re-runs at execution, so a stranger can only enact what the
+    /// admin proposed, exactly as proposed, after the full timelock.
     function commitMarket(address token) external {
-        if (msg.sender != admin) revert NotAdmin();
         PendingMarket memory p = _pending[token];
         if (p.effectiveAt == 0) revert NoPendingChange(token);
         if (block.timestamp < p.effectiveAt) revert TimelockNotElapsed(p.effectiveAt - block.timestamp);
-        // Re-validate at commit: the rules may have tightened since the proposal was made, and a
-        // stale proposal must not be able to install parameters that would be rejected today.
+        // Re-validation is defense-in-depth only: _validate is pure over compile-time constants
+        // in a non-upgradeable contract, so it cannot fail here where the proposal succeeded.
         _validate(p.m);
+        // WS3 stage-order guard: a dust threshold (below MIN_RISK_GAP_BPS) force-liquidates every
+        // open position, so it may only follow a timelocked stage 1 (installed ltvBps == 0) —
+        // skipping straight to stage 2 is impossible by construction. Gated on `configured`, the
+        // durable ever-committed marker: empty storage also reads ltvBps == 0, and without the
+        // marker a FRESH listing at dust threshold would slip through in a single commit.
+        if (p.m.liqThresholdBps < MIN_RISK_GAP_BPS) {
+            if (!_feeds[token].configured || _markets[token].ltvBps != 0) revert DeprecationOrderViolated(token);
+        }
         // Re-cross-check decimals at commit too: the token's decimals() can't change, but this keeps the
         // guarantee at the authoritative install point, symmetric with the re-validation above.
         _assertRealDecimals(token, p.m.collateralDecimals, p.feed, p.feedDecimals);
@@ -257,30 +376,90 @@ contract EsseyMarkets is StaleFeedGuard {
         // append-only for feeds for the same reason.)
         FeedConfig memory existing = _feeds[token];
         if (existing.configured && address(existing.feed) != address(p.feed)) revert FeedIsImmutable(token);
-        _setFeed(token, p.feed, p.maxStaleness, p.feedDecimals);
+        // The multiplier source is append-only for the feed's exact reason: swapping a live market's
+        // source — even behind the timelock — could force-liquidate healthy borrowers (fake low
+        // multiplier) or enable a pool-draining over-borrow (fake high one).
+        if (existing.configured && multiplierSource[token] != p.multiplierSource) {
+            revert MultiplierSourceIsImmutable(token);
+        }
+        // The freshness pair latches with them (round-6 A/B): loosening re-widens the stale-
+        // liquidation window the per-feed heartbeat closed; tightening below the feed's real
+        // cadence turns PriceStale into a liquidation freeze that also blocks writeOff while
+        // debt accrues. The feed is immutable; the clock it is judged by must be too.
+        if (existing.configured && (existing.heartbeat != p.heartbeat || existing.maxStaleness != p.maxStaleness)) {
+            revert FreshnessIsImmutable(token);
+        }
+        // Re-assert the source answers NOW, not just at propose — a wrong wiring must fail loudly at
+        // commit, never at the first borrow. Same for the pool binding: commit is where activePool
+        // flips, so commit is where the binding must hold.
+        uint256 liveMult = _assertMultiplierSource(token, p.multiplierSource);
+        _assertActivePool(token, p.pool);
+        _setFeed(token, p.feed, p.heartbeat, p.maxStaleness, p.feedDecimals);
         _markets[token] = p.m;
+        multiplierSource[token] = p.multiplierSource;
+        activePool[token] = p.pool;
         // Seed the observed-multiplier baseline (once) so the first post-commit corporate action registers
         // as a MOVE via syncMultiplier, not as uninitialised state.
-        if (seenMultiplier[token] == 0) seenMultiplier[token] = _liveMultiplier(token);
+        if (seenMultiplier[token] == 0) seenMultiplier[token] = liveMult;
         delete _pending[token];
         emit MarketCommitted(token, p.m.ltvBps, p.m.liqThresholdBps);
     }
 
-    /// Disabling is IMMEDIATE and needs no timelock. Turning a market off is always safe —
-    /// it stops new borrows; it does not seize anything and does not block repayment.
-    function disableMarket(address token) external {
+    function proposeResolver(address resolver_) external {
         if (msg.sender != admin) revert NotAdmin();
+        pendingResolver = resolver_;
+        pendingResolverEffectiveAt = block.timestamp + PARAM_TIMELOCK;
+        emit ResolverProposed(resolver_, pendingResolverEffectiveAt);
+    }
+
+    /// PERMISSIONLESS, same reasoning as commitMarket: only the timelocked payload can be enacted.
+    function commitResolver() external {
+        uint256 at = pendingResolverEffectiveAt;
+        if (at == 0) revert NoPendingChange(address(0));
+        if (block.timestamp < at) revert TimelockNotElapsed(at - block.timestamp);
+        resolver = pendingResolver;
+        delete pendingResolver;
+        delete pendingResolverEffectiveAt;
+        emit ResolverCommitted(resolver);
+    }
+
+    /// Disabling is IMMEDIATE and needs no timelock. Turning a market off is always safe —
+    /// it stops NEW borrows and nothing else: repay, addCollateral, liquidation, and write-off
+    /// all continue (the valuation path keys on `configured`, not `enabled`).
+    ///
+    /// The pending proposal is cleared too: every committable proposal carries enabled=true, so
+    /// a ripe one left in place would let the next commitMarket silently reverse an emergency
+    /// disable with no fresh notice. Re-enabling always pays the full timelock.
+    function disableMarket(address token) external {
+        if (msg.sender != admin && msg.sender != guardian) revert NotAdmin();
         _markets[token].enabled = false;
+        delete _pending[token];
         emit MarketDisabled(token);
+    }
+
+    /// The non-emergency sibling of disableMarket: immediate because it only REMOVES a pending
+    /// change — the installed market is untouched. Admin-only; the guardian's emergency path
+    /// (disableMarket) already clears _pending as a side effect.
+    function cancelMarketProposal(address token) external {
+        if (msg.sender != admin) revert NotAdmin();
+        if (_pending[token].effectiveAt == 0) revert NoPendingChange(token);
+        delete _pending[token];
+        emit MarketProposalCancelled(token);
     }
 
     function _validate(Market memory m) internal pure {
         if (!m.enabled) revert InvalidRiskParams("market must be enabled");
         if (m.liqThresholdBps > MAX_LIQ_THRESHOLD_BPS) revert InvalidRiskParams("threshold too high");
-        if (m.ltvBps >= m.liqThresholdBps) revert InvalidRiskParams("ltv must be below threshold");
-        if (m.liqThresholdBps - m.ltvBps < MIN_RISK_GAP_BPS) revert InvalidRiskParams("risk gap too narrow");
+        // Deprecation mode (WS3): ltvBps == 0 means no new borrows can ever open, so the gap that
+        // protects OPEN borrowers from unliquidatable moves has no one left to protect — stage 2
+        // (dust threshold) must be expressible. Every other bound below still binds.
+        if (m.ltvBps != 0) {
+            if (m.ltvBps >= m.liqThresholdBps) revert InvalidRiskParams("ltv must be below threshold");
+            if (m.liqThresholdBps - m.ltvBps < MIN_RISK_GAP_BPS) revert InvalidRiskParams("risk gap too narrow");
+        }
         if (m.liqBonusBps > MAX_LIQ_BONUS_BPS) revert InvalidRiskParams("bonus too high");
         if (m.cap == 0) revert InvalidRiskParams("cap must be set");
+        if (m.maxPositionBps == 0 || m.maxPositionBps > 10_000) revert InvalidRiskParams("bad position cap");
         if (m.collateralDecimals == 0 || m.collateralDecimals > 36) revert InvalidRiskParams("bad collateral decimals");
     }
 
@@ -299,12 +478,38 @@ contract EsseyMarkets is StaleFeedGuard {
         if (feedDecimals != feed.decimals()) revert InvalidRiskParams("feed decimals mismatch");
     }
 
-    /// Deliberately redundant with the enabled-check inside `collateralValue`: it fails fast with
-    /// the right error before any oracle work. A mutation sweep flags it as deletable for exactly
-    /// that reason — the redundancy is intentional, not an untested guard.
+    /// A DIRECT call, no try: a source lacking uiMultiplier() must revert here — at propose/commit,
+    /// where the operator is watching — not brick valuation at the first borrow. A zero answer is
+    /// equally unusable (it would value all collateral at nothing and mark everyone liquidatable).
+    function _assertMultiplierSource(address token, address source) internal view returns (uint256 live) {
+        if (source == address(0)) revert BadMultiplierSource(token, source);
+        live = IScaledUI(source).uiMultiplier();
+        if (live == 0) revert BadMultiplierSource(token, source);
+    }
+
+    /// Direct calls, no try — a mis-wired pool must fail loudly here, where the operator is
+    /// watching, never as a NotActivePool brick at the first borrow (the _assertMultiplierSource
+    /// precedent). The markets() check is the cross-registry squat guard: a pool bound to someone
+    /// else's registry can never become this one's active pool.
+    function _assertActivePool(address token, address pool) internal view {
+        if (
+            pool == address(0) || IPoolBinding(pool).collateralToken() != token
+                || IPoolBinding(pool).markets() != address(this)
+        ) revert BadActivePool(token, pool);
+    }
+
+    /// BORROW-side read: maxBorrow only. Liquidation-side paths use _configuredMarket instead.
     function _requireEnabled(address token) internal view returns (Market memory m) {
         m = _markets[token];
         if (!m.enabled) revert MarketNotEnabled(token);
+    }
+
+    /// LIQUIDATION-side read: requires the market was ever committed, not that it is enabled.
+    /// `_feeds[token].configured` is the durable commit marker — feeds are append-only
+    /// (commitMarket), so it can never be un-set the way `enabled` can.
+    function _configuredMarket(address token) internal view returns (Market memory m) {
+        if (!_feeds[token].configured) revert MarketNotEnabled(token);
+        m = _markets[token];
     }
 
     function market(address token) external view returns (Market memory) {

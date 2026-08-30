@@ -65,6 +65,7 @@ contract BundleConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
     uint256 public immutable spreadBps; // protective haircut off oracle-fair output (0 = full value)
 
     uint256 internal constant BPS = 10_000;
+    uint32 public constant FEED_HEARTBEAT = 86_400; // RH equity-feed heartbeat (was StaleFeedGuard.FEED_HEARTBEAT before the per-feed guard)
     uint256 internal constant MAX_SPREAD_BPS = 500; // 5% ceiling on the config
 
     mapping(address => StockConfig) public stocks;
@@ -111,7 +112,7 @@ contract BundleConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
         // session flag it returns is ignored for the base leg, exactly as in StockConverter/Cases).
         uint8 bfd = baseFeed_.decimals();
         if (bfd > 18) revert BadConfig(); // normalization assumes <= 18 (Chainlink uses 8)
-        _setFeed(address(base_), baseFeed_, FEED_HEARTBEAT + STALENESS_GRACE, bfd);
+        _setFeed(address(base_), baseFeed_, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, bfd);
     }
 
     // ---------------------------------------------------------------- views
@@ -148,7 +149,7 @@ contract BundleConverter is IConverter, StaleFeedGuard, ReentrancyGuard {
         uint8 td = IERC20Metadata(token).decimals();
         if (fd > 18 || td > 18) revert BadConfig(); // normalization assumes <= 18
         stocks[token] = StockConfig(td, true);
-        _setFeed(token, feed, FEED_HEARTBEAT + STALENESS_GRACE, fd);
+        _setFeed(token, feed, FEED_HEARTBEAT, FEED_HEARTBEAT + STALENESS_GRACE, fd);
         emit StockListed(token, address(feed));
     }
 

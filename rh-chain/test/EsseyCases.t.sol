@@ -105,6 +105,13 @@ contract EsseyCasesTest is Test {
 
     // ------------------------------------------------- bankroll + backing invariant
 
+    /// M-2: the migrated per-feed staleness window must stay pinned (heartbeat 86_400 / maxStaleness
+    /// 90_000). Reads the STORED config so a widening of FEED_HEARTBEAT cannot ship green.
+    function test_feedStalenessWindowIsPinned() public view {
+        assertEq(uint256(cases_.feedConfig(address(aapl)).maxStaleness), 90_000, "maxStaleness pinned");
+        assertEq(uint256(cases_.feedConfig(address(aapl)).heartbeat), 86_400, "heartbeat pinned");
+    }
+
     function test_SeedBuildsInventory() public view {
         assertEq(cases_.inventoryCount(), 5);
         assertEq(cases_.freeInventory(), 5);
