@@ -41,7 +41,6 @@ const CSS = `
 .txp .clock{color:var(--tx-faint);white-space:nowrap}
 .txp .ticker{display:flex;gap:18px;overflow-x:auto;border:1px solid var(--line);padding:6px 10px;margin-bottom:10px;white-space:nowrap}
 .txp .ticker span b{color:var(--gold)}
-.txp .ticker .na{color:var(--tx-faint)}
 .txp .tabs{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto}
 .txp .tab{background:transparent;border:1px solid var(--line-2);color:var(--tx-mut);font:inherit;font-weight:700;letter-spacing:.1em;padding:6px 13px;cursor:pointer;white-space:nowrap}
 .txp .tab:hover{color:var(--tx)}
@@ -454,10 +453,6 @@ export function ExplorerPage() {
           <span>HOUSES DAMAGED <b>{damagedCount ?? "—"}</b></span>
           <span>MISSION BUDGET <b>{econ?.missionBudget != null ? fmtScrip(econ.missionBudget) : "—"}</b></span>
         </>}
-        {/* No price oracle wired into the web layer yet -> honest placeholders (TODO: wire feeds). */}
-        {["USDG", "ESSEY", "AAPL", "NVDA"].map((s) => (
-          <span key={s}>{s} <span className="na">—</span></span>
-        ))}
         <span className="muted" style={{ marginLeft: "auto" }}>chain {NET.chainId} · block {head ? head.toString() : "—"} · testnet</span>
       </div>
 

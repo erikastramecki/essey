@@ -7,7 +7,7 @@ const HEADLINE: Item[] = [
     tag: "the take becomes the ticker",
     head: "Jobs pay in real stock",
     body: "Every brief in Solvency is already pegged to a real tokenized company, and the guide prints each contract so you can check it. Today the take is Scrip marked to that peg. It will be the asset itself: the chip fab job pays the chip company, the wafer run pays the flagship, the long odds pay the long shots.",
-    note: "NVDA, AMD, SPCX, GME, META and GOOGL are verified on chain today, contract and price wire both. The rest of the ledger is marked pending its proof, and stays marked until it passes.",
+    note: "AAPL and NVDA are wired on chain today, token and price both. The rest of the ledger is marked pending its proof, and stays marked until it passes.",
   },
   {
     tag: "districts",

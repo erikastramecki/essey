@@ -28,7 +28,6 @@ import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
 import { PortfolioPage } from "./portfolio";
 import { PrivatePage } from "./private";
 import { LendPage } from "./lend-ui";
-import { OperatorPage } from "./operator";
 import { ExplorerPage } from "./explorer";
 import { BuilderPage } from "./builder";
 import { HowToPlayPage } from "./howtoplay";
@@ -79,7 +78,6 @@ const MORE_ITEMS: NavLeaf[] = [
     desc: "Where protocol fees pool and pay out",
   },
   { to: "/private", label: "Private", desc: "Shielded balances and transfers" },
-  { to: "/launch", label: "Launch", desc: "Operator console" },
 ];
 const NAV: NavItem[] = [
   { to: "/game", label: "The Game" },
@@ -173,14 +171,6 @@ export default function App() {
               element={
                 <AppPage title="Lend">
                   <LendPage />
-                </AppPage>
-              }
-            />
-            <Route
-              path="/launch"
-              element={
-                <AppPage title="Launch">
-                  <OperatorPage />
                 </AppPage>
               }
             />
@@ -576,7 +566,6 @@ function Footer() {
                 ["/explorer", "Explorer"],
                 ["/bell", "The Bell"],
                 ["/private", "Private"],
-                ["/launch", "Launch"],
               ],
             ],
           ] as const
@@ -600,8 +589,10 @@ function Footer() {
             distributions are mechanically LP-style fee-shares, not dividends,
             not yield promises, and no payout is guaranteed, ever. The contracts
             are adversarially audited (published rounds in the technical docs)
-            and <b>live on Robinhood Chain testnet</b>. Everything here is play
-            money with no real value; not on mainnet.{" "}
+            and <b>live on Robinhood Chain testnet</b>. Everything in the game
+            is play money with no real value. The base layer — the $ESSEY token
+            and its on-chain floor reserve — is live on Robinhood Chain mainnet;
+            the game season is not.{" "}
             <button
               className="linklike"
               onClick={() =>

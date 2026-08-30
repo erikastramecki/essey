@@ -14,15 +14,13 @@ export function usePortfolio() {
   const a = w.address as Address | null;
   const connected = !!a && w.chainOk;
   const [p, setP] = useState<Portfolio | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(() => {
     if (!a) { setP(null); return; }
-    setLoading(true);
-    reads.portfolio(a).then(setP).catch(() => {}).finally(() => setLoading(false));
+    reads.portfolio(a).then(setP).catch(() => {});
   }, [a]);
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 20_000); return () => clearInterval(t); }, [refresh]);
 
-  return { portfolio: p, connected, loading, refresh };
+  return { portfolio: p, connected, refresh };
 }

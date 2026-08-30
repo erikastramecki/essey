@@ -66,9 +66,10 @@ export function WarningModal() {
         <p className="warn-lede"><b>Essey is experimental software.</b> It's early, and it's built in the open, including
           the audits that made us look bad. Read this before you connect a wallet.</p>
         <ul className="warn-list">
-          <li><b>Testnet, play money. You can't lose real money here.</b> Everything runs on Robinhood Chain
-            <b> testnet</b> with real contracts and real mechanics, but the tokens have <b>no real value</b> and this
-            is not on mainnet. So explore freely. Then, the honest rest:</li>
+          <li><b>Testnet, play money. You can't lose real money here.</b> The game runs on Robinhood Chain
+            <b> testnet</b> with real contracts and real mechanics, but its tokens have <b>no real value</b>. The
+            base layer — the $ESSEY token and its on-chain floor reserve — is live on Robinhood Chain
+            <b> mainnet</b>; this game season is not. So explore freely. Then, the honest rest:</li>
           <li><b>This season settles in Scrip</b> — play points marked to real tickers. Real-token settlement is
             the roadmap, not this season: nothing you win in the game right now is real stock, and no one should
             tell you otherwise, including us.</li>
@@ -248,8 +249,9 @@ export function ProvableTwist() {
         </div>
         <div className="twist-status">Status, honestly: the contracts are <b>adversarially audited across
           published rounds and live on Robinhood Chain testnet</b>. You can play the whole thing with play money
-          right now, and every event links a real transaction. Not on mainnet
-          yet. <a href={`${REPO}/tree/main/docs/audits`} target="_blank" rel="noreferrer">Read the audits ↗</a>
+          right now, and every event links a real transaction. The game season runs on testnet; the base
+          layer — the $ESSEY token and its on-chain floor reserve — is live on Robinhood Chain
+          mainnet. <a href={`${REPO}/tree/main/docs/audits`} target="_blank" rel="noreferrer">Read the audits ↗</a>
         </div>
       </div>
     </section>

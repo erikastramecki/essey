@@ -315,8 +315,7 @@ export function BuilderPage() {
     composite(cv, d, r.render, () => genRef.current === gen);
   }, [d, eff, seed]);
 
-  // LIVE on RH testnet (chainId 46630) against the deployed DonDistributor — see don-config.ts.
-  const MINT_LIVE = true;
+  // Minting is LIVE on RH testnet (chainId 46630) against the deployed DonDistributor — see don-config.ts.
 
   // -------------------------------------------------------------------------- wallet + chain reads
   const sel = useSelectedProvider(); // re-binds account listeners when the user picks/switches wallets
@@ -346,7 +345,6 @@ export function BuilderPage() {
 
   useEffect(() => {
     // fees + gate are public reads — no wallet needed
-    if (!MINT_LIVE) return;
     Promise.all([
       pub.readContract({
         address: DON_NET.distributor,
@@ -368,7 +366,7 @@ export function BuilderPage() {
         setFees({ customFee, rerollFee, publicOpen }),
       )
       .catch(() => {});
-  }, [MINT_LIVE]);
+  }, []);
 
   const loadOwned = useCallback(async (addr: `0x${string}`) => {
     try {
@@ -858,10 +856,7 @@ export function BuilderPage() {
       <div className="bld-head">
         <h1>The builder</h1>
         <span>
-          pick traits · rules keep it valid ·{" "}
-          {MINT_LIVE
-            ? "mint your 1-of-1 on testnet"
-            : "your 1-of-1 · minting soon"}
+          pick traits · rules keep it valid · mint your 1-of-1 on testnet
         </span>
       </div>
       <div className="bld-grid">
@@ -896,7 +891,7 @@ export function BuilderPage() {
             <br />
             <code>{res?.key.slice(0, 40)}…</code>
           </div>
-          {MINT_LIVE ? (
+          {
             <>
               {/* wallet */}
               {wallet ? (
@@ -1136,15 +1131,7 @@ export function BuilderPage() {
                 </div>
               )}
             </>
-          ) : (
-            <button
-              disabled
-              title="Minting opens with the on-chain drop"
-              className="bld-soon"
-            >
-              ✦ Minting soon, this 1-of-1 will be claimable
-            </button>
-          )}
+          }
         </div>
         {/* category pickers */}
         <div className="bld-cats">

@@ -6,15 +6,8 @@ export const DON_NET = {
   chainId: 46630,
   rpc: "https://rpc.testnet.chain.robinhood.com/rpc",
   explorer: "https://explorer.testnet.chain.robinhood.com",
-  essey: "0x32a860B1Eaa02A07c0b8a9eB6E3c51B7ce823d1F",
   distributor: "0x9F9928E1FDa97f67d54A9E7b7fFedC003C669103",
   don: "0x582E4B8E3A783B1FE09409AEDa3C6533782dB53c",
-  reserve: "0xD54FeD45840FA4E64dC04C36dD119d256BCEd679",
-  bell: "0x8a7749e47E79964B265B6ee6216FD5d017701552",
-  exchange: "0x9Cec219bCdA1a901D4a7154B55648bdAE5433582",
-  loan: "0x764525bE0e90cB02afFB93ccA63bB94333c43EEF",
-  feeRouter: "0x0000000000000000000000000000000000000000",
-  affinity: "0x2d9CC510D464977F0Eb597237F467b453CB3e484",
 } as const;
 
 /// The RH testnet as a viem chain, for createPublicClient/createWalletClient anywhere Don flows run.

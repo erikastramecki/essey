@@ -3899,16 +3899,6 @@ main#top {
   padding: 13px;
   font-size: 14px;
 }
-.bld-soon {
-  border: 1px solid var(--gold-line);
-  color: var(--gold-hi);
-  background: var(--gold-dim);
-  padding: 13px;
-  font-size: 14px;
-  border-radius: 999px;
-  font-weight: 650;
-  font-family: var(--sans);
-}
 .bld-cats {
   display: flex;
   flex-direction: column;
