@@ -8,13 +8,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { parseUnits, isAddress, type Address, type Hex } from "viem";
 import { useWallet, ConnectButton } from "./wallet";
-import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, scanPool, lookupPoolAccount, sharesToUsdg, usdgToShares, stockImpaired, SHIELDED_POOLS, RelayerUnavailableError, type ShieldedPoolCfg, type StealthKeys, type PrivateHolding, type PoolNote, type PoolKeys } from "./live";
+import { NET, ADDR, flows, fmt, niceError, lookupStealthMeta, scanPrivateInbox, scanPool, lookupPoolAccount, sharesToUsdg, usdgToShares, stockImpaired, SHIELDED_POOLS, PRIVATE_TOKENS, RelayerUnavailableError, type ShieldedPoolCfg, type StealthKeys, type PrivateHolding, type PoolNote, type PoolKeys } from "./live";
 
-// Decimals are carried per-token, NOT hardcoded — testnet mocks are all 18-dec, but mainnet USDG is 6-dec,
-// and a hardcoded 18 there would over-send by 1e12x. Update these when the mainnet addresses land.
-const TOKENS: { key: string; addr: Address; decimals: number }[] = [
-  { key: "USDG", addr: ADDR.usdg, decimals: 18 }, { key: "AAPL", addr: ADDR.aapl, decimals: 18 }, { key: "NVDA", addr: ADDR.nvda, decimals: 18 },
-];
+// Tokens and their decimals come from the shielded-pool set, so the private surface always matches the live pools.
+const TOKENS = PRIVATE_TOKENS;
 const USDG_DECIMALS = TOKENS.find((t) => t.addr === ADDR.usdg)?.decimals ?? 18; // shielded pool is USDG-only
 const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 

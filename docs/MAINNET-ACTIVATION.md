@@ -118,3 +118,65 @@ pool has NO haircut (EsseyShieldedPool.sol:169-177), so a pause/freeze/upgrade a
 could brick or seize funds with no pro-rata defense. This is a real, named issuer risk to accept or
 mitigate before shielding real USDG — distinct from the adminless base-layer reserve. Shielded STOCK
 already has an adminBurn haircut; shielded USDG does not.
+
+## Update 2026-08-30 (4) — two gates RESOLVED on-chain + lending SHIPPED; viability review in
+See [MAINNET-VIABILITY-REVIEW.md] for the full ranked review.
+
+- **#3 Lending — BUILT + AUDITED + PUSHED (public).** Ported to rh-chain, StaleFeedGuard reconciled
+  (behavior-preserving), 1254→1267 tests, THREE consecutive clean 3-agent rounds (economics /
+  access-oracle / mutation). Committed 75f90b0 + pushed to public essey (127f985). REMAINING: the
+  founder's mainnet DEPLOY (funded deployer + admin/guardian roles), + optional beacon assert, +
+  Multiply adapter. Contracts public; NOT deployed (no borrow live yet).
+- **BEACON gate — VERIFIED (was UNVERIFIED).** `0xe10b6f6b275de231345c20d14ab812db62151b00` is a live
+  contract; AAPL's EIP-1967 beacon slot reads exactly it. The is-real-equity identity assert is now
+  codeable across #2-stock/#3/#6/#7/#8. (Adding the assert to a live contract needs its own audit round.)
+- **MULTIPLY "no DEX" — REFUTED (was BLOCKER).** Uniswap V3 SwapRouter02 `0xcaf681…5cb2` live;
+  USDG↔NVDA 500-tier pool is DEEP (~$3.6M USDG + ~$2.2M NVDA); USDG↔AAPL thin (~$39k). Multiply needs
+  the swap ADAPTER + a one-line SwapRouter02 `deadline`-drop ABI fix (that same fix also unblocks Bell/
+  Cases/Degen payouts + the DonFeeRouter flush — a cross-flow unlock).
+- **Sluice (V4-hook liquidity mgmt)** — PARK / near-term-conditional. Not a lending-supply solution;
+  we'd build our OWN V4 afterSwap tax hook (route the $ESSEY pool-side tax → buy equities into reserve),
+  not adopt Sluice. Hard dep: Uniswap V4 PoolManager on 4663 is UNVERIFIED. Ship the $ESSEY AMM V3-first;
+  add a taxed V4 hook later only if V4 is confirmed on-chain.
+
+## Update 2026-08-30 (5) — ACTIVE NEAR-TERM PUSH: flywheel accretion + shielded-game BETA
+
+Two coordinated programs are now the active push. Both new docs are analysis/planning only.
+
+**Base-layer correction (register #1 confirmed, config doc stale):** `EsseyReserve` +$ESSEY ARE live on
+mainnet — reserve `0xd970Ca726188e38982906Ae2284D2bdB80205A7b`, $ESSEY `0x315790B57C19141B34C4653a91b096Cf3f071610`,
+ops/treasury `0x93e6e42CcC676614FB3635b0983d60F35dDE4B9E` (verified 2026-08-29, [[essey-reserve-deposit-address]];
+`claimBase` 8.888e27, `EXIT_FEE` 500, adminless). `MAINNET-CONFIG.md:121` ("nothing deployed") is STALE — it
+predates the 08-29 Foundation deploy; the game/lending/shielded FRONTENDS remain testnet-only, which is a
+separate fact.
+
+**A. Flywheel accretion — [MAINNET-FLYWHEEL-MATH.md].** `fund(token,amount)` (`EsseyReserve.sol:93`) raises
+`floorOf = reserveOf·1e18/claimBase` (`:203-205`) pro-rata for every holder; 5% exit fee is permanent
+over-collateralisation (`:53,147`), and the immutability IS the trust. Key number: every **$1M of lifetime
+accretion = +$0.0001069 redeemable floor per $ESSEY, forever, monotone-up** (spread across the full 8.888B
+genesis supply → a long-game ratchet, ~$100M NAV for a 1¢ floor). **Nothing auto-calls `fund()` and no
+pool-tax hook exists (grep-verified)** — accretion is operational today. The AUTO version (pool-side tax →
+buy equities → `fund()`) is COUPLED to the AMM and launches **in lockstep with AMM seeding, not before**
+(V4 `PoolManager` on 4663 UNVERIFIED; V3 SwapRouter02 `0xcaf681…5cb2` is live). Recommendation:
+**operational-first accretion (keeper/manual `fund()`), lock-later-only-if-ever** — do NOT bake the rate into
+an immutable `FeeRouter`-style splitter (`FeeRouter.sol:17,35-36` splits are set-once; it has no reserve leg).
+
+**B. Shielded-game BETA — [SHIELDED-GAME-BETA-PLAN.md].** Real gameplay on mainnet; shielding treated as
+PRODUCTION (a BETA, not a demo). Player wins SMALL real stock (existing payout path, plain transfers
+`Bell.sol:341`) and shields it on `/private` — **Option A: payout-routing + UX, NO game-contract change**
+(the player generates their own note; `EsseyShieldedStock.transact` requires gate-approval + a self-held note
+commitment, `EsseyShieldedStock.sol:124-137`). Founder ruled the **FULL multi-party ceremony**, and **ONE
+ceremony** on `transaction2` secures ALL three shielded pools (shared `PoolVerifier2` zk core,
+`EsseyShieldedStock.sol:11-12,8,55,178`); `SolvencyVerifier` is a separate circuit, out of scope. Go-live
+order: (1) ceremony → regen `PoolVerifier2`+zkey/wasm; (2) deploy shielded set to mainnet (real
+USDG/AAPL/NVDA, **openMode=FALSE**, `setApproved` players) → 3-agent config audit → FOUNDER deploy; (3) wire
+game payout → shielded stock (essey-web-designer); (4) game on mainnet (don-economist economy scope). Issuer
+freeze/adminBurn = FOUNDER-ACCEPTED (haircut already built, `EsseyShieldedStock.sol:162-166`).
+
+**Blocked-on / next actions:**
+- **don-economist** — `docs/GAME-MAINNET-ECONOMY-SCOPE.md` does NOT exist yet (confirmed 08-30); it is the
+  pending dependency for the beta's game side (#13 Scrip→real remap).
+- **Ceremony** — the founder's multi-party ceremony on `transaction2` is the hard gate for the shielded set
+  (#2) and blocks the beta's shielding leg.
+- **Founder gates** — every mainnet deploy (shielded set, game contracts); ceremony sign-off; `maxDeposit`
+  cap + seed stock amount/tickers; `openMode=false`/`setApproved` posture.

@@ -36,7 +36,7 @@ import { ComingPage } from "./coming";
 import { NotFoundPage } from "./notfound";
 import { TreasuryPage } from "./treasury";
 import { BlogIndex, BlogPost } from "./blog";
-import { TickerTapeRail, TapeRoom } from "./tape-ui";
+import { TapeRoom } from "./tape-ui";
 import { GamePage } from "./game/GamePage";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
 
@@ -51,7 +51,7 @@ const GROUPS = [
 
 // The nav is game-first and stays condensed: The Game and How to Play lead, Mint/Trade feed them,
 // and everything else lives behind two doors. Lending is HIDDEN (not linked, route still resolves);
-// the Bell moved under More — it's plumbing now, not the pitch. Every old route still resolves.
+// the Bell is off the nav — a payout sink reached in-context from Portfolio. Every old route resolves.
 type NavLeaf = { to: string; label: string; desc: string };
 type NavItem =
   { to: string; label: string } | { label: string; items: NavLeaf[] };
@@ -77,14 +77,8 @@ const MORE_ITEMS: NavLeaf[] = [
     desc: "What backs $ESSEY, live on mainnet",
   },
   { to: "/blog", label: "Blog", desc: "Building Essey in the open" },
-  { to: "/faucet", label: "Faucet", desc: "Free testnet $ESSEY, USDG + gas" },
   { to: "/tape", label: "The Tape", desc: "Every event, with its receipt" },
   { to: "/explorer", label: "Explorer", desc: "Contracts, blocks, balances" },
-  {
-    to: "/bell",
-    label: "The Bell",
-    desc: "Where protocol fees pool and pay out",
-  },
   { to: "/private", label: "Private", desc: "Shielded balances and transfers" },
 ];
 const NAV: NavItem[] = [
@@ -427,7 +421,6 @@ function Layout() {
         <Outlet />
         <Footer />
       </main>
-      <TickerTapeRail />
     </>
   );
 }
@@ -581,10 +574,8 @@ function Footer() {
               [
                 ["/treasury", "Treasury"],
                 ["/blog", "Blog"],
-                ["/faucet", "Faucet"],
                 ["/tape", "The Tape"],
                 ["/explorer", "Explorer"],
-                ["/bell", "The Bell"],
                 ["/private", "Private"],
               ],
             ],

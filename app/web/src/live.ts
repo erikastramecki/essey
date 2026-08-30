@@ -279,11 +279,20 @@ export const SHIELDED_POOLS: ShieldedPoolCfg[] = [
   { key: "nvda", label: "NVDA", blurb: "A private NVDA position, resilient to issuer token burns.", address: ADDR.shieldedStockNvda, token: ADDR.nvda, unit: "NVDA", decimals: 18, deployBlock: 97_832_416n, kind: "plain", stock: true },
   { key: "supply", label: "USDG · yield", blurb: "Supply USDG privately and earn yield. The position and its yield stay hidden.", address: ADDR.shieldedSupply, token: ADDR.usdg, unit: "shares", decimals: 18, deployBlock: 97_808_037n, kind: "supply", lendingPool: ADDR.pool },
 ];
-// The known ERC-20s a received stealth address could hold — we read balances directly rather than trust
-// event amounts, so the inbox shows what is actually spendable right now.
-const KNOWN_TOKENS: { key: string; addr: Address }[] = [
-  { key: "USDG", addr: ADDR.usdg }, { key: "AAPL", addr: ADDR.aapl }, { key: "NVDA", addr: ADDR.nvda },
-];
+// Distinct ERC-20s reachable through the private surface, DERIVED from the shielded-pool set so the send-menu and
+// inbox scanner extend automatically when a pool is added. Deduped by token; plains sort ahead of the supply pool.
+export const PRIVATE_TOKENS: { key: string; addr: Address; decimals: number }[] = (() => {
+  const seen = new Set<string>();
+  const out: { key: string; addr: Address; decimals: number }[] = [];
+  for (const p of [...SHIELDED_POOLS].sort((a, b) => Number(a.kind === "supply") - Number(b.kind === "supply"))) {
+    const low = p.token.toLowerCase();
+    if (seen.has(low)) continue;
+    seen.add(low);
+    out.push({ key: p.unit, addr: p.token, decimals: p.decimals });
+  }
+  return out;
+})();
+const KNOWN_TOKENS = PRIVATE_TOKENS;
 
 export const pub = createPublicClient({ transport: http(NET.rpc) });
 

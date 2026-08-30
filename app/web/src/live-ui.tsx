@@ -34,15 +34,15 @@ function prefKey(pref: Address | null): "Bundle" | "AAPL" | "NVDA" {
 export function TestnetBanner() {
   return (
     <div className="testnet-banner num">
-      TESTNET · live contracts on Robinhood Chain testnet · play money, real
-      mechanics ·{" "}
+      SEASON ZERO runs on Robinhood Chain testnet — play money, real mechanics ·{" "}
       <a
         href={`${NET.explorer}/address/${ADDR.don}`}
         target="_blank"
         rel="noreferrer"
       >
         verify ↗
-      </a>
+      </a>{" "}
+      · the base layer — $ESSEY and its floor reserve — is live on mainnet
     </div>
   );
 }

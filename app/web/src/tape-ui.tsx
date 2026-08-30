@@ -1,61 +1,16 @@
-// The Tape — a permanent ticker rail along the bottom of every page, plus a full /tape room. Reads
-// live from the chain; when it's quiet it says so rather than faking motion (the brand's whole point).
+// The Tape — the full /tape room. Reads live from the chain; when it's quiet it says so rather than
+// faking motion (the brand's whole point).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchTape, txUrl, type TapeRow } from "./tape";
 import { EMonogram } from "./market";
 
-const reducedMotion = () =>
-  typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-/// Shared poller — one chain read feeds both the rail and the room.
+/// The room's chain poller.
 function useTape(pollMs = 20_000) {
   const [rows, setRows] = useState<TapeRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const load = useCallback(() => { fetchTape().then(({ rows }) => { setRows(rows); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
   useEffect(() => { load(); const t = setInterval(load, pollMs); return () => clearInterval(t); }, [load, pollMs]);
   return { rows, loaded };
-}
-
-function RowText({ r }: { r: TapeRow }) {
-  return (
-    <>
-      {r.proven && <span className="tape-mark" aria-hidden><EMonogram size={13} /></span>}
-      <span className="tr-icon">{r.icon}</span>
-      <span className="tr-text num">{r.text}</span>
-    </>
-  );
-}
-
-/// The permanent bottom rail. Duplicated content scrolls seamlessly; reduced-motion shows a static
-/// "latest" strip instead. Hidden until the first chain read resolves so it never flashes empty.
-export function TickerTapeRail() {
-  const { rows, loaded } = useTape(20_000);
-  const [paused, setPaused] = useState(false);
-  const still = reducedMotion();
-  if (!loaded) return null;
-
-  return (
-    <div className="tape-rail" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <a className="tape-rail-tag" href="/tape">THE TAPE</a>
-      <div className="tape-rail-view">
-        {rows.length === 0 ? (
-          <span className="tape-quiet num">quiet right now · the Tape prints every trade, ring, draw and loan as it happens</span>
-        ) : still ? (
-          <div className="tape-static">
-            {rows.slice(0, 4).map((r) => <a key={r.key} className="tape-cell" href={txUrl(r.tx)} target="_blank" rel="noreferrer"><RowText r={r} /></a>)}
-          </div>
-        ) : (
-          <div className={"tape-crawl" + (paused ? " paused" : "")}>
-            {[0, 1].map((dup) => (
-              <div className="tape-track" key={dup} aria-hidden={dup === 1}>
-                {rows.map((r) => <a key={r.key + dup} className="tape-cell" href={txUrl(r.tx)} target="_blank" rel="noreferrer"><RowText r={r} /><span className="tr-verify">verify ↗</span></a>)}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 /// The full room: reverse-chronological, filterable, every row a receipt.
