@@ -1,11 +1,11 @@
 // ESSEY SCAN — the Solvency desk. Game-era explorer: THE WIRE (live game+protocol event feed,
 // world-voice lines, stamps) leads; THE STREET (who is exposed right now), FAMILIES (per-Don
 // dossiers), THE FLOOR (the economy dashboard) drill down; THE RAILS preserves the protocol
-// explorer — pool, markets, open loans with in-browser snarkjs PROOF verify, firehose — intact.
+// explorer — pool, markets, open loans, firehose — intact.
 //
 // Honesty rules baked in: panels wired to on-chain reads show REAL data; anything not yet wired
 // renders a visible "—" / in-voice empty state and never a fabricated number or mock row. Every
-// event row links its tx. The VERIFY button reports only what snarkjs.groth16.verify returns.
+// event row links its tx.
 // Motion discipline: one-shot fresh pulse + one-shot stamp thump only, both gated by
 // prefers-reduced-motion; countdowns tick on setInterval (never rAF — hidden tabs throttle rAF).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -159,9 +159,9 @@ function MissionChip({ dueMs, settled }: { dueMs: number | null; settled: boolea
   return <span className={"cdown" + (left < 600_000 ? " warn" : "")}>[T-{fmtHMS(left / 1000)}]</span>;
 }
 
-/// The stock-peg record — the live season's four briefs, straight from the guide's master ledger
-/// (verified main-network contracts; a ticker that has not cleared the four-check proof is marked
-/// "pending the proof", never guessed at). No prices: the feed is not wired to the web layer.
+/// The stock-peg record — the live season's four briefs, straight from the guide's master ledger,
+/// with the main-network token + price-wire contracts on file where a brief has them. No prices:
+/// the feed is not wired to the web layer.
 const PEGS: { brief: string; ticker: string; token: string | null; wire: string | null }[] = [
   { brief: "PAPER ROUTE", ticker: "SGOV", token: null, wire: null },
   { brief: "GLASS HARVEST · RUSH", ticker: "NVDA", token: "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC", wire: "0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15" },
@@ -180,7 +180,6 @@ export function ExplorerPage() {
   const [head, setHead] = useState<bigint>(0n);
   const [q, setQ] = useState("");
   const [clock, setClock] = useState("");
-  const [proof, setProof] = useState<Record<string, "idle" | "checking" | "verified" | "failed" | "notwired">>({});
   const mounted = useRef(true);
   // ---- game-era state ----
   const [wireRows, setWireRows] = useState<WireRow[]>([]);
@@ -294,21 +293,6 @@ export function ExplorerPage() {
     const t = setInterval(loadReads, 20_000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [gameOn, loadReads]);
-
-  // In-browser Groth16 verification of a loan's solvency proof. Reports ONLY what snarkjs returns.
-  const verify = useCallback(async (id: bigint) => {
-    const key = id.toString();
-    setProof((p) => ({ ...p, [key]: "checking" }));
-    try {
-      const [vkRes, pfRes] = await Promise.all([fetch("/proof/solvency_vk.json"), fetch(`/proof/loan_${key}.json`)]);
-      if (!vkRes.ok || !pfRes.ok) { setProof((p) => ({ ...p, [key]: "notwired" })); return; }
-      const vk = await vkRes.json();
-      const { proof, publicSignals } = await pfRes.json();
-      const snarkjs = await import("snarkjs");
-      const ok = await snarkjs.groth16.verify(vk, publicSignals, proof);
-      setProof((p) => ({ ...p, [key]: ok ? "verified" : "failed" }));
-    } catch { setProof((p) => ({ ...p, [key]: "notwired" })); }
-  }, []);
 
   const ql = q.trim().toLowerCase();
   const loansF = useMemo(() => (loans ?? []).filter((l) => !ql || l.owner.toLowerCase().includes(ql) || l.id.toString() === ql || tokenName(l.token).toLowerCase().includes(ql)), [loans, ql]);
@@ -692,9 +676,9 @@ export function ExplorerPage() {
             </div>
 
             <div className="panel full">
-              <div className="ph"><span className="t">STOCK PEGS</span><span className="s">the briefs&rsquo; tickers · verified main-network contracts</span></div>
+              <div className="ph"><span className="t">STOCK PEGS</span><span className="s">the briefs&rsquo; tickers · main-network contracts on file</span></div>
               <table>
-                <thead><tr><th>BRIEF</th><th>TICKER</th><th>TOKEN</th><th>PRICE WIRE</th><th className="r">PRICE</th><th>STATUS</th></tr></thead>
+                <thead><tr><th>BRIEF</th><th>TICKER</th><th>TOKEN</th><th>PRICE WIRE</th></tr></thead>
                 <tbody>
                   {PEGS.map((p) => (
                     <tr key={p.brief}>
@@ -702,8 +686,6 @@ export function ExplorerPage() {
                       <td>{p.ticker}</td>
                       <td>{p.token ? <a href={`https://robinhoodchain.blockscout.com/address/${p.token}`} target="_blank" rel="noreferrer">{short(p.token)}</a> : <span className="muted">—</span>}</td>
                       <td>{p.wire ? <a href={`https://robinhoodchain.blockscout.com/address/${p.wire}`} target="_blank" rel="noreferrer">{short(p.wire)}</a> : <span className="muted">—</span>}</td>
-                      <td className="r muted">—</td>
-                      <td>{p.token ? <span className="pill okg">verified</span> : <span className="pill muted">pending the proof</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -731,36 +713,33 @@ export function ExplorerPage() {
               </div>
             </div>
 
-            {/* MARKETS — real borrow-open status; price is TODO */}
+            {/* MARKETS — real borrow-open status */}
             <div className="panel">
               <div className="ph"><span className="t">MARKETS</span><span className="s">collateral</span></div>
               <table>
-                <thead><tr><th>ASSET</th><th className="r">PRICE</th><th className="r">BORROW</th></tr></thead>
+                <thead><tr><th>ASSET</th><th className="r">BORROW</th></tr></thead>
                 <tbody>
                   {(markets ?? []).map((m) => (
                     <tr key={m.sym}>
                       <td className="good">{m.sym}</td>
-                      <td className="r na muted">—</td>
                       <td className="r">{m.canBorrow === null ? <span className="muted">—</span> : m.canBorrow ? <span className="pill good">OPEN</span> : <span className="pill warn">CLOSED</span>}</td>
                     </tr>
                   ))}
-                  {!markets && <tr><td colSpan={3} className="empty">loading…</td></tr>}
+                  {!markets && <tr><td colSpan={2} className="empty">loading…</td></tr>}
                 </tbody>
               </table>
-              <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>PRICE feed not wired to the web layer yet. TODO.</div>
             </div>
 
-            {/* LOANS — real; PROOF = in-browser verify */}
+            {/* LOANS — real positions; health computed from live maxBorrow reads */}
             <div className="panel full">
-              <div className="ph"><span className="t">OPEN LOANS</span><span className="s">provably-solvent · verify in your browser</span></div>
+              <div className="ph"><span className="t">OPEN LOANS</span><span className="s">live positions · health read from the chain</span></div>
               <div style={{ overflowX: "auto" }}>
                 <table>
-                  <thead><tr><th>ID</th><th>BORROWER</th><th>COLLATERAL</th><th className="r">DEBT</th><th className="r">LTV / MAX</th><th>HEALTH</th><th>PROOF</th></tr></thead>
+                  <thead><tr><th>ID</th><th>BORROWER</th><th>COLLATERAL</th><th className="r">DEBT</th><th className="r">LTV / MAX</th><th>HEALTH</th></tr></thead>
                   <tbody>
                     {loansF.map((l) => {
                       const util = l.maxDebt > 0n ? Number(l.debt) / Number(l.maxDebt) : null;
                       const hp = util === null ? null : util <= 0.85 ? "good" : util <= 1 ? "warn" : "bad";
-                      const st = proof[l.id.toString()] ?? "idle";
                       return (
                         <tr key={l.id.toString()}>
                           <td className="muted">#{l.id.toString()}</td>
@@ -769,24 +748,13 @@ export function ExplorerPage() {
                           <td className="r">{fmt(l.debt, 2)} USDG</td>
                           <td className="r">{util === null ? <span className="muted">—</span> : <span className={hp!}>{(util * 100).toFixed(0)}%</span>}</td>
                           <td>{hp === null ? <span className="muted">—</span> : hp === "good" ? <span className="good">HEALTHY</span> : hp === "warn" ? <span className="warn">TIGHT</span> : <span className="bad">UNDERWATER</span>}</td>
-                          <td>
-                            {st === "verified" ? <span className="good" title="debt ≤ collateral×price×LTV, verified in your browser">✓ SOLVENT</span>
-                              : st === "checking" ? <span className="muted">verifying…</span>
-                              : st === "failed" ? <span className="bad">✗ INVALID</span>
-                              : st === "notwired" ? <span className="muted" title="Drop solvency_vk.json + loan_<id>.json in public/proof/ (needs gnark→snarkjs vk conversion)">proof not wired</span>
-                              : <button className="v" onClick={() => verify(l.id)}>VERIFY</button>}
-                          </td>
                         </tr>
                       );
                     })}
-                    {loans && loansF.length === 0 && <tr><td colSpan={7} className="empty">{loans.length === 0 ? "no open loans in the scanned window" : "no matches"}</td></tr>}
-                    {!loans && <tr><td colSpan={7} className="empty">scanning positions…</td></tr>}
+                    {loans && loansF.length === 0 && <tr><td colSpan={6} className="empty">{loans.length === 0 ? "no open loans in the scanned window" : "no matches"}</td></tr>}
+                    {!loans && <tr><td colSpan={6} className="empty">scanning positions…</td></tr>}
                   </tbody>
                 </table>
-              </div>
-              <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>
-                VERIFY runs snarkjs.groth16.verify in-browser against <span className="good">public/proof/solvency_vk.json</span> + <span className="good">loan_&lt;id&gt;.json</span>.
-                Real solvency proofs need the gnark→snarkjs vk conversion (TODO). Until then it honestly reports “proof not wired”.
               </div>
             </div>
 
@@ -819,7 +787,7 @@ export function ExplorerPage() {
 
       <div className="foot">
         <span>ESSEY SCAN · v2 · Robinhood Chain {NET.chainId} testnet · <a href={NET.explorer} target="_blank" rel="noreferrer">raw explorer ↗</a></span>
-        <span>proof, not attestation: verify solvency yourself</span>
+        <span>every line links its receipt · read the chain yourself</span>
       </div>
     </div>
   );

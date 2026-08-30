@@ -34,6 +34,8 @@ import { HowToPlayPage } from "./howtoplay";
 import { FaucetPage } from "./faucet";
 import { ComingPage } from "./coming";
 import { NotFoundPage } from "./notfound";
+import { TreasuryPage } from "./treasury";
+import { BlogIndex, BlogPost } from "./blog";
 import { TickerTapeRail, TapeRoom } from "./tape-ui";
 import { GamePage } from "./game/GamePage";
 import { WalletProvider, ConnectButton, useWallet } from "./wallet";
@@ -69,6 +71,12 @@ const LEARN_ITEMS: NavLeaf[] = [
   },
 ];
 const MORE_ITEMS: NavLeaf[] = [
+  {
+    to: "/treasury",
+    label: "Treasury",
+    desc: "What backs $ESSEY, live on mainnet",
+  },
+  { to: "/blog", label: "Blog", desc: "Building Essey in the open" },
   { to: "/faucet", label: "Faucet", desc: "Free testnet $ESSEY, USDG + gas" },
   { to: "/tape", label: "The Tape", desc: "Every event, with its receipt" },
   { to: "/explorer", label: "Explorer", desc: "Contracts, blocks, balances" },
@@ -252,6 +260,16 @@ export default function App() {
                 </PageShell>
               }
             />
+            <Route
+              path="/treasury"
+              element={
+                <AppPage title="Treasury">
+                  <TreasuryPage />
+                </AppPage>
+              }
+            />
+            <Route path="/blog" element={<BlogIndex />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/docs" element={<DocsPage />} />
             <Route path="/docs/:slug" element={<DocsPage />} />
             <Route path="*" element={<NotFoundPage />} />
@@ -561,6 +579,8 @@ function Footer() {
             [
               "More",
               [
+                ["/treasury", "Treasury"],
+                ["/blog", "Blog"],
                 ["/faucet", "Faucet"],
                 ["/tape", "The Tape"],
                 ["/explorer", "Explorer"],
