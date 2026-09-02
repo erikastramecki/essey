@@ -1,2 +1,15 @@
-{ "name": "essey-liveness-keeper", "private": true, "type": "module",
-  "dependencies": { "viem": "^2.21.0" } }
+{
+  "name": "essey-keepers",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'",
+    "mutation-gate": "node test/mutation-gate.mjs",
+    "fixture": "node holder-airdrop/make-fixture.mjs",
+    "airdrop": "node holder-airdrop/keeper.mjs",
+    "verify-root": "node holder-airdrop/verify-root.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  }
+}

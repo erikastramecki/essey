@@ -2,3 +2,6 @@
 # forge script broadcast artifacts (rehearsals are local; real deploy records go in docs/)
 broadcast/
 game-keeper.log
+
+# holder-airdrop keeper runtime state + published root manifests (regenerated, never a source of truth)
+keeper/keeper-state/

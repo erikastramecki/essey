@@ -87,8 +87,8 @@ contract StockLpVaultTest is Test {
         oracle.setFeed(address(nvda), AggregatorV3Interface(address(stockFeed)), 86_400, 86_400 + 3_600, 8);
 
         // oracle-implied sqrt (token0=USDG,token1=NVDA => stockIs1): f0=factorBase, f1=factorStock.
-        uint256 factorStock = 220e8 * (10 ** (18 - 8)) / (10 ** 18); // = 220
-        uint256 factorBase = 1e8 * (10 ** (18 - 8)) / (10 ** 6); // = 1e12
+        uint256 factorStock = 220e8 * (10 ** (36 - 8 - 18)); // USD 1e36 per raw NVDA = 220e18
+        uint256 factorBase = 1e8 * (10 ** (36 - 8 - 6)); // USD 1e36 per raw USDG = 1e30
         sqrtOracle = uint160(Math.sqrt(Math.mulDiv(factorBase, uint256(1) << 192, factorStock)));
 
         pool = new MockV3Pool(address(usdg), address(nvda), 10, sqrtOracle, 222362);
@@ -177,10 +177,74 @@ contract StockLpVaultTest is Test {
         assertGt(usdg.balanceOf(address(pool)), 0, "token0 (USDG) genuinely deployed into the position");
         assertGt(nvda.balanceOf(address(pool)), 0, "token1 (NVDA) genuinely deployed into the position");
 
-        uint256 fS = 220e8 * (10 ** (18 - 8)) / (10 ** 18); // 220
-        uint256 fB = 1e8 * (10 ** (18 - 8)) / (10 ** 6); // 1e12
-        uint256 expected = uint256(10e18) * fS + uint256(5_000e6) * fB;
+        // 10 NVDA at $220 plus 5,000 USDG at $1 = $7,200, in the view's USD-1e18 unit.
+        uint256 expected = 7_200e18;
         assertEq(vault.totalValueUsd(), expected, "oracle value counts BOTH position arms (idle + p0 + p1)");
+    }
+
+    /// The mark carries the FEED's full precision for an 18-dec stock, not whole dollars. The old
+    /// `_factor` divided by 10**tokenDec and floored $220.4321 to $220 — a 19.6 bps under-mark that a
+    /// USDG depositor could round-trip out of the stock side (StockLpVaultFork.t.sol). The fixture's
+    /// 220e8 is exactly representable either way, which is why this needs its own non-integral price.
+    /// MUTATION: `10 ** (MARK_EXP - shift)` off by one in either direction, or the old
+    /// `px * 10**(18-feedDec) / 10**tokenDec` restored -> RED.
+    function test_markCarriesFullFeedPrecisionForEighteenDecStock() public {
+        stockFeed.set(220_4321_0000, block.timestamp); // $220.4321 — 19.6 bps off spot, inside the 1% gate
+        _deposit(alice, 100e18, 0); // no range set: pure idle, so the total IS the mark
+
+        assertEq(vault.totalValueUsd(), 22_043_21e16, "100 NVDA marked at $220.4321, not $220");
+        assertTrue(vault.totalValueUsd() != 22_000e18, "whole-dollar mark must be gone");
+    }
+
+    /// The base (6-dec) leg carries its feed's precision too — it always did, since 10**(18-8) covered
+    /// 10**6, and it must keep doing so under the rescale. The other half of the decimal sweep.
+    /// MUTATION: any exponent shift in _factor -> RED here as well as on the stock leg.
+    function test_markCarriesFullFeedPrecisionForSixDecBase() public {
+        baseFeed.set(99_987_654, block.timestamp); // $0.99987654 — 12.3 bps off spot, inside the gate
+        _deposit(alice, 0, 1_000e6);
+
+        assertEq(vault.totalValueUsd(), 999_87654e13, "1,000 USDG marked at $0.99987654");
+    }
+
+    /// The seed deposit defines the share unit: one share stays USD × 1e-18 at the oracle mark, so the
+    /// mark's 1e36 carry is stripped exactly once, on the way in. Every later mint is a ratio in which
+    /// the carry cancels, which is why only this branch divides.
+    /// MUTATION: drop the `/ PRICE_SCALE`, multiply by it instead, or apply it to the ratio branch -> RED.
+    function test_seedDepositMintsExactlyItsOracleMarkUsd() public {
+        uint256 shares = _deposit(alice, 100e18, 0); // no range set: pure idle, no position rounding
+        assertEq(shares, 22_000e18, "100 NVDA at $220 mints exactly 22,000 shares");
+    }
+
+    /// Rounding at the share/value boundary is DOWN, in the vault's favour: a seed deposit worth a
+    /// fraction of the 1e18 share unit mints the floor, never the ceiling. Needs a non-integral price —
+    /// at $220 every raw amount is a whole number of share units and both directions agree.
+    /// MUTATION: Math.ceilDiv at either `/ PRICE_SCALE` -> RED.
+    function test_seedShareRoundsDownNotUp() public {
+        stockFeed.set(220_4321_0000, block.timestamp);
+        uint256 shares = _deposit(alice, 1, 0); // one raw wei = 220.4321 share units
+        assertEq(shares, 220, "floor, not the 221 a round-up would mint");
+        assertEq(vault.totalValueUsd(), 220, "the view floors the same way");
+    }
+
+    /// MARK_EXP is INCLUSIVE: an 18-dec feed on an 18-dec token sums to exactly 36, whose factor is an
+    /// exact 10**0, so it must be accepted. Every fixture feed is 8-dec, so nothing else drives this.
+    /// MUTATION: `shift > MARK_EXP` -> `>=` -> a legal pair is refused -> RED.
+    function test_factorAcceptsTheExactDecimalCeiling() public {
+        stockFeed.set(220e18, block.timestamp); // same $220, quoted at 18 decimals
+        oracle.setFeed(address(nvda), AggregatorV3Interface(address(stockFeed)), 86_400, 86_400 + 3_600, 18);
+        _deposit(alice, 100e18, 0);
+        assertEq(vault.totalValueUsd(), 22_000e18, "an 18-dec feed marks the same $220 as the 8-dec one");
+    }
+
+    /// A feed/token decimal pair with no exact factor is REFUSED, not floored: the rescale buys exactness
+    /// for every combination up to MARK_EXP and fails closed past it.
+    /// MUTATION: drop the `shift > MARK_EXP` guard -> the exponent underflows to a panic, not BadConfig -> RED.
+    function test_factorRefusesDecimalsItCannotRepresentExactly() public {
+        // 20-dec feed on the 18-dec stock: 38 > MARK_EXP, so no whole-number factor exists.
+        oracle.setFeed(address(nvda), AggregatorV3Interface(address(stockFeed)), 86_400, 86_400 + 3_600, 20);
+        vm.prank(alice);
+        vm.expectRevert(StockLpVault.BadConfig.selector);
+        vault.deposit(10e18, 0, 0);
     }
 
     /// Deposit is refused when the pool is manipulated away from the oracle beyond maxDeviation —

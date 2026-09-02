@@ -82,6 +82,10 @@ contract StockLpVault is ERC20, ReentrancyGuard {
     uint256 internal constant BPS = 10_000;
     uint256 public constant FEE_TIMELOCK = 48 hours;
     uint256 internal constant Q128 = 1 << 128; // V3 fee-growth accumulators are Q128.128 fixed point
+    /// Marks are carried at USD × 1e36 so _factor is a pure multiply that cannot floor a feed; the extra
+    /// 1e18 is stripped where the number leaves the path — totalValueUsd and the seed share mint.
+    uint256 internal constant MARK_EXP = 36;
+    uint256 internal constant PRICE_SCALE = 1e18;
     /// Round-up on mint can owe a wei or two above the liquidity math's floor; deploy leaves this
     /// much idle unspent so the pool's round-up is always payable (the Seeder's AMOUNT_MARGIN).
     uint256 internal constant AMOUNT_MARGIN = 1e3;
@@ -105,7 +109,6 @@ contract StockLpVault is ERC20, ReentrancyGuard {
     error TickNotAligned();
     error TickOrder();
     error Slippage();
-    error LiquidityOverflow();
     error NotGovernor();
     error FeeFrozenError();
     error BadFee();
@@ -182,8 +185,9 @@ contract StockLpVault is ERC20, ReentrancyGuard {
         if (stockAmt > 0) stock.safeTransferFrom(msg.sender, address(this), stockAmt);
         if (baseAmt > 0) base.safeTransferFrom(msg.sender, address(this), baseAmt);
 
+        // The seed sets the share unit; later mints are a ratio of two 1e36 marks, where the carry cancels.
         uint256 depositUsd = stockAmt * fS + baseAmt * fB;
-        shares = supply == 0 ? depositUsd : Math.mulDiv(depositUsd, supply, totalBefore);
+        shares = supply == 0 ? depositUsd / PRICE_SCALE : Math.mulDiv(depositUsd, supply, totalBefore);
         if (shares == 0 || shares < minShares) revert Slippage();
 
         _mint(msg.sender, shares);
@@ -407,12 +411,12 @@ contract StockLpVault is ERC20, ReentrancyGuard {
 
     // ================================================================== internal: oracle valuation
 
-    /// The vault's total value at the ORACLE mark: idle balances + the position priced at the
-    /// oracle-implied sqrt price. Uses ONLY the oracle, never pool spot — this is the load-bearing
+    /// The vault's total value at the ORACLE mark, USD × 1e18: idle balances + the position priced at
+    /// the oracle-implied sqrt price. Uses ONLY the oracle, never pool spot — this is the load-bearing
     /// anti-manipulation property. Reverts off-hours / on a stale feed (fail closed).
     function totalValueUsd() public view returns (uint256) {
         (uint256 fS, uint256 fB, uint160 sqrtO) = _prices();
-        return _valueAtOracle(fS, fB, sqrtO);
+        return _valueAtOracle(fS, fB, sqrtO) / PRICE_SCALE;
     }
 
     function _valueAtOracle(uint256 fS, uint256 fB, uint160 sqrtO) internal view returns (uint256) {
@@ -433,7 +437,7 @@ contract StockLpVault is ERC20, ReentrancyGuard {
         return LiquidityAmounts.getAmountsForLiquidity(sqrtO, sa, sb, liq);
     }
 
-    /// Read both legs' oracle prices, convert to per-raw-token USD factors (1e18-scaled) and the
+    /// Read both legs' oracle prices, convert to per-raw-token USD factors (1e36-scaled) and the
     /// oracle-implied sqrt price. Reverts NotInSession off equity hours; priceOf reverts on staleness.
     function _prices() internal view returns (uint256 factorStock, uint256 factorBase, uint160 sqrtOracle) {
         (factorStock, factorBase) = _factors();
@@ -454,10 +458,12 @@ contract StockLpVault is ERC20, ReentrancyGuard {
         (s,,,,,,) = pool.slot0();
     }
 
-    /// USD × 1e18 carried by one RAW unit of a token. NVDA: 220e8 · 1e10 / 1e18 = 220.
-    /// L-1 deploy-config: an 18-dec token divides by 1e18, so a sub-$1 price truncates the factor — vet a low-price 18-dec stock before listing.
+    /// USD × 1e36 per RAW token unit. NVDA: 21678940000 · 1e10 = $216.7894 per 1e18 raw. Dividing by
+    /// 10**tokenDec instead floored an 18-dec mark to whole dollars, and the under-mark was extractable.
     function _factor(uint256 px, uint8 feedDec, uint8 tokenDec) internal pure returns (uint256) {
-        return px * (10 ** (18 - feedDec)) / (10 ** tokenDec);
+        uint256 shift = uint256(feedDec) + uint256(tokenDec);
+        if (shift > MARK_EXP) revert BadConfig();
+        return px * (10 ** (MARK_EXP - shift));
     }
 
     function _requireTradeable() internal view returns (uint256 fS, uint256 fB, uint160 sqrtO) {

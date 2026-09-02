@@ -11,8 +11,12 @@ remappings = [
   "@uniswap/v4-core/=lib/v4-core/",
   "@uniswap/v4-periphery/=lib/v4-periphery/",
 ]
-# read the generated Poseidon hasher bytecode for the shielded-pool deploy/tests
-fs_permissions = [{ access = "read", path = "./circuits-nova" }]
+# read the generated Poseidon hasher bytecode for the shielded-pool deploy/tests, and the keeper-built
+# airdrop root fixture that test/HolderAirdropRoot.t.sol replays against the real distributor
+fs_permissions = [
+  { access = "read", path = "./circuits-nova" },
+  { access = "read", path = "./test/fixtures" },
+]
 
 # The V4 hook + vendored v4-core/v4-periphery use assembly-heavy libraries that overflow the legacy
 # pipeline (stack-too-deep) and need via_ir. via_ir is off in `default` because it shifts gas enough to
@@ -25,6 +29,7 @@ skip = [
   "test/EsseyReserveHook.t.sol",
   "test/EsseyReserveHookFork.t.sol",
   "test/EsseyReserveHookLaunchSeed.t.sol",
+  "test/EsseyHookRealSwapSeedFork.t.sol",
   "script/DeployEsseyV4Pool.s.sol",
 ]
 

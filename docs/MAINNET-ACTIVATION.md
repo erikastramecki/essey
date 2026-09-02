@@ -398,7 +398,7 @@ THIS table plus Update (12) are the current state.)*
 | B2 | Build `HolderStockDistributor` (epoch buy + pro-rata by holding value + default/category baskets + registry + claim/auto-push) | protocol-engineer | S locked | **BUILT, not audited** — `HolderDistributor.sol` 327 lines + `BasketRegistry.sol` 148 lines, COMMITTED `ae143bc` (VERIFIED 2026-09-02). Params still placeholder pending the 6 founder rulings + eligibility bar |
 | G1 | 3-round audit gate — hook (governor + money-path surface, byte-diff vs prior) | essey-auditor | B1 all-clean-same-round | **✅ MET 2026-08-31** — 3 consecutive complete-clean 3-lens rounds on byte-identical code; receipt [`docs/audits/esseyreservehook-gate-2026-08-31.md`](audits/esseyreservehook-gate-2026-08-31.md) (92 tests, 4 equivalent survivors). Carries 2 DEPLOY-CONFIG preconditions (feeCurrency=USDG; ESSEY non-circulating until the atomic seed) |
 | G2 | 3-round audit gate — distributor (fresh money path: pro-rata math, basket registry, claim/push, dust) | essey-auditor | B2 all-clean-same-round | NOT FIRED — blocked on founder params + eligibility bar (answers incoming) |
-| G3 | 3-round audit gate — `StockLpVault` (added after this table was written) | essey-auditor + protocol-engineer | vault build | **RAN, NOT MET** — code SOUND, no vulnerability found, 2 code issues fixed during the gate (deposit fee-skim M-1; reverting-`feeRecipient` governor-DoS). Blocked by **F-C** (MEDIUM, test-integrity): the mock reuses the contract's own `LiquidityAmounts` lib → value math is circular in-mock. Needs a **mainnet-fork test**; no `StockLpVaultFork.t.sol` exists (`ls rh-chain/test/ | grep -i fork`, VERIFIED 2026-09-02) |
+| G3 | 3-round audit gate — `StockLpVault` (added after this table was written) | essey-auditor + protocol-engineer | vault build | **NOT MET — REOPENED by a new MEDIUM.** The F-C blocker is CLOSED: `rh-chain/test/StockLpVaultFork.t.sol` now exists (12 tests, all green against the live NVDA/USDG fee-500 pool `0xd4EB…14a3` on 4663) and closes F-C, F2, S10, S10b, F-A, F-B; 17/17 mutants verified RED, vault source byte-unchanged (`git diff --stat src/` empty, VERIFIED 2026-09-02). **NEW FINDING (MEDIUM, code):** `_factor` (`rh-chain/src/market/StockLpVault.sol:460`, pre-fix line) floors an 18-dec stock's mark to whole dollars — NVDA's live feed $216.7894 marks as $216 — and the under-mark is extractable at **±20 bps per round trip at ZERO pool deviation**, permissionless and repeatable; the exactly-representable-price control returns 0 bps, naming the cause. Invisible in-mock (its 220e8 feed is exact). Also **L-A-1 is understated**: measured up to **15 bps/trip** at the gate ceiling, not ~4, and single-sided is NOT $0. **MEDIUM now FIXED (2026-09-02, protocol-engineer):** `_factor` (`rh-chain/src/market/StockLpVault.sol:461-467`) carries the mark at USD x 1e36 as a pure multiply, exact for every feed/token decimal pair up to 36 and refusing (`BadConfig`) past it; the 1e18 carry is stripped at the two unit boundaries only (`totalValueUsd` `:419`, the seed share mint `:190`). Measured on the same live pool: the zero-deviation round trip fell from **+20 / -20 bps (~$44 a trip)** to **-8.9e-7 / -6.7e-7 USD** while the price stayed 44 bps non-integral. 59/59 in-mock + 12/12 fork green, full suite 1431 pass / 2 fail (the same 2 pre-existing `DonMainnetFork` + `DonSolvencyStress` setUp failures as before the change), **17/17 new mutants RED, zero survivors**. Dead `LiquidityOverflow` error dropped (F-D). **G3 must now be re-run FROM ZERO on the changed source — not gate-ready.** L-A-1's deviation term is unchanged and still open |
 | I | Integration + adversarial harness — full epoch loop on chain (buy → distribute → claim/push) with real wallets | essey-harness | G1 + G2 + G3 clean | NOT STARTED |
 | D | FOUNDER-gated mainnet deploy (exact commands prepared; never self-deploy) | FOUNDER | I green | NOT STARTED |
 
@@ -1123,3 +1123,35 @@ wrong. Founder resolves: confirm and strip the comments, or downgrade the receip
 A reconcile that is not committed did not happen. **New standing rule: a doc reconcile is not done until it
 is committed.** Applied immediately — this entry and every correction above are being committed now, not
 left in the tree.
+
+### Update 2026-09-02 (15) — vault MEDIUM (whole-dollar mark) FIXED; G3 resets to zero
+The `_factor` truncation the fork test found is closed in source. `_factor`
+(`rh-chain/src/market/StockLpVault.sol:461-467`) no longer divides by `10 ** tokenDec`: the mark is carried at
+USD x 1e36 (`MARK_EXP = 36`, `:87`) as a pure multiply, so the feed's full precision survives for **every**
+decimal pair whose feed+token decimals sum to <= 36, and a pair above that is refused with `BadConfig` rather
+than floored. The extra 1e18 is stripped at exactly two unit boundaries — `totalValueUsd` (`:419`) and the
+seed share mint (`:190`) — so the public USD-1e18 unit and the share unit are byte-for-byte what they were.
+
+- **Measured on the live NVDA/USDG fee-500 pool, same test that found it:** the zero-deviation round trip went
+  from **+20 bps in / -20 bps out (~$44 on a $22k trip)** to **-8.9e-7 / -6.7e-7 USD** — dust in the vault's
+  favour — with the live price still 44 bps non-integral. `test_fork_FINDING_whole_dollar_mark_truncation_is_fixed`
+  now asserts the fixed behaviour and self-checks that its dust band sits 100x under the leak it replaces;
+  the exactly-representable control is untouched and still green.
+- **Evidence:** 59/59 `test/StockLpVault.t.sol` (6 new pins), 12/12 `test/StockLpVaultFork.t.sol`, full suite
+  1431 passed / 2 failed — the same two pre-existing `DonMainnetFork` / `DonSolvencyStress` `setUp` failures
+  present before the change (baseline 1425/2, re-run VERIFIED 2026-09-02). **17 adversarial mutants, all RED,
+  zero survivors** (exponent +/-1, `MARK_EXP` 35/37, the original divide restored, divide-for-multiply, guard
+  dropped and `>`->`>=`, each `shift` operand dropped, and every direction of both `/ PRICE_SCALE` sites
+  including round-up).
+- **The in-mock blind spot is closed too.** The mock feed is exactly `220e8`, which the OLD `_factor`
+  represented without loss — which is why this was fork-only. The suite now carries a non-integral price
+  (`$220.4321`) on the 18-dec leg and `$0.99987654` on the 6-dec leg, so restoring the original divide is RED
+  **in-mock as well as on the fork**.
+- **F-D closed:** the dead `LiquidityOverflow` error is deleted (grep: the only other definitions belong to
+  `LaunchSeeder.sol:84` and `EsseyLadderSeeder.sol:131`, which use their own).
+- **Gate consequence: G3 restarts from zero.** The vault source changed after the fork-test round, so the
+  three consecutive clean rounds must be re-run against the new bytes. Nothing is pushed and nothing is
+  deployed; the vault is not deployed anywhere, so there was never live exposure.
+- **Still open, unchanged by this fix:** L-A-1's deviation term (deposit mints at the oracle mark, withdraw
+  pays a spot-basis slice) — measured 8-9 bps a trip at the 100 bps gate ceiling, bounded by the pinned 25 bps
+  and **not** a rounding bug. That is a design question for the auditor + economist, not this changeset.
