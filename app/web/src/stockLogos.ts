@@ -87,6 +87,10 @@ export const STOCK_LOGOS: Record<string, StockLogo> = {
     evenodd: true,
     d: "M2 8h20v12h-4v-5a6 6 0 00-12 0v5H2z",
   },
+  FLR: {
+    source: "thematic", // FLOOR: a plinth that steps up, never down
+    d: "M2 18h20v3H2zm4-5h12v3H6zm4-5h4v3h-4z",
+  },
 };
 
 const GOLD = "#e2c177";

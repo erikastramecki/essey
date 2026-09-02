@@ -37,9 +37,11 @@ import { ComingSoon, GameComingSoon } from "./game-gate";
 import { NotFoundPage } from "./notfound";
 import { TreasuryPage } from "./treasury";
 import { HolderHubPage } from "./holder";
+import { RedeemPage } from "./redeem-ui";
 import { BlogIndex, BlogPost } from "./blog";
 import { TapeRoom } from "./tape-ui";
 import { GamePage } from "./game/GamePage";
+import { GameExplorerPage } from "./game/explorer";
 import { WalletProvider, ConnectButton } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
@@ -49,6 +51,15 @@ const REPO = "https://github.com/erikastramecki/essey";
 // of a preview build to the live domain. Either being restrictive keeps it off essey.xyz.
 const PROD_HOSTS = new Set(["essey.xyz", "www.essey.xyz"]);
 const HOLDER_ON =
+  typeof window === "undefined"
+    ? __HOLDER_BUILD__
+    : !PROD_HOSTS.has(window.location.hostname);
+// Redemption writes to a LIVE mainnet contract and destroys supply, so it stays preview-only until the
+// founder opens it (founder standing rule). Same two guards as HOLDER_ON: __HOLDER_BUILD__ is false on a
+// prod build (covers SSR/prerender, no window), and the hostname check covers an alias-promote of a
+// preview build to the live domain. Off the live host /redeem renders the coming-soon screen and the
+// Redeem door drops from the nav, so no visitor to essey.xyz can reach a burn.
+const REDEEM_ON =
   typeof window === "undefined"
     ? __HOLDER_BUILD__
     : !PROD_HOSTS.has(window.location.hostname);
@@ -146,10 +157,16 @@ const DONS_ITEMS: NavLeaf[] = [
     label: "Portfolio",
     desc: "Your Dons and every action on them",
   },
+  {
+    to: "/dons/explorer",
+    label: "Solvency Scan",
+    desc: "The wire, the street, the families",
+  },
 ];
 const NAV: NavItem[] = [
   { to: "/treasury", label: "The Floor" },
   ...(HOLDER_ON ? [{ to: "/holder", label: "Holder Hub" } as NavItem] : []),
+  ...(REDEEM_ON ? [{ to: "/redeem", label: "Redeem" } as NavItem] : []),
   ...(PRIVATE_ON ? [{ to: "/private", label: "Private" } as NavItem] : []),
   { label: "Learn", items: LEARN_ITEMS },
   ...(GAME_ON ? [{ label: "Dons", items: DONS_ITEMS } as NavItem] : []),
@@ -170,6 +187,15 @@ const PROTOCOL_ITEMS: NavLeaf[] = [
         },
       ]
     : []),
+  ...(REDEEM_ON
+    ? [
+        {
+          to: "/redeem",
+          label: "Redeem",
+          desc: "Burn $ESSEY for your slice of the floor",
+        },
+      ]
+    : []),
   ...(PRIVATE_ON
     ? [
         {
@@ -179,7 +205,11 @@ const PROTOCOL_ITEMS: NavLeaf[] = [
         },
       ]
     : []),
-  { to: "/explorer", label: "Explorer", desc: "Contracts, blocks, balances" },
+  {
+    to: "/explorer",
+    label: "Explorer",
+    desc: "The reserve's state and every event, on mainnet",
+  },
 ];
 const MOBILE_NAV: [string, NavLeaf[]][] = [
   ["Essey — the protocol", PROTOCOL_ITEMS],
@@ -282,6 +312,15 @@ export default function App() {
               }
             />
             <Route path="/explorer" element={<ExplorerPage />} />
+            {/* The game-era desk reads the game chain, so it is gated with the rest of the wing. */}
+            <Route
+              path="/dons/explorer"
+              element={
+                <GameGate>
+                  <GameExplorerPage />
+                </GameGate>
+              }
+            />
             <Route
               path="/builder"
               element={
@@ -364,6 +403,25 @@ export default function App() {
                     eyebrow="Essey Private"
                     title="Coming soon to mainnet."
                     body="Private balances and payments aren't open on the live site yet. When shielding is live you'll be able to hold and move value without it showing on-chain — we're finishing it in the open and will say the moment it's ready."
+                  />
+                )
+              }
+            />
+            {/* Redemption — preview only (founder standing rule). The reserve is live and adminless
+                on mainnet; what is gated is the WRITE surface, so deep-linking /redeem on the live
+                host reaches the coming-soon screen and never a burn. */}
+            <Route
+              path="/redeem"
+              element={
+                REDEEM_ON ? (
+                  <AppPage title="Redeem">
+                    <RedeemPage />
+                  </AppPage>
+                ) : (
+                  <ComingSoon
+                    eyebrow="Redemption"
+                    title="Coming soon to mainnet."
+                    body="Redeeming $ESSEY for its slice of the reserve isn't open on the live site yet. The reserve itself is live and adminless — you can read every figure that backs the token on The Floor — and we'll say the moment redemption opens."
                   />
                 )
               }
@@ -930,6 +988,7 @@ function Footer() {
                 ["/builder", "Mint"],
                 ["/market", "Trade"],
                 ["/portfolio", "Portfolio"],
+                ["/dons/explorer", "Solvency Scan"],
               ],
             ],
           ] as const
@@ -954,16 +1013,17 @@ function Footer() {
       <div className="wrap foot-in">
         <div>
           <p className="disclaim">
-            <b>This season settles in Scrip</b> — play points marked to tickers.
-            Real-token settlement is the roadmap; nothing won in the game today
-            is real stock. "Payout," never "dividend": protocol fee
+            <b>The base layer is live on Robinhood Chain mainnet</b> — the
+            $ESSEY token and its adminless on-chain floor reserve. Everything
+            else on this site says plainly whether it is live, or built and not
+            yet open. $ESSEY is <b>not tradable at this time</b>; no market has
+            been seeded against it. "Payout," never "dividend": protocol fee
             distributions are mechanically LP-style fee-shares, not dividends,
             not yield promises, and no payout is guaranteed, ever. The contracts
-            are adversarially audited (published rounds in the technical docs)
-            and <b>playable now with play money</b>. Everything in the game is
-            play money with no real value. The base layer — the $ESSEY token and
-            its on-chain floor reserve — is live on Robinhood Chain mainnet; the
-            game season is not.{" "}
+            are adversarially audited, with the rounds published in the
+            technical docs. The D.O.N. game is <b>not open here</b>: it runs on
+            a test network in play-money Scrip with no real value, and nothing
+            in it is real stock.{" "}
             <button
               className="linklike"
               onClick={() =>

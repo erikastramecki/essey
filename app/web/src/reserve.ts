@@ -15,7 +15,9 @@ import {
   http,
   parseAbi,
   type Address,
+  type PublicClient,
 } from "viem";
+import { chainNow, NO_FEED, priceOf, valueOf, type Price } from "./prices";
 
 export const MAINNET = {
   chainId: 4663,
@@ -39,7 +41,7 @@ export const deployed = (): boolean => RESERVE.reserve !== ZERO;
 /// The known basket, live on RH mainnet 4663. The reserve's real holdings are read per token below; this
 /// list is only what the page KNOWS to look up (and a symbol fallback). Any token in here that the reserve
 /// does not hold simply reads zero.
-const BASKET: Address[] = [
+export const BASKET: Address[] = [
   "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC", // NVDA
   "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9", // AAPL
   "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3", // GOOGL
@@ -52,6 +54,7 @@ const BASKET: Address[] = [
   "0x1D11f0496982706C5e14A514D4E79F2e6BdE4516", // DJT
   "0x020bfC650A365f8BB26819deAAbF3E21291018b4", // CASHCAT
   "0x39dBED3a2bd333467115dE45665cC57F813C4571", // PONS
+  "0x8aD25c65587979533fa1cA0d2194A76D5bAE305d", // FLR
 ];
 
 /// Non-forgeable legitimacy gate: every real Robinhood Stock Token is an EIP-1967 beacon proxy whose
@@ -64,7 +67,7 @@ const EIP1967_BEACON_SLOT =
 
 export type TokenKind = "equity" | "crypto";
 
-const chain = defineChain({
+export const mainnetChain = defineChain({
   id: MAINNET.chainId,
   name: MAINNET.name,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -73,7 +76,7 @@ const chain = defineChain({
 });
 
 export const mainnetPub = createPublicClient({
-  chain,
+  chain: mainnetChain,
   transport: http(MAINNET.rpc),
 });
 
@@ -82,6 +85,7 @@ const erc20 = parseAbi([
   "function totalSupply() view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
+  "function name() view returns (string)",
 ]);
 
 /// Only the views this page reads. reserveOf/floorOf/circulatingSupply are the honest backing figures;
@@ -108,6 +112,9 @@ export const fmt = (v: bigint, decimals = 18, dp = 2): string => {
   return neg ? `-${s}` : s;
 };
 
+/// Display-only, so the Treasury page and the explorer's balance bar cannot drift apart on precision.
+export const usd = (v: bigint): string => `$${fmt(v, 8, 2)}`;
+
 /// A read error here is a mainnet RPC/decode failure, not a game revert — live.ts's niceError is
 /// game-flavored (faucet, Dons), so keep a plain surface: the custom-error name where viem gives one.
 export const readError = (e: unknown): string => {
@@ -120,10 +127,15 @@ export const readError = (e: unknown): string => {
 export type TokenRow = {
   address: Address;
   symbol: string;
+  /// The issuer's own on-chain name(), never a hand-kept map — so the display cannot drift from the
+  /// token it is describing.
+  name: string;
   decimals: number;
   reserve: bigint; // units of the token the reserve holds right now
   floor: bigint; // units of the token backing 1e18 $ESSEY — only ratchets up
   kind: TokenKind;
+  price: Price;
+  valueUsd8: bigint | null; // display-only mark of `reserve` at `price`, 1e8 USD; null when unpriced
 };
 
 export type TreasuryState = {
@@ -132,6 +144,20 @@ export type TreasuryState = {
   claimBase: bigint;
   exitFeeBps: bigint;
   tokens: TokenRow[];
+  /// Priced lines only, 1e8 USD — a floor on the marked value, never the whole basket, so any surface
+  /// showing it must also say which lines it covers.
+  pricedUsd8: bigint;
+  /// The same total split by the on-chain beacon check, because a dollar figure dominated by a launchpad
+  /// token says something very different from one dominated by equities.
+  equityUsd8: bigint;
+  upsideUsd8: bigint;
+  pricedHeld: number;
+  unpricedHeld: number;
+  /// Named, not just counted: "excluded" is only honest if a reader can see WHICH holdings it means.
+  unpricedSymbols: string[];
+  /// True while any marked line comes from a thin AMM pool rather than a Chainlink feed.
+  poolMarked: boolean;
+  priceAsOf: number;
 };
 
 const read = <T>(functionName: string, args?: unknown[]): Promise<T> =>
@@ -149,45 +175,75 @@ async function isRhStock(token: Address): Promise<boolean> {
   return !!slot && slot.toLowerCase().endsWith(RH_STOCK_BEACON);
 }
 
-async function tokenRow(token: Address): Promise<TokenRow> {
-  const [symbol, decimals, reserve, floor, stock] = await Promise.all([
-    mainnetPub
-      .readContract({ address: token, abi: erc20, functionName: "symbol" })
-      .catch(() => "?") as Promise<string>,
-    mainnetPub
-      .readContract({ address: token, abi: erc20, functionName: "decimals" })
-      .catch(() => 18) as Promise<number>,
-    read<bigint>("reserveOf", [token]).catch(() => 0n),
-    read<bigint>("floorOf", [token]).catch(() => 0n),
-    isRhStock(token),
-  ]);
+async function tokenRow(token: Address, now: number): Promise<TokenRow> {
+  const [symbol, name, decimals, reserve, floor, stock, price] =
+    await Promise.all([
+      mainnetPub
+        .readContract({ address: token, abi: erc20, functionName: "symbol" })
+        .catch(() => "?") as Promise<string>,
+      mainnetPub
+        .readContract({ address: token, abi: erc20, functionName: "name" })
+        .catch(() => "") as Promise<string>,
+      mainnetPub
+        .readContract({ address: token, abi: erc20, functionName: "decimals" })
+        .catch(() => 18) as Promise<number>,
+      read<bigint>("reserveOf", [token]).catch(() => 0n),
+      read<bigint>("floorOf", [token]).catch(() => 0n),
+      isRhStock(token),
+      // A price outage must not take the backing ledger down with it: the units are the truth here.
+      priceOf(mainnetPub as PublicClient, token, now).catch(() => NO_FEED),
+    ]);
+  const dec = Number(decimals);
   return {
     address: token,
     symbol,
-    decimals: Number(decimals),
+    name,
+    decimals: dec,
     reserve,
     floor,
     kind: stock ? "equity" : "crypto",
+    price,
+    valueUsd8: valueOf(reserve, dec, price),
   };
 }
 
 export const reads = {
   async treasury(): Promise<TreasuryState> {
-    const [circulating, claimBase, exitFeeBps, esseyAddr] = await Promise.all([
-      read<bigint>("circulatingSupply"),
-      read<bigint>("claimBase"),
-      read<bigint>("EXIT_FEE_BPS"),
-      read<Address>("essey"),
-    ]);
+    const [circulating, claimBase, exitFeeBps, esseyAddr, priceAsOf] =
+      await Promise.all([
+        read<bigint>("circulatingSupply"),
+        read<bigint>("claimBase"),
+        read<bigint>("EXIT_FEE_BPS"),
+        read<Address>("essey"),
+        chainNow(mainnetPub as PublicClient),
+      ]);
     const esseyTotal = (await mainnetPub.readContract({
       address: esseyAddr,
       abi: erc20,
       functionName: "totalSupply",
     })) as bigint;
     // Reliable equities first, then upside — a stable render order regardless of RPC ordering.
-    const tokens = (await Promise.all(BASKET.map(tokenRow))).sort((a, b) =>
-      a.kind === b.kind ? 0 : a.kind === "equity" ? -1 : 1,
-    );
-    return { esseyTotal, circulating, claimBase, exitFeeBps, tokens };
+    const tokens = (
+      await Promise.all(BASKET.map((t) => tokenRow(t, priceAsOf)))
+    ).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "equity" ? -1 : 1));
+    const held = tokens.filter((t) => t.reserve > 0n);
+    const sum = (rows: TokenRow[]): bigint =>
+      rows.reduce((s, t) => s + (t.valueUsd8 ?? 0n), 0n);
+    const unpriced = held.filter((t) => t.valueUsd8 === null);
+    return {
+      esseyTotal,
+      circulating,
+      claimBase,
+      exitFeeBps,
+      tokens,
+      pricedUsd8: sum(held),
+      equityUsd8: sum(held.filter((t) => t.kind === "equity")),
+      upsideUsd8: sum(held.filter((t) => t.kind === "crypto")),
+      pricedHeld: held.length - unpriced.length,
+      unpricedHeld: unpriced.length,
+      unpricedSymbols: unpriced.map((t) => t.symbol),
+      poolMarked: held.some((t) => t.price.ok && t.price.src === "pool"),
+      priceAsOf,
+    };
   },
 };

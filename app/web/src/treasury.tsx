@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { unpricedReason } from "./prices";
 import {
   deployed,
   fmt,
@@ -6,9 +7,11 @@ import {
   readError,
   reads,
   RESERVE,
+  usd,
   type TokenRow,
   type TreasuryState,
 } from "./reserve";
+import { coinSVG, STOCK_LOGOS } from "./stockLogos";
 
 const pct = (bps: bigint): string => `${(Number(bps) / 100).toFixed(0)}%`;
 
@@ -85,6 +88,7 @@ export function TreasuryPage() {
       <div className="wrap">
         <Head />
         <OfficialContract />
+        <Balance st={st} />
 
         <div className="hw-stats">
           <Stat
@@ -165,7 +169,10 @@ export function TreasuryPage() {
             The equity legs of the basket. These are the backing the floor is
             measured against — the reliable, stock-denominated claim under
             $ESSEY. Each figure is read from the reserve right now; tap a symbol
-            to verify the contract&apos;s holding on the explorer.
+            to verify the contract&apos;s holding on the explorer. Not every
+            equity here has a Chainlink feed on this chain — the ones that
+            don&apos;t read <i>no feed · units only</i> and sit outside the
+            dollar total.
           </p>
           <BasketTable
             rows={equities}
@@ -183,7 +190,10 @@ export function TreasuryPage() {
             on top of it. The split is drawn on chain, not by hand: a token is
             reliable only if it passes the Robinhood Stock Token beacon check;
             anything else lands here. The reserve itself pays every token
-            identically.
+            identically. $FLR has no feed on this chain, so it is marked from
+            the median of its last 50 pool swaps and carries the thin-market
+            caveat above; $PONS and $CASHCAT have no price source we read at
+            all, so they show units and sit <b>outside the dollar total</b>.
           </p>
           <BasketTable
             rows={crypto}
@@ -276,6 +286,68 @@ function OfficialContract() {
   );
 }
 
+/// The one figure on this page that is NOT a claim: a dollar mark sitting next to a redeemable claim is
+/// exactly what a reader will misread, so it says so, and it NAMES the lines it left out rather than
+/// letting a missing feed quietly shrink the total into a lie.
+function Balance({ st }: { st: TreasuryState | null }) {
+  const excluded = st?.unpricedSymbols ?? [];
+  return (
+    <div className="hw-note" style={{ margin: "10px 0 0" }}>
+      <div className="hw-card-k" style={{ color: "var(--gold)" }}>
+        Treasury balance · indicative, display only
+      </div>
+      <div className="hw-card-big">
+        {st ? usd(st.pricedUsd8) : "…"}{" "}
+        <i>
+          marked value of {st ? st.pricedHeld : "…"} of{" "}
+          {st ? st.pricedHeld + st.unpricedHeld : "…"} funded holdings
+        </i>
+      </div>
+      <div className="hw-stats" style={{ margin: "0 0 12px" }}>
+        <Stat
+          label="Tokenized equities · Chainlink feeds"
+          value={st ? usd(st.equityUsd8) : "…"}
+        />
+        <Stat
+          label={
+            st?.poolMarked
+              ? "Crypto upside · thin-pool mark"
+              : "Crypto upside · no live pool mark"
+          }
+          value={st ? usd(st.upsideUsd8) : "…"}
+        />
+        <Stat
+          label="Excluded — no price source"
+          value={
+            excluded.length === 0 ? (st ? "none" : "…") : excluded.join(" · ")
+          }
+        />
+      </div>
+      <p style={{ margin: 0 }}>
+        <b>This is not the claim.</b> Redeeming $ESSEY pays a pro-rata slice in{" "}
+        <b>units of each token</b>, never dollars, and no figure here touches
+        the floor, redemption, borrowing, or bonds — the units below are the
+        truth and this is an informational layer over them. Equity legs are
+        marked at their live Chainlink feed on Robinhood Chain and those feeds
+        run 24/5, so a line goes <i>price unavailable</i> rather than showing a
+        stale mark. Holdings with no price source anywhere are named above and
+        left <b>out</b> of the total, never counted as zero.
+      </p>
+      <p style={{ margin: "10px 0 0" }}>
+        <b>$FLR is marked from a thin pool.</b> It has no Chainlink feed on this
+        chain; its only venue is a single permanently-locked Uniswap V4 position
+        about 8 ETH deep, where roughly{" "}
+        <b>$1,000 of trading moves the price 10%</b>. To blunt that we mark it
+        at the <b>median tick of the last 50 swaps</b> rather than the latest
+        one, and show nothing at all if that pool has not traded in an hour.
+        Read the split above before you read the total: to whatever extent the
+        crypto line dominates it, the whole figure is an estimate a small trade
+        can move.
+      </p>
+    </div>
+  );
+}
+
 function BasketTable({
   rows,
   loading,
@@ -296,6 +368,7 @@ function BasketTable({
           <tr>
             <th>Token</th>
             <th className="n">Reserve holds</th>
+            <th className="n">Value · USD</th>
             <th className="n">Floor · units / 1,000 $ESSEY</th>
           </tr>
         </thead>
@@ -308,12 +381,48 @@ function BasketTable({
                   target="_blank"
                   rel="noreferrer"
                   title={t.address}
+                  style={{ display: "flex", gap: 9, alignItems: "center" }}
                 >
-                  {t.symbol} ↗
+                  <Coin symbol={t.symbol} />
+                  <span>
+                    {t.symbol} ↗
+                    <span
+                      style={{
+                        display: "block",
+                        fontWeight: 400,
+                        fontSize: 12.5,
+                        color: "var(--tx-faint)",
+                      }}
+                    >
+                      {t.name || t.address}
+                    </span>
+                  </span>
                 </a>
               </td>
               <td className="n">
                 {fmt(t.reserve, t.decimals, 4)} {t.symbol}
+              </td>
+              <td className="n">
+                {t.valueUsd8 === null ? (
+                  <span style={{ color: "var(--tx-faint)" }}>
+                    {unpricedReason(t.price)}
+                  </span>
+                ) : (
+                  <>
+                    {usd(t.valueUsd8)}
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        color: "var(--tx-faint)",
+                      }}
+                    >
+                      {t.price.ok && t.price.src === "pool"
+                        ? "thin-pool median"
+                        : "Chainlink feed"}
+                    </span>
+                  </>
+                )}
               </td>
               <td className="n">
                 {empty
@@ -325,6 +434,18 @@ function BasketTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/// Only a ticker we hold a real mark for gets a coin: coinSVG's fallback interpolates the symbol string
+/// into markup, and symbol() is contract-supplied, so the unknown case renders nothing at all.
+function Coin({ symbol }: { symbol: string }) {
+  if (!STOCK_LOGOS[symbol]) return null;
+  return (
+    <span
+      style={{ flex: "0 0 auto", lineHeight: 0 }}
+      dangerouslySetInnerHTML={{ __html: coinSVG(symbol, 30) }}
+    />
   );
 }
 

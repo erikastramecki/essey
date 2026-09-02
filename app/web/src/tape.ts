@@ -1,6 +1,6 @@
-// The Tape — the live proof feed, read straight from the testnet chain. Every row is a real event
-// from a deployed contract with a verify link; no hosted indexer, no fabricated motion. When the
-// chain is quiet, the Tape says so.
+// The GAME feed — testnet 46630, consumed only by /explorer. The protocol's /tape reads mainnet from
+// tape-mainnet.ts; never point a protocol surface at this file, which is how testnet rows once landed
+// under a "live" chip on the front door.
 import { parseAbiItem, type Address, type Log } from "viem";
 import { pub, ADDR, NET, fmt } from "./live";
 
