@@ -5,3 +5,6 @@ game-keeper.log
 
 # holder-airdrop keeper runtime state + published root manifests (regenerated, never a source of truth)
 keeper/keeper-state/
+
+# audit PoC scratch (receipts live in ~/.claude/gate-receipts)
+test-poc/
