@@ -50,6 +50,7 @@ export function TreasuryPage() {
       <section className="band">
         <div className="wrap">
           <Head />
+          <OfficialContract />
           <div className="hw-card">
             <div className="hw-card-h">
               The reserve deploys soon{" "}
@@ -83,6 +84,7 @@ export function TreasuryPage() {
     <section className="band">
       <div className="wrap">
         <Head />
+        <OfficialContract />
 
         <div className="hw-stats">
           <Stat
@@ -215,6 +217,60 @@ function Head() {
           is exactly what backs it, and here is how to verify every figure
           yourself.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/// Anti-scam anchor. Visitors arrive from Twitter, where a scammer can seed a tradable fake "$ESSEY"
+/// on a DEX. The real token is not tradable, so the honest defence is to show the one real address —
+/// read from the same reserve config the page trusts — and let anyone verify it on chain.
+function OfficialContract() {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(RESERVE.essey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="hw-note" style={{ margin: "0 0 6px" }}>
+      <div
+        className="hw-card-k"
+        style={{ color: "var(--gold)", marginBottom: 8 }}
+      >
+        $ESSEY — official contract
+      </div>
+      <div
+        style={{
+          fontFamily: "var(--mono)",
+          fontSize: 13,
+          color: "var(--tx)",
+          wordBreak: "break-all",
+          marginBottom: 10,
+        }}
+      >
+        {RESERVE.essey}
+      </div>
+      <div className="live-row" style={{ gap: 14, marginBottom: 10 }}>
+        <button className="pf-link gold" onClick={copy}>
+          {copied ? "copied ✓" : "copy address"}
+        </button>
+        <a
+          className="pf-link"
+          href={`${MAINNET.explorer}/address/${RESERVE.essey}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          verify on explorer ↗
+        </a>
+      </div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>
+        This is the only official $ESSEY contract, on Robinhood Chain. $ESSEY is{" "}
+        <b>not tradable at this time</b> — no market is seeded against it, and
+        this reserve is a backing ledger, not a price. Any token trading as
+        &ldquo;$ESSEY&rdquo; on a DEX or exchange is not ours; treat it as a
+        scam. Verify the address above on the explorer before trusting anything
+        that calls itself $ESSEY.
       </div>
     </div>
   );

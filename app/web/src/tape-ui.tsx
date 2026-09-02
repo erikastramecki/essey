@@ -46,7 +46,7 @@ export function TapeRoom() {
         <div className="band-head"><div>
           <span className="eyebrow">The Tape</span>
           <h2>Every receipt, live</h2>
-          <p>Everything the club does, printed as it happens on Robinhood Chain testnet, and every line links
+          <p>Everything the club does, printed as it happens on-chain, and every line links
             the real transaction. The <b>⬡ proven only</b> filter shows just the events whose correctness is
             checkable on-chain: rings, payouts, fair draws, solvent loans.</p>
         </div>

@@ -1,5 +1,5 @@
-// Live testnet UI: the live Exchange and the Bell. Everything here talks to the REAL deployed
-// Dons contracts on 46630 — labeled TESTNET throughout, play money only.
+// Live game UI: the live Exchange and the Bell. Everything here talks to the REAL deployed
+// Dons contracts on 46630 — play money only.
 import { useCallback, useEffect, useState } from "react";
 import { DonStats, DonTraits, traitText, useTraitIndex } from "./don-traits";
 import { Link } from "react-router-dom";
@@ -31,10 +31,10 @@ function prefKey(pref: Address | null): "Bundle" | "AAPL" | "NVDA" {
   return "Bundle";
 }
 
-export function TestnetBanner() {
+export function SeasonBanner() {
   return (
-    <div className="testnet-banner num">
-      SEASON ZERO runs on Robinhood Chain testnet — play money, real mechanics ·{" "}
+    <div className="season-banner num">
+      SEASON ZERO — play money, real mechanics, an experimental preview ·{" "}
       <a
         href={`${NET.explorer}/address/${ADDR.don}`}
         target="_blank"
@@ -198,7 +198,7 @@ export function LiveExchange() {
         </div>
         <div className="live-card amm">
           <div className="live-h">
-            TRADE DONS <span className="preview-chip">testnet</span>
+            TRADE DONS <span className="preview-chip">preview</span>
           </div>
 
           {/* live desk header — pool size + floor price + your position */}
@@ -418,7 +418,7 @@ export function LiveExchange() {
             (!ready ? (
               <div className="amm-empty">
                 <div className="live-note" style={{ marginBottom: 10 }}>
-                  Connect on Robinhood Chain testnet to see your Dons and sell
+                  Connect your wallet to see your Dons and sell
                   one back.
                 </div>
                 <ConnectButton />
@@ -555,7 +555,7 @@ const MIX_TOKENS: { key: string; addr: Address }[] = [
 ];
 
 // The Bell — the full loop: stake a Tier on a Don you own, ring when the pot's ready, claim the
-// Payout into that Don's Vault. All live on testnet.
+// Payout into that Don's Vault.
 export function LiveBell() {
   const w = useWallet();
   const a = w.address as Address | null;
@@ -677,14 +677,14 @@ export function LiveBell() {
               your Don's Vault as real stock.
             </p>
           </div>
-          <span className="preview-chip live">testnet</span>
+          <span className="preview-chip live">preview</span>
         </div>
 
         {!ready ? (
           <div className="live-card">
             <div className="live-row">
               <span className="live-note">
-                Connect on Robinhood Chain testnet to stake and get paid.
+                Connect your wallet to stake and get paid.
               </span>
               <ConnectButton />
             </div>

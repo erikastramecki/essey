@@ -856,7 +856,7 @@ export function BuilderPage() {
       <div className="bld-head">
         <h1>The builder</h1>
         <span>
-          pick traits · rules keep it valid · mint your 1-of-1 on testnet
+          pick traits · rules keep it valid · mint your 1-of-1
         </span>
       </div>
       <div className="bld-grid">
@@ -897,7 +897,7 @@ export function BuilderPage() {
               {wallet ? (
                 <div className="bld-wallet">
                   <span className="ok">● {short(wallet)}</span>
-                  <span>Robinhood testnet · {DON_NET.chainId}</span>
+                  <span>Robinhood Chain · {DON_NET.chainId}</span>
                 </div>
               ) : (
                 <button

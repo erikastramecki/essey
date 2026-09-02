@@ -24,7 +24,7 @@ import {
   ProvableTwist,
   EngineSection,
 } from "./market";
-import { TestnetBanner, LiveExchange, LiveBell } from "./live-ui";
+import { SeasonBanner, LiveExchange, LiveBell } from "./live-ui";
 import { PortfolioPage } from "./portfolio";
 import { PrivatePage } from "./private";
 import { LendPage } from "./lend-ui";
@@ -33,96 +33,160 @@ import { BuilderPage } from "./builder";
 import { HowToPlayPage } from "./howtoplay";
 import { FaucetPage } from "./faucet";
 import { ComingPage } from "./coming";
+import { ComingSoon, GameComingSoon } from "./game-gate";
 import { NotFoundPage } from "./notfound";
 import { TreasuryPage } from "./treasury";
+import { HolderHubPage } from "./holder";
 import { BlogIndex, BlogPost } from "./blog";
 import { TapeRoom } from "./tape-ui";
 import { GamePage } from "./game/GamePage";
-import { WalletProvider, ConnectButton, useWallet } from "./wallet";
+import { WalletProvider, ConnectButton } from "./wallet";
 
 const REPO = "https://github.com/erikastramecki/essey";
-const GROUPS = [
-  "The game",
-  "The Market",
-  "Essey Private",
-  "The engine",
-  "Audits",
+// The Holder Hub is preview-only until its distributor deploys (founder standing rule). It is OFF on the
+// live domain and ON everywhere else (preview URLs, local dev). Two guards: __HOLDER_BUILD__ is false on
+// a prod build (covers SSR/prerender, which has no window), and the hostname check covers an alias-promote
+// of a preview build to the live domain. Either being restrictive keeps it off essey.xyz.
+const PROD_HOSTS = new Set(["essey.xyz", "www.essey.xyz"]);
+const HOLDER_ON =
+  typeof window === "undefined"
+    ? __HOLDER_BUILD__
+    : !PROD_HOSTS.has(window.location.hostname);
+// The whole D.O.N. game wing is preview-only until it ships to mainnet (founder standing rule). Same
+// two guards as HOLDER_ON: __HOLDER_BUILD__ is false on a prod build (covers SSR/prerender, no window),
+// and the hostname check covers an alias-promote of a preview build to the live domain. Off the live
+// host every game route renders the coming-soon screen and every game door drops from the nav.
+const GAME_ON =
+  typeof window === "undefined"
+    ? __HOLDER_BUILD__
+    : !PROD_HOSTS.has(window.location.hostname);
+// Essey Private (shielding) is preview-only until it ships to mainnet (founder standing rule). Same
+// two guards as HOLDER_ON/GAME_ON: __HOLDER_BUILD__ is false on a prod build (covers SSR/prerender,
+// no window), and the hostname check covers an alias-promote of a preview build to the live domain.
+// Off the live host /private renders the coming-soon screen and the Private door drops from the nav.
+const PRIVATE_ON =
+  typeof window === "undefined"
+    ? __HOLDER_BUILD__
+    : !PROD_HOSTS.has(window.location.hostname);
+// The game wing's routes — the season banner and the game framing apply only under these prefixes.
+const GAME_PREFIXES = [
+  "/dons",
+  "/game",
+  "/builder",
+  "/market",
+  "/bell",
+  "/portfolio",
+  "/how-to-play",
+  "/coming",
+  "/faucet",
+];
+// The reading room is siloed the way the site is: PROTOCOL docs and DONS/GAME docs are separate
+// top-level sections that never mix. `key` matches Doc.section from gen-docs.mjs; `groups` fixes the
+// sub-heading order within each section. Protocol leads (the front door), the game is the wing.
+const DOC_SECTIONS = [
+  {
+    key: "PROTOCOL",
+    label: "Protocol",
+    groups: [
+      "Base layer",
+      "The engine",
+      "Essey Private",
+      "Known-open",
+      "Protocol audits",
+    ],
+  },
+  {
+    key: "DONS",
+    label: "Dons / The Game",
+    groups: [
+      "The game",
+      "Dons tokenomics",
+      "Game known-open",
+      "Game-era contracts",
+    ],
+  },
 ];
 
-// The nav is game-first and stays condensed: The Game and How to Play lead, Mint/Trade feed them,
-// and everything else lives behind two doors. Lending is HIDDEN (not linked, route still resolves);
-// the Bell is off the nav — a payout sink reached in-context from Portfolio. Every old route resolves.
+// The site is TWO SECTIONS under ONE identity: the Essey protocol (the front door) and the D.O.N.
+// game (a wing you only reach by going looking). The masthead is protocol-first — the Floor and the
+// Holder Hub lead — and the whole game lives behind the single "Dons" door. Every old route still
+// resolves. The leaf groups are named consts reused by MOBILE_NAV — never index into NAV positionally
+// (that broke the mobile sheet once when the doors shifted).
 type NavLeaf = { to: string; label: string; desc: string };
 type NavItem =
   { to: string; label: string } | { label: string; items: NavLeaf[] };
-// The leaf groups are named consts and reused by MOBILE_NAV — never index into NAV for these
-// (positional refs broke the mobile sheet once already when the doors shifted).
 const LEARN_ITEMS: NavLeaf[] = [
   {
     to: "/docs",
     label: "Technical docs",
     desc: "The protocol underneath, from the repo's own files",
   },
-  { to: "/provable", label: "Provable", desc: "Fair rolls, solvent books" },
-  {
-    to: "/engine",
-    label: "The engine",
-    desc: "The lending machinery underneath",
-  },
-];
-const MORE_ITEMS: NavLeaf[] = [
-  {
-    to: "/treasury",
-    label: "Treasury",
-    desc: "What backs $ESSEY, live on mainnet",
-  },
   { to: "/blog", label: "Blog", desc: "Building Essey in the open" },
   { to: "/tape", label: "The Tape", desc: "Every event, with its receipt" },
-  { to: "/explorer", label: "Explorer", desc: "Contracts, blocks, balances" },
-  { to: "/private", label: "Private", desc: "Shielded balances and transfers" },
+  { to: "/provable", label: "Provable", desc: "Fair rolls, solvent books" },
+];
+// The Dons wing — the entire game behind one door. A holder never lands here unless they open it.
+const DONS_ITEMS: NavLeaf[] = [
+  {
+    to: "/dons",
+    label: "The Dons game",
+    desc: "The on-chain city of Solvency",
+  },
+  { to: "/game", label: "Play", desc: "The desk, the job board, the stakeout" },
+  { to: "/builder", label: "Mint", desc: "Build your Don" },
+  { to: "/market", label: "Trade", desc: "Buy · snipe · sell" },
+  {
+    to: "/how-to-play",
+    label: "How to Play",
+    desc: "The walkthrough, file by file",
+  },
+  { to: "/docs/game-guide", label: "Game Guide", desc: "The full house rules" },
+  {
+    to: "/portfolio",
+    label: "Portfolio",
+    desc: "Your Dons and every action on them",
+  },
 ];
 const NAV: NavItem[] = [
-  { to: "/game", label: "The Game" },
-  { to: "/builder", label: "Mint" },
-  { to: "/market", label: "Trade" },
-  { to: "/how-to-play", label: "How to Play" },
-  { to: "/docs/game-guide", label: "Game Guide" },
-  { to: "/coming", label: "Coming Soon" },
+  { to: "/treasury", label: "The Floor" },
+  ...(HOLDER_ON ? [{ to: "/holder", label: "Holder Hub" } as NavItem] : []),
+  ...(PRIVATE_ON ? [{ to: "/private", label: "Private" } as NavItem] : []),
   { label: "Learn", items: LEARN_ITEMS },
-  { label: "More", items: MORE_ITEMS },
+  ...(GAME_ON ? [{ label: "Dons", items: DONS_ITEMS } as NavItem] : []),
 ];
-// The mobile sheet flattens the same IA under three headers.
+// The mobile sheet flattens the same IA under its three faces: protocol, learn, game.
+const PROTOCOL_ITEMS: NavLeaf[] = [
+  {
+    to: "/treasury",
+    label: "The Floor",
+    desc: "What backs $ESSEY, live on mainnet",
+  },
+  ...(HOLDER_ON
+    ? [
+        {
+          to: "/holder",
+          label: "Holder Hub",
+          desc: "Your basket and your claim — preview",
+        },
+      ]
+    : []),
+  ...(PRIVATE_ON
+    ? [
+        {
+          to: "/private",
+          label: "Private",
+          desc: "Shielded balances and transfers",
+        },
+      ]
+    : []),
+  { to: "/explorer", label: "Explorer", desc: "Contracts, blocks, balances" },
+];
 const MOBILE_NAV: [string, NavLeaf[]][] = [
-  [
-    "The city",
-    [
-      {
-        to: "/game",
-        label: "The Game",
-        desc: "jobs · raids · the city of Solvency",
-      },
-      {
-        to: "/docs/game-guide",
-        label: "Game Guide",
-        desc: "the rulebook, every brief and number",
-      },
-      {
-        to: "/how-to-play",
-        label: "How to Play",
-        desc: "the walkthrough, file by file",
-      },
-      {
-        to: "/coming",
-        label: "Coming Soon",
-        desc: "the real-asset era, and what is still designed",
-      },
-      { to: "/builder", label: "Mint", desc: "build your Don" },
-      { to: "/market", label: "Trade", desc: "buy · snipe · sell" },
-      { to: "/portfolio", label: "Portfolio", desc: "everything you hold" },
-    ],
-  ],
+  ["Essey — the protocol", PROTOCOL_ITEMS],
   ["Learn", LEARN_ITEMS],
-  ["More", MORE_ITEMS],
+  ...(GAME_ON
+    ? ([["D.O.N. — the game", DONS_ITEMS]] as [string, NavLeaf[]][])
+    : []),
 ];
 
 /// Thin wrapper for app pages: sets the document title. Each page's own band-head carries its
@@ -134,6 +198,12 @@ function AppPage({ title, children }: { title: string; children: ReactNode }) {
   return <>{children}</>;
 }
 
+/// Route-level gate for the game wing: off the live domain (GAME_ON false) the page never mounts and
+/// the coming-soon screen renders in its place, so deep-linking a game route reaches no gameplay action.
+function GameGate({ children }: { children: ReactNode }) {
+  return GAME_ON ? <>{children}</> : <GameComingSoon />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -143,28 +213,63 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
+            {/* The Dons wing — the game's own front door. The marketing that used to sit at "/". */}
+            <Route
+              path="/dons"
+              element={
+                <GameGate>
+                  <AppPage title="D.O.N. — the Game">
+                    <DonsLanding />
+                  </AppPage>
+                </GameGate>
+              }
+            />
+            {/* The Holder Hub — preview only (founder standing rule); withheld from the live domain
+                until its distributor deploys. Off the live host the route renders the coming-soon screen. */}
+            <Route
+              path="/holder"
+              element={
+                HOLDER_ON ? (
+                  <AppPage title="Holder Hub">
+                    <HolderHubPage />
+                  </AppPage>
+                ) : (
+                  <ComingSoon
+                    eyebrow="Holder Hub"
+                    title="Coming soon to mainnet."
+                    body="The holder hub isn't open on the live site yet. When it's live, holders will claim their airdrops and manage their position from here — we're building it in the open and will say the moment it's ready."
+                  />
+                )
+              }
+            />
             <Route
               path="/market"
               element={
-                <AppPage title="The Exchange">
-                  <LiveExchange />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="The Exchange">
+                    <LiveExchange />
+                  </AppPage>
+                </GameGate>
               }
             />
             <Route
               path="/bell"
               element={
-                <AppPage title="The Bell">
-                  <LiveBell />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="The Bell">
+                    <LiveBell />
+                  </AppPage>
+                </GameGate>
               }
             />
             <Route
               path="/game/*"
               element={
-                <AppPage title="D.O.N. — the Game">
-                  <GamePage />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="D.O.N. — the Game">
+                    <GamePage />
+                  </AppPage>
+                </GameGate>
               }
             />
             {/* Lending is hidden from the nav for now but stays functional at its old address. */}
@@ -180,38 +285,50 @@ export default function App() {
             <Route
               path="/builder"
               element={
-                <AppPage title="PFP Builder">
-                  <BuilderPage />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="PFP Builder">
+                    <BuilderPage />
+                  </AppPage>
+                </GameGate>
               }
             />
             <Route
               path="/coming"
               element={
-                <AppPage title="Coming to Solvency">
-                  <ComingPage />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="Coming to Solvency">
+                    <ComingPage />
+                  </AppPage>
+                </GameGate>
               }
             />
             <Route
               path="/how-to-play"
               element={
-                <AppPage title="How to Play">
-                  <HowToPlayPage />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="How to Play">
+                    <HowToPlayPage />
+                  </AppPage>
+                </GameGate>
               }
             />
             {/* The Seats-era explainer is retired; old links land on the game walkthrough. */}
             <Route
               path="/how-it-works"
-              element={<Navigate to="/how-to-play" replace />}
+              element={
+                <GameGate>
+                  <Navigate to="/how-to-play" replace />
+                </GameGate>
+              }
             />
             <Route
               path="/faucet"
               element={
-                <AppPage title="Faucet">
-                  <FaucetPage />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="Faucet">
+                    <FaucetPage />
+                  </AppPage>
+                </GameGate>
               }
             />
             <Route
@@ -225,17 +342,30 @@ export default function App() {
             <Route
               path="/portfolio"
               element={
-                <AppPage title="Portfolio">
-                  <PortfolioPage />
-                </AppPage>
+                <GameGate>
+                  <AppPage title="Portfolio">
+                    <PortfolioPage />
+                  </AppPage>
+                </GameGate>
               }
             />
+            {/* Essey Private — preview only (founder standing rule); withheld from the live domain
+                until it ships to mainnet. Off the live host the route renders the coming-soon screen,
+                so deep-linking /private reaches no shielding UI. */}
             <Route
               path="/private"
               element={
-                <AppPage title="Private">
-                  <PrivatePage />
-                </AppPage>
+                PRIVATE_ON ? (
+                  <AppPage title="Private">
+                    <PrivatePage />
+                  </AppPage>
+                ) : (
+                  <ComingSoon
+                    eyebrow="Essey Private"
+                    title="Coming soon to mainnet."
+                    body="Private balances and payments aren't open on the live site yet. When shielding is live you'll be able to hold and move value without it showing on-chain — we're finishing it in the open and will say the moment it's ready."
+                  />
+                )
               }
             />
             <Route
@@ -382,12 +512,6 @@ function Layout() {
             )}
           </nav>
           <div className="nav-right">
-            <NavLink
-              to="/portfolio"
-              className={({ isActive }) => "nav-pf" + (isActive ? " on" : "")}
-            >
-              Portfolio
-            </NavLink>
             <ThemeToggle />
             <ConnectButton />
             <button
@@ -417,7 +541,11 @@ function Layout() {
         )}
       </header>
       <main id="top">
-        <TestnetBanner />
+        {/* The Season-Zero play-money banner belongs to the game wing only — on the protocol side it
+            would falsely frame the live-mainnet floor as a play-money preview. */}
+        {GAME_ON && GAME_PREFIXES.some((p) => pathname.startsWith(p)) && (
+          <SeasonBanner />
+        )}
         <Outlet />
         <Footer />
       </main>
@@ -439,20 +567,220 @@ function PageShell({
   return <>{children}</>;
 }
 
+// The protocol front door's live/roadmap ledger. A green ("audited") stamp is on chain and checkable;
+// a grey ("scoped") stamp is designed but not deployed — never claimable, never shown as live. Every
+// address here is verified against reserve.ts:44-46. Keep this honest: this list is the whole pitch.
+const LANDING_CARDS: {
+  to: string;
+  icon: string;
+  nm: string;
+  sub: string;
+  live: boolean;
+  badge: string;
+  line: string;
+}[] = [
+  {
+    to: "/treasury",
+    icon: "◈",
+    nm: "$ESSEY — the token",
+    sub: "fixed supply, adminless",
+    live: true,
+    badge: "live · mainnet",
+    line: "8.888B minted once, no mint key, no admin. The chip you hold; a claim on the floor beneath it.",
+  },
+  {
+    to: "/treasury",
+    icon: "⚖",
+    nm: "The floor — the reserve",
+    sub: "real tokenized equities",
+    live: true,
+    badge: "live · mainnet",
+    line: "An adminless reserve of on-chain stock. Redeem pro-rata against whatever it holds, minus a 5% exit fee. Backing only rises.",
+  },
+  {
+    to: "/holder",
+    icon: "▦",
+    nm: "Holder basket & claim",
+    sub: "choose your split",
+    live: false,
+    badge: "coming",
+    line: "Pick which stocks your share of the floor pays out in, then claim it each epoch. Designed and scoped — not yet on chain.",
+  },
+  {
+    to: "/lend",
+    icon: "⇄",
+    nm: "Borrow against your stock",
+    sub: "a loan, not a sale",
+    live: false,
+    badge: "coming",
+    line: "Post your tokenized equities and borrow against them without selling. The lending engine is built; mainnet activation is ahead.",
+  },
+  {
+    to: "/private",
+    icon: "◐",
+    nm: "Shielded claim",
+    sub: "hold and claim unseen",
+    live: false,
+    badge: "experimental",
+    line: "Turn on private shielding to hold and claim your stock without revealing amounts. Experimental — not yet live on mainnet.",
+  },
+];
+
+/// The Essey protocol front door. Someone who bought $ESSEY lands here and can do everything on the
+/// protocol side without ever touching the Dons game — the game is one door, opened only on purpose.
 function Landing() {
-  const w = useWallet();
   useEffect(() => {
     document.title =
-      "Essey · D.O.N. — the on-chain city where the odds and the books are both provable";
+      "Essey · a token backed by a floor of real tokenized equities";
   }, []);
-  // Signed-in testers land on their dashboard, not the pitch. Wait for the reconnect probe so we don't
-  // flash the marketing page before redirecting.
-  if (!w.ready) return null;
-  if (w.address) return <Navigate to="/portfolio" replace />;
+  return (
+    <>
+      {/* The claim, honest: the floor is live; the rest is labeled roadmap below, not asserted here. */}
+      <section className="band">
+        <div className="wrap">
+          <div className="band-head">
+            <div>
+              <span className="eyebrow">Essey · the protocol</span>
+              <h2>
+                A token backed by a floor of <em>real tokenized equities</em>.
+              </h2>
+              <p>
+                $ESSEY is pegged to a reserve of on-chain tokenized stock —
+                adminless, claim-based, redeemable pro-rata against whatever the
+                floor holds. Fixed supply, no mint key, backing that only rises.
+                The floor is live on Robinhood Chain mainnet today; everything
+                else on this page says plainly what is built and what is still
+                ahead.
+              </p>
+            </div>
+          </div>
+          <div className="hero-cta">
+            <Link className="btn btn-gold" to="/treasury">
+              See the floor →
+            </Link>
+            <Link className="btn btn-ghost" to="/blog/intro">
+              Read the thesis
+            </Link>
+          </div>
+          <div className="learn-row">
+            $ESSEY <code>0x315790…1610</code> · EsseyReserve{" "}
+            <code>0xd970Ca…5A7b</code> — both adminless, live on mainnet.{" "}
+            <Link to="/explorer">Verify on the explorer →</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* The honest ledger — what is real today, what is coming, one badged card each. */}
+      <section className="band" style={{ paddingTop: 8 }}>
+        <div className="wrap">
+          <div className="band-head">
+            <div>
+              <span className="eyebrow">Live &amp; roadmap</span>
+              <h2>What is real today, and what is coming</h2>
+              <p>
+                No vapor. A green stamp is on chain right now and you can check
+                it yourself. A grey stamp is designed and scoped — not deployed,
+                not claimable, not live.
+              </p>
+            </div>
+          </div>
+          <div className="mech-grid">
+            {LANDING_CARDS.map((c) => {
+              // The Holder Hub card STAYS as an honest roadmap card, but its link is inert on the live
+              // domain (where /holder redirects home) — render it as a plain div there, not a Link.
+              const inert = !HOLDER_ON && c.to === "/holder";
+              const inner = (
+                <>
+                  <span
+                    className="mech-hit"
+                    style={{ cursor: inert ? "default" : "pointer" }}
+                  >
+                    <span className="mech-icon" aria-hidden>
+                      {c.icon}
+                    </span>
+                    <span className="mech-nm">
+                      {c.nm}
+                      <i>{c.sub}</i>
+                    </span>
+                    <span
+                      className={
+                        "mech-status " + (c.live ? "audited" : "scoped")
+                      }
+                    >
+                      {c.badge}
+                    </span>
+                  </span>
+                  <p className="mech-line">{c.line}</p>
+                </>
+              );
+              return inert ? (
+                <div className="mech-card" key={c.nm}>
+                  {inner}
+                </div>
+              ) : (
+                <Link className="mech-card" to={c.to} key={c.nm}>
+                  {inner}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* The Dons game — the wing you only reach by going looking. Bridged, never in the way. */}
+      {/* The game entrance from the protocol front door — withheld on the live domain (GAME_ON false),
+          where the whole wing is preview-only, so nothing advertises a door that lands on coming-soon. */}
+      {GAME_ON && (
+        <section className="band" style={{ paddingTop: 8 }}>
+          <div className="wrap">
+            <div className="start-cta plate">
+              <div>
+                <span className="eyebrow">Also by Essey · a separate wing</span>
+                <h2>D.O.N. — the on-chain game</h2>
+                <p>
+                  Essey also runs a game: 8,888 Don NFTs work the city of
+                  Solvency for provably-fair odds against a provably-solvent
+                  house. It runs in play-money Scrip and is entirely optional —
+                  a Don is also a holder, so you can flip between the game and
+                  your holdings whenever you like.
+                </p>
+              </div>
+              <Link className="btn btn-gold start-cta-btn" to="/dons">
+                Enter the game →
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+/// The Dons wing's own front door — the game marketing that used to live at "/". A Don is also a
+/// holder, so this page bridges back to the protocol-side Holder Hub and the live floor.
+function DonsLanding() {
+  useEffect(() => {
+    document.title = "D.O.N. — the on-chain city of Solvency · Essey";
+  }, []);
   return (
     <>
       <GameHero />
       <GameLoop />
+      {/* The game's own terms — the Scrip / play-money / house-edge specifics scoped to the game wing,
+          off the protocol front door where they don't belong. */}
+      <section className="band" style={{ paddingTop: 8 }}>
+        <div className="wrap">
+          <div className="hw-note">
+            <b>Season Zero — the game terms.</b> D.O.N. runs in play-money
+            Scrip: nothing you win here is real stock. Every roll's odds are
+            published on-chain before you pay, and the house keeps an edge —
+            across the city, roughly 10 of every 100 Scrip staked on a gamble
+            stays with the house. <b>Banked is sacred:</b> no mechanic, robbery,
+            or admin can touch your Vault — only what you deploy is ever at
+            risk. <b>Exits are free, forever.</b>
+          </div>
+        </div>
+      </section>
       {/* The doors — the same IA as the masthead, with one line of truth each. */}
       <section className="band" style={{ paddingTop: 8 }}>
         <div className="wrap">
@@ -519,13 +847,37 @@ function Landing() {
         </div>
       </section>
 
+      {/* The bridge — a Don is also a holder. Its only action is the Holder Hub, which is preview-only,
+          so the whole band is withheld on the live domain (where /holder redirects home) and returns
+          intact once the hub goes live. */}
+      {HOLDER_ON && (
+        <section className="band" style={{ paddingTop: 8 }}>
+          <div className="wrap">
+            <div className="start-cta">
+              <div>
+                <span className="eyebrow">Your other half</span>
+                <h2>A Don is also a holder</h2>
+                <p>
+                  Every Don is an $ESSEY holder too. Flip from the game to your
+                  holder view — the live floor that backs the token, and the
+                  Holder Hub where you choose your basket and claim your share.
+                </p>
+              </div>
+              <Link className="btn btn-ghost start-cta-btn" to="/holder">
+                Open the Holder Hub →
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Essey Private — the privacy layer. */}
       <section className="band" style={{ paddingTop: 8 }}>
         <div className="wrap">
           <div className="start-cta plate">
             <div>
               <span className="eyebrow">
-                Essey Private · experimental · testnet
+                Essey Private · experimental · not yet live
               </span>
               <h2>Hold, move, and earn, unseen</h2>
               <p>
@@ -552,44 +904,52 @@ function Footer() {
         {(
           [
             [
-              "The city",
+              "Essey — the protocol",
               [
-                ["/game", "The Game"],
-                ["/how-to-play", "How to Play"],
-                ["/builder", "Mint"],
-                ["/market", "Trade"],
-                ["/portfolio", "Portfolio"],
+                ["/treasury", "The Floor"],
+                ["/holder", "Holder Hub"],
+                ["/private", "Private"],
+                ["/explorer", "Explorer"],
               ],
             ],
             [
               "Learn",
               [
                 ["/docs", "Technical docs"],
+                ["/blog", "Blog"],
+                ["/tape", "The Tape"],
                 ["/provable", "Provable"],
                 ["/engine", "The engine"],
               ],
             ],
             [
-              "More",
+              "D.O.N. — the game",
               [
-                ["/treasury", "Treasury"],
-                ["/blog", "Blog"],
-                ["/tape", "The Tape"],
-                ["/explorer", "Explorer"],
-                ["/private", "Private"],
+                ["/dons", "The game"],
+                ["/game", "Play"],
+                ["/builder", "Mint"],
+                ["/market", "Trade"],
+                ["/portfolio", "Portfolio"],
               ],
             ],
           ] as const
-        ).map(([h, links]) => (
-          <div className="foot-col" key={h}>
-            <span className="fc-h">{h}</span>
-            {links.map(([to, label]) => (
-              <Link key={to} to={to}>
-                {label}
-              </Link>
-            ))}
-          </div>
-        ))}
+        )
+          .filter(([h]) => GAME_ON || h !== "D.O.N. — the game")
+          .map(([h, links]) => (
+            <div className="foot-col" key={h}>
+              <span className="fc-h">{h}</span>
+              {/* The Holder Hub is preview-only: drop its footer link on the live domain, where the
+                page redirects home — nothing should advertise a route that bounces. */}
+              {links
+                .filter(([to]) => HOLDER_ON || to !== "/holder")
+                .filter(([to]) => PRIVATE_ON || to !== "/private")
+                .map(([to, label]) => (
+                  <Link key={to} to={to}>
+                    {label}
+                  </Link>
+                ))}
+            </div>
+          ))}
       </div>
       <div className="wrap foot-in">
         <div>
@@ -600,10 +960,10 @@ function Footer() {
             distributions are mechanically LP-style fee-shares, not dividends,
             not yield promises, and no payout is guaranteed, ever. The contracts
             are adversarially audited (published rounds in the technical docs)
-            and <b>live on Robinhood Chain testnet</b>. Everything in the game
-            is play money with no real value. The base layer — the $ESSEY token
-            and its on-chain floor reserve — is live on Robinhood Chain mainnet;
-            the game season is not.{" "}
+            and <b>playable now with play money</b>. Everything in the game is
+            play money with no real value. The base layer — the $ESSEY token and
+            its on-chain floor reserve — is live on Robinhood Chain mainnet; the
+            game season is not.{" "}
             <button
               className="linklike"
               onClick={() =>
@@ -636,13 +996,9 @@ function Footer() {
           <a href={REPO} target="_blank" rel="noreferrer">
             GitHub ↗
           </a>
-          <a
-            href={`${REPO}/tree/main/docs/audits`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Audits ↗
-          </a>
+          {/* Curated current-rounds view, not the raw GitHub tree — the reading room's Audits group
+              shows the clean market-layer rounds; superseded Sui/Solidity rounds stay in the repo. */}
+          <Link to="/docs">Audits</Link>
           <Link to="/docs">Technical docs</Link>
         </div>
       </div>
@@ -743,42 +1099,51 @@ function DocsPage() {
             </p>
           </div>
         </div>
-        {GROUPS.map((g) => {
-          const inGroup = DOCS.filter((d) => d.group === g);
-          if (inGroup.length === 0) return null;
+        {DOC_SECTIONS.map((sec) => {
+          const inSection = DOCS.filter((d) => d.section === sec.key);
+          if (inSection.length === 0) return null;
           return (
-            <div className="doc-group" key={g}>
-              <div className="doc-group-h">
-                {g}
-                <span>{inGroup.length}</span>
-              </div>
-              <div className="docs-grid">
-                {inGroup.map((d) => (
-                  <div key={d.slug} className="doc-card">
-                    <Link
-                      className="doc-card-hit"
-                      to={`/docs/${d.slug}`}
-                      aria-label={`Read ${d.title}`}
-                    >
-                      <span className="doc-t">{d.title}</span>
-                      <span className="doc-d">{d.desc}</span>
-                      <span className="doc-r">Read →</span>
-                    </Link>
-                    <div className="doc-foot">
-                      {/* DOCS_BRANCH, not "main": the site renders the built checkout, and some docs
-                          haven't merged yet — a main link would 404 for those. Self-heals at merge. */}
-                      <a
-                        className="doc-src"
-                        href={`${REPO}/blob/${DOCS_BRANCH}/docs/${d.file}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        source ↗
-                      </a>
+            <div className="doc-section" key={sec.key}>
+              <div className="doc-section-h">{sec.label}</div>
+              {sec.groups.map((g) => {
+                const inGroup = inSection.filter((d) => d.group === g);
+                if (inGroup.length === 0) return null;
+                return (
+                  <div className="doc-group" key={g}>
+                    <div className="doc-group-h">
+                      {g}
+                      <span>{inGroup.length}</span>
+                    </div>
+                    <div className="docs-grid">
+                      {inGroup.map((d) => (
+                        <div key={d.slug} className="doc-card">
+                          <Link
+                            className="doc-card-hit"
+                            to={`/docs/${d.slug}`}
+                            aria-label={`Read ${d.title}`}
+                          >
+                            <span className="doc-t">{d.title}</span>
+                            <span className="doc-d">{d.desc}</span>
+                            <span className="doc-r">Read →</span>
+                          </Link>
+                          <div className="doc-foot">
+                            {/* DOCS_BRANCH, not "main": the site renders the built checkout, and some
+                                docs haven't merged yet — a main link would 404. Self-heals at merge. */}
+                            <a
+                              className="doc-src"
+                              href={`${REPO}/blob/${DOCS_BRANCH}/docs/${d.file}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              source ↗
+                            </a>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           );
         })}

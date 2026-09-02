@@ -31,7 +31,7 @@ export function LendPage() {
             holding stock (say, a Case you opened) can borrow USDG against it. A share of that interest
             routes to the Bell, so lending feeds the same pot the game does.</p>
         </div>
-          <span className="preview-chip live">testnet</span>
+          <span className="preview-chip live">preview</span>
         </div>
 
         <div className="lend-stats num">
@@ -43,7 +43,7 @@ export function LendPage() {
 
         {!ready ? (
           <div className="live-card"><div className="live-row">
-            <span className="live-note">Connect on Robinhood Chain testnet to supply or borrow.</span><ConnectButton />
+            <span className="live-note">Connect your wallet to supply or borrow.</span><ConnectButton />
           </div></div>
         ) : (
           <>
@@ -149,7 +149,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
     <div className="live-card">
       <div className="live-h">BORROW AGAINST STOCK {open
         ? <span className="preview-chip live">live now</span>
-        : <span className="preview-chip">testnet: coming soon</span>}
+        : <span className="preview-chip">coming soon</span>}
       </div>
 
       {loans.length > 0 && (
@@ -164,7 +164,7 @@ function BorrowPanel({ a, onDone }: { a: Address; onDone: () => void }) {
       )}
 
       {!open ? (
-        <div className="live-note">Borrowing against stock isn't live on testnet yet. The testnet stock tokens are
+        <div className="live-note">Borrowing against stock isn't live yet. The current stock tokens are
           simple mocks that don't expose the price data the collateral market needs to size a loan safely, so we've
           kept borrowing closed rather than open a position we can't price honestly. It's on the roadmap; supplying
           USDG to earn (above) works today.</div>
@@ -239,7 +239,7 @@ function DcaPanel({ a }: { a: Address }) {
   return (
     <div className="live-card" style={{ marginTop: 16 }}>
       <div className="live-h">AUTO-STACK INTO STOCK <span className="preview-chip">DCA</span></div>
-      <div className="live-note" style={{ marginBottom: 12 }}>Dollar-cost-average into stock: a recurring USDG→stock buy that runs on its own. <b>Your funds stay in your wallet</b>: each buy pulls only that buy's USDG (cancel or revoke the allowance anytime). Fills settle at an oracle-fair price within a ≤5% floor, <b>during US market hours</b>, executed by Essey's keeper. Testnet, play money.</div>
+      <div className="live-note" style={{ marginBottom: 12 }}>Dollar-cost-average into stock: a recurring USDG→stock buy that runs on its own. <b>Your funds stay in your wallet</b>: each buy pulls only that buy's USDG (cancel or revoke the allowance anytime). Fills settle at an oracle-fair price within a ≤5% floor, <b>during US market hours</b>, executed by Essey's keeper. Play money.</div>
       <div className="live-row" style={{ gap: 10, flexWrap: "wrap" }}>
         <select value={stock} onChange={(e) => setStock(e.target.value as Address)} style={{ ...dcaInput, flex: "0 0 90px" }} aria-label="stock">
           <option value={ADDR.aapl}>AAPL</option><option value={ADDR.nvda}>NVDA</option>

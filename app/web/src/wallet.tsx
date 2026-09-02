@@ -380,7 +380,7 @@ export function ConnectButton() {
   }
   if (w.address) {
     return (
-      <span className="wallet-chip num" title="Connected to Robinhood Chain testnet">
+      <span className="wallet-chip num" title="Connected to Robinhood Chain">
         <span className="dot" style={{ background: "var(--good)" }} />
         {short(w.address)}
       </span>

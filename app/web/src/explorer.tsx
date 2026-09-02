@@ -437,7 +437,7 @@ export function ExplorerPage() {
           <span>HOUSES DAMAGED <b>{damagedCount ?? "—"}</b></span>
           <span>MISSION BUDGET <b>{econ?.missionBudget != null ? fmtScrip(econ.missionBudget) : "—"}</b></span>
         </>}
-        <span className="muted" style={{ marginLeft: "auto" }}>chain {NET.chainId} · block {head ? head.toString() : "—"} · testnet</span>
+        <span className="muted" style={{ marginLeft: "auto" }}>chain {NET.chainId} · block {head ? head.toString() : "—"}</span>
       </div>
 
       <div className="tabs">
@@ -445,7 +445,7 @@ export function ExplorerPage() {
           <button key={t} className={"tab" + (tab === t ? " on" : "")} onClick={() => setTab(t)}>{label}</button>
         ))}
       </div>
-      <div className="season">SEASON 0 · THE SKIRMISH · played in Scrip, the city&rsquo;s season money · testnet funds · no real value at stake</div>
+      <div className="season">SEASON 0 · THE SKIRMISH · played in Scrip, the city&rsquo;s season money · play money · no real value at stake</div>
 
       {/* ═══════════════ THE WIRE ═══════════════ */}
       {tab === "wire" && (!gameOn ? <div className="grid">{notPosted}</div> : (
@@ -786,7 +786,7 @@ export function ExplorerPage() {
       )}
 
       <div className="foot">
-        <span>ESSEY SCAN · v2 · Robinhood Chain {NET.chainId} testnet · <a href={NET.explorer} target="_blank" rel="noreferrer">raw explorer ↗</a></span>
+        <span>ESSEY SCAN · v2 · Robinhood Chain {NET.chainId} · <a href={NET.explorer} target="_blank" rel="noreferrer">raw explorer ↗</a></span>
         <span>every line links its receipt · read the chain yourself</span>
       </div>
     </div>

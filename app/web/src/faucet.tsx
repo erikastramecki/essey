@@ -77,10 +77,10 @@ export function FaucetPage() {
       <div className="wrap">
         <div className="band-head">
           <div>
-            <span className="eyebrow">Testnet faucet</span>
+            <span className="eyebrow">Play-money faucet</span>
             <h2>Fund your wallet with play money</h2>
             <p>
-              Everything on Essey runs on Robinhood Chain <b>testnet</b>, so the
+              The game is an experimental preview, so the
               tokens here are free and have no real value. Two things get you
               playing: <b>gas ETH</b> from the chain's own faucet, and{" "}
               <b>$ESSEY + USDG</b>
@@ -105,19 +105,19 @@ export function FaucetPage() {
 
         <div className="live-card" style={{ maxWidth: 640 }}>
           <div className="live-h">
-            PLAY MONEY <span className="preview-chip live">testnet</span>
+            PLAY MONEY <span className="preview-chip live">preview</span>
           </div>
           {!addr ? (
             <div className="live-row">
               <span className="live-note">
-                Connect on Robinhood Chain testnet to get funds.
+                Connect your wallet to get funds.
               </span>
               <ConnectButton />
             </div>
           ) : !w.chainOk ? (
             <div className="live-row">
               <span className="live-note">
-                Wrong network. Switch to Robinhood Chain testnet first.
+                Wrong network. Switch to Robinhood Chain first.
               </span>
               <ConnectButton />
             </div>

@@ -1119,7 +1119,7 @@ export function niceError(e: unknown): string {
   if (s.includes("insufficient funds") || s.includes("intrinsic gas")) return "Not enough gas ETH. Grab some from the Robinhood Chain faucet.";
   if (s.includes("erc20insufficientbalance") || s.includes("transfer amount exceeds balance") || s.includes("exceeds balance")) return "Not enough $ESSEY or USDG for this action.";
   if (s.includes("toosoon") || s.includes("cooldown")) return "Faucet cooldown: 8h between drips.";
-  if (s.includes("chain") && s.includes("match")) return "Wrong network. Switch to Robinhood Chain testnet.";
+  if (s.includes("chain") && s.includes("match")) return "Wrong network. Switch to Robinhood Chain.";
   if (s.includes("insufficientallowance") || s.includes("allowance")) return "Approval needed first. Try again and confirm both wallet popups.";
   if (s.includes("marketclosed") || s.includes("notinsession")) return "Only open during US market hours. Try again while the stock market is open (weekdays, ~9:30am–4pm ET).";
   if (s.includes("soldout") || s.includes("emptyinventory")) return "Sold out. No inventory left right now.";

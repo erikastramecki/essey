@@ -10,6 +10,8 @@ export type PostMeta = {
   date: string;
   slug: string;
   summary: string;
+  /// Full X status URL. Absent on most posts — its presence is what makes the post load widgets.js.
+  tweet?: string;
 };
 export type Post = PostMeta & { body: string };
 
@@ -36,6 +38,7 @@ function parse(raw: string, path: string): Post & { draft: boolean } {
     date: meta.date ?? "",
     slug: meta.slug ?? fileSlug,
     summary: meta.summary ?? "",
+    tweet: meta.tweet || undefined,
     draft: meta.draft === "true",
     body: body.trim(),
   };

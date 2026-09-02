@@ -38,14 +38,14 @@ export function PortfolioPage() {
         <div className="band-head"><div>
           <span className="eyebrow">Portfolio</span>
           <h2>Your Essey</h2>
-          <p>Everything you hold on testnet: balances, your Dons, the Payouts sitting in each
+          <p>Everything you hold: balances, your Dons, the Payouts sitting in each
             Vault, and any stock in your wallet. Your Dons are your characters in the game.</p>
         </div>
         </div>
 
         {!connected ? (
           <div className="live-card"><div className="live-row">
-            <span className="live-note">Connect on Robinhood Chain testnet to see your account.</span><ConnectButton />
+            <span className="live-note">Connect your wallet to see your account.</span><ConnectButton />
           </div></div>
         ) : !p ? (
           <div className="live-card"><div className="live-note">Loading your account…</div></div>
@@ -97,7 +97,7 @@ export function PortfolioPage() {
                   ? <span className="pf-lend-item">supplied <b>{fmt(p.pool.mine, 2)}</b> USDG <i>@ {p.pool.supplyApy.toFixed(2)}% APY</i></span>
                   : <span className="pf-note">not supplying yet. Supply USDG to earn {p.pool.supplyApy.toFixed(2)}% APY →</span>}
                 {p.loans.length === 0
-                  ? <span className="pf-note">no open loans{p.wins.aapl > 0n || p.wins.nvda > 0n ? " (you hold stock; borrowing against it is coming to testnet)" : ""}.</span>
+                  ? <span className="pf-note">no open loans{p.wins.aapl > 0n || p.wins.nvda > 0n ? " (you hold stock; borrowing against it is coming)" : ""}.</span>
                   : p.loans.map((l) => <span className="pf-lend-item" key={l.id.toString()}>Loan #{l.id.toString()} · owe <b>{fmt(l.debt, 2)}</b> USDG</span>)}
               </div>
             </div>
@@ -111,7 +111,7 @@ export function PortfolioPage() {
                 <div className="pf-wins num">
                   {p.wins.aapl > 0n && <span className="pf-win">AAPL <b>{fmt(p.wins.aapl, 2)}</b></span>}
                   {p.wins.nvda > 0n && <span className="pf-win">NVDA <b>{fmt(p.wins.nvda, 2)}</b></span>}
-                  <span className="pf-note">real testnet stock tokens, held in your wallet; borrow against them on <Link to="/lend">Lend</Link>.</span>
+                  <span className="pf-note">play-money stock tokens, held in your wallet; borrow against them on <Link to="/lend">Lend</Link>.</span>
                 </div>
               )}
             </div>

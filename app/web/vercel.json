@@ -19,7 +19,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'sha256-VPdYNL7Ak9TlQ+miFtSClugYNMwtnkF+Uy3Go95nEP4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'none'"
+          "value": "default-src 'self'; script-src 'self' 'sha256-VPdYNL7Ak9TlQ+miFtSClugYNMwtnkF+Uy3Go95nEP4=' https://platform.x.com https://platform.twitter.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https://platform.twitter.com https://platform.x.com https://syndication.twitter.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'none'"
         },
         {
           "key": "X-Frame-Options",

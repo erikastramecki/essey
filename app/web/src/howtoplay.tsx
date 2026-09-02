@@ -201,7 +201,7 @@ export function HowToPlayPage() {
           <div className="htp-honest">
             THE HONEST STAMP — <b>this season settles in Scrip</b> (play points)
             marked to tickers; <b>real-token settlement is the roadmap</b>.
-            Nothing you win this season is real stock. Testnet funds only, no
+            Nothing you win this season is real stock. Play money only, no
             real value at stake.
           </div>
         </header>
@@ -214,13 +214,13 @@ export function HowToPlayPage() {
         >
           <W>
             You need a browser wallet (MetaMask or similar) pointed at{" "}
-            <b>Robinhood Chain testnet</b> — the site offers to add and switch
+            <b>the game network</b> — the site offers to add and switch
             the network for you when you hit connect. Everything on this chain
             is play money.
           </W>
           <W lbl="Do this">
             Open the <Link to="/faucet">Faucet</Link> and drip yourself free
-            testnet funds: a little gas ETH first (every action needs a sliver),
+            play-money funds: a little gas ETH first (every action needs a sliver),
             then the play tokens. This is the one step everything else depends
             on.
           </W>
@@ -695,7 +695,7 @@ export function HowToPlayPage() {
             </b>{" "}
             — it resolves jobs and refreshes prices; if it stalls, your job
             settles at the sideways floor and your money remains yours. And{" "}
-            <b>this season is testnet</b>: Scrip and test funds only, no real
+            <b>this season is a play-money preview</b>: Scrip and play funds only, no real
             value at stake — the Skirmish exists precisely to prove the loop
             before real assets ride it.
           </W>

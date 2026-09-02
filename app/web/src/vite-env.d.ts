@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+// Build-time flag (vite.config define): false only on a production Vercel build. Gates the /holder route.
+declare const __HOLDER_BUILD__: boolean;
+
 // circomlibjs ships no type declarations; declare the minimal surface poolsdk uses.
 declare module "circomlibjs" {
   export interface PoseidonField {
@@ -20,7 +23,14 @@ declare module "snarkjs" {
       wasm: string,
       zkey: string,
     ): Promise<{ proof: unknown; publicSignals: string[] }>;
-    verify(vkey: unknown, publicSignals: string[], proof: unknown): Promise<boolean>;
-    exportSolidityCallData(proof: unknown, publicSignals: string[]): Promise<string>;
+    verify(
+      vkey: unknown,
+      publicSignals: string[],
+      proof: unknown,
+    ): Promise<boolean>;
+    exportSolidityCallData(
+      proof: unknown,
+      publicSignals: string[],
+    ): Promise<string>;
   };
 }

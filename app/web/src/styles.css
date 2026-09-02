@@ -1322,6 +1322,20 @@ body {
   }
 }
 
+/* ---- doc sections (protocol / game silo) ---- */
+.doc-section + .doc-section {
+  margin-top: 52px;
+  padding-top: 40px;
+  border-top: 1px solid var(--gold-line);
+}
+.doc-section-h {
+  font-family: var(--serif);
+  font-size: 26px;
+  letter-spacing: 0.01em;
+  color: var(--gold);
+  margin-bottom: 22px;
+}
+
 /* ---- doc groups ---- */
 .doc-group + .doc-group {
   margin-top: 26px;
@@ -2682,8 +2696,8 @@ body {
   font-weight: 600;
 }
 
-/* ---- testnet live mode ---- */
-.testnet-banner {
+/* ---- season banner ---- */
+.season-banner {
   position: relative;
   z-index: 40;
   text-align: center;
@@ -2694,12 +2708,12 @@ body {
   color: var(--warn);
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
 }
-.testnet-banner a {
+.season-banner a {
   color: var(--warn);
   text-decoration: underline;
 }
 @media (max-width: 620px) {
-  .testnet-banner {
+  .season-banner {
     font-size: 10.5px;
   }
 }
@@ -4041,5 +4055,95 @@ body {
 @media (max-width: 720px) {
   .amm-confirm {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---- blog timeline: recent-first, a legible ledger that scales as posts accrue ---- */
+.bl-time {
+  margin-top: 8px;
+}
+.bl-year + .bl-year {
+  margin-top: 10px;
+}
+.bl-year-h {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--tx-faint);
+  text-transform: uppercase;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+.bl-entry {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 18px;
+  padding: 16px 8px 16px 2px;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.15s;
+}
+.bl-entry:hover {
+  background: var(--s1);
+}
+.bl-date {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--gold);
+  padding-top: 4px;
+  white-space: nowrap;
+}
+.bl-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.bl-title {
+  font-family: var(--serif);
+  font-size: 19px;
+  color: var(--tx);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bl-latest {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--good);
+  background: var(--good-dim);
+  border: 1px solid var(--good);
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+.bl-sum {
+  font-size: 13.5px;
+  color: var(--tx-mut);
+  line-height: 1.6;
+  max-width: 72ch;
+}
+.bl-go {
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 600;
+  margin-top: 2px;
+}
+/* "On X" embed — spacing + the eyebrow rule under the post; X sizes its own card (max 550px). */
+.bl-x {
+  margin-top: 26px;
+}
+.bl-x .eyebrow {
+  margin-bottom: 16px;
+}
+@media (max-width: 560px) {
+  .bl-entry {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .bl-date {
+    padding-top: 0;
   }
 }

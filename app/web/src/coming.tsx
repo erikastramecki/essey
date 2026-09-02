@@ -62,7 +62,7 @@ export function ComingPage() {
     <div className="soon">
       <div className="soon-stamp">designed and ruled · not yet shipped</div>
       <p className="soon-lede">
-        What you are playing on testnet is the loop, proved with play money.
+        What you are playing is the loop, proved with play money.
         Everything below is designed, argued over and written down. None of it
         is live yet, and some of it will change before it is. We would rather
         tell you that than sell you a roadmap as though it were a product.
@@ -84,7 +84,7 @@ export function ComingPage() {
       <div className="soon-foot">
         <h3>What is already real</h3>
         <p>
-          The game runs today on Robinhood Chain testnet. Jobs resolve,
+          The game runs today, live with play money. Jobs resolve,
           robberies land, houses take damage, and every roll is drawn at
           settlement rather than in a transaction you could rewind. You can hand
           the board to Claude and let it do the arithmetic. That part is not a

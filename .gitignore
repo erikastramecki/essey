@@ -40,3 +40,27 @@ app/web/public/allowlist/
 
 # keeper runtime state (low-water marks)
 rh-chain/.keeper-state/
+
+# --- internal strategy / research / scopes — NOT for the public repo (agents read them from disk) ---
+docs/research/
+docs/design/
+docs/DONS-BETA-MINT-PHASING.md
+docs/DONS-INTEGRATED-VALUE-SYSTEM.md
+docs/DONS-HOUSE-LAYER-REWORK.md
+docs/OPTION-B-V4-AUDIT.md
+docs/OPTION-B-V4-BUILD.md
+docs/OPTION-B-V4-ECON.md
+docs/OPTION-B-V4-LAUNCH-SEED.md
+docs/MAINNET-AMM-LAUNCH-SCOPE.md
+docs/PVP-RAID-BETA-SCOPE.md
+docs/SHIELDED-GAME-REUSE-VS-BUILD.md
+docs/JESTER-PERSONA-BIBLE.md
+
+# TS incremental build cache (regenerated)
+*.tsbuildinfo
+
+# internal ops / PM / ceremony — NOT for the public repo (agents read from disk)
+docs/CEREMONY-READINESS.md
+docs/JESTER-OPERATING-PLAN.md
+docs/PRODUCT-TRACKER.md
+rh-chain/docs/

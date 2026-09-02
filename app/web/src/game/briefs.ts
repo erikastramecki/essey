@@ -206,7 +206,7 @@ export const BRIEFS: Record<BriefKey, GameBrief> = {
     ratingLabel: "TRAINING",
     featured: true,
     riskBlocks: 1,
-    exhibit: "PROVING GROUND · the testnet training wire",
+    exhibit: "PROVING GROUND · the training wire",
     scene: "milk-corner",
     job: "A 75-second answer for the family bankroll. Run it once, fund your whole night.",
     takeLine:

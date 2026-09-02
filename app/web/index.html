@@ -4,14 +4,30 @@
     <meta charset="utf8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Essey · D.O.N. — the on-chain city where the odds and the books are both provable</title>
-    <meta name="description" content="8,888 Dons, timed jobs with published odds, raids, and a Vault nothing can touch. Provably fair AND provably solvent, on Robinhood Chain testnet." />
+    <meta name="description" content="8,888 Dons, timed jobs with published odds, raids, and a Vault nothing can touch. Provably fair AND provably solvent." />
+    <!-- OG:START — social unfurl meta. These are the SITE DEFAULTS (homepage + any non-prerendered
+         route); prerender-blog.mjs rewrites this whole block per blog post at build time. Crawlers
+         don't run JS, so the tags a card reads must be in the served HTML, not set in a useEffect. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Essey" />
+    <meta property="og:title" content="Essey · D.O.N. — the on-chain city where the odds and the books are both provable" />
+    <meta property="og:description" content="8,888 Dons, timed jobs with published odds, raids, and a Vault nothing can touch. Provably fair AND provably solvent." />
+    <meta property="og:url" content="https://essey.xyz/" />
+    <meta property="og:image" content="https://essey.xyz/og-default.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@EsseyMarkets" />
+    <meta name="twitter:title" content="Essey · D.O.N. — the on-chain city where the odds and the books are both provable" />
+    <meta name="twitter:description" content="8,888 Dons, timed jobs with published odds, raids, and a Vault nothing can touch. Provably fair AND provably solvent." />
+    <meta name="twitter:image" content="https://essey.xyz/og-default.png" />
+    <link rel="canonical" href="https://essey.xyz/" />
+    <!-- OG:END -->
     <script>
-      // Stamp the theme before first paint so light-mode visitors never flash dark (styles.css keys
-      // every token off [data-theme]). localStorage choice wins; OS preference is the default.
+      // Stamp the theme before first paint so a stored choice never flashes the other way (styles.css
+      // keys every token off [data-theme]). localStorage choice wins; dark is the default for a
+      // first-time visitor regardless of OS prefers-color-scheme.
       (function () {
         try {
-          var t = localStorage.getItem("essey-theme")
-            || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+          var t = localStorage.getItem("essey-theme") || "dark";
           document.documentElement.dataset.theme = t;
         } catch (e) { document.documentElement.dataset.theme = "dark"; }
       })();
