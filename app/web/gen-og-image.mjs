@@ -44,29 +44,55 @@ const defaultCardSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" width="120
   ${footer}
 </svg>`;
 
-// Usable text column: 1200 minus a 96px margin each side. Char widths are estimated at 0.52em (Georgia
-// mixed-case advance) so librsvg needs no metrics pass; the size ladder drops until the title fits 3 lines.
-const COL = 1008;
-const wrapWords = (words, maxChars) => {
+// librsvg can't measure text, so title lines are sized against a per-glyph width estimate rounded UP
+// (calibrated to real pixel extents): when the estimate fits SAFE_W the glyphs do, so the worst case is
+// a smaller title, never the overflow the old flat 0.52 average caused on wide caps like "$ESSEY".
+const SAFE_W = 1000;         // text x=96 .. 1096, ~64px inside the inner gold frame at x=1160
+const MAX_LINES = 3;
+const LETTER_SPACING = 1;    // the title text's letter-spacing="1"
+const TITLE_SIZES = [92, 80, 70, 62, 54, 46, 40];
+
+function glyphEm(ch) {       // em advance, Georgia bold; caps, $, M/W are the wide classes the average missed
+  if (ch === " ") return 0.32;
+  if (ch === "M" || ch === "W") return 1.15;
+  if (ch === "m" || ch === "w") return 0.98;
+  if (ch >= "A" && ch <= "Z") return 0.85;
+  if ((ch >= "0" && ch <= "9") || ch === "$") return 0.70;
+  if ("ijltfrI.,:;'!|()[]-".includes(ch)) return 0.38;
+  return 0.62;
+}
+const emWidth = (s) => [...s].reduce((w, c) => w + glyphEm(c), 0);
+const lineWidth = (s, size) => emWidth(s) * size + LETTER_SPACING * Math.max(0, s.length - 1);
+
+function wrapAt(words, size) {
   const lines = [];
   let cur = "";
   for (const w of words) {
     const cand = cur ? `${cur} ${w}` : w;
-    if (cand.length > maxChars && cur) { lines.push(cur); cur = w; } else cur = cand;
+    if (cur && lineWidth(cand, size) > SAFE_W) { lines.push(cur); cur = w; } else cur = cand;
   }
   if (cur) lines.push(cur);
   return lines;
-};
+}
+
+const linesFit = (lines, size) => lines.every((ln) => lineWidth(ln, size) <= SAFE_W);
 
 function layoutTitle(title) {
   const words = title.split(/\s+/).filter(Boolean);
-  for (const size of [92, 80, 70, 60, 54]) {
-    const lines = wrapWords(words, Math.floor(COL / (size * 0.52)));
-    if (lines.length <= 3) return { size, lines };
+  for (const size of TITLE_SIZES) {
+    const lines = wrapAt(words, size);
+    if (lines.length <= MAX_LINES && linesFit(lines, size)) return { size, lines };
   }
-  const size = 54;
-  let lines = wrapWords(words, Math.floor(COL / (size * 0.52)));
-  if (lines.length > 3) { lines = lines.slice(0, 3); lines[2] = `${lines[2].slice(0, -1)}…`; }
+  // No rung fit (usually one word wider than the column): clamp to MAX_LINES, then shrink below the
+  // ladder so even the widest line lands inside SAFE_W rather than overflow.
+  const base = TITLE_SIZES[TITLE_SIZES.length - 1];
+  let lines = wrapAt(words, base);
+  if (lines.length > MAX_LINES) {
+    lines = lines.slice(0, MAX_LINES);
+    lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1].replace(/.$/, "")}…`;
+  }
+  const widest = Math.max(...lines.map(emWidth));
+  const size = Math.min(base, Math.floor(SAFE_W / widest));
   return { size, lines };
 }
 
@@ -86,8 +112,11 @@ function postCardSvg(title, summary) {
 
   let summarySvg = "";
   if (lines.length <= 2 && summary) {
-    const maxChars = Math.floor(COL / (30 * 0.5));
-    const one = summary.length > maxChars ? `${summary.slice(0, maxChars - 1).trimEnd()}…` : summary;
+    let one = summary;
+    if (lineWidth(one, 30) > SAFE_W) {
+      while (one && lineWidth(`${one.trimEnd()}…`, 30) > SAFE_W) one = one.slice(0, -1);
+      one = `${one.trimEnd()}…`;
+    }
     summarySvg = `<text x="96" y="${underlineY + 48}" font-family="${SERIF}" font-size="30" fill="${TX_MUT}">${esc(one)}</text>`;
   }
 

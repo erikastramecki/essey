@@ -60,10 +60,9 @@ function TweetEmbed({ url }: { url: string }) {
   );
 }
 
-/// Front-matter dates are plain YYYY-MM-DD; render them at UTC so the day never shifts by timezone.
 function fmtDate(d: string): string {
   if (!d) return "";
-  const t = new Date(`${d}T00:00:00Z`);
+  const t = new Date(`${d.slice(0, 10)}T00:00:00Z`);
   return Number.isNaN(t.getTime())
     ? d
     : t.toLocaleDateString("en-US", {
@@ -77,7 +76,7 @@ function fmtDate(d: string): string {
 /// Compact rail date for the timeline ("Aug 29"). Year lives in the group header, so the row stays lean.
 function fmtShort(d: string): string {
   if (!d) return "—";
-  const t = new Date(`${d}T00:00:00Z`);
+  const t = new Date(`${d.slice(0, 10)}T00:00:00Z`);
   return Number.isNaN(t.getTime())
     ? d
     : t.toLocaleDateString("en-US", {

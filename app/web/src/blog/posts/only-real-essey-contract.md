@@ -1,6 +1,6 @@
 ---
 title: "The Only Real $ESSEY Contract"
-date: 2026-09-01
+date: 2026-09-01T19:33:00
 slug: only-real-essey-contract
 summary: "There is exactly one official $ESSEY token, and this is its address. It is not tradable at this time. Anything trading as $ESSEY on an exchange is not ours. Here is how to check it yourself in under a minute."
 ---

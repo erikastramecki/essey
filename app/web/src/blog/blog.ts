@@ -47,7 +47,7 @@ function parse(raw: string, path: string): Post & { draft: boolean } {
 export const POSTS: Post[] = Object.entries(FILES)
   .map(([path, raw]) => parse(raw, path))
   .filter((p) => !p.draft)
-  .sort((a, b) => (a.date < b.date ? 1 : -1));
+  .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
 export const getPost = (slug: string): Post | undefined =>
   POSTS.find((p) => p.slug === slug);

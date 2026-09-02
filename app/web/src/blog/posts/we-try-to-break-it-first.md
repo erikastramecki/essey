@@ -1,6 +1,6 @@
 ---
 title: "We Try to Break It First"
-date: 2026-09-01
+date: 2026-09-01T15:23:00
 summary: "How the core Essey contracts get built — attacked on purpose, before they ever hold a dollar."
 ---
 

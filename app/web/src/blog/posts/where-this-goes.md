@@ -1,6 +1,6 @@
 ---
 title: "Where This Goes"
-date: 2026-09-01
+date: 2026-09-01T18:57:00
 summary: "The whole picture — what Essey is being built to do, and the rules it won't bend."
 tweet: https://x.com/EsseyMarkets/status/2094947457306440175
 ---

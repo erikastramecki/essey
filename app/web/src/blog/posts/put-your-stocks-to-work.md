@@ -1,6 +1,6 @@
 ---
 title: "Put Your Stocks to Work"
-date: 2026-09-01
+date: 2026-09-01T14:37:00
 summary: "What Essey is, and where it stands today."
 ---
 
