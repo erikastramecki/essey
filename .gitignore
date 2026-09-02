@@ -62,6 +62,7 @@ docs/JESTER-BUILD-LOG.md
 
 # internal ops / PM / ceremony — NOT for the public repo (agents read from disk)
 docs/CEREMONY-READINESS.md
+docs/CEREMONY-LIVE-WALKTHROUGH.md
 docs/JESTER-OPERATING-PLAN.md
 docs/PRODUCT-TRACKER.md
 rh-chain/docs/
