@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node gen-docs.mjs && vite",
-    "build": "node gen-docs.mjs && vite build && node prerender-blog.mjs",
+    "build": "node gen-docs.mjs && node gen-og-image.mjs && vite build && node prerender-blog.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },

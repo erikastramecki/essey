@@ -116,12 +116,12 @@ type NavLeaf = { to: string; label: string; desc: string };
 type NavItem =
   { to: string; label: string } | { label: string; items: NavLeaf[] };
 const LEARN_ITEMS: NavLeaf[] = [
+  { to: "/blog", label: "Blog", desc: "Building Essey in the open" },
   {
     to: "/docs",
     label: "Technical docs",
     desc: "The protocol underneath, from the repo's own files",
   },
-  { to: "/blog", label: "Blog", desc: "Building Essey in the open" },
   { to: "/tape", label: "The Tape", desc: "Every event, with its receipt" },
   { to: "/provable", label: "Provable", desc: "Fair rolls, solvent books" },
 ];
@@ -915,8 +915,8 @@ function Footer() {
             [
               "Learn",
               [
-                ["/docs", "Technical docs"],
                 ["/blog", "Blog"],
+                ["/docs", "Technical docs"],
                 ["/tape", "The Tape"],
                 ["/provable", "Provable"],
                 ["/engine", "The engine"],

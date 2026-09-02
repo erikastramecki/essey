@@ -1,2 +1,5 @@
 .vercel
 src/docs.generated.ts
+
+# Auto-generated per-post social cards (og-default.png stays committed)
+public/og/

@@ -17,6 +17,7 @@ const SHELL = join(DIST, "index.html");
 // does not unfurl. Flagged to the founder — swap if the blog ever moves off the apex domain.
 const SITE = (process.env.VITE_SITE_URL || "https://essey.xyz").replace(/\/$/, "");
 const OG_IMAGE_DEFAULT = `${SITE}/og-default.png`;
+const PUBLIC_OG = join(HERE, "public", "og");
 
 const die = (msg) => { console.error(`prerender-blog: ${msg}`); process.exit(1); };
 
@@ -33,8 +34,11 @@ function parse(raw, file) {
     if (kv) meta[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, "");
   }
   const fileSlug = file.replace(/\.md$/, "");
+  // title/summary are NOT defaulted — a published post missing either fails the build below, rather
+  // than silently shipping a filename-as-title or an empty description. slug still falls back (legit).
   return {
-    title: meta.title ?? fileSlug,
+    file,
+    title: meta.title ?? "",
     date: meta.date ?? "",
     slug: meta.slug ?? fileSlug,
     summary: meta.summary ?? "",
@@ -43,12 +47,16 @@ function parse(raw, file) {
   };
 }
 
-// Absolute image URL: an optional per-post `image:` front-matter (root-relative or absolute) wins;
-// otherwise the branded default. Relative paths don't unfurl, so always resolve against the origin.
+// Absolute image URL: an explicit per-post `image:` front-matter (root-relative or absolute) wins;
+// else the post's auto-generated card (gen-og-image.mjs writes public/og/<slug>.png before the build);
+// else the branded default. Relative paths don't unfurl, so always resolve against the origin.
 const imageFor = (post) => {
-  if (!post.image) return OG_IMAGE_DEFAULT;
-  if (/^https?:\/\//.test(post.image)) return post.image;
-  return `${SITE}/${post.image.replace(/^\//, "")}`;
+  if (post.image) {
+    if (/^https?:\/\//.test(post.image)) return post.image;
+    return `${SITE}/${post.image.replace(/^\//, "")}`;
+  }
+  if (existsSync(join(PUBLIC_OG, `${post.slug}.png`))) return `${SITE}/og/${post.slug}.png`;
+  return OG_IMAGE_DEFAULT;
 };
 
 function metaBlock({ type, title, description, url, image }) {
@@ -98,6 +106,14 @@ const posts = readdirSync(POSTS_DIR)
   .filter((f) => f.endsWith(".md"))
   .map((f) => parse(readFileSync(join(POSTS_DIR, f), "utf8"), f))
   .filter((p) => !p.draft);
+
+// A published post ships a social card, so its ingredients are mandatory (drafts are exempt — they are
+// filtered out above). Fail loud and name the file, rather than unfurling a blank title/description.
+for (const p of posts) {
+  if (!p.title) die(`${p.file}: published post is missing required front-matter \`title\``);
+  if (!p.summary) die(`${p.file}: published post is missing required front-matter \`summary\``);
+  if (!existsSync(join(PUBLIC_OG, `${p.slug}.png`))) die(`${p.file}: social card public/og/${p.slug}.png missing — gen-og-image.mjs must run before the build`);
+}
 
 // The /blog index gets its own card. Copy is the blog's own standing description (blog.tsx band-head).
 const INDEX_TITLE = "Blog · Essey";
