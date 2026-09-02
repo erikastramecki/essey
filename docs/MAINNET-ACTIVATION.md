@@ -1155,3 +1155,28 @@ seed share mint (`:190`) — so the public USD-1e18 unit and the share unit are 
 - **Still open, unchanged by this fix:** L-A-1's deviation term (deposit mints at the oracle mark, withdraw
   pays a spot-basis slice) — measured 8-9 bps a trip at the 100 bps gate ceiling, bounded by the pinned 25 bps
   and **not** a rounding bug. That is a design question for the auditor + economist, not this changeset.
+
+## Update 2026-09-02 — #3 lending: the /lend SURFACE is mainnet-ready (contracts still not deployed)
+
+- **The UI moved to mainnet 4663.** New `app/web/src/lending.ts` reads through `reserve.ts`'s
+  `mainnetPub` and writes through `mainnet-tx.ts`; `live.ts` `NET` was NOT flipped, so the game wing
+  stays on 46630. `/lend` no longer reads a single contract on testnet.
+- **`LENDING.markets` (lending.ts:30) is the single activation switch.** EsseyMarkets is the root:
+  `activePool(token)`, `liveness()`, `health()` and the pool's own `note()`/`asset()` are all
+  discovered from it, so the founder's deploy turns the page on by setting one address — no rewrite.
+- **`EsseyMarkets`/`EsseyPool`/`StaleFeedGuard` are STILL NOT on 4663.** VERIFIED: no
+  `rh-chain/broadcast/DeployMarkets.s.sol/4663` exists. The page renders an explicit "not deployed"
+  state with no inputs and no buttons rather than a dead control.
+- **The beacon address is now VERIFIED on chain, not founder-supplied.** MAINNET-LENDING-SCOPE.md §2
+  marked `0xe10b6f6b275de231345c20d14ab812db62151b00` UNVERIFIED. `cast storage <AAPL|NVDA>
+  0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50 --rpc-url <4663>` returns exactly
+  that beacon for both Stock Tokens (2026-09-02). The scope's open question on the beacon assert can be
+  answered on evidence.
+- **Fork rehearsal of the read layer.** `DeployMarkets.s.sol` deployed against an anvil fork of 4663;
+  after the 2-day warp and `commitMarket`, `market(AAPL)` returned
+  `(true, 5000, 7500, 500, 18, 250000000000, 2000)` — every ABI entry the UI declares decodes against
+  the real contracts, and `canBorrow` resolved false at the `liquidationsAllowed()` rung, which is the
+  reason the UI now names. Fork broadcast artifacts were deleted; nothing was deployed.
+- **#11 DCA is unchanged and still testnet.** `RecurringBuy` has no mainnet build, so its panel keeps
+  the 46630 path and now carries an explicit `testnet · chain 46630` label on a mainnet page.
+  RECOMMENDATION: give it its own route so one page does not hold two chains.

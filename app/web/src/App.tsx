@@ -37,6 +37,7 @@ import { ComingSoon, GameComingSoon } from "./game-gate";
 import { NotFoundPage } from "./notfound";
 import { TreasuryPage } from "./treasury";
 import { HolderHubPage } from "./holder";
+import { EarnPage } from "./earn-ui";
 import { RedeemPage } from "./redeem-ui";
 import { BlogIndex, BlogPost } from "./blog";
 import { TapeRoom } from "./tape-ui";
@@ -75,6 +76,11 @@ const GAME_ON =
 // two guards as HOLDER_ON/GAME_ON: __HOLDER_BUILD__ is false on a prod build (covers SSR/prerender,
 // no window), and the hostname check covers an alias-promote of a preview build to the live domain.
 // Off the live host /private renders the coming-soon screen and the Private door drops from the nav.
+const EARN_ON =
+  typeof window === "undefined"
+    ? __HOLDER_BUILD__
+    : !PROD_HOSTS.has(window.location.hostname);
+
 const PRIVATE_ON =
   typeof window === "undefined"
     ? __HOLDER_BUILD__
@@ -165,6 +171,8 @@ const DONS_ITEMS: NavLeaf[] = [
 ];
 const NAV: NavItem[] = [
   { to: "/treasury", label: "The Floor" },
+  { to: "/lend", label: "Borrow" },
+  ...(EARN_ON ? [{ to: "/earn", label: "Earn" } as NavItem] : []),
   ...(HOLDER_ON ? [{ to: "/holder", label: "Holder Hub" } as NavItem] : []),
   ...(REDEEM_ON ? [{ to: "/redeem", label: "Redeem" } as NavItem] : []),
   ...(PRIVATE_ON ? [{ to: "/private", label: "Private" } as NavItem] : []),
@@ -178,6 +186,20 @@ const PROTOCOL_ITEMS: NavLeaf[] = [
     label: "The Floor",
     desc: "What backs $ESSEY, live on mainnet",
   },
+  {
+    to: "/lend",
+    label: "Borrow",
+    desc: "Borrow against your stock, without selling it",
+  },
+  ...(EARN_ON
+    ? [
+        {
+          to: "/earn",
+          label: "Earn",
+          desc: "Put your stock to work in the LP vault",
+        },
+      ]
+    : []),
   ...(HOLDER_ON
     ? [
         {
@@ -422,6 +444,24 @@ export default function App() {
                     eyebrow="Redemption"
                     title="Coming soon to mainnet."
                     body="Redeeming $ESSEY for its slice of the reserve isn't open on the live site yet. The reserve itself is live and adminless — you can read every figure that backs the token on The Floor — and we'll say the moment redemption opens."
+                  />
+                )
+              }
+            />
+            {/* Earn — preview only. StockLpVault is not deployed anywhere and its audit gate
+                restarted from zero on 2026-09-02, so the live host reaches coming-soon. */}
+            <Route
+              path="/earn"
+              element={
+                EARN_ON ? (
+                  <AppPage title="Earn">
+                    <EarnPage />
+                  </AppPage>
+                ) : (
+                  <ComingSoon
+                    eyebrow="Earn"
+                    title="Coming soon to mainnet."
+                    body="Putting your stock to work in the earn vault isn't open yet. The contract is built and tested against the live NVDA/USDG pool, and it deploys once its audit clears — we'll say the moment it's open."
                   />
                 )
               }
@@ -965,6 +1005,8 @@ function Footer() {
               "Essey — the protocol",
               [
                 ["/treasury", "The Floor"],
+                ["/lend", "Borrow"],
+                ["/earn", "Earn"],
                 ["/holder", "Holder Hub"],
                 ["/private", "Private"],
                 ["/explorer", "Explorer"],
@@ -1000,6 +1042,7 @@ function Footer() {
               {/* The Holder Hub is preview-only: drop its footer link on the live domain, where the
                 page redirects home — nothing should advertise a route that bounces. */}
               {links
+                .filter(([to]) => EARN_ON || to !== "/earn")
                 .filter(([to]) => HOLDER_ON || to !== "/holder")
                 .filter(([to]) => PRIVATE_ON || to !== "/private")
                 .map(([to, label]) => (
@@ -1021,9 +1064,9 @@ function Footer() {
             distributions are mechanically LP-style fee-shares, not dividends,
             not yield promises, and no payout is guaranteed, ever. The contracts
             are adversarially audited, with the rounds published in the
-            technical docs. The D.O.N. game is <b>not open here</b>: it runs on
-            a test network in play-money Scrip with no real value, and nothing
-            in it is real stock.{" "}
+            technical docs. The D.O.N. game is <b>not open here</b>: it runs
+            separately in play-money Scrip with no real value, and nothing in it
+            is real stock.{" "}
             <button
               className="linklike"
               onClick={() =>

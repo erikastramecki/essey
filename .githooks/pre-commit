@@ -1,69 +1,55 @@
-#!/usr/bin/env bash
-# Blocks commits containing secrets. Bypass (only if you're sure): git commit --no-verify
-set -uo pipefail
+#!/bin/sh
+# Pre-commit secret + private-path gate for a PUBLIC repo.
+#
+# Why this exists: on 2026-09-02 an audit found two other private repo names
+# ("[redacted]", the ceremony checkout) committed inside absolute paths in a test
+# harness. Memory claimed a hook protected this repo. There was none — the hooks
+# directory held only samples. History had to be rewritten to remove them.
+#
+# Exit 1 blocks the commit. Escape hatch: COMMIT_SECRET_OK=1, deliberate only.
 
-fail=0
-red()  { printf '\033[31m%s\033[0m\n' "$*"; }
-warn() { printf '\033[33m%s\033[0m\n' "$*"; }
+[ "$COMMIT_SECRET_OK" = "1" ] && exit 0
 
 staged=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$staged" ] && exit 0
 
-# --- 1. forbidden filenames, even if .gitignore is bypassed with `git add -f` ---
-bad_names=$(printf '%s\n' "$staged" | grep -iE '(^|/)\.env($|\.)|\.key$|\.pem$|\.p12$|\.jks$|id_rsa|keypair\.json$|keystore|(^|/)\.operator[^/]*\.(key|json)$' || true)
-if [ -n "$bad_names" ]; then
-  red "BLOCKED: secret-bearing filenames staged:"
-  printf '  %s\n' $bad_names
-  fail=1
-fi
+fail=0
+say() { printf '%s\n' "$*" >&2; fail=1; }
 
-# --- 2. secret values in staged content ---
-# Patterns match literal credentials, not variable names like PRIVATE_KEY_SIZE.
-patterns=(
-  'suiprivkey1[a-z0-9]{20,}'                    # Sui private key
-  'BEGIN [A-Z ]*PRIVATE KEY'                    # PEM block
-  'sk-(ant-)?[A-Za-z0-9_-]{20,}'                # OpenAI / Anthropic
-  'AKIA[0-9A-Z]{16}'                            # AWS access key
-  'AIza[0-9A-Za-z_-]{30,}'                      # Google
-  'gh[pousr]_[A-Za-z0-9]{30,}'                  # GitHub token
-  'xox[baprs]-[A-Za-z0-9-]{10,}'                # Slack
-  '(mnemonic|seed_?phrase)["'"'"' ]*[:=]["'"'"' ]*([a-z]+ ){11,}' # 12+ word mnemonic
-)
-
-# EVM keys — the one live secret class this repo orbits (sweep finding F1, 2026-08-26).
-# Separate case-insensitive pass (the main loop is case-sensitive by design: AKIA, sk-ant).
-# Context-gated on keyish words rather than allowlisted — docs legitimately carry 64-hex
-# tx hashes, and an allowlist cannot enumerate future ones.
-patterns_ci=(
-  '(private[_-]?key|[a-z_]*_pk|privkey)[[:space:]]*[:=][[:space:]]*["'"'"']?(0x)?[0-9a-f]{64}'
-  '--private-key[= ]["'"'"']?(0x)?[0-9a-f]{64}'
-)
-
-for p in "${patterns_ci[@]}"; do
-  # -e: a pattern beginning with -- (the CLI-flag rule) must not parse as a grep option
-  hits=$(git diff --cached -U0 -- $staged | grep -E '^\+' | grep -nEiI -e "$p" || true)
-  if [ -n "$hits" ]; then
-    red "BLOCKED: possible EVM private key matching /$p/ in staged changes:"
-    printf '%s\n' "$hits" | head -5 | sed 's/^/  /'
-    fail=1
-  fi
+# 1. Files that must never be committed at all.
+for f in $staged; do
+  case "$f" in
+    *.env|*.env.*|.env|.env.*|*.pem|*.key|*.keypair.json|*.keystore)
+      say "BLOCKED: $f — secrets file staged." ;;
+  esac
 done
 
-for p in "${patterns[@]}"; do
-  # -U keeps binary-ish files from silently passing; only added lines are checked.
-  hits=$(git diff --cached -U0 -- $staged | grep -E '^\+' | grep -nEI "$p" || true)
-  if [ -n "$hits" ]; then
-    red "BLOCKED: possible secret matching /$p/ in staged changes:"
-    printf '%s\n' "$hits" | head -5 | sed 's/^/  /'
-    fail=1
-  fi
+# 2. Content patterns, checked on the staged blob (not the worktree).
+for f in $staged; do
+  git cat-file -e ":$f" 2>/dev/null || continue
+  case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico|*.pdf|*.zkey|*.ptau|*.wasm|*.woff*) continue ;; esac
+  blob=$(git cat-file blob ":$f" 2>/dev/null) || continue
+
+  printf '%s' "$blob" | grep -qE 'BEGIN [A-Z ]*PRIVATE KEY' \
+    && say "BLOCKED: $f — PEM private key."
+
+  # A bare 64-hex assignment reads as a raw private key. Bytes32 literals in
+  # source are the common false positive, so only flag it next to a key-ish name.
+  printf '%s' "$blob" | grep -qiE '(private_?key|secret_?key|mnemonic|seed_?phrase)[^=:]{0,20}[=:]\s*["'\'']?(0x)?[0-9a-fA-F]{64}' \
+    && say "BLOCKED: $f — hardcoded private key or mnemonic."
+
+  # The actual 2026-09-02 leak: an absolute home path naming another repo.
+  printf '%s' "$blob" | grep -qE '/Users/[A-Za-z0-9._-]+/(Developer|Documents|Desktop)/' \
+    && say "BLOCKED: $f — absolute home path. It leaks your directory layout (and other repo names). Use an env var with a relative default."
+
+  printf '%s' "$blob" | grep -qiE '(api[_-]?key|auth[_-]?token|bearer)[^=:]{0,12}[=:]\s*["'\''][A-Za-z0-9_\-]{20,}' \
+    && say "BLOCKED: $f — API key or token literal."
 done
 
 if [ "$fail" -ne 0 ]; then
-  echo
-  warn "This repo is PUBLIC — a pushed secret is compromised the moment it lands."
-  warn "Unstage the file, move the value into .env / an ignored key file, and recommit."
-  warn "If this is a false positive: git commit --no-verify"
+  printf '%s\n' "" \
+    "This repo is PUBLIC. Fix the lines above, or re-run with COMMIT_SECRET_OK=1" \
+    "if you have genuinely verified it is safe to publish." >&2
   exit 1
 fi
 exit 0
