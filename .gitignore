@@ -66,3 +66,7 @@ docs/CEREMONY-LIVE-WALKTHROUGH.md
 docs/JESTER-OPERATING-PLAN.md
 docs/PRODUCT-TRACKER.md
 rh-chain/docs/
+
+# mutation/patch backups — never commit
+*.orig
+*.rej

@@ -26,7 +26,8 @@ import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmo
 /// liquidity at open (owing zero USDG since sqrtP == sqrtLower) — what lets the honest first buy pass the
 /// hook's empty-pool guard.
 /// LOCKED BY CONSTRUCTION: the LP owner is THIS contract (PoolManager.sol:164); no withdraw / modifyLiquidity(-)
-/// / position-move / fee-collect path exists, so principal and its fees can never leave.
+/// / position-move / fee-collect path exists, so principal and its fees can never leave. recoverGriefedSeed()
+/// is pre-seed only and moves this contract's own ERC20 balance — never a minted position.
 /// SINGLE-SIDEDNESS IS SELF-ENFORCING: holding only ESSEY, a rung that straddled spot would owe USDG it
 /// cannot pay and revert the whole seed — a wrong ladder cannot half-deploy.
 contract LaunchSeeder is IUnlockCallback {
@@ -71,6 +72,7 @@ contract LaunchSeeder is IUnlockCallback {
   event ToleratedPreInit(uint160 sqrtPriceX96);
   event RungMinted(uint256 indexed idx, int24 tickLower, int24 tickUpper, uint128 liquidity);
   event Seeded(uint256 esseyIn);
+  event RecoveredUnseeded(uint256 essey);
 
   error ZeroAddress();
   error NotSeedCaller();
@@ -83,6 +85,9 @@ contract LaunchSeeder is IUnlockCallback {
   error PreInitWrongPrice(); // pool was pre-initialized at a price other than the pinned one (impossible via the hook)
   error LiquidityOverflow();
   error LeftoverTooLarge();
+  error NoActiveLiquidity();
+  error NotGriefed();
+  error NothingToRecover();
 
   constructor(
     IPoolManager _poolManager,
@@ -139,10 +144,30 @@ contract LaunchSeeder is IUnlockCallback {
     }
 
     uint256 esseyIn = essey.balanceOf(address(this));
+    uint128 liqBefore = poolManager.getLiquidity(poolId());
     poolManager.unlock(abi.encode(rungs));
 
+    // A ladder entirely above spot mints fine and opens a pool nothing can trade (S-2). Measured as an
+    // INCREASE, so a griefer's pre-existing rung at spot cannot stand in for the seed's own liquidity.
+    if (poolManager.getLiquidity(poolId()) <= liqBefore) revert NoActiveLiquidity();
     if (essey.balanceOf(address(this)) > MAX_LEFTOVER) revert LeftoverTooLarge();
     emit Seeded(esseyIn);
+  }
+
+  /// Escape hatch for the one state where seed() can only ever revert PreInitWrongPrice: a pool live off the
+  /// pinned price (A-3). The launch redeploys against a fresh hook, abandoning the griefed pool. The guards
+  /// below close this in every state where seed() can still succeed, and it is terminal, so it never precedes one.
+  function recoverGriefedSeed() external returns (uint256 amount) {
+    if (msg.sender != seedCaller) revert NotSeedCaller();
+    if (seeded) revert AlreadySeeded();
+    (uint160 sqrtP,,,) = poolManager.getSlot0(poolId());
+    if (sqrtP == 0 || sqrtP == expectedSqrtPriceX96) revert NotGriefed();
+    amount = essey.balanceOf(address(this));
+    if (amount == 0) revert NothingToRecover();
+
+    seeded = true; // terminal: recovery and seeding are mutually exclusive, in either order
+    essey.safeTransfer(seedCaller, amount);
+    emit RecoveredUnseeded(amount);
   }
 
   function unlockCallback(bytes calldata data) external returns (bytes memory) {

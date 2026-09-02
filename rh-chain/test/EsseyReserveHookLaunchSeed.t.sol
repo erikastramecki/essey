@@ -158,9 +158,23 @@ contract MockV4Manager {
     return bytes32(0);
   }
 
-  /// Drive ONLY beforeSwap — enough to exercise the empty-pool guard (used only where a revert is expected).
-  function probeSwap(PoolKey calldata k, SwapParams calldata p) external {
+  /// Drives ONLY the hook's beforeSwap — NOT a swap. This mock has no v4 swap loop, so nothing here can
+  /// observe liquidity going to zero MID-swap; that class of assertion lives on the real manager in
+  /// test/EsseyHookRealSwapSeedFork.t.sol (audit A-6). Named for what it does so no future reader counts it
+  /// as swap coverage.
+  function probeBeforeSwap(PoolKey calldata k, SwapParams calldata p) external {
     hook.beforeSwap(msg.sender, k, p, "");
+  }
+
+  /// Model the two post-seed pool states the REAL manager reaches on a fork (proven there): a ladder walked
+  /// out of range leaves zero active liquidity, and a free walk moves price off the pinned peg.
+  function setActiveLiquidity(uint128 v) external {
+    activeLiquidity = v;
+  }
+
+  function setSqrtPrice(uint160 v) external {
+    sqrtPriceX96 = v;
+    tick = TickMath.getTickAtSqrtPrice(v);
   }
 }
 
@@ -250,7 +264,7 @@ contract EsseyReserveHookLaunchSeedTest is Test {
 
   function _probeDustSwap() internal {
     SwapParams memory p = SwapParams({zeroForOne: true, amountSpecified: -1e12, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
-    manager.probeSwap(key, p);
+    manager.probeBeforeSwap(key, p);
   }
 
   // ================================================================= Layer 2: empty pool is un-swappable
@@ -311,15 +325,49 @@ contract EsseyReserveHookLaunchSeedTest is Test {
   }
 
   /// Test G, part 2 (the load-bearing dependency): a first rung ABOVE the open tick leaves ZERO active
-  /// liquidity at open, so the guard still refuses the honest first buy. Documents why the rung sits at open.
-  function test_first_rung_above_open_leaves_pool_empty() public {
+  /// liquidity at open. seed() now refuses that whole ladder rather than opening a pool nothing can trade
+  /// (audit S-2), and the one shot is not spent. RED against dropping the post-condition — the seed would
+  /// complete and lock the ESSEY in a dead pool.
+  function test_first_rung_above_open_is_refused() public {
     LaunchSeeder seeder = _deploySeeder();
     essey.transfer(address(seeder), 300e18);
+
+    vm.expectRevert(LaunchSeeder.NoActiveLiquidity.selector);
     seeder.seed(_ladder(60)); // first rung [60,600] — strictly above the open tick 0
 
-    assertEq(_liq(), 0, "above-open ladder wrongly counts at open");
-    vm.expectRevert(EsseyReserveHook.EmptyPool.selector);
-    _probeDustSwap();
+    assertFalse(seeder.seeded(), "the refused seed burned the one shot");
+    assertEq(essey.balanceOf(address(seeder)), 300e18, "ESSEY left the seeder on a refused seed");
+    seeder.seed(_ladder(OPEN_TICK)); // the corrected ladder still opens the pool
+    assertGt(_liq(), 0, "corrected ladder did not open the pool");
+  }
+
+  /// The post-condition measures the seed's OWN contribution: a griefer's active rung sitting at spot before
+  /// the seed must not stand in for a ladder that opens nothing. RED against checking `getLiquidity() != 0`
+  /// instead of an increase — the weaker form passes here on the griefer's liquidity alone.
+  function test_griefer_liquidity_cannot_mask_a_dead_ladder() public {
+    manager.initialize(key, OPEN_PRICE);
+    manager.setActiveLiquidity(1e18); // a griefer's dust rung, active at spot
+    LaunchSeeder seeder = _deploySeeder();
+    essey.transfer(address(seeder), 300e18);
+
+    vm.expectRevert(LaunchSeeder.NoActiveLiquidity.selector);
+    seeder.seed(_ladder(60)); // ladder entirely above spot — contributes nothing active
+    assertFalse(seeder.seeded(), "the refused seed burned the one shot");
+  }
+
+  /// The other arm of the same guard, at the mock's level: once the seed has stamped the clock, a pool that
+  /// LATER reads zero active liquidity is swappable again. RED against dropping `launchTime == 0 &&` from the
+  /// hook's empty-pool guard (audit A-1). The mid-swap version of this — liquidity hitting zero inside the v4
+  /// swap loop — is only observable on the real manager; see EsseyHookRealSwapSeedFork.t.sol.
+  function test_empty_pool_guard_disarms_after_the_seed() public {
+    LaunchSeeder seeder = _deploySeeder();
+    essey.transfer(address(seeder), 300e18);
+    seeder.seed(_ladder(OPEN_TICK));
+    assertGt(hook.launchTime(), 0, "seed did not stamp the clock");
+
+    manager.setActiveLiquidity(0);
+    assertEq(_liq(), 0, "liquidity not zeroed");
+    _probeDustSwap(); // must NOT revert: the healing trade has to be able to run
   }
 
   // ================================================================= HIGH: clock stamped at the atomic seed
@@ -484,6 +532,57 @@ contract EsseyReserveHookLaunchSeedTest is Test {
     r[0] = LaunchSeeder.Rung({tickLower: 0, tickUpper: 600, esseyAmount: 1000});
     vm.expectRevert(LaunchSeeder.LiquidityOverflow.selector);
     seeder.seed(r);
+  }
+
+  // ================================================================= A-3: griefed-seed recovery
+
+  /// The escape hatch opens ONLY in the state where seed() can never succeed, and returns every wei to the
+  /// founder key. RED against removing recoverGriefedSeed: the seeder has no other egress at all.
+  function test_recover_returns_the_prefunded_essey_when_the_price_is_off_peg() public {
+    manager.initialize(key, OPEN_PRICE);
+    LaunchSeeder seeder = _deploySeeder();
+    essey.transfer(address(seeder), 300e18);
+    manager.setSqrtPrice(OPEN_PRICE + 1); // the free walk, as proven reachable on the real manager
+
+    uint256 before = essey.balanceOf(address(this));
+    assertEq(seeder.recoverGriefedSeed(), 300e18, "recovery returned the wrong amount");
+    assertEq(essey.balanceOf(address(this)) - before, 300e18, "ESSEY did not reach the founder");
+    assertEq(essey.balanceOf(address(seeder)), 0, "ESSEY left behind");
+    assertTrue(seeder.seeded(), "recovery is not terminal");
+  }
+
+  /// Every guard on the hatch, one branch per assertion: caller, pool-unopened, pool-on-peg, empty balance,
+  /// and post-seed. RED against widening any single one of them into a withdrawal backdoor.
+  function test_recover_is_closed_in_every_state_where_seed_still_works() public {
+    LaunchSeeder seeder = _deploySeeder();
+    essey.transfer(address(seeder), 300e18);
+
+    vm.prank(address(0xBAD));
+    vm.expectRevert(LaunchSeeder.NotSeedCaller.selector);
+    seeder.recoverGriefedSeed();
+
+    vm.expectRevert(LaunchSeeder.NotGriefed.selector);
+    seeder.recoverGriefedSeed(); // pool never initialized
+
+    manager.initialize(key, OPEN_PRICE);
+    vm.expectRevert(LaunchSeeder.NotGriefed.selector);
+    seeder.recoverGriefedSeed(); // pool live, on the peg
+
+    seeder.seed(_ladder(OPEN_TICK));
+    manager.setSqrtPrice(OPEN_PRICE + 1); // off-peg AFTER the seed must still not open the hatch
+    vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
+    seeder.recoverGriefedSeed();
+  }
+
+  /// An off-peg pool with nothing pre-funded reverts rather than burning the one shot on a no-op.
+  function test_recover_rejects_an_empty_seeder() public {
+    manager.initialize(key, OPEN_PRICE);
+    LaunchSeeder seeder = _deploySeeder();
+    manager.setSqrtPrice(OPEN_PRICE + 1);
+
+    vm.expectRevert(LaunchSeeder.NothingToRecover.selector);
+    seeder.recoverGriefedSeed();
+    assertFalse(seeder.seeded(), "an empty recovery still burned the one shot");
   }
 
   /// LaunchSeeder.sol:137 PreInitWrongPrice — a pool pre-initialized at a price other than the seeder's pinned

@@ -913,73 +913,192 @@ contract EsseyHookRealSwapSeedForkTest is Test {
     assertLt((BPS / BASE_FEE_BPS) - 1, 100, "free-notional window wider than one basis unit");
   }
 
-  // ================================================================= 10. S-1 / S-2 (open LOW findings)
+  // ============================================== 10. audit round 1: A-1 / A-3 / S-1 / S-2 (fixed 2026-09-02)
 
-  /// S-1, independently reproduced on the REAL manager: the empty-pool guard never disarms. One buy large
-  /// enough to walk price past the top rung leaves getLiquidity()==0, and from then on EVERY swap — in BOTH
-  /// directions, including the sell that would arbitrage the price back — reverts. The pool is bricked.
-  function test_S1_oversized_buy_bricks_the_pool_permanently() public onFork {
+  /// The A-1 grief, on the real manager: a 1-wei-notional sell whose limit sits below the opening price walks
+  /// out of the only active rung for zero tokens. Reproduced verbatim from the audit PoC.
+  function _freeWalkDown(EsseyReserveHook hook, uint160 limit) internal returns (V4Actor a) {
+    a = new V4Actor(pm);
+    a.swap(_key(hook), SwapParams({zeroForOne: true, amountSpecified: -1, sqrtPriceLimitX96: limit}), address(a));
+  }
+
+  /// The A-3 grief: dust ESSEY pre-initializes the pool at the PUBLIC pinned price, mints an active dust rung
+  /// at spot (which also stamps the anti-snipe clock), then free-walks the price off the peg.
+  function _griefTheLaunch(EsseyReserveHook hook) internal {
+    V4Actor g = new V4Actor(pm);
+    _sendEssey(address(g), 1e18);
+    pm.initialize(_key(hook), openPrice);
+
+    uint128 L = LiquidityAmounts.getLiquidityForAmount0(
+      TickMath.getSqrtPriceAtTick(OPEN_TICK), TickMath.getSqrtPriceAtTick(OPEN_TICK + 60), 1e18 - 1e3
+    );
+    g.modify(
+      _key(hook),
+      ModifyLiquidityParams({
+        tickLower: OPEN_TICK,
+        tickUpper: OPEN_TICK + 60,
+        liquidityDelta: int256(uint256(L)),
+        salt: bytes32(0)
+      }),
+      address(g)
+    );
+    g.swap(_key(hook), SwapParams({zeroForOne: true, amountSpecified: -1, sqrtPriceLimitX96: openPrice - 1}), address(g));
+  }
+
+  /// A-1 (HIGH, fixed): the free walk still empties the pool — that is v4's own swap loop, not a bug — but the
+  /// empty-pool guard no longer arms behind it, so the pool HEALS on the next honest trade. RED against
+  /// re-arming the guard (dropping `launchTime == 0 &&` at EsseyReserveHook.sol beforeSwap): the buy and the
+  /// sell below are exactly the two trades the permanently-armed guard blocked forever, in both directions.
+  function test_A1_free_walk_empties_the_pool_but_cannot_brick_it() public onFork {
+    (EsseyReserveHook hook,) = _launch();
+    vm.warp(block.timestamp + SNIPE_SECONDS); // steady-state fee; the guard is what is under test, not the skim
+    assertGt(_liq(hook), 0, "precondition: the seeded pool is live");
+
+    V4Actor attacker = _freeWalkDown(hook, TickMath.MIN_SQRT_PRICE + 1);
+    assertEq(IERC20(ESSEY).balanceOf(address(attacker)), 0, "the walk cost the attacker ESSEY");
+    assertEq(IERC20(USDG).balanceOf(address(attacker)), 0, "the walk paid the attacker USDG");
+    assertEq(_liq(hook), 0, "A-1 precondition gone: the walk no longer empties the pool");
+
+    _buy(hook, BUYER, 1_000e6);
+    assertGt(IERC20(ESSEY).balanceOf(BUYER), 0, "bricked: the honest buy got no ESSEY");
+    assertGt(_liq(hook), 0, "bricked: the buy did not walk back into the ladder");
+
+    _sell(hook, SNIPER, 1_000_000e18);
+    assertGt(IERC20(USDG).balanceOf(SNIPER), 0, "bricked: the arbitrage sell got no USDG");
+  }
+
+  /// The surviving arm of the same guard: BEFORE the seed the free walk is still refused outright, so nothing
+  /// can move the pinned opening price in the window between initialize and seed. RED against deleting the
+  /// guard, and RED against inverting it to `launchTime != 0`.
+  function test_A1_free_walk_is_still_refused_before_the_seed() public onFork {
+    EsseyReserveHook hook = _mineHook(c1);
+    pm.initialize(_key(hook), openPrice);
+    assertEq(hook.launchTime(), 0, "clock stamped at init");
+
+    V4Actor attacker = new V4Actor(pm);
+    vm.expectRevert(); // manager bubbles EsseyReserveHook.EmptyPool
+    attacker.swap(
+      _key(hook), SwapParams({zeroForOne: true, amountSpecified: -1, sqrtPriceLimitX96: openPrice - 1}), address(attacker)
+    );
+
+    (uint160 p,,,) = pm.getSlot0(PoolId.wrap(hook.poolIdRaw()));
+    assertEq(p, openPrice, "the pinned opening price moved before the seed");
+  }
+
+  /// S-1 (was: "the guard never disarms"). Walking price past the TOP rung is the honest, non-adversarial way
+  /// a seeded pool reaches getLiquidity()==0, and the sell that arbitrages the price back must go through.
+  /// RED against re-arming the guard.
+  function test_S1_oversized_buy_no_longer_bricks_the_pool() public onFork {
     (EsseyReserveHook hook,) = _launch();
     vm.warp(block.timestamp + SNIPE_SECONDS);
     assertGt(_liq(hook), 0, "precondition: pool is live");
 
-    _buy(hook, BUYER, 1_000_000e6); // 1,000,000 USDG — walks past the top rung
+    _buy(hook, BUYER, 1_000_000e6); // walks price past the top rung
+    assertEq(_liq(hook), 0, "S-1 setup: liquidity survived the oversized buy");
 
-    (, int24 tick,,) = pm.getSlot0(PoolId.wrap(hook.poolIdRaw()));
-    emit log_named_int("tick after the oversized buy", tick);
-    emit log_named_uint("active liquidity after", _liq(hook));
-    assertEq(_liq(hook), 0, "S-1 not reproduced: liquidity survived");
-
-    V4Actor a1 = new V4Actor(pm);
-    _giveUsdg(address(a1), 1_000e6);
-    vm.expectRevert();
-    a1.swap(
-      _key(hook),
-      SwapParams({zeroForOne: false, amountSpecified: -int256(1_000e6), sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1}),
-      BUYER
-    );
-
-    // The recovery trade is blocked too — this is what makes it a brick rather than illiquidity.
-    V4Actor a2 = new V4Actor(pm);
-    _sendEssey(address(a2), 1_000e18);
-    vm.expectRevert();
-    a2.swap(
-      _key(hook),
-      SwapParams({zeroForOne: true, amountSpecified: -int256(1_000e18), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1}),
-      BUYER
-    );
-    emit log("FINDING S-1 CONFIRMED on the real manager: pool un-swappable in both directions");
+    _sell(hook, SNIPER, 1_000_000e18);
+    assertGt(IERC20(USDG).balanceOf(SNIPER), 0, "the recovery sell was blocked: the pool is bricked");
+    assertGt(_liq(hook), 0, "the recovery sell did not re-enter the ladder");
   }
 
-  /// S-2, independently reproduced: a ladder entirely ABOVE spot passes every per-rung check, mints all three
-  /// positions, and yields ZERO active liquidity. `seeded` is now true, there is no withdraw path, and the
-  /// guard makes the pool un-swappable — the seed ESSEY is locked forever.
-  function test_S2_ladder_above_spot_seeds_zero_active_liquidity_and_locks_the_essey() public onFork {
+  /// S-2 (fixed): a ladder entirely ABOVE spot passes every per-rung check and mints all three positions, yet
+  /// opens a pool with zero active liquidity. seed() now refuses it as a whole, so the one shot is NOT spent
+  /// and every wei stays in the seeder for a corrected retry. RED against dropping the post-condition.
+  function test_S2_ladder_above_spot_is_refused_not_seeded() public onFork {
     EsseyReserveHook hook = _mineHook(c1);
     LaunchSeeder seeder = _deploySeeder(hook);
     _sendEssey(address(seeder), _seedLadderAmount());
 
     LaunchSeeder.Rung[] memory above = new LaunchSeeder.Rung[](3);
-    above[0] = LaunchSeeder.Rung({tickLower: OPEN_TICK + 6000, tickUpper: OPEN_TICK + 12_000, esseyAmount: 500_000_000e18});
+    above[0] =
+      LaunchSeeder.Rung({tickLower: OPEN_TICK + 6000, tickUpper: OPEN_TICK + 12_000, esseyAmount: 500_000_000e18});
     above[1] =
       LaunchSeeder.Rung({tickLower: OPEN_TICK + 12_000, tickUpper: OPEN_TICK + 18_000, esseyAmount: 500_000_000e18});
     above[2] =
       LaunchSeeder.Rung({tickLower: OPEN_TICK + 18_000, tickUpper: OPEN_TICK + 24_000, esseyAmount: 500_000_000e18});
 
-    uint256 pmBefore = IERC20(ESSEY).balanceOf(POOL_MANAGER);
-    seeder.seed(above); // passes every check
+    vm.expectRevert(LaunchSeeder.NoActiveLiquidity.selector);
+    seeder.seed(above);
 
-    assertTrue(seeder.seeded(), "seed did not complete");
-    assertEq(seeder.positionCount(), 3, "rungs not minted");
-    assertEq(_liq(hook), 0, "S-2 not reproduced: the above-spot ladder was active");
-    uint256 locked = IERC20(ESSEY).balanceOf(POOL_MANAGER) - pmBefore;
-    emit log_named_decimal_uint("FINDING S-2 CONFIRMED: ESSEY locked in a dead pool", locked, 18);
-    assertGt(locked, _seedLadderAmount() - 1e18, "ESSEY not delivered");
+    assertFalse(seeder.seeded(), "the refused seed still burned the one shot");
+    assertEq(seeder.positionCount(), 0, "positions survived the revert");
+    assertEq(IERC20(ESSEY).balanceOf(address(seeder)), _seedLadderAmount(), "ESSEY left the seeder");
 
-    // One-shot: no retry, and no withdraw path exists.
-    _sendEssey(address(seeder), 1_000e18);
+    seeder.seed(_ladder()); // the post-condition rejects the mis-parameterization, not the launch
+    assertGt(_liq(hook), 0, "the corrected ladder did not open the pool");
+  }
+
+  /// A-3 (HIGH, fixed): the dust grief no longer strands the launch. With the guard disarmed there is nothing
+  /// to pay for, so ANYONE can put the price back on the peg with a 1-wei repair swap, after which the
+  /// founder's seed runs normally. RED against re-arming the guard — the repair swap is what it blocked.
+  function test_A3_dust_grief_is_repairable_and_the_seed_still_runs() public onFork {
+    EsseyReserveHook hook = _mineHook(c1);
+    LaunchSeeder seeder = _deploySeeder(hook);
+    _sendEssey(address(seeder), _seedLadderAmount());
+    _griefTheLaunch(hook);
+
+    (uint160 griefed,,,) = pm.getSlot0(PoolId.wrap(hook.poolIdRaw()));
+    assertTrue(griefed != openPrice, "the grief did not move the price");
+    vm.expectRevert(LaunchSeeder.PreInitWrongPrice.selector);
+    seeder.seed(_ladder());
+
+    V4Actor repair = new V4Actor(pm);
+    repair.swap(
+      _key(hook), SwapParams({zeroForOne: false, amountSpecified: -1, sqrtPriceLimitX96: openPrice}), address(repair)
+    );
+    assertEq(IERC20(USDG).balanceOf(address(repair)), 0, "the repair swap cost USDG");
+    (uint160 repaired,,,) = pm.getSlot0(PoolId.wrap(hook.poolIdRaw()));
+    assertEq(repaired, openPrice, "the repair swap did not land on the pinned price");
+
+    seeder.seed(_ladder());
+    assertTrue(seeder.seeded(), "the seed is still blocked after the repair");
+    assertGt(_liq(hook), 0, "the repaired seed produced no active liquidity");
+  }
+
+  /// A-3, the guaranteed escape hatch: if nobody repairs the price, the founder is still not stranded. The
+  /// whole pre-funded allocation comes back and the seeder is spent. RED against removing recoverGriefedSeed —
+  /// LaunchSeeder has no other egress, so the allocation would be unrecoverable.
+  function test_A3_griefed_seed_is_recoverable_in_full() public onFork {
+    EsseyReserveHook hook = _mineHook(c1);
+    LaunchSeeder seeder = _deploySeeder(hook);
+    _sendEssey(address(seeder), _seedLadderAmount());
+    _griefTheLaunch(hook);
+
+    uint256 before = IERC20(ESSEY).balanceOf(address(this));
+    assertEq(seeder.recoverGriefedSeed(), _seedLadderAmount(), "recovery returned the wrong amount");
+    assertEq(IERC20(ESSEY).balanceOf(address(this)) - before, _seedLadderAmount(), "ESSEY did not reach the founder");
+    assertEq(IERC20(ESSEY).balanceOf(address(seeder)), 0, "ESSEY left behind in the seeder");
+
+    assertTrue(seeder.seeded(), "recovery left the seeder live");
+    _sendEssey(address(seeder), _seedLadderAmount());
     vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
     seeder.seed(_ladder());
+    vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
+    seeder.recoverGriefedSeed();
+  }
+
+  /// The trust argument for the escape hatch, pinned branch by branch: it is CLOSED in every state where
+  /// seed() can still succeed (pool unopened, pool on the peg), closed to everyone but the founder key, and
+  /// closed forever once liquidity is seeded. RED against widening any of the four guards.
+  function test_A3_recovery_is_not_a_withdrawal_backdoor() public onFork {
+    EsseyReserveHook hook = _mineHook(c1);
+    LaunchSeeder seeder = _deploySeeder(hook);
+    _sendEssey(address(seeder), _seedLadderAmount());
+
+    vm.expectRevert(LaunchSeeder.NotGriefed.selector);
+    seeder.recoverGriefedSeed(); // pool not initialized — seed() still works
+
+    pm.initialize(_key(hook), openPrice);
+    vm.expectRevert(LaunchSeeder.NotGriefed.selector);
+    seeder.recoverGriefedSeed(); // pool live on the peg — seed() still works
+
+    vm.prank(SNIPER);
+    vm.expectRevert(LaunchSeeder.NotSeedCaller.selector);
+    seeder.recoverGriefedSeed();
+
+    seeder.seed(_ladder());
+    vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
+    seeder.recoverGriefedSeed(); // seeded liquidity has no exit at all
   }
 
   /// Precondition 1 as strengthened 2026-09-02: the constructor has NO native-currency check. A hook whose

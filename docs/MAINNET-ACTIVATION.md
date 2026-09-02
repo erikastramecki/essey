@@ -1180,3 +1180,215 @@ seed share mint (`:190`) — so the public USD-1e18 unit and the share unit are 
 - **#11 DCA is unchanged and still testnet.** `RecurringBuy` has no mainnet build, so its panel keeps
   the 46630 path and now carries an explicit `testnet · chain 46630` label on a mainnet page.
   RECOMMENDATION: give it its own route so one page does not hold two chains.
+
+---
+
+## Update 2026-09-02 (16) — PROGRAM RECONCILE: audit R1 NOT CLEAN (two HIGHs), history rewritten, four surfaces shipped to prod
+
+Everything below was re-verified this pass against the repo, the receipts, the chain, and the **live
+production bundle**. Recall was not used. The five preceding updates in this doc are point-in-time
+snapshots; this entry supersedes them where they disagree.
+
+### 16.1 The push set — re-derived, because history was REWRITTEN today
+
+`git log --oneline origin/main..HEAD` = **14 commits**, HEAD `ae62d34`, origin/main `6903bc6` (VERIFIED
+2026-09-02). A `filter-branch` ran today to scrub two private repo names out of committed paths, so
+**every SHA recorded in this register before this entry is STALE**. In particular `ae143bc` — cited as
+"the source checkpoint" throughout Updates (12)–(14) and across the tracker — is now `c7d0e60`
+(`git log --oneline origin/main..HEAD`). Do not cite a pre-rewrite SHA again.
+
+**The leak is ALMOST gone from the unpushed range — one residue remains, and it must be cleared before the
+push.** Grepping the two scrubbed names over `git rev-list origin/main..HEAD` returns **`.githooks/pre-commit`
+in two commits** (`ae62d34`, `04e763d`): the hook's own comment explained what it blocks by naming the very
+repos being scrubbed. The **worktree copy has since been generalised** (re-verified 2026-09-02: zero hits
+across the working tree) — but a worktree fix does not clean a commit, which is the exact lesson H-1 taught
+in Update (14). **Those two commits need amending or rewriting before the push.** Hygiene finding H-1 is
+therefore **NOT closed**; it is one rewrite away from closed.
+
+*(The two names are deliberately not written into this register. Grep for them from the shell, not from a
+tracked doc — writing the pattern down re-creates the leak inside the file that documents it. This entry
+did exactly that on its first draft and was corrected in the same pass. The failure is that reflexive.)*
+
+**The structural cause is closed too.** `.githooks/pre-commit` now exists (2,339 bytes, executable,
+`core.hooksPath=.githooks` — VERIFIED). It blocks staged secrets files, PEM keys, key/mnemonic literals,
+API-token literals, and — the actual 2026-09-02 leak — **any absolute `/Users/*/Developer|Documents|Desktop/`
+path**, checked against the *staged blob*, not the worktree. Escape hatch `COMMIT_SECRET_OK=1`.
+The audit's structural finding *"No git hooks are installed… the pre-commit secret hook recorded in memory
+DOES NOT EXIST"* (receipt `~/.claude/gate-receipts/audit-7fe1cb8`) is **RESOLVED**.
+**Scope limit, stated plainly:** it gates `commit`, not `push`, and it does not catch `.orig`/backup
+copies of source (two are in the tree right now — see 16.6).
+
+### 16.2 AUDIT ROUND 1 — NOT CLEAN, twice over. The round counter is at ZERO.
+
+Receipt: `~/.claude/gate-receipts/audit-7fe1cb8` (9,551 bytes, 2026-09-02). PoCs:
+`~/.claude/gate-receipts/audit-7fe1cb8-poc/A{1,2,3}Poc.t.sol`. All findings CONFIRMED on an **RH mainnet
+(4663) fork against the real deployed PoolManager** `0x8366a39CC670B4001A1121B8F6A443A643e40951`.
+The receipt pins the audited bytes by sha256 + git blob id, and those match the hashes in the G1 receipt —
+so the findings apply to exactly the bytes that would have shipped.
+
+**This RETRACTS the "G1 MET" posture for the shipping bytes.** G1's three clean rounds were real, but they
+were run without a real-PoolManager swap harness; the moment one existed it found two HIGHs in the same
+pass. G1 is now **REOPENED**, not met.
+
+| ID | Sev | What | Where |
+|---|---|---|---|
+| **A-1** | **HIGH** | The empty-pool guard is a **pre-check only**. Post-seed the tick sits exactly on `rung0.tickLower`, so `amountSpecified=-1` with `sqrtPriceLimitX96 = openPrice-1` crosses out of the only active range at **zero cost** (v4 `SwapMath` returns `amountIn=0` when `target==current`, and again at `liquidity==0`), zeroing active liquidity and leaving the guard armed forever. **Attacker holds zero ESSEY and zero USDG and pays nothing. Measured: 33,440 gas. Pool permanently unswappable in both directions.** | `EsseyReserveHook.sol:256` |
+| **A-3** | **HIGH** | Compounding A-1. Dust ESSEY buys an ACTIVE rung at spot (no USDG needed when `sqrtP == sqrtLower`), then the A-1 free walk moves price off the peg. `seed()` then reverts `PreInitWrongPrice` **forever**, and no swap can restore the price because the hook bricks every swap at zero liquidity. LaunchSeeder had **no egress path**, so the pre-funded seed allocation (**1.5B ESSEY** in the harness config) was **permanently unrecoverable**. The documented founder procedure was the loss path. | `LaunchSeeder.sol:136-146` |
+| **A-4** | MEDIUM | Rails had a reserve FLOOR but **no holders/dons floor**, and `lock()` is one-way with no timelock. A compromised governor could `proposeSplit(10000,0,0)` → 48h → `executeSplit` (permissionless) → `lock()`, **permanently zeroing the holder-airdrop and Dons buckets**. | `EsseyReserveHook.sol:364-370, 403-409` |
+| **A-6** | test-integrity | `MockV4Manager.probeSwap` calls only `hook.beforeSwap` — **the mock never runs the v4 swap loop**, so **90 of the gate's 92 tests structurally cannot observe liquidity going to zero mid-swap**. The one real-manager test used a 1,000,000 USDG buy and missed the zero-cost path entirely. | `test/EsseyReserveHookLaunchSeed.t.sol:48,162-164`; `EsseyHookRealSwapSeedFork.t.sol:921` |
+| A-2 | not-new | Already known + already tested (deploy precondition #2). Re-verified on chain 2026-09-02 that the precondition **currently holds**: ESSEY `totalSupply == balanceOf(0x93e6…4B9E) == 8,888,888,888e18`. A-3 escalated its consequence from "surcharge lost" to "seed and launch lost." | `EsseyReserveHook.sol:308` |
+| A-5 | LOW | Locked positions accrue 0.3% LP fees forever with no collect path. Documented as intentional; **needs explicit founder acceptance**, not silent passing. | `LaunchSeeder.sol:28-31` |
+
+**The lesson worth keeping, because it repeats:** the full V4 suite was **120/120 GREEN with every finding
+above live**. Green is not clean. A mock that does not run the real loop manufactures coverage — the same
+failure shape as the vault's circular-in-mock `LiquidityAmounts` (F-C, Update (15)) and the keeper's
+non-archive-node assumption. **Every gate from here carries a real-fork harness or it does not count.**
+
+**SUPERSEDED: S-1 and S-2 were recorded as LOW.** Update (14) and the tracker carry them as
+"⚠️ founder rules fix-vs-accept, neither worse than LOW alone." That was wrong by two severity levels.
+A-1 is S-1 with a **zero-cost, zero-balance** trigger; A-3 is S-2 with **permanent loss of the seed
+allocation**. "Accept in writing" is no longer available for either.
+
+### 16.3 FOUNDER RULINGS 2026-09-02 (this batch)
+
+| # | Ruling | Consequence |
+|---|---|---|
+| R-16.1 | **Fix A-1 and A-3 in code; re-gate from ZERO.** | Engineer running now. Supersedes the fix-vs-accept question on S-1/S-2. |
+| R-16.2 | **Fee FLOORS for BOTH holders and Dons** — proposed **2500 / 500 bps** against the existing 4000 reserve floor. | Closes A-4. Floors now sum to 7,000 bps, so the governor's reachable space shrinks and reserve gains an *implied ceiling* of 7,000. **Founder: confirm you intend that implied reserve ceiling** — it was not stated in the ruling. |
+| R-16.3 | **Rewrite history to scrub the leak.** | ✅ DONE — verified in 16.1. |
+| R-16.4 | **Airdrop exclusions = all protocol-owned addresses.** | Keeper eligibility input. Settles a B2 open item. |
+| R-16.5 | **Eligibility bar = exactly 0.1%** (10 bps of `totalSupply`). | = 8,888,889 $ESSEY. Keeper knob, not a source constant. Unblocks G2. |
+| R-16.6 | **Batch auction REJECTED.** | The launch-economist's batch-auction anti-snipe thread is **CLOSED**. The hook's decaying surcharge + the two-snapshot gate remain the anti-snipe posture. Remove it from the research queue. |
+| R-16.7 | **Ceremony ON HOLD at the founder's word.** | **DO NOT RE-RAISE.** O2 (beacon source/height) and the ceremony date are **withdrawn as critical-path items**. The shielded set (#2) is consequently **PARKED, not blocked-and-waiting** — a status change, not a status update. |
+| R-16.8 | **Treasury shows full dollar value including FLR.** | Shipped. See 16.4. |
+
+### 16.4 SHIPPED TO PRODUCTION and VERIFIED LIVE (founder-run deploy, 2026-09-02)
+
+Verified by fetching the live bundle — `https://essey.xyz/assets/index-BQOOG3UJ.js`, 4,478,856 bytes,
+HTTP 200 — and grepping it. This is chain-of-evidence on the *deployed artifact*, not the source tree.
+
+- **Treasury dollar value** — live, with the honesty logic intact (`unpricedHeld` / `unpricedSymbols`
+  present in the bundle: a figure with no price source is **excluded from the total**, never counted as
+  zero). **FLR is priced**, closing the long-open "FLR price source" founder blocker: `prices.ts:178`
+  `flrPrice()` crosses the Pons V4 ETH/FLR pool against the ETH/USD feed, and fails closed when ETH is
+  stale (`prices.ts:42-51,178-211,230`). FLR is in the basket at `reserve.ts:57`.
+- **`/tape` on mainnet** — `tape-ui.tsx:1-4` reads `tape-mainnet.ts` (4663); the `live` chip only appears
+  after a real read returns. The old game feed `tape.ts:1-3` is now **explicitly fenced** to `/dons/explorer`.
+- **`/explorer` is the protocol explorer** — `explorer.tsx:1-9` reads the EsseyReserve's own state and
+  history on 4663. **The game-era desk moved to `/dons/explorer`** behind `GameGate` (`App.tsx:339`).
+- **`/redeem`** — route exists (`App.tsx:436`), **write surface gated** (`REDEEM_ON`, `App.tsx:63`);
+  deep-linking on the live host reaches coming-soon and never a burn.
+- **Footer reframed** to the protocol story.
+
+**Two register/tracker claims are now STALE and are corrected here:**
+1. **"essey.xyz is currently publishing the wrong fee split"** (Update (14)) — **NO LONGER TRUE.** The
+   prod bundle contains "50/40/10" **only inside the dated CORRECTION boxes** (grep of the live bundle,
+   3 hits, all in retraction context) alongside the correct 45/40/15. The corrected docs are deployed.
+2. **Tracker F1/F2 "honesty defect — play-money SEASON 0 framing reachable from the protocol front
+   door"** — **RESOLVED.** The two `SEASON 0` strings surviving in the bundle belong to game components
+   that are unreachable behind `GAME_ON`.
+
+### 16.5 BUILT TODAY, NOT DEPLOYED
+
+Verified present in the tree and **absent from the prod bundle** (`grep -c '"/earn"' bundle.js` → **0**).
+
+- **`/earn`** — vault UI, preview-gated (`App.tsx:454`, `EARN_ON` `:79`). Its coming-soon copy already
+  states the contract "deploys once its audit clears" — honest, and correct given 16.7.
+- **`/lend` rewired to mainnet 4663** with an honest not-deployed state. `lending.ts:30` `LENDING.markets`
+  is the **single activation switch** — the founder's deploy turns the page on by setting one address.
+  The beacon `0xe10b6f6b…51b00` is now **VERIFIED on chain** (`cast storage` on both Stock Tokens,
+  2026-09-02), no longer founder-supplied. **The DCA panel is still testnet 46630** and is labelled as
+  such on a mainnet page — recommend it gets its own route so one page does not hold two chains.
+- **Holder-airdrop keeper** — 14 files, now **tracked** (`git ls-files rh-chain/keeper/holder-airdrop/`);
+  92 keeper tests + 37 Solidity + **46/46 mutation gate**, plus a cross-language proof that a keeper-built
+  root replays through the real `HolderDistributor`.
+- **Three mainnet-fork harnesses** — `EsseyHookRealSwapSeedFork.t.sol` (50KB), `StockLpVaultFork.t.sol`
+  (27KB), `EsseyReserveHookFork.t.sol`; all tracked.
+- **Vault `_factor` precision fix** — 17/17 mutants RED. **G3 reset to zero** (Update (15)).
+
+**A finding from the hook fork harness that changes a deploy precondition:** deploy precondition #2
+("ESSEY non-circulating until the atomic seed") was **unsatisfiable as written** — ESSEY is already fully
+minted to the ops wallet. The real rule is about **TRANSFERS**: the treasury must send ESSEY only to
+`LaunchSeeder` until `seed()` completes. Precondition #2 is **restated**, not merely re-verified.
+
+### 16.6 IN FLIGHT RIGHT NOW — the A-1/A-3/A-4 fix (uncommitted, unaudited, NOT verified by the PM)
+
+`git diff --stat`: 5 files, +365/−77 — `EsseyReserveHook.sol` (+30/−?), `LaunchSeeder.sol`,
+and three test files. Read, not run. **Reported as data, not as truth.**
+
+- **A-1 fix** — the guard is now **pre-seed only**: `if (launchTime == 0 && getLiquidity(...) == 0) revert EmptyPool();`
+- **A-4 fix** — `MIN_HOLDERS_BPS = 2_500`, `MIN_DONS_BPS = 500` added; `_splitWithinRails` now enforces
+  both floors; the stale `// PENDING FOUNDER CONFIRMATION` comments are **stripped** — which also closes
+  the open contradiction Update (14) flagged between the receipt and the source.
+- **A-3 / S-2 fix** — `LaunchSeeder.seed()` gains a post-condition `if (getLiquidity(poolId()) == 0) revert NoActiveLiquidity();`,
+  plus a new `recoverGriefedSeed()` egress.
+
+**THREE THINGS THE RE-GATE MUST SPECIFICALLY ADVERSARIALISE. Flagging as PM, not adjudicating:**
+1. **`recoverGriefedSeed()` is a NEW egress on a contract whose entire security argument was
+   "no egress path exists."** Its own doc comment now has to carry that argument. This is the classic
+   shape of a fix that opens a hole — it must be attacked as hard as A-3 was, in every ordering.
+2. **Disarming the guard post-launch is a real widening.** A-1's fix trades "bricked forever" for
+   "walkable when the ladder legitimately empties at either end." The auditor must prove the post-launch
+   zero-liquidity swap cannot be walked for free, not merely that the brick is gone.
+3. **A-6 is not fixed by either code change.** 90 of 92 tests still cannot observe the swap loop. The
+   re-gate must run on the **real-manager fork harness**, or it re-certifies the same blind spot.
+
+**Hygiene, must clear before commit:** `rh-chain/src/market/EsseyReserveHook.sol.orig` and
+`LaunchSeeder.sol.orig` are in the tree, **untracked and NOT gitignored** (`git check-ignore` → no match).
+They are pre-fix duplicates of two public contracts. The pre-commit hook does **not** catch them.
+
+### 16.7 GATE LADDER — actual state after this pass
+
+| Gate | Product | State 2026-09-02 (end of pass) |
+|---|---|---|
+| **G1** hook + LaunchSeeder | B1 | ❌ **REOPENED — round counter ZERO.** Was MET; the real-PoolManager fork harness found A-1/A-3 HIGH in the shipping bytes. Fix in flight (16.6) → then **3 consecutive clean rounds on the real-fork harness**. |
+| **G2** HolderDistributor + BasketRegistry | B2 | **Not fired — and now genuinely fireable.** All five params are constructor args (`HolderDistributor.sol:88-100` → immutables `:27-32`), so ruling them changes **zero bytes** and cannot invalidate a round; they become deploy-config preconditions as `feeCurrency=USDG` did at G1. Eligibility bar ruled (R-16.5) and exclusions ruled (R-16.4). **The one real constraint is sequencing:** fire G2 only once the keeper has stopped touching the contract, or the rounds get paid for twice. |
+| **G3** StockLpVault | Earn | ❌ **ZERO** — reset by the `_factor` fix (Update (15)). Code sound, fork harness exists (12/12), 17/17 mutants RED. Needs 3 clean rounds on the new bytes. Open founder params before *deploy* (not before the gate): `performanceFeeBps`, `bountyBps`, share name/symbol, and L-A-1's deviation basis. |
+| **Ceremony** | Shielded set #2 | ⏸️ **ON HOLD at the founder's word (R-16.7). DO NOT RE-RAISE.** O2 and the date are withdrawn from the critical path. The shielded stack is **PARKED**: 1,207 lines of finished `/private` UI and a fully line-specified rewire (`MAINNET-SHIELDED-SCOPE.md:142-160`) sit ready, and the deployed zkey stays single-contributor — so **nothing shielded may touch real value** while this is parked. That constraint does not expire with the hold. |
+| **I** harness (E2E) | B1+B2+B3 | Downstream of G1/G2/G3. |
+| **D** founder deploy | all | Founder-gated, per-instance. Unchanged. |
+
+### 16.8 Records corrected or retired by this pass
+
+| Was recorded as | Actually | Evidence |
+|---|---|---|
+| G1 **MET** (receipt-backed, cited ~15 places) | **REOPENED** — two HIGHs in the audited bytes | `~/.claude/gate-receipts/audit-7fe1cb8` |
+| S-1 / S-2 = **LOW**, "founder rules fix-vs-accept" | **HIGH** (A-1 / A-3), zero-cost and loss-of-seed; accept-in-writing withdrawn | same receipt; PoCs `A1Poc/A3Poc.t.sol` |
+| `ae143bc` = the source checkpoint | **SHA no longer valid** — history rewritten today; it is `c7d0e60` | `git log --oneline origin/main..HEAD` |
+| "ahead 7" of origin | **ahead 14** | `git rev-list --count origin/main..HEAD` |
+| "essey.xyz is publishing the wrong fee split" | **STALE** — corrected docs are deployed; "50/40/10" survives only inside retraction boxes | grep of live bundle `index-BQOOG3UJ.js` |
+| Tracker F1/F2 "honesty defect on the protocol front door" | **RESOLVED** — `/explorer` is the protocol explorer; the game desk is at `/dons/explorer` behind `GAME_ON` | `App.tsx:336,339`; `explorer.tsx:1-9`; live bundle |
+| "No git hooks are installed" (audit structural) | **RESOLVED** — `.githooks/pre-commit`, `core.hooksPath` set, blocks the exact 2026-09-02 leak class | `.githooks/pre-commit`; `git config core.hooksPath` |
+| FLR **price source** = open founder blocker | **CLOSED** — priced via the Pons V4 ETH cross, fails closed on a stale ETH feed | `prices.ts:178-211,230` |
+| Beacon `0xe10b6f6b…51b00` UNVERIFIED (founder-supplied) | **VERIFIED on chain** for both Stock Tokens | `cast storage`, 4663, 2026-09-02 |
+| Deploy precondition #2 "ESSEY non-circulating until the seed" | **Unsatisfiable as written** — ESSEY is fully minted. Restated as a **TRANSFER** rule: treasury sends ESSEY only to `LaunchSeeder` until `seed()` completes | `EsseyHookRealSwapSeedFork.t.sol`; on-chain supply read |
+| Batch-auction anti-snipe = live research thread | **REJECTED (R-16.6)** — thread closed | founder ruling |
+| Ceremony O2 beacon = "the real critical path #1" | **ON HOLD (R-16.7)** — withdrawn from the critical path; do not re-raise | founder ruling |
+
+### 16.9 Still UNVERIFIED / open in our own records — flagged, not fixed
+
+- **The ~45 failing tests** in `FOUNDRY_PROFILE=v4 forge test` are still **coordinator-reported and never
+  re-run by the PM**. Update (15) separately reports the full suite at **1431 pass / 2 fail**. These two
+  numbers cannot both describe the same tree. **Settled by:** the engineer running the full tree once and
+  pasting the output. Until then neither figure is load-bearing.
+- **`EsseyLadderSeeder` at `0x1c9fd50d…5876a` is a REAL mainnet-4663 deployment** nobody is tracking
+  (`broadcast/RehearseEsseyLadder.s.sol/4663/run-latest.json`). Despite the "Rehearse" name it is live.
+  **Founder: intended, or a rehearsal artifact to document and retire?**
+- **`EsseyReserve.sol` appears in NO audit doc** (hygiene finding H4, receipt). The blog asserts "repeated
+  adversarial audits" over the contract that holds mainnet money. That claim is **UNSUPPORTED**, and it is
+  published. Either cite the round or cut the line.
+- **`base-layer-live.md:18,22` is STALE** — "Three tokens right now" / "roughly 0.0093 MSTR" against a
+  re-derived on-chain basket of six. The *other* post is accurate; do not "fix" the accurate one.
+- **Redemption prose vs. product**: `EsseyReserve.redeem` is live and adminless, but the write surface is
+  gated, so a reader who follows the copy finds no Redeem door. Misleading by omission, not false.
+
+*This entry is committed, not left in the tree — per the standing rule from Update (14) that a doc
+reconcile is not done until it is committed.*
+
+### PRE-PUSH BLOCKER — history scrub #2 (opened 2026-09-02)
+Commit `04e763d` still contains the other private repo's NAME inside `.githooks/pre-commit`'s own
+comment — the comment explaining the scrub re-introduced the string the scrub removed. The worktree
+is clean (verified: zero occurrences tree-wide); the COMMIT is not. The hook does not catch it
+because a bare name is not a path.
+**MUST run a second filter-branch over `origin/main..HEAD` before any push.** Verify with a
+per-commit loop, not a worktree grep — that is the check that missed it the first time.

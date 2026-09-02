@@ -2,7 +2,7 @@
 # Pre-commit secret + private-path gate for a PUBLIC repo.
 #
 # Why this exists: on 2026-09-02 an audit found two other private repo names
-# ("[redacted]", the ceremony checkout) committed inside absolute paths in a test
+# (another private repo, and the ceremony checkout) committed inside absolute paths in a test
 # harness. Memory claimed a hook protected this repo. There was none — the hooks
 # directory held only samples. History had to be rewritten to remove them.
 #

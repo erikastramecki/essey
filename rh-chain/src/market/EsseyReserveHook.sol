@@ -33,11 +33,13 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
 
   uint256 public constant BPS = 10_000;
 
-  // Hard immutable governor rails — never changeable, enforced on every proposed split.
-  // PENDING FOUNDER CONFIRMATION: exact rail numbers are the economist's proposal, not yet founder-final.
-  uint256 public constant MIN_RESERVE_BPS = 4_000; // PENDING FOUNDER CONFIRMATION — reserve floor
-  uint256 public constant MAX_HOLDERS_BPS = 5_000; // PENDING FOUNDER CONFIRMATION — holders is a ceiling
-  uint256 public constant MAX_DONS_BPS = 2_000; // PENDING FOUNDER CONFIRMATION — dons is a ceiling
+  // Hard immutable governor rails, enforced on every proposed split. FOUNDER-CONFIRMED 2026-09-02: every
+  // bucket has a FLOOR, so no governor can zero holders or Dons and lock() that in. Floors sum to 7_000.
+  uint256 public constant MIN_RESERVE_BPS = 4_000;
+  uint256 public constant MIN_HOLDERS_BPS = 2_500;
+  uint256 public constant MAX_HOLDERS_BPS = 5_000;
+  uint256 public constant MIN_DONS_BPS = 500;
+  uint256 public constant MAX_DONS_BPS = 2_000;
   uint256 public constant SPLIT_TIMELOCK = 48 hours; // propose -> execute delay; long enough for holders to react
 
   IPoolManager public immutable poolManager;
@@ -249,11 +251,11 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
     returns (bytes4, BeforeSwapDelta, uint24)
   {
     if (msg.sender != address(poolManager)) revert NotPoolManager();
-    // Empty-pool guard: a swap on a pool with ZERO active liquidity would succeed with a (0,0) delta while
-    // walking price to the caller's limit. Refuse it — no honest trade exists until the seed materializes
-    // active liquidity at spot. The anti-snipe clock is NOT touched here; it is stamped at the atomic seed
-    // (afterAddLiquidity), so a sniper's cheap first swap can neither start nor reset the decay.
-    if (poolManager.getLiquidity(PoolId.wrap(poolIdRaw)) == 0) revert EmptyPool();
+    // Empty-pool guard, PRE-SEED ONLY: a zero-liquidity swap nets (0,0) while walking price to the caller's
+    // limit, which before the seed moves the pool off its pinned opening price for free. It must not stay
+    // armed after (A-1): a seeded pool legitimately empties at either end of the ladder, and an armed guard
+    // would block the healing trade forever.
+    if (launchTime == 0 && poolManager.getLiquidity(PoolId.wrap(poolIdRaw)) == 0) revert EmptyPool();
     if (!_feeIsSpecified(params)) return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     uint256 fee = _feeOnSpecified(params);
     if (fee == 0) return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -359,13 +361,13 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
 
   // ------------------------------------------------------------------ split governor (split-only, bounded)
 
-  /// True iff the three base-fee shares sum to BPS and sit inside the hard rails. All shares are uint so the
-  /// ">= 0" side of each rail is structural.
+  /// True iff the three base-fee shares sum to BPS and sit inside the hard rails. Reserve has no ceiling: the
+  /// other two floors imply one (BPS - MIN_HOLDERS_BPS - MIN_DONS_BPS).
   function _splitWithinRails(uint256 res, uint256 holders, uint256 dons) internal pure returns (bool) {
     if (res + holders + dons != BPS) return false;
     if (res < MIN_RESERVE_BPS) return false;
-    if (holders > MAX_HOLDERS_BPS) return false;
-    if (dons > MAX_DONS_BPS) return false;
+    if (holders < MIN_HOLDERS_BPS || holders > MAX_HOLDERS_BPS) return false;
+    if (dons < MIN_DONS_BPS || dons > MAX_DONS_BPS) return false;
     return true;
   }
 

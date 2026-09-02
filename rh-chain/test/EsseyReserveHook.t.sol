@@ -452,35 +452,38 @@ contract EsseyReserveHookTest is Test {
     assertEq(hook.reserveEscrow(address(usdg)), expReserve, "surcharge not 100% to reserve");
   }
 
-  // ================================================================= (viii) 0-share rounding dust -> reserve
+  // ================================================================= (viii) rounding dust -> reserve
 
-  /// With a 0% bucket the escrow for that bucket must accrue EXACTLY 0 after any swap — the rounding remainder
-  /// lives in the RESERVE, not the 0% bucket. Govern dons to 0 (a valid rail split), then a non-divisible base
-  /// is the discriminating case. RED if the remainder ever leaks into the 0% bucket.
-  function test_inv_zero_share_accrues_exactly_zero() public {
+  /// The split is floor-with-remainder-to-reserve, so the three parts sum EXACTLY to baseFee and the dust
+  /// never lands anywhere but the reserve. Govern to the SMALLEST dons share the rails allow — since A-4 gave
+  /// every bucket a floor, a 0% bucket is unreachable, and the minimum rail is the discriminating case.
+  /// RED if the remainder ever leaks out of the reserve, or if a floored part is rounded up instead.
+  function test_inv_rounding_remainder_stays_in_the_reserve() public {
     _openTrading();
     vm.prank(GOV);
-    hook.proposeSplit(6_000, 4_000, 0); // dons -> 0, rails-valid
+    hook.proposeSplit(4_500, 5_000, 500); // dons at MIN_DONS_BPS, holders at MAX_HOLDERS_BPS
     vm.warp(block.timestamp + 48 hours); // clears timelock AND leaves the anti-snipe window (surcharge 0)
     hook.executeSplit();
 
     _sellExactIn(1e18, 1300); // baseFee 13 — indivisible across the shares
-    assertEq(hook.donsEscrow(address(usdg)), 0, "0% dons accrued nonzero dust");
+    assertEq(hook.donsEscrow(address(usdg)), (13 * 500) / BPS, "dons part is not the floored share");
+    assertEq(hook.holdersEscrow(address(usdg)), (13 * 5_000) / BPS, "holders part is not the floored share");
     uint256 sum =
       hook.reserveEscrow(address(usdg)) + hook.holdersEscrow(address(usdg)) + hook.donsEscrow(address(usdg));
     assertEq(sum, 13, "parts do not sum to baseFee");
   }
 
-  function test_inv_zero_share_fuzz(uint128 usdgOut) public {
+  function test_inv_rounding_remainder_fuzz(uint128 usdgOut) public {
     _openTrading();
     vm.prank(GOV);
-    hook.proposeSplit(6_000, 4_000, 0);
+    hook.proposeSplit(4_500, 5_000, 500);
     vm.warp(block.timestamp + 48 hours);
     hook.executeSplit();
 
     usdgOut = uint128(bound(usdgOut, 1, 1e24));
     uint256 taken = _sellExactIn(1e18, usdgOut);
-    assertEq(hook.donsEscrow(address(usdg)), 0, "0% dons accrued dust");
+    assertEq(hook.donsEscrow(address(usdg)), (taken * 500) / BPS, "dons part is not the floored share");
+    assertEq(hook.holdersEscrow(address(usdg)), (taken * 5_000) / BPS, "holders part is not the floored share");
     uint256 sum =
       hook.reserveEscrow(address(usdg)) + hook.holdersEscrow(address(usdg)) + hook.donsEscrow(address(usdg));
     assertEq(sum, taken, "parts do not sum to baseFee");
@@ -660,6 +663,47 @@ contract EsseyReserveHookTest is Test {
     vm.expectRevert(EsseyReserveHook.BadSplit.selector);
     hook.proposeSplit(4_000, 3_999, 2_001); // dons > 2000
     hook.proposeSplit(4_000, 4_000, 2_000); // dons exactly 2000 accepted
+    vm.stopPrank();
+  }
+
+  /// A-4 (MEDIUM, fixed): a compromised governor could propose (10000, 0, 0), wait out the timelock, execute
+  /// permissionlessly and lock() — zeroing the holder airdrop and the Dons tap irreversibly. The holders floor
+  /// makes that split unproposable. RED against removing MIN_HOLDERS_BPS or lowering it past 2500.
+  function test_gov_rails_holders_floor_enforced() public {
+    vm.startPrank(GOV);
+    vm.expectRevert(EsseyReserveHook.BadSplit.selector);
+    hook.proposeSplit(10_000, 0, 0); // the A-4 attack split itself
+    vm.expectRevert(EsseyReserveHook.BadSplit.selector);
+    hook.proposeSplit(6_999, 2_499, 502); // one bp under the holders floor
+    hook.proposeSplit(6_000, 2_500, 1_500); // exactly 2500 accepted
+    vm.stopPrank();
+  }
+
+  /// The same floor for the Dons bucket. RED against removing MIN_DONS_BPS or lowering it past 500.
+  function test_gov_rails_dons_floor_enforced() public {
+    vm.startPrank(GOV);
+    vm.expectRevert(EsseyReserveHook.BadSplit.selector);
+    hook.proposeSplit(4_500, 5_000, 500 - 1); // one bp under the dons floor
+    hook.proposeSplit(4_500, 5_000, 500); // exactly 500 accepted
+    vm.stopPrank();
+  }
+
+  /// The five rails must leave a governable region, not an empty one: the three floors have to fit inside BPS
+  /// with room to move, the deployed default has to sit inside them, and each corner has to be reachable.
+  /// RED against raising a floor (or lowering a ceiling) to the point where some valid split is unreachable.
+  function test_gov_rails_leave_a_reachable_region() public {
+    uint256 floors = hook.MIN_RESERVE_BPS() + hook.MIN_HOLDERS_BPS() + hook.MIN_DONS_BPS();
+    assertLt(floors, BPS, "the floors alone exhaust the split");
+    assertEq(BPS - floors, 3_000, "governing room is not the confirmed 3000 bps");
+    assertGe(hook.MAX_HOLDERS_BPS(), hook.MIN_HOLDERS_BPS(), "holders rails cross");
+    assertGe(hook.MAX_DONS_BPS(), hook.MIN_DONS_BPS(), "dons rails cross");
+
+    // The live default and every rail corner are proposable.
+    vm.startPrank(GOV);
+    hook.proposeSplit(RES_SHARE, HOLDERS_SHARE, DON_SHARE); // the deployed default
+    hook.proposeSplit(hook.MIN_RESERVE_BPS(), hook.MAX_HOLDERS_BPS(), BPS - 4_000 - 5_000); // reserve floor corner
+    hook.proposeSplit(BPS - 2_500 - 500, hook.MIN_HOLDERS_BPS(), hook.MIN_DONS_BPS()); // reserve ceiling corner
+    hook.proposeSplit(4_000, 4_000, hook.MAX_DONS_BPS()); // dons ceiling corner
     vm.stopPrank();
   }
 
@@ -846,6 +890,16 @@ contract EsseyReserveHookTest is Test {
   function test_constructor_rejects_dons_over_rail() public {
     vm.expectRevert(EsseyReserveHook.BadConfig.selector);
     _newHook(4_000, 3_999, 2_001); // dons > MAX_DONS_BPS, sum ok
+  }
+
+  function test_constructor_rejects_holders_below_rail() public {
+    vm.expectRevert(EsseyReserveHook.BadConfig.selector);
+    _newHook(7_001, 2_499, 500); // holders < MIN_HOLDERS_BPS, sum ok, dons at its floor
+  }
+
+  function test_constructor_rejects_dons_below_rail() public {
+    vm.expectRevert(EsseyReserveHook.BadConfig.selector);
+    _newHook(5_001, 4_500, 499); // dons < MIN_DONS_BPS, sum ok, holders within rails
   }
 
   function test_constructor_rejects_zero_governor() public {

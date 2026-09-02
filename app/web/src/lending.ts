@@ -30,7 +30,7 @@ export const lendingDeployed = (): boolean => LENDING.markets !== ZERO;
 
 /// USDG, the borrow asset. VERIFIED on 4663 2026-09-02: symbol() == "USDG", decimals() == 6.
 /// Address from docs/MAINNET-CONFIG.md:11. Six decimals, not eighteen — the testnet mock was 18 and
-/// the old page's parseUnits(amt, 18) would have been a millionfold error against the real token.
+/// the old page's parseUnits(amt, 18) would have been a trillionfold error against the real token.
 export const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168" as Address;
 
 export type MarketDef = {
