@@ -79,11 +79,22 @@ and #4 above are the *procedural* mitigation; whether to add a *code* post-condi
 ## Content hashes (added 2026-09-02 — process improvement)
 The original receipt recorded no content hash, so byte-identity of the audited code could not be proved from
 the document alone. **Every future receipt MUST carry `sha256sum` of each audited file.** For this gate,
-hashed at the time of this correction (`shasum -a 256`, 2026-09-02):
+hashed 2026-09-02. **These pin the HEAD-COMMITTED content, not a working-tree snapshot** — re-derive with
+`git show HEAD:<path> | shasum -a 256`, which is stable regardless of what is in the tree at the time:
 ```
 b113fe7d3f3e2aec2fe52ec3dcf969aa72dfe0f5ab8243cec91e5d3156150c35  rh-chain/src/market/EsseyReserveHook.sol
 449c6da723cf11cc844c8590e1f882e2999dde4347f13884cebb0b2fe0cc421a  rh-chain/src/market/LaunchSeeder.sol
 ```
+Independent second derivation — the git blob ids for the same two files at the same commit:
+```
+bd9eca95950cdfbc255a4e1e68fec99f447f81de  rh-chain/src/market/EsseyReserveHook.sol
+39ae98c1006c013a420808ccc4ed21f0a1416d61  rh-chain/src/market/LaunchSeeder.sol
+```
+**Why the "HEAD-committed" qualifier is load-bearing:** while this correction was being written, the working
+copy of `EsseyReserveHook.sol` was churning through three different hashes in about two minutes — an auditor
+mutation run in progress (observed mutants: the `EmptyPool` guard at `:256` deleted, then
+`_feeIsSpecified` reduced to `return true;`). A receipt that pinned a *working-tree* hash would have recorded
+a mutant and looked authoritative doing it. **Always hash the committed blob, never the file on disk.**
 **Honest caveat:** these hashes were taken on 2026-09-02, NOT during the three clean rounds on 2026-08-31.
 They pin the files from today forward; they do **not** retroactively prove the audited bytes were these
 bytes. Only a receipt written with hashes at gate time can do that. Treat this block as the baseline for the
