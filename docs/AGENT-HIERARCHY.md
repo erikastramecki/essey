@@ -10,10 +10,25 @@ how the team operates day to day.
               owns the program · sequences work · runs cross-team reviews · keeps the gap list
    ┌──────────────────┬──────────────────┬────────────────────┬─────────────────┐
    BUILD & QUALITY     PRODUCT            ECONOMY & DESIGN       COMMS
-   protocol-engineer   web-designer       don-economist          blog-scribe
-   auditor  (gate)                        don-designer           social
-   harness  (E2E)
+   protocol-engineer   brand-designer     don-economist          jester
+   auditor  (gate)     web-designer       don-designer           social
+   zk-auditor (gate)   research-intern    launch-economist
+   harness  (E2E)      legal-advisor
+                                    essey-dons-director
+                         (GAME-side program owner — counterpart to the PM)
 ```
+**Roster = 13 specialists + the PM.** BUILD & QUALITY: protocol-engineer · auditor · zk-auditor · harness.
+PRODUCT: brand-designer · web-designer · research-intern · legal-advisor. ECONOMY & DESIGN: don-economist ·
+don-designer · launch-economist. COMMS: jester · social. Plus **essey-dons-director**, the game-side program
+owner (peer of the PM, not under it).
+
+## Read-first, every agent, every session (agents spawn stateless)
+1. **`docs/AGENT-HIERARCHY.md`** (this file) — the team + your seams.
+2. **`docs/MAINNET-ACTIVATION.md`** — the live register: chronology, per-flow gating, founder-decision log.
+3. **`docs/PRODUCT-TRACKER.md`** — the CONNECTED matrix: every product across CODE · UI/UX · DEPLOY · OWNER
+   · next action, plus the disconnects and the current kickoff queue. Added to the read-first set 2026-09-02;
+   the register is the narrative, the tracker is the at-a-glance state. **When a gate moves, update BOTH.**
+4. The scope docs for your task + project memory for durable facts.
 
 ## The agents
 - **essey-deployment-manager (PM).** Owns the mainnet-activation register + the gate ladder (scope → build
@@ -30,6 +45,15 @@ how the team operates day to day.
 - **don-designer.** Game mechanics — raids, missions, traits — grounded in the deployed contracts.
 - **jester.** Long-form editorial in the founder's voice — the "why," building-in-the-open.
 - **essey-social.** The X/social framing — hooks, threads — downstream of the scribe.
+- **essey-zk-auditor.** Circuit / cryptographic security — the shielded join-split circuit, the Groth16
+  verifiers, and the trusted-setup CEREMONIES. PEER of essey-auditor; together they cover the full surface.
+- **essey-brand-designer.** DEFINES the Essey protocol visual language the web-designer implements against.
+- **essey-launch-economist.** The $ESSEY market launch — seed math, liquidity depth, anti-snipe/MEV.
+- **essey-research-intern.** Competitive/protocol research verified against the target's OWN contracts.
+- **essey-legal-advisor.** Licensing / open-core strategy / IP protection options memos. Explicitly NOT
+  binding legal advice — flags where a licensed attorney is required. Read-only; never touches contracts,
+  keys, or deploys. (Added to this roster 2026-09-02; the charter had existed since 2026-08-31 unlisted.)
+- **essey-dons-director.** The GAME-side program owner + lore-master, counterpart to the PM.
 
 ## How information flows — the one chain, so the story never drifts from reality
 1. **Build.** protocol-engineer (contracts) or web-designer (UI) ships a change.
@@ -124,3 +148,26 @@ plain dialect (unchanged); humor is ADDITIVE seasoning where it fits, never at t
 (the grounding gate is absolute, a joke never bends a number). Jester keeps a living persona bible
 (`docs/JESTER-PERSONA-BIBLE.md`) it reads-first and grows each session, learns what lands as reader
 reactions appear, and gently ribs the founder. Founder sign-off before any publish, unchanged.
+
+## Addendum — essey-legal-advisor (added to the roster 2026-09-02)
+**essey-legal-advisor** joins under PRODUCT as the legal / IP research advisor: open-source licensing,
+dual-licensing / open-core strategy, IP protection, and regulatory-adjacent structure questions. Produces
+grounded **options memos — explicitly NOT binding legal advice** — and flags where a licensed attorney is
+required for anything carrying legal weight. Read-only research + writes scope/memo docs
+(`docs/research/legal-licensing-scope.md`); never touches production contracts, keys, or deploys. Reports
+to the PM; the founder decides adoption. Seam with **jester/essey-social** (what may be claimed publicly)
+and with the PM (licensing posture at the canonical-repo boundary).
+
+*Why this addendum exists:* the charter has existed since 2026-08-31 but was never listed here, so the agent
+was invisible to the org and to every other agent's read-first. Caught by the 2026-09-02 PM currency check.
+
+## Addendum — the two-doc rule (2026-09-02)
+The register (`MAINNET-ACTIVATION.md`) is the **chronological narrative**; the tracker (`PRODUCT-TRACKER.md`)
+is the **connected at-a-glance matrix**. Neither replaces the other, and they drift apart silently — the
+2026-09-02 check found the register still showing the hook gate as `NOT STARTED` across ~15 lines while its
+committed receipt said MET. Two standing rules, both learned from that drift:
+1. **When a gate moves, update BOTH** — the matrix row AND the register's flow entry/log.
+2. **A dated log entry is a point-in-time snapshot, never live status.** The register's per-update "Tracker
+   state" footers were true when written and are NOT rewritten. Current state lives in the register's
+   PROGRAM PHASES table + the newest update entry, and in the tracker's matrix. Never quote a dated footer
+   as the state of a gate today.

@@ -105,7 +105,9 @@ stake: 50% burned, 50% treasury** (`Bell.sol:368-369` — half `safeTransferFrom
 address, half to the immutable treasury; VERIFIED). Tier **clears on transfer** (the buyer re-activates).
 
 > **This burn is a GAME-side Bell mechanic, not the protocol fee model.** The locked protocol fee model
-> is USDG-denominated and splits **50 holders / 40 floor / 10 dons with NO burn** — the hook never mints
+> is USDG-denominated and splits **45 floor / 40 holders / 15 dons with NO burn** (default deploy split,
+> `script/DeployEsseyV4Pool.s.sol:47-49`; corrected 2026-09-02 from "50/40/10", which was the rails
+> 40/50/20 mistaken for the split) — the hook never mints
 > or skims $ESSEY (`docs/BASE-LAYER.md:108-114`). The Bell activation burn is a separate demand sink on the
 > Dons game side; it burns the game's own $ESSEY balances (testnet Scrip this Skirmish season) and touches
 > the live mainnet supply only at the game's future mainnet deploy. Do not read this line as protocol

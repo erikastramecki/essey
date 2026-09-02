@@ -33,7 +33,7 @@ covered.
 | [Market layer 4](market-layer-round-4.md) | game-era: `EsseyCases.sol` (the fair-value stock gacha) | 2 HIGH + 1 MED + 3 LOW | 4 rounds; **final round clean** (all 3 lenses) |
 | [Market layer 5](market-layer-round-5.md) | game-era: `EsseyPool.sol` reserve-routing → the Bell | 1 (fixed) | **round-2 clean** (all 3 lenses) |
 | [Market layer 6](market-layer-round-6.md) | game-era: `SeatArt.sol` + `Seat.tokenURI` | 2 LOW + 5 hardenings | 3 rounds; **final round clean** (all 3 lenses) |
-| [$ESSEY launch hook — gate](esseyreservehook-gate-2026-08-31.md) | **protocol (base layer):** `EsseyReserveHook.sol` (50/40/10 fee model) + `LaunchSeeder.sol` | 1 (test-only, code CORRECT) | **GATE MET** — 3 consecutive clean rounds, all 3 lenses, byte-identical code; 92 tests pass |
+| [$ESSEY launch hook — gate](esseyreservehook-gate-2026-08-31.md) | **protocol (base layer):** `EsseyReserveHook.sol` (three-bucket fee model; **rails 40/50/20**, **default split 45 reserve / 40 holders / 15 dons** — `DeployEsseyV4Pool.s.sol:47-49`) + `LaunchSeeder.sol` | 1 test-only at gate (code CORRECT); **+2 LOW (S-1, S-2) raised 2026-09-02 post-gate, OPEN** | **GATE MET** (3 consecutive clean rounds, all 3 lenses, byte-identical code; 92 tests) — **push BLOCKED 2026-09-02** pending a fresh 3-round clean |
 
 **Game-era vs protocol.** The **Market layer 1–6** rounds cover the D.O.N. **game / market layer**
 (Seats/Bell/Cases/Exchange/Notes/art) — the contract lineage of the gamification wing. The **$ESSEY

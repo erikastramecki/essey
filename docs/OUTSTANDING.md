@@ -11,8 +11,10 @@ not "done." Game/market-layer open items live in [GAME-OUTSTANDING.md](GAME-OUTS
   plus the FLR bootstrap position, redemption in units (not dollars) with a 5% exit fee, floor ratchets
   up only. Full description: [BASE-LAYER.md](BASE-LAYER.md). Register flow #1
   ([MAINNET-ACTIVATION.md](MAINNET-ACTIVATION.md)).
-- **Fee hook — code gate MET, not yet deployed.** `EsseyReserveHook` (50 holders / 40 floor / 10 dons,
-  NO burn; rails `MIN_RESERVE_BPS=4000` / `MAX_HOLDERS_BPS=5000` / `MAX_DONS_BPS=2000`) passed three
+- **Fee hook — code gate MET, not yet deployed.** `EsseyReserveHook` (default split **45 floor / 40 holders
+  / 15 dons** — `script/DeployEsseyV4Pool.s.sol:47-49`; corrected 2026-09-02 from an inherited "50/40/10",
+  which was the RAILS mistaken for the SPLIT; NO burn; rails `MIN_RESERVE_BPS=4000` /
+  `MAX_HOLDERS_BPS=5000` / `MAX_DONS_BPS=2000`) passed three
   consecutive clean 3-agent rounds on byte-identical code
   (`docs/audits/esseyreservehook-gate-2026-08-31.md`). Ships with the mainnet launch.
 - **Lending — ported to `rh-chain`, audited, NOT yet deployed.** The `RobinhoodMainnet` (4663) path is

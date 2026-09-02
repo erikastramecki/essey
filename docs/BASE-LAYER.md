@@ -107,7 +107,12 @@ Fees accrete the base layer through `EsseyReserveHook`, the $ESSEY launch/swap h
 - The hook skims a fee **always denominated in USDG** (`feeCurrency`, never $ESSEY) on every swap and
   splits the base fee three ways — **holders / floor(reserve) / dons** — with an anti-snipe surcharge
   routed 100% to the floor (gate doc, "What the hook is").
-- **Default split: 50 holders / 40 floor / 10 dons** (constructor arg; gate doc). There is **NO burn** —
+- **Default split: 45 floor(reserve) / 40 holders / 15 dons** (constructor arg) — verified against the code
+  the deploy actually uses: `script/DeployEsseyV4Pool.s.sol:47-49` (`RESERVE_SHARE_BPS = 4_500`,
+  `HOLDERS_SHARE_BPS = 4_000`, `DONS_SHARE_BPS = 1_500`), matched by `test/EsseyReserveHook.t.sol:132-134`.
+  *(Corrected 2026-09-02: this line previously read "50 holders / 40 floor / 10 dons", inherited from an
+  error in the gate receipt that mistook the **rails** below for the **split**. The rails are 40/50/20; the
+  split is 45/40/15 and sits with real margin inside them, not on their limits.)* There is **NO burn** —
   the hook never mints or skims $ESSEY; the fee is always the USDG leg (gate doc, invariants).
 - **Rails**, enforced at construction and on any `proposeSplit`:
   `MIN_RESERVE_BPS = 4000`, `MAX_HOLDERS_BPS = 5000`, `MAX_DONS_BPS = 2000`, and the split must sum to
@@ -133,7 +138,7 @@ deploy (gate doc, "Status"). The hook is **not yet deployed to mainnet**; $ESSEY
 |---|---|
 | $ESSEY token (fixed supply, adminless) | **LIVE mainnet 4663** |
 | EsseyReserve (adminless floor, 12-token basket + FLR bootstrap) | **LIVE mainnet 4663** |
-| Fee hook (50/40/10, no burn) | code gate **MET**, **not yet deployed** |
+| Fee hook (default split 45 floor / 40 holders / 15 dons; rails 40/50/20; no burn) | code gate **MET**, **not yet deployed** |
 | Lending (borrow vs Stock Tokens) | ported to `rh-chain`, audited, **not yet deployed** — see [MAINNET-LENDING-SCOPE.md](MAINNET-LENDING-SCOPE.md) |
 | Shielded / private transfers | **testnet (46630)**, mainnet-blocked — see [ESSEY-PRIVATE.md](ESSEY-PRIVATE.md) |
 

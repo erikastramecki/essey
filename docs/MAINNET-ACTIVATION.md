@@ -349,34 +349,57 @@ Founder ruled today: keep the 1% (100 bps) $ESSEY buy/sell fee; **re-split and D
 This REPLACES the 75/20/5/0 split of Update (8): reserve 75→45, Dons 20→15, POL 5→0, ops already 0, and
 a new 40-bps holder bucket that does not exist today.
 
-**GROUNDING — why this is a rebuild, not a governor tweak (VERIFIED):**
-- The deployed-shape hook has a hard immutable rail `MIN_RESERVE_BPS = 6_000` (60%),
-  `EsseyReserveHook.sol:50`, enforced on every proposed split at `:395` → **the 45% floor is structurally
-  rejected** by the current contract. Not adjustable; it is a `constant`.
-- The hook has exactly FOUR buckets — `reserveShareBps / donsShareBps / opsShareBps / polShareBps`
-  (`EsseyReserveHook.sol:84-87`) — and **no holder bucket.** The 40-bps holder route has nowhere to land.
+**GROUNDING — why this is a rebuild, not a governor tweak (VERIFIED *as of 2026-08-30, against the
+PRE-REBUILD hook*):**
+
+> ### ⚠️ SUPERSEDED — corrected 2026-09-02. Read this box before the two bullets below.
+> The two bullets that follow described the **pre-rebuild** hook and were true when written, but they are
+> labelled VERIFIED and carry `file:line` citations that **now point at different code**. A reader following
+> them today lands on a direct contradiction about the MONEY RAILS. The bullets are kept for the audit trail;
+> **these are the current facts, re-verified against the committed file on 2026-09-02:**
+> - **`MIN_RESERVE_BPS = 4_000`** (40%, not 60%) at **`EsseyReserveHook.sol:38`** (not `:50`), with
+>   `MAX_HOLDERS_BPS = 5_000` at `:39` and `MAX_DONS_BPS = 2_000` at `:40`; enforced at `:366-368`.
+>   The 45% reserve floor is **accepted** by the current contract, not rejected.
+> - **THREE buckets** — `reserveShareBps / holdersShareBps / donsShareBps` at **`EsseyReserveHook.sol:73-75`**
+>   (not four at `:84-87`). `opsShareBps` and `polShareBps` are GONE; the holder bucket EXISTS and is where
+>   the holder route lands.
+> - **Do not confuse the RAILS with the SPLIT.** Rails (the immutable bounds) are 40/50/20. The **default
+>   deploy split** is **45 reserve / 40 holders / 15 dons** — `DeployEsseyV4Pool.s.sol:47-49` and
+>   `test/EsseyReserveHook.t.sol:132-134`. Conflating the two is exactly the error the 2026-09-02 pre-push
+>   audit caught in the G1 receipt (H-3).
+
+- ~~The deployed-shape hook has a hard immutable rail `MIN_RESERVE_BPS = 6_000` (60%),
+  `EsseyReserveHook.sol:50`, enforced on every proposed split at `:395`~~ → **the 45% floor is structurally
+  rejected** by the current contract. Not adjustable; it is a `constant`. **[SUPERSEDED — see box]**
+- ~~The hook has exactly FOUR buckets — `reserveShareBps / donsShareBps / opsShareBps / polShareBps`
+  (`EsseyReserveHook.sol:84-87`) — and **no holder bucket.**~~ The 40-bps holder route has nowhere to land.
+  **[SUPERSEDED — see box]**
 - Therefore the hook must be REBUILT (new rail floor, drop POL/ops buckets, add a holder-distribution
   route) → **full 3-round audit re-gate**, because a money-path contract changed.
 - The holder engine is a **brand-new money-moving contract** (`HolderStockDistributor`, name TBD). VERIFIED
   it does not exist anywhere in the repo today (grep of all non-`out` `.sol` for `HolderStockDistributor /
   holderShareBps / holderSink` → 0 matches). It needs its OWN dedicated 3-round audit gate.
-- **Hook build/gate state (VERIFIED):** the reworked hook `EsseyReserveHook.sol` + its three test files
-  (`EsseyReserveHook.t.sol`, `…LaunchSeed.t.sol`, `…Fork.t.sol`) are **untracked on `main`** (`git status`
-  `??`) — built locally, never committed/pushed. **UNVERIFIED:** whether it "cleared a 3-round gate" — no
-  audit doc for the hook exists under `docs/audits/` (only market-layer R1-6, circuit R1, solidity R1,
-  all pre-dating this hook). Load-bearing conclusion holds regardless: the split it was built/spec'd for is
+- **Hook build/gate state (VERIFIED 2026-08-30; SUPERSEDED 2026-09-02):** ~~the reworked hook + its three
+  test files are **untracked on `main`** — built locally, never committed/pushed. **UNVERIFIED:** whether it
+  "cleared a 3-round gate" — no audit doc for the hook exists under `docs/audits/`.~~ **BOTH facts have since
+  changed and the "no audit doc" line must NOT ship as written — the very push it would ride on ADDS that
+  doc.** Current: the contracts are **COMMITTED** (`ae143bc`) and the gate is **MET**, grounded in
+  [`docs/audits/esseyreservehook-gate-2026-08-31.md`](audits/esseyreservehook-gate-2026-08-31.md). Load-bearing conclusion holds regardless: the split it was built/spec'd for is
   now obsolete AND the 60% rail blocks 45%, so it is rebuilt-and-re-gated either way.
 
-**PROGRAM PHASES / OWNERS / DEPENDENCIES**
+**PROGRAM PHASES / OWNERS / DEPENDENCIES** *(State column reconciled 2026-09-02 — see Update (12). The
+dated "Tracker state" footers on earlier updates below are point-in-time snapshots and are NOT re-written;
+THIS table plus Update (12) are the current state.)*
 | Phase | What | Owner | Depends on | State |
 |---|---|---|---|---|
-| R | Research Floor's epoch model (claim-vs-push, default+category baskets, dust threshold, per-user basket) | research-intern | may need founder's browser for Floor's app | IN FLIGHT |
-| S | Scope new split + distributor architecture + hook-rebuild scope (per-user baskets + add-stocks/baskets registry + claim/push, all v1-core) | launch-economist | R (informs epoch/UX shape) | IN FLIGHT |
-| B1 | Build hook rebuild (new floor rail, drop POL/ops, add holder route) | protocol-engineer | S locked | NOT STARTED |
-| B2 | Build `HolderStockDistributor` (epoch buy + pro-rata by holding value + default/category baskets + registry + claim/auto-push) | protocol-engineer | S locked | NOT STARTED |
-| G1 | 3-round audit gate — hook (governor + money-path surface, byte-diff vs prior) | essey-auditor | B1 all-clean-same-round | NOT STARTED |
-| G2 | 3-round audit gate — distributor (fresh money path: pro-rata math, basket registry, claim/push, dust) | essey-auditor | B2 all-clean-same-round | NOT STARTED |
-| I | Integration + adversarial harness — full epoch loop on chain (buy → distribute → claim/push) with real wallets | essey-harness | G1 + G2 clean | NOT STARTED |
+| R | Research Floor's epoch model (claim-vs-push, default+category baskets, dust threshold, per-user basket) | research-intern | may need founder's browser for Floor's app | DONE (informed S; FLR push-vs-claim still VERIFY-gated, `:804-808`) |
+| S | Scope new split + distributor architecture + hook-rebuild scope (per-user baskets + add-stocks/baskets registry + claim/push, all v1-core) | launch-economist | R (informs epoch/UX shape) | DONE — split LOCKED at rails 40 reserve / 50 holders / 20 dons |
+| B1 | Build hook rebuild (new floor rail, drop POL/ops, add holder route) | protocol-engineer | S locked | **DONE** — `EsseyReserveHook.sol` 453 lines + `LaunchSeeder.sol` 183 lines, COMMITTED `ae143bc` (`git show --stat ae143bc`, VERIFIED 2026-09-02) |
+| B2 | Build `HolderStockDistributor` (epoch buy + pro-rata by holding value + default/category baskets + registry + claim/auto-push) | protocol-engineer | S locked | **BUILT, not audited** — `HolderDistributor.sol` 327 lines + `BasketRegistry.sol` 148 lines, COMMITTED `ae143bc` (VERIFIED 2026-09-02). Params still placeholder pending the 6 founder rulings + eligibility bar |
+| G1 | 3-round audit gate — hook (governor + money-path surface, byte-diff vs prior) | essey-auditor | B1 all-clean-same-round | **✅ MET 2026-08-31** — 3 consecutive complete-clean 3-lens rounds on byte-identical code; receipt [`docs/audits/esseyreservehook-gate-2026-08-31.md`](audits/esseyreservehook-gate-2026-08-31.md) (92 tests, 4 equivalent survivors). Carries 2 DEPLOY-CONFIG preconditions (feeCurrency=USDG; ESSEY non-circulating until the atomic seed) |
+| G2 | 3-round audit gate — distributor (fresh money path: pro-rata math, basket registry, claim/push, dust) | essey-auditor | B2 all-clean-same-round | NOT FIRED — blocked on founder params + eligibility bar (answers incoming) |
+| G3 | 3-round audit gate — `StockLpVault` (added after this table was written) | essey-auditor + protocol-engineer | vault build | **RAN, NOT MET** — code SOUND, no vulnerability found, 2 code issues fixed during the gate (deposit fee-skim M-1; reverting-`feeRecipient` governor-DoS). Blocked by **F-C** (MEDIUM, test-integrity): the mock reuses the contract's own `LiquidityAmounts` lib → value math is circular in-mock. Needs a **mainnet-fork test**; no `StockLpVaultFork.t.sol` exists (`ls rh-chain/test/ | grep -i fork`, VERIFIED 2026-09-02) |
+| I | Integration + adversarial harness — full epoch loop on chain (buy → distribute → claim/push) with real wallets | essey-harness | G1 + G2 + G3 clean | NOT STARTED |
 | D | FOUNDER-gated mainnet deploy (exact commands prepared; never self-deploy) | FOUNDER | I green | NOT STARTED |
 
 **Cross-flow dependencies (inherited, load-bearing):** the holder engine BUYS real stocks each epoch →
@@ -857,7 +880,8 @@ yield + range/hedge sizing); PM (program). Reports to coordinator for its 3-roun
 **log-based analytics must tally client-side**, not trust a topic-filtered server-side log query. Applies to the
 daily-tracking (#4, Update (8)) and any explorer accrual analytics.
 
-**Tracker state — FOUR build streams + TWO analysis + gates:**
+**Tracker state — FOUR build streams + TWO analysis + gates:** *(SUPERSEDED — this is the 2026-08-31 (9)
+snapshot. Current state = the phase table `:370-383` + Update (12) below.)*
 - BUILD: **B1** hook (in flight) · **B2** HolderDistributor (ACTIVE, placeholder params) · **UI/UX** (live-now +
   preview) · **StockLpVault Phase 1** (ACTIVE, build-with-gate; P3 Arcus-gated).
 - ANALYSIS/VERIFY: oracle-deviation rebalancer (design-only) · FLR daily-accrual (VERIFY-gated on push-vs-claim #1).
@@ -882,7 +906,8 @@ actual files, not recall):**
   G-UI-1/G-UI-2 from the vault scope. 23/23 in its own suite (coordinator-reported, not PM-re-run).
 
 **Two states the tracker records that this narrative did not:**
-- **D-1 audit-state UNVERIFIED:** the hook is founder-reported "R2 clean, 1 round to go," but no audit doc exists
+- **D-1 audit-state UNVERIFIED** *(as of 2026-08-31; **RESOLVED** by Update (11) — the receipt now exists at
+  `docs/audits/esseyreservehook-gate-2026-08-31.md`. Kept for the trail; do not read as current):* the hook is founder-reported "R2 clean, 1 round to go," but no audit doc exists
   under `docs/audits/` for it and the contract is untracked — recorded UNVERIFIED until the auditor commits round
   receipts. Consistent with update `:366-368`.
 - **Wrap-up cleanup workstream:** `FOUNDRY_PROFILE=v4 forge test` has ~45 failing tests in unrelated suites
@@ -900,3 +925,201 @@ actual files, not recall):**
   until the atomic seed). Contracts still UNTRACKED — guard-git now unblocks the push (3 clean rounds); commit next.
 - **G3 — StockLpVault gate FIRING (round 1 of 3).** CODE → `audit-in-progress`. Needs 3 consecutive clean rounds.
 - Register+tracker reconciled. No deploy, no push, no publish on PM's end.
+
+### Update 2026-09-02 (12) — REGISTER RECONCILE (G1=MET pass) + ceremony status + team-MD check
+PM pass, read/reconcile only. No build, no push, no deploy, no publish.
+
+**Reconciled in this doc (the stale-state fix the tracker flagged):**
+- **Phase table `:370-383` rewritten.** B1 was `NOT STARTED` while the hook is built AND audit-clean; B2 was
+  `NOT STARTED` while the distributor is built; G1 was `NOT STARTED` while its receipt says **MET**. G3 (vault)
+  did not exist in the table at all. All five cells now carry a `file:line`, a `git` read, or the audit receipt.
+- **The 2026-08-31 (9) "Tracker state" block `:863-871` is marked SUPERSEDED** rather than rewritten. Same for
+  every other dated "Tracker state / gates NOT fired" footer above (`:465,512,551,653,678,729,763,827`) — those
+  are point-in-time snapshots inside a chronological log and were true when written. **Current state = the phase
+  table + this entry.** Do not read a dated footer as live status.
+
+**CEREMONY — DID NOT RUN on 2026-09-01. VERIFIED, and this is load-bearing.**
+- `ls -laT the ceremony directory` (run 2026-09-02) shows **only** `ceremony_0000.zkey` (the
+  pre-contribution key), `pot15_final.ptau`, `transaction2.r1cs`, `CEREMONY-RUNBOOK.md` — **all mtime
+  2026-08-30**. There is **no** `ceremony_0001.zkey`, `ceremony_0002.zkey`, or `ceremony_final.zkey`.
+- The app still serves the **single-contributor** proving key: `app/web/public/pool/transaction2.zkey`,
+  mtime **2026-08-15** (`ls -laT app/web/public/pool/`).
+- `rh-chain/src/private/pool/PoolVerifier2.sol` mtime **2026-08-15**; last touched at commit `61a27bd`
+  (`git log -- rh-chain/src/private/pool/PoolVerifier2.sol`) — no post-ceremony verifier swap happened.
+- **Consequence, unchanged:** the deployed shielded setup remains single-contributor → **proofs forgeable,
+  a funded pool drainable with real money** (`:96-98`). The shielded set (#2) stays HARD-BLOCKED. The two
+  human gates from `CEREMONY-READINESS.md` are still open: **B1** a real independent second contributor
+  (or a founder ruling on the Erik-only + beacon fallback) and **O2** the public beacon source/height.
+  Everything mechanical is green — ptau provenance CONFIRMED (blake2b == official PSE), starting key
+  `ZKey Ok!`, toolchain installed, runbook written.
+
+**Team-MD / shared-doc currency check (`~/.claude/agents/*.md` + the five shared docs) — flagged, not fixed
+(they are outside the two docs the PM owns):**
+- `docs/PRODUCT-TRACKER.md` — **CURRENT** (reconciled 2026-09-01, 2nd session; its own "STILL STALE" note
+  pointed at this register, which this entry closes).
+- `docs/JESTER-PERSONA-BIBLE.md` — **CURRENT** through §32 (2026-09-01). Cosmetic only: §30 is filed after §31.
+- `docs/CEREMONY-READINESS.md` — **CURRENT as a readiness inventory**, but its header still reads "for a
+  founder-run ceremony on **2026-09-01**" (`:3`) and the step list says "run it tomorrow" (`:~86`). The date
+  has passed with no run — needs a re-date by the zk lead when the founder sets a new one.
+- `docs/AGENT-HIERARCHY.md` — **STALE, 2 gaps.** (a) **`essey-legal-advisor` is missing entirely** — the
+  charter exists (`~/.claude/agents/essey-legal-advisor.md`, 2026-08-31) but no roster line or addendum
+  (`grep -n essey-legal-advisor docs/AGENT-HIERARCHY.md` → no match). (b) It never names
+  `docs/PRODUCT-TRACKER.md`, so no charter's read-first list points at the connected matrix.
+- `~/.claude/agents/essey-legal-advisor.md` — **STALE: no onboarding block and no GROUNDING GATE.** Every
+  other Essey charter carries both; this one carries neither (`grep -n "READ FIRST\|GROUNDING GATE\|AGENT-HIERARCHY"`
+  → no match). It spawns stateless with no orientation.
+- `~/.claude/agents/essey-web-designer.md:10` — **STALE:** still lists `~/Developer/essey-markets/web/` as a
+  co-owned site, against the canonical-repo ruling (one public source of truth; the markets fork is archived)
+  [[essey-canonical-repo-decision]]. The directory still exists on disk, so the charter will send the
+  designer to the wrong tree.
+- `~/.claude/agents/essey-deployment-manager.md:39-46` — **STALE (PM's own charter):** the "Specialists you
+  coordinate" list names only 5 (auditor, web-designer, jester, don-economist/don-designer, harness). Missing
+  8 real team members: protocol-engineer, zk-auditor, launch-economist, brand-designer, research-intern,
+  social, legal-advisor, dons-director.
+- All other Essey charters carry the onboarding block + grounding gate and read current.
+
+**One more stale-state correction:** the **Opal Exchange dossier is DELIVERED**, not queued —
+`docs/research/opal-exchange-dossier.md`, 18,784 bytes, mtime **2026-09-01 14:36** (`ls -laT`, VERIFIED
+2026-09-02). Both `RESUME-2026-09-01` and the tracker's kickoff queue said "not dispatched." Verdict:
+Opal's privacy is a **TEE/enclave trust assumption, not cryptography** (no ZK, no mixer, no shielded
+pool; off-chain matching, nothing on-chain-verifiable), and "100% of fees to holders" is an operator-run
+off-chain snapshot + manual airdrop with no distribution contract located. This makes Essey's shielded
+pool a genuine cryptographic differentiator against the narrative the founder flagged — **and it raises
+the cost of the ceremony not running**: the differentiator is exactly the thing still gated. The two
+downstream items (brand/narrative study; uniform-price sealed batch-auction anti-snipe scope) are
+UNBLOCKED and are now the live research work.
+
+**PUSH GATE — a finding the tracker did not surface.** The tracker's B1 row says the next action is
+"push (needs 3-agent clean + founder go)." That understates it. The 7 local commits (`git status -sb` →
+`ahead 7`) include `ae143bc`, which touches **12 contract files**, only 2 of which are audit-clean
+(`git show --numstat ae143bc -- rh-chain/src`, VERIFIED 2026-09-02):
+- **audit-clean (G1 MET):** `EsseyReserveHook.sol`, `LaunchSeeder.sol`.
+- **built, NEVER audited:** `HolderDistributor.sol`, `BasketRegistry.sol`, `StockLpVault.sol` (G3 not met),
+  `DonMintSplitter.sol`, `EsseyLadderSeeder.sol`, `GameControllerV2.sol`, `GameLedger.sol`, `HitterNFTV2.sol`.
+- **MODIFICATIONS to already-deployed contracts:** `MissionBoard.sol` (+35/−13) and `EsseyCasesDegen.sol`
+  (+30/−1) — changed contracts under hard rule 2.
+**Therefore G1 alone does NOT unblock the public push.** Pushing this bundle would put nine unaudited
+contracts and two modified deployed ones on the public repo. Options for the founder: (a) fire a scoped
+pre-push audit round over the whole `ae143bc` contract set, or (b) split the push so only the G1-clean
+hook + `LaunchSeeder` + the docs/web commits go out and the rest waits on G2/G3. **PM recommends (b)** —
+it is the smaller blast radius and does not hold the finished work hostage to the unfinished. Founder's call.
+
+**Nothing else moved.** No gate advanced today; this entry only makes the register match the receipts.
+
+### Update 2026-09-02 (13) — SEVEN FOUNDER RULINGS landed; five workstreams dispatched
+All seven relayed via the orchestrator. Recorded here and in `PRODUCT-TRACKER.md`. PM did not deploy,
+push, publish, or dispatch — the orchestrator dispatches.
+
+1. **AGENT CONFIG — repair authorized.** `docs/AGENT-HIERARCHY.md` repaired this pass (see below). The
+   four `~/.claude/agents/*.md` charter edits are prepared but NOT applied — see the note at the end.
+2. **PUSH — SPLIT it** (PM's recommendation adopted). Only the G1-clean set ships: `EsseyReserveHook.sol` +
+   `LaunchSeeder.sol` + the docs/web/blog commits, after `essey-auditor` returns a clean **scoped** round on
+   **just that set**. The 9 built-never-audited contracts and the 2 modified already-deployed ones
+   (`MissionBoard.sol` +35/−13, `EsseyCasesDegen.sol` +30/−1) are held back in a separate commit until gated.
+   **Mechanical note:** `ae143bc` is ONE commit mixing clean and unclean contracts, so this is a history
+   rewrite of an unpushed commit, not a partial push.
+3. **CEREMONY — B1 SETTLED: the founder contributes HIMSELF and finalizes with a PUBLIC BEACON.** No
+   independent second contributor. `essey-zk-auditor` dispatched to prepare the run + an exact live
+   walkthrough. **POSTURE, to be stated exactly and never softened:** founder-only + beacon is enormously
+   better than the single-contributor key on chain today — the beacon is unbiddable public randomness, so
+   the toxic waste cannot be ground after the fact — but it is **NOT a multi-party ceremony**. Security
+   rests on the founder honestly discarding his entropy PLUS the beacon. **Never publish it as multi-party**
+   (Jester + social: this is a hard framing constraint, not a preference). `CEREMONY-READINESS.md` re-dated
+   accordingly; the contribution chain is now `_0000 → _0001 → beacon → _final` (the counterparty step is
+   SKIPPED, and step 3 beacons `_0001`, not `_0002`).
+4. **FLR AIRDROP — CLOSED, not a risk.** Floor's airdrops have **volume MINIMUMS** before they drop, so the
+   reserve receiving nothing is **EXPECTED**, not evidence of a stranded claim-only path. The push-vs-claim
+   VERIFY-gate (`:804-808`) is retired as a finding. Memory: `floor-airdrop-minimums`. **Do not re-open this**
+   — it is a settled fact, and re-discovering it as a "finding" wastes the founder's time.
+5. **Vault fork-test = BUILD** (`StockLpVaultFork.t.sol`, dispatched) · **keeper owner = protocol-engineer**
+   (dispatched) · **eligibility bar = 0.1% of supply = 8,888,889 $ESSEY, a KEEPER KNOB** (unblocks G2) ·
+   **FLR price = query via PONS**, the launchpad Floor is on (dispatched).
+
+**Repairs made this pass (`docs/AGENT-HIERARCHY.md`):** added `essey-legal-advisor` to the org diagram, the
+agent list, and its own addendum — the charter had existed since 2026-08-31 but was never listed, so the agent
+was invisible to the org and to every other agent's read-first. Added the four newer specialists that were
+also missing from the agent list (zk-auditor, brand-designer, launch-economist, research-intern) plus
+dons-director; the roster is now **13 specialists + the PM**, stated explicitly. Added a **read-first block**
+that puts `PRODUCT-TRACKER.md` third in every agent's orientation. Added a **two-doc rule** addendum recording
+the lesson from this reconcile: update BOTH docs when a gate moves, and **a dated log entry is a point-in-time
+snapshot, never live status.**
+
+**O2 IS NOW THE CRITICAL PATH.** With B1 settled, the single remaining input before the ceremony can run is
+the **public beacon source + height** — and it must be **pre-announced and FUTURE** (e.g. a Bitcoin block hash
+at an agreed height after the contribution), or it can be ground and the whole exercise is theatre. The
+ceremony is the hard blocker on the entire shielded set (#2), and the Opal dossier (Update (12)) makes it the
+sharpest item on the board: our shielded pool is real cryptography where the competitor's is an enclave trust
+assumption — and the real one is the one still gated. **No new date is set.**
+
+**NOT DONE — agent-charter edits held.** Ruling 1 also covers four files under `~/.claude/agents/`
+(`essey-legal-advisor.md` onboarding+grounding block · `essey-web-designer.md:10` stale `essey-markets` path ·
+`essey-deployment-manager.md:39-46` incomplete roster · charters reading into PRODUCT-TRACKER). Those are
+harness **agent configuration**, and the authorization reached the PM as an agent-relayed message rather than
+from the founder directly. The exact patches are written and ready to apply on the founder's own word; the
+repo-side docs (this file, `AGENT-HIERARCHY.md`, `CEREMONY-READINESS.md`, `PRODUCT-TRACKER.md`) are done.
+
+### Update 2026-09-02 (14) — scoped pre-push audit NOT CLEAN; H-2/H-3 doc corrections landed
+The scoped pre-push round on the G1-clean set came back **NOT CLEAN**. H-1 (absolute local paths in
+`rh-chain/circuits-nova/adversarial/` leaking the layout of two other private repos) was fixed by the
+coordinator. H-2 and H-3 were in PM-owned docs and are fixed here. **Push stays BLOCKED pending a fresh
+3-round clean.** Every number below was re-verified against the committed file, not carried forward.
+
+**H-2 — the register contradicted the code shipping in the same push.** Three corrections, all made as
+dated SUPERSEDED boxes rather than silent rewrites, so the audit trail survives and the contradiction dies:
+- `MIN_RESERVE_BPS` — register said **`6_000` at `EsseyReserveHook.sol:50`**, labelled VERIFIED. Code says
+  **`4_000` at `:38`** (`grep -n MIN_RESERVE_BPS`, 2026-09-02), with `MAX_HOLDERS_BPS=5_000` `:39`,
+  `MAX_DONS_BPS=2_000` `:40`, enforced `:366-368`.
+- Bucket count — register said **FOUR** (`reserveShareBps/donsShareBps/opsShareBps/polShareBps` at `:84-87`),
+  labelled VERIFIED. Code has **THREE** (`reserveShareBps/holdersShareBps/donsShareBps` at `:73-75`).
+- "No audit doc exists for the hook" (`:366`) — the same push **ADDS** that doc. Marked superseded.
+- B1/G1 `NOT STARTED` rows were already corrected in Update (12); the auditor read `HEAD`, where Update (12)
+  was still **uncommitted**. That was the real defect — see the commit note at the end.
+
+**H-3 — the audit receipt misstated the fee split, and the error had already spread.** The receipt said
+"Default deploy split **50 holders / 40 reserve / 10 dons**." The real default is **45 reserve / 40 holders
+/ 15 dons** (`script/DeployEsseyV4Pool.s.sol:47-49`; `test/EsseyReserveHook.t.sol:132-134`). **The receipt
+had printed the RAILS as if they were the SPLIT.** This matters beyond tidiness: 50/40/10 sits *exactly on*
+two rails — holders at the 5000 ceiling, reserve at the 4000 floor — so the old text described a launch
+shipping at its limits with zero governor headroom. The real split has 500 bps above the reserve floor and
+1000 bps below the holders ceiling.
+
+**The contamination chain — wider than the audit flagged.** One wrong number in one receipt propagated into
+**four more documents**, each citing the receipt as its source. Found by sweeping `grep -rn "50/40/10"`
+rather than trusting the two files reported. All corrected:
+`docs/audits/esseyreservehook-gate-2026-08-31.md` (origin) → `docs/audits/README.md` →
+**`docs/BASE-LAYER.md:110,136`** → **`docs/OUTSTANDING.md:14`** → **`docs/TOKENOMICS-v3.md:108`**.
+The last three are **tracked, public, and rendered on the live site's `/docs`**. The wrong split is in the
+built bundle (`app/web/dist/assets/index-*.js`, gitignored build artifact), so **essey.xyz is currently
+publishing the wrong fee split** and will keep doing so until a rebuild + founder-gated deploy. Flagging,
+not fixing — a deploy is not the PM's to make, and the clean-tree deploy gate applies.
+**This is the "never let one agent's unverified assumption become another agent's premise" failure, in its
+exact textbook shape.** Four downstream docs cited the receipt instead of the code. The receipt was the
+single point of failure and nothing re-derived it.
+
+**Two LOW findings recorded that existed nowhere in the receipt (now added to it):**
+- **S-1** — `EsseyReserveHook.sol:256`'s `EmptyPool` guard is unconditional and never disarms after launch.
+  A buy that exhausts active liquidity leaves `getLiquidity()==0`, and every subsequent swap reverts.
+- **S-2** — `LaunchSeeder.seed()` (`:123`) validates each rung individually (`:156,157,162,168,144`) but has
+  **no post-condition that the result is active at spot**. One-shot (`seeded=true` `:127`), no withdraw path.
+- **They COMPOUND:** a mis-parameterized seed (S-2) yields zero active liquidity, which S-1 turns into a
+  **permanently un-swappable pool** — a launch that can neither trade nor be recovered, from one bad rung
+  array on a one-shot call. **Fix-in-code vs accept-in-writing is a FOUNDER call; the PM does not decide it.**
+  Procedural mitigation is now DEPLOY-CONFIG preconditions #3 (fork-simulate the rungs first) and #4 (rung
+  contiguity bracketing spot). Precondition #1 strengthened to **ERC20 USDG, never the native currency** —
+  a V4 `Currency` may be the zero address and the payout path assumes an ERC20 transfer.
+
+**Process improvement ADOPTED: every future audit receipt carries `sha256sum` of each audited file.** Added
+to the G1 receipt with an honest caveat — the hashes were taken 2026-09-02, not during the 2026-08-31 rounds,
+so they pin the files forward but do **not** retroactively prove the audited bytes. Baseline for the next
+gate, not proof of the last.
+
+**Open contradiction flagged, not resolved:** the receipt says "rails founder-confirmed 40/50/20" while the
+source still carries `// PENDING FOUNDER CONFIRMATION` on all three rail constants
+(`EsseyReserveHook.sol:37-40`) and on the default split (`DeployEsseyV4Pool.s.sol:46`). One of the two is
+wrong. Founder resolves: confirm and strip the comments, or downgrade the receipt's claim.
+
+**THE PROCESS DEFECT WORTH KEEPING.** Update (12) fixed the stale register on 2026-09-02 — and then sat
+**uncommitted in the working tree**, so the auditor reading `HEAD` correctly found the register still stale.
+A reconcile that is not committed did not happen. **New standing rule: a doc reconcile is not done until it
+is committed.** Applied immediately — this entry and every correction above are being committed now, not
+left in the tree.
