@@ -298,4 +298,70 @@ contract EsseyCasesDegenTest is Test {
         assertEq(treasury.balance, before + 0.5 ether, "stray ETH swept to treasury");
         assertEq(address(degen).balance, 0);
     }
+
+    // ---------------------------------------------------------------- FIX #2: value-faucet guard
+    // The #1 mainnet solvency risk is a MISPRICED play: at launch $ESSEY ~$0.0000281, a 100-$ESSEY
+    // price (~$0.0028) buys a ~$100 expected payout — a ~36,000% value RTP. These pin the fix:
+    // pricing the play in the payout asset makes value-RTP oracle-free and bounded <= 100% at deploy.
+
+    /// A config priced in the payout asset itself (essey == payoutStock == stock; fee stays in usdg).
+    function _cfgAssetPriced(uint256 casePrice_) internal view returns (EsseyCasesDegen.Config memory c) {
+        c = _cfg();
+        c.essey = stock; // price currency == payout asset
+        c.casePrice = casePrice_;
+    }
+
+    /// INVARIANT: priced in the payout asset, value-RTP = E[payout]/casePrice is oracle-free and the
+    /// house edge holds at ANY $ESSEY price (no $ESSEY in the priced path at all).
+    function test_AssetPriced_ValueRtpBoundedAndOracleFree() public {
+        // reference 0.5 share, 89.6% ladder -> E[payout] = 0.448 share.
+        EsseyCasesDegen d = new EsseyCasesDegen(_cfgAssetPriced(5e17)); // price = 1x reference = 0.5 share
+        assertTrue(d.pricedInPayoutAsset(), "priced in the payout asset");
+        assertEq(d.expectedPayoutShares(), 0.448e18, "E[payout] from the disclosed ladder, in shares");
+        // value RTP = E[payout] / price, both in shares -> 0.448/0.5 = 89.6% <= 100%, independent of any
+        // token's dollar price. The house edge is real by construction.
+        assertLe(d.expectedPayoutShares(), d.casePrice(), "value RTP <= 100% (edge is house-positive)");
+
+        // And it actually runs: buyer pays the price IN the payout asset to treasury; worst case reserved.
+        stock.mint(alice, 100e18);
+        stock.mint(address(this), 100e18);
+        stock.approve(address(d), type(uint256).max);
+        d.seedReserve(100e18);
+        uint256 tBefore = stock.balanceOf(treasury);
+        vm.startPrank(alice);
+        stock.approve(address(d), type(uint256).max);
+        usdg.approve(address(d), type(uint256).max);
+        d.buy{value: ENTROPY_FEE}();
+        vm.stopPrank();
+        assertEq(stock.balanceOf(treasury) - tBefore, 5e17, "price paid in the payout asset, sunk to treasury");
+        assertEq(d.reservedShares(), 25e18, "worst case still reserved in shares");
+    }
+
+    /// MUTATION DIRECTION: a value-faucet config (price below E[payout], so value RTP > 100%) is
+    /// rejected AT CONSTRUCTION. Remove/invert the `casePrice < expShares` guard in the contract and
+    /// this goes green (the faucet deploys) — that is the mutation this test is pinned against.
+    function test_AssetPriced_FaucetPriceRejectedAtDeploy() public {
+        uint256 exp = 0.448e18; // E[payout] for this ladder + reference
+        // exactly E[payout] is the 100%-RTP boundary: allowed.
+        EsseyCasesDegen ok = new EsseyCasesDegen(_cfgAssetPriced(exp));
+        assertEq(ok.expectedPayoutShares(), exp);
+        // one wei under E[payout] => value RTP > 100% => a faucet => BadConfig.
+        vm.expectRevert(EsseyCasesDegen.BadConfig.selector);
+        new EsseyCasesDegen(_cfgAssetPriced(exp - 1));
+        // the shipped testnet number (100 shares) is far above E[payout], so it is trivially safe here;
+        // the danger only ever existed because the OLD price was in a token that floats to ~$0.
+    }
+
+    /// Guard scope: pricing in a DIFFERENT token (the current $ESSEY path) is deliberately left
+    /// unconstrained — there is no oracle-free way to compare a floating price token to the payout —
+    /// so a low casePrice there does NOT revert. This documents WHY mainnet must price in the asset.
+    function test_ForeignTokenPricing_NotBoundByContract() public {
+        EsseyCasesDegen d = new EsseyCasesDegen(_cfg()); // essey != payoutStock, casePrice 100e18
+        assertFalse(d.pricedInPayoutAsset(), "not priced in the payout asset");
+        // a 1-wei $ESSEY price would construct fine — the contract cannot catch a foreign-token faucet.
+        EsseyCasesDegen.Config memory cheap = _cfg();
+        cheap.casePrice = 1;
+        EsseyCasesDegen faucet = new EsseyCasesDegen(cheap);
+        assertEq(faucet.casePrice(), 1, "foreign-token underprice is unconstrained (deploy's responsibility)");
+    }
 }

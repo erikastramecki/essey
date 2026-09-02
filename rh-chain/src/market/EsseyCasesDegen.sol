@@ -94,6 +94,13 @@ contract EsseyCasesDegen is ReentrancyGuard, IEntropyConsumer {
     uint256[] public cumPpm; // strictly increasing, last == PPM
     uint256 public immutable maxMultiplierBps; // the reservation basis (largest ladder multiplier)
 
+    /// The value-faucet guard. Priced in the payout asset (essey == payoutStock), price and payout share
+    /// one unit, so value-RTP = expectedPayoutShares/casePrice is oracle-free and pinned <= 100% at deploy.
+    /// Pricing in a token that floats to ~$0 (e.g. $ESSEY at launch) makes value-RTP unbounded — the #1
+    /// mainnet risk — and cannot be caught here, so that path is left to the deploy's own discipline.
+    bool public immutable pricedInPayoutAsset;
+    uint256 public immutable expectedPayoutShares; // E[payout] in payoutStock units, from the disclosed ladder
+
     mapping(uint64 => Case) public cases; // keyed by the entropy sequence number
     mapping(address => uint256) public owed; // pull-based winnings, in payoutStock shares
     uint256 public reservedShares; // stock reserved for outstanding (unsettled) cases
@@ -144,9 +151,16 @@ contract EsseyCasesDegen is ReentrancyGuard, IEntropyConsumer {
         ) revert BadConfig();
 
         IERC20 base_ = IERC20(address(c.bell.reward()));
-        if (c.essey == base_ || c.payoutStock == base_ || c.payoutStock == c.essey) revert BadConfig();
+        // essey==payoutStock is now ALLOWED (payout-asset pricing); the fee currency must still differ.
+        if (c.essey == base_ || c.payoutStock == base_) revert BadConfig();
 
         maxMultiplierBps = _validateLadder(c.multiplierBps, c.cumPpm);
+        uint256 expShares = _expectedPayoutShares(c.referenceShares, c.multiplierBps, c.cumPpm);
+        // Value-faucet guard (see pricedInPayoutAsset): in-asset, a price below E[payout] is a >100% RTP.
+        bool priceInAsset = c.essey == c.payoutStock;
+        if (priceInAsset && c.casePrice < expShares) revert BadConfig();
+        pricedInPayoutAsset = priceInAsset;
+        expectedPayoutShares = expShares;
 
         essey = c.essey;
         bell = c.bell;
@@ -178,6 +192,21 @@ contract EsseyCasesDegen is ReentrancyGuard, IEntropyConsumer {
             if (m[i] > maxM) maxM = m[i];
         }
         if (cp[cp.length - 1] != PPM) revert BadConfig();
+    }
+
+    /// E[payout] in payoutStock units: Σ bandProb_i · ref · mult_i (bandProb_i = cp_i − cp_{i−1} in ppm).
+    /// cp is validated strictly-increasing before this runs, so the band subtraction never underflows.
+    function _expectedPayoutShares(uint256 ref, uint256[] memory m, uint256[] memory cp)
+        internal
+        pure
+        returns (uint256 exp)
+    {
+        uint256 prev;
+        for (uint256 i = 0; i < m.length; i++) {
+            exp += ref * m[i] * (cp[i] - prev);
+            prev = cp[i];
+        }
+        exp /= (BPS * PPM);
     }
 
     function getEntropy() internal view override returns (address) {

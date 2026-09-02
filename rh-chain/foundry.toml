@@ -8,9 +8,29 @@ optimizer_runs = 200
 remappings = [
   "@openzeppelin/=lib/openzeppelin-contracts/",
   "forge-std/=lib/forge-std/src/",
+  "@uniswap/v4-core/=lib/v4-core/",
+  "@uniswap/v4-periphery/=lib/v4-periphery/",
 ]
 # read the generated Poseidon hasher bytecode for the shielded-pool deploy/tests
 fs_permissions = [{ access = "read", path = "./circuits-nova" }]
+
+# The V4 hook + vendored v4-core/v4-periphery use assembly-heavy libraries that overflow the legacy
+# pipeline (stack-too-deep) and need via_ir. via_ir is off in `default` because it shifts gas enough to
+# break the loop-heavy liveness tests, so the V4 surface is skipped there and built/tested under its own
+# `v4` profile with via_ir on:
+#   FOUNDRY_PROFILE=v4 forge test --match-path 'test/EsseyReserveHook*.t.sol'
+skip = [
+  "src/market/EsseyReserveHook.sol",
+  "src/market/LaunchSeeder.sol",
+  "test/EsseyReserveHook.t.sol",
+  "test/EsseyReserveHookFork.t.sol",
+  "test/EsseyReserveHookLaunchSeed.t.sol",
+  "script/DeployEsseyV4Pool.s.sol",
+]
+
+[profile.v4]
+via_ir = true
+skip = []
 
 # Robinhood Chain — chainId 4663 mainnet, 46630 testnet
 # Deploy.s.sol has too many locals for the legacy pipeline, but via_ir changes gas behaviour

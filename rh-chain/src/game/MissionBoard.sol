@@ -220,12 +220,18 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
         uint256 betaBps
     ) external returns (uint64 briefId) {
         if (msg.sender != controller.admin()) revert NotAdmin();
-        // The Degen ladder-validation discipline: strictly increasing bands terminating inside PPM,
-        // and a floor (partial) that a real roll always weakly beats.
-        if (
-            duration == 0 || cumSuccessPpm == 0 || cumPartialPpm <= cumSuccessPpm || cumPartialPpm > PPM
-                || successPay == 0 || partialPay == 0 || partialPay >= successPay
-        ) revert BadBrief();
+        // The Degen ladder-validation discipline: strictly increasing bands terminating inside PPM.
+        if (duration == 0 || cumSuccessPpm == 0 || cumPartialPpm <= cumSuccessPpm || cumPartialPpm > PPM) {
+            revert BadBrief();
+        }
+        // Two shapes. PROVISION-ONLY (successPay==0 && partialPay==0): the real-asset shape — no minted
+        // base wage, payout is purely the provision boost capped at the stake (betaBps<=BPS), so the held
+        // provision self-backs and NOTHING mints. SUBSIDIZED: a minted base wage + a floor (Scrip/testnet).
+        if (successPay == 0 && partialPay == 0) {
+            if (betaBps == 0 || betaBps > BPS || provisionCap == 0) revert BadBrief();
+        } else if (successPay == 0 || partialPay == 0 || partialPay >= successPay) {
+            revert BadBrief();
+        }
         briefId = ++briefCount;
         briefs[briefId] = Brief({
             live: true,
@@ -273,13 +279,19 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
 
         address vault = don.vaultOf(l.donId);
         scrip.burn(vault, b.dispatchFee); // rate card: Scrip-mode dispatch fees burn
-        if (l.provision > 0) scrip.burn(vault, l.provision); // consumed at dispatch — the gamble
 
         // Worst-case reservation BEFORE the roll exists (the solvency law): best outcome is
         // success pay + the full provisioning boost.
         uint256 worst = b.successPay + (l.provision * b.betaBps) / BPS;
-        if (missionBudget < worst) revert InsufficientBudget();
-        missionBudget -= worst;
+        if (b.successPay == 0) {
+            // Provision-only: HOLD the provision (never burned, never minted) — it IS the payout's
+            // backing. worst <= provision (betaBps<=BPS at postBrief), so no budget is ever drawn.
+            if (l.provision > 0) scrip.move(vault, address(this), l.provision);
+        } else {
+            if (l.provision > 0) scrip.burn(vault, l.provision); // consumed at dispatch — the gamble
+            if (missionBudget < worst) revert InsufficientBudget();
+            missionBudget -= worst;
+        }
         outstandingReserved += worst;
 
         missionId = ++missionCount;
@@ -417,11 +429,21 @@ contract MissionBoard is IEntropyConsumer, ReentrancyGuard {
     function _settle(Mission storage m, uint256 payout) internal {
         m.settled = true;
         activeMissionOf[m.donId] = 0;
-        missionBudget += m.reserved - payout;
         outstandingReserved -= m.reserved;
-        if (payout > 0) {
-            scrip.mint(address(escrow), payout);
-            escrow.creditLoot(m.donId, payout);
+        if (briefs[m.briefId].successPay == 0) {
+            // Provision-only: pay from the HELD provision (move, never mint); the unpaid remainder is
+            // the house edge, retained by the board as add-only bankroll. Nothing returns to budget.
+            if (payout > 0) {
+                scrip.move(address(this), address(escrow), payout);
+                escrow.creditLoot(m.donId, payout);
+            }
+        } else {
+            // Subsidized: unspent reservation returns to the budget; the payout is minted to escrow.
+            missionBudget += m.reserved - payout;
+            if (payout > 0) {
+                scrip.mint(address(escrow), payout);
+                escrow.creditLoot(m.donId, payout);
+            }
         }
     }
 

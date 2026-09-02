@@ -398,4 +398,65 @@ contract GameMissionBoardTest is GameBase {
         _resolveWith(m, 950_000);
         assertEq(escrow.hopperOf(aliceDon), 0, "nerve must not convert a FAIL into a payout");
     }
+
+    // ============================================================ FIX #1: provision-only (real-asset)
+    // On mainnet the payout token is non-mintable ($ESSEY fixed-supply / real equities), so the minted
+    // base-wage faucet cannot exist. A provision-only brief (successPay==0 && partialPay==0) HOLDS the
+    // stake, pays purely the provision boost from it (betaBps<=BPS => payout<=stake), and mints nothing.
+
+    uint64 constant PROV_ONLY = 5; // posted after the 4 seeded briefs
+
+    /// betaBps 9000: on success pay 0.9x the stake; self-backing, no budget, no mint.
+    function _postProvisionOnly() internal returns (uint64 id) {
+        id = board.postBrief("PROV ONLY", 1, 1 hours, 900_000, 950_000, 0, 0, 0, 1_000e18, 9_000);
+    }
+
+    /// INVARIANT (a): a provision-only payout MINTS NOTHING and never exceeds the staked provision.
+    /// Mutation that this pins: swap the `scrip.move` in _settle's provision-only branch back to
+    /// `scrip.mint` — totalSupply then rises on settle and the "mints nothing" assertion goes red.
+    function test_ProvisionOnly_SettlementMintsNothing_AndIsProvisionBounded() public {
+        uint64 bid = _postProvisionOnly();
+        assertEq(bid, PROV_ONLY);
+        _fund(aliceDon, 100e18);
+        uint64 m = _depart(alicePk, aliceDon, bid, 100e18, bytes32(0));
+        assertEq(scrip.balanceOf(address(board)), 100e18, "provision HELD by the board, not burned");
+
+        uint256 supply0 = scrip.totalSupply();
+        uint256 budget0 = board.missionBudget();
+        uint256 hopper0 = escrow.hopperOf(aliceDon);
+        _resolveWith(m, 0); // roll 0 -> success
+        uint256 payout = escrow.hopperOf(aliceDon) - hopper0;
+
+        assertEq(payout, 90e18, "success pays the 0.9x provision boost");
+        assertLe(payout, 100e18, "provision-bounded: payout never exceeds the stake");
+        assertEq(scrip.totalSupply(), supply0, "SETTLEMENT MINTS NOTHING (paid by move from the held stake)");
+        assertEq(scrip.balanceOf(address(board)), 10e18, "house edge retained as add-only bankroll");
+        assertEq(board.missionBudget(), budget0, "provision-only never touches the mission budget");
+    }
+
+    /// A losing roll keeps the whole stake in the board (the house edge) and still mints nothing.
+    function test_ProvisionOnly_FailRetainsStake_MintsNothing() public {
+        uint64 bid = _postProvisionOnly();
+        _fund(aliceDon, 100e18);
+        uint64 m = _depart(alicePk, aliceDon, bid, 100e18, bytes32(0));
+        uint256 supply0 = scrip.totalSupply();
+        _resolveWith(m, 999_999); // past the partial band -> FAIL
+        assertEq(escrow.hopperOf(aliceDon), 0, "fail pays nothing");
+        assertEq(scrip.totalSupply(), supply0, "fail mints nothing");
+        assertEq(scrip.balanceOf(address(board)), 100e18, "the full stake is retained by the house");
+    }
+
+    /// The self-backing precondition: a provision-only brief whose best outcome could EXCEED the stake
+    /// (betaBps > BPS) is rejected at postBrief — otherwise the held stake could not cover the payout.
+    /// Mutation this pins: drop the `betaBps > BPS` check in postBrief and this stops reverting.
+    function test_ProvisionOnly_BetaAboveOneRejected() public {
+        vm.expectRevert(MissionBoard.BadBrief.selector);
+        board.postBrief("HOT", 1, 1 hours, 900_000, 950_000, 0, 0, 0, 1_000e18, 10_001); // >BPS
+        vm.expectRevert(MissionBoard.BadBrief.selector);
+        board.postBrief("NOCAP", 1, 1 hours, 900_000, 950_000, 0, 0, 0, 0, 9_000); // no provision cap
+        vm.expectRevert(MissionBoard.BadBrief.selector);
+        board.postBrief("DEAD", 1, 1 hours, 900_000, 950_000, 0, 0, 0, 1_000e18, 0); // zero boost
+        // betaBps == BPS (best outcome == stake) is the boundary and IS allowed.
+        board.postBrief("EDGE", 1, 1 hours, 900_000, 950_000, 0, 0, 0, 1_000e18, 10_000);
+    }
 }
