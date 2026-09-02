@@ -331,3 +331,5 @@ list NVDA first (deep pool), gate AAPL to small size (thin pool). Do not block b
 - Every mainnet deploy remains the founder's explicit per-instance action.
 </content>
 </invoke>
+
+> CORRECTION 2026-08-30 (on-chain verified): the reserve is NOT empty. It holds MSTR/GLD/NVDA (small test deposits from ops, block ~49.65M). "ops holds 100% of supply" refers to $ESSEY the TOKEN, not the stock legs. Verify via cast, not this doc.

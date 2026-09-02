@@ -1,10 +1,17 @@
 # Essey Tokenomics — The Dons
 
-> **Status: shipped spec (updated 2026-08-11).** Supersedes the Seat model in `TOKENOMICS.md`. The 2,222
+> **Status: shipped spec (updated 2026-09-01).** Supersedes the Seat model in `TOKENOMICS.md`. The 2,222
 > Seats become the **8,888 Dons** — a PFP collection that IS the seat at the table. This document is
-> reconciled against the deployed contracts (`rh-chain/src/market/{Don,DonDistributor,DonReserve,DonExchange,DonFeeRouter,DonLoan,Bell}.sol`,
-> testnet addresses in `docs/DEPLOYMENT-testnet.md`): **where a number appears here, it is the number in
-> the code.** Where a value is admin-tunable, we say so.
+> reconciled against the deployed contracts (`rh-chain/src/market/{Don,DonDistributor,DonReserve,DonExchange,DonFeeRouter,DonLoan,Bell}.sol`):
+> **where a number appears here, it is the number in the code.** Where a value is admin-tunable, we say so.
+>
+> **Chain status.** The **$ESSEY token is live on mainnet** (Robinhood Chain, id 4663) at
+> `0x315790B57C19141B34C4653a91b096Cf3f071610`. The **Dons game layer** — mint, Bell, exchange, loan,
+> and the mission/raid economy — currently runs as a **testnet Skirmish season in Scrip** (play-money, no
+> real value; see `docs/GAME-GUIDE.md`); its mainnet deploy is a separate, later step. This document is
+> **Dons/game-side tokenomics**, siloed from the protocol fee model. Where a $ESSEY sink below is a GAME
+> mechanic (notably the Bell activation burn, §4), it is a game-side mechanic and is **not** the protocol
+> fee model, which is USDG-denominated and burns nothing (`docs/BASE-LAYER.md:108-114`).
 
 ## 0. One-line
 
@@ -17,7 +24,7 @@ it — and Essey can cryptographically **prove** the whole book is solvent.
 | | |
 |---|---|
 | Collection size | **8,888 Dons** (ERC-721, mint-on-demand — not pre-generated) |
-| Token | **$ESSEY** — fixed supply **8,888,888,888** (re-motif from 2.222B **done**: `EsseyToken.TOTAL_SUPPLY = 8_888_888_888e18`, testnet `0x32a8…3d1F`; same supply-per-NFT ratio 1,000,100.01), 18 dec, adminless, non-mintable, deflationary. Pure access chip, never a reward. |
+| Token | **$ESSEY** — fixed supply **8,888,888,888** (`EsseyToken.TOTAL_SUPPLY = 8_888_888_888e18`; same supply-per-NFT ratio 1,000,100.01), 18 dec, adminless, non-mintable. **Live on mainnet at `0x315790B57C19141B34C4653a91b096Cf3f071610`** (Robinhood Chain 4663). Pure access chip, never a reward. Supply is fixed and never minted; the only $ESSEY sink is the game-side Bell activation burn (§4), which acts on the game's own balances (testnet Scrip this season). |
 | Payout / stable | **USDG**; rewards delivered as **tokenized stock** (AAPL/NVDA/BUNDLE), fail-open to USDG |
 | Mint chain | **Robinhood Chain** — resolved and **deployed** (USDG + stock + Bell live there) |
 
@@ -94,7 +101,15 @@ contract's immutable 8,888 cap:
 
 To **earn**, the holder stakes the Don + pays a **tiered activation fee in $ESSEY** → sets payout **weight**
 (the Bell's O(1) accumulator — one division per ring regardless of table size). Fee is a **sink, not a
-stake: 50% burned, 50% treasury.** Tier **clears on transfer** (the buyer re-activates).
+stake: 50% burned, 50% treasury** (`Bell.sol:368-369` — half `safeTransferFrom` to the `0x…dEaD` burn
+address, half to the immutable treasury; VERIFIED). Tier **clears on transfer** (the buyer re-activates).
+
+> **This burn is a GAME-side Bell mechanic, not the protocol fee model.** The locked protocol fee model
+> is USDG-denominated and splits **50 holders / 40 floor / 10 dons with NO burn** — the hook never mints
+> or skims $ESSEY (`docs/BASE-LAYER.md:108-114`). The Bell activation burn is a separate demand sink on the
+> Dons game side; it burns the game's own $ESSEY balances (testnet Scrip this Skirmish season) and touches
+> the live mainnet supply only at the game's future mainnet deploy. Do not read this line as protocol
+> tokenomics.
 
 | Tier | Activation fee ($ESSEY) | Weight |
 |---|---:|---:|

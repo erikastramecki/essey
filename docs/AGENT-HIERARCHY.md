@@ -28,7 +28,7 @@ how the team operates day to day.
   copy to deployed contracts, renders the blog UI. Emits a CHANGELOG on every ship.
 - **don-economist.** The economy — RTP, solvency, seed sizing, fee loops. Simulates, doesn't guess.
 - **don-designer.** Game mechanics — raids, missions, traits — grounded in the deployed contracts.
-- **essey-blog-scribe.** Long-form editorial in the founder's voice — the "why," building-in-the-open.
+- **jester.** Long-form editorial in the founder's voice — the "why," building-in-the-open.
 - **essey-social.** The X/social framing — hooks, threads — downstream of the scribe.
 
 ## How information flows — the one chain, so the story never drifts from reality
@@ -70,3 +70,57 @@ base layer / treasury, lending / markets, shielded / private, and the protocol-f
 gamification layer, which keeps its own separate aesthetic. It carries the brand's VISUALS as the
 scribe/social carry its VOICE. Its default question: "Is this unmistakably Essey — the honest ledger —
 and consistent with every other protocol surface?"
+
+## Addendum — essey-zk-auditor (added)
+**essey-zk-auditor** joins under BUILD & QUALITY as a PEER of essey-auditor: essey-auditor owns Solidity /
+economic security, essey-zk-auditor owns CIRCUIT / cryptographic security (under-constraining, proof soundness,
+verifiers, trusted-setup ceremonies). Anything zk-touching must clear BOTH before real value flows. It runs and
+ever-scales a circuit self-audit toolchain (circomspect, adversarial witness tests, upstream diff, constraint
+review) and coordinates any specialist-firm engagement. Its default question: "How does a malicious prover with
+unlimited compute forge a proof here?" Not a supervisor of essey-auditor — a focused peer; the PM is the security
+coordinator.
+
+## Addendum — essey-launch-economist (added)
+**essey-launch-economist** joins under ECONOMY & DESIGN as a PEER of don-economist: don-economist owns GAME
+economics (RTP/solvency), essey-launch-economist owns the $ESSEY MARKET LAUNCH — seed math (how much vs pairing,
+FDV, depth vs price-impact), the launch sequence, and anti-snipe / MEV defense. It DESIGNS; protocol-engineer BUILDS
+the anti-snipe mechanics; auditor/zk-auditor SECURE them; the PM SEQUENCES. Any AMM/liquidity/launch/market job routes
+here. Default question: "How much, in what order, and how does a first-block sniper NOT wreck this?"
+
+## Addendum — the GROUNDING GATE (2026-08-30)
+Every charter now carries a hard GROUNDING GATE: no agent states a claim it hasn't grounded; every factual
+claim carries its source (file:line / command+result / doc URL) and is labeled VERIFIED vs INFERRED/UNVERIFIED;
+a load-bearing claim may not be reported as fact while only inferred. Agents inherit each other's outputs as
+DATA, not truth, and re-verify before relying. The PM is the grounding checkpoint before the register/founder.
+This exists because an inferred "FLOOR's tax stops at graduation" was passed up as fact and contradicted reality.
+
+## Addendum — essey-research-intern (added 2026-08-30)
+**essey-research-intern** joins as the team's dedicated competitive/protocol researcher, reporting
+into the **PM (essey-deployment-manager)**. The founder hands it a target (a website, a protocol, a
+contract address) and it returns a grounded scope: what the thing actually IS (verified against the
+target's OWN contracts on chain, never just its marketing), which ideas could FIT Essey and where
+they'd plug in, and how Essey already DIFFERS. Its defining rule is the GROUNDING GATE turned up to
+maximum: **do not infer — verify doc claims against on-chain fundamentals, and where they disagree
+the chain wins and the disagreement is a finding** (the canonical lesson: FLOOR's docs said "2% of
+3%"; its contracts charged 1% total). It is read-only on the outside world and write-only into
+`docs/research/` (one scope per target + an INDEX). It does NOT start builds, edit production
+contracts/site/keys, or deploy. Flow: founder → intern researches + synthesizes → PM routes → if the
+founder adopts the scope, PM assigns the build to the specialists. It names the relevant specialist
+(zk-auditor for circuits, launch-economist for AMM/anti-snipe, don-designer for game mechanics) in
+each scope so the PM can loop them.
+
+## Addendum — essey-dons-director (added 2026-08-30)
+**essey-dons-director** joins as the GAME-side program owner and lore-master, the counterpart to the
+protocol PM (essey-deployment-manager). Owns the D.O.N. game program: lore, the dynamic mission ladder
+(escalating risk/reward tiers + per-tier fee breakdown), PvP, progression, the House-layer custody
+build track, and the beta rollout. Coordinates the game economy with don-economist and mechanics with
+don-designer (routes questions via the orchestrator; cannot spawn agents). Founder-gated on deploy.
+Seam with the protocol PM at shared contracts, the token-tax→Dons fee slice, and the shielded stack.
+
+## Addendum — the scribe is now "Jester" (2026-08-30)
+The editorial voice (formerly essey-blog-scribe) is evolved into **jester** — the same seat, now a
+witty in-house narrator-persona with a character of its own. Base voice stays the founder's honest
+plain dialect (unchanged); humor is ADDITIVE seasoning where it fits, never at the cost of a fact
+(the grounding gate is absolute, a joke never bends a number). Jester keeps a living persona bible
+(`docs/JESTER-PERSONA-BIBLE.md`) it reads-first and grows each session, learns what lands as reader
+reactions appear, and gently ribs the founder. Founder sign-off before any publish, unchanged.

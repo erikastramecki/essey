@@ -59,9 +59,26 @@ dedicated on-chain harness before the feature is trusted with real value.
 - **You need a standard wallet (EOA).** Keys derive from a wallet signature, which smart-contract wallets can't
   reproduce deterministically.
 
+## The mainnet blockers (named, grounded — this is NOT mainnet-ready)
+
+Three concrete blockers stand between the testnet build and a safe live transfer. Do NOT deploy real
+funds until every one clears (per [MAINNET-ACTIVATION.md](MAINNET-ACTIVATION.md), Update 2, lines ~90–104):
+
+1. **HARD BLOCKER — placeholder/single-contributor verifier → forgeable proofs.** The deployed zkey is
+   single-contributor (`DeployShieldedPool.s.sol:20-21`, `pool/README.md:41-43`), so **proofs are
+   forgeable and the pool is drainable with real money**. This needs a multi-party trusted-setup ceremony
+   + a regenerated verifier/zkey/wasm before ANY mainnet value. A cryptographic must, not a config tweak.
+2. **`openMode=true` baked into the deploy script** (`DeployShieldedPool.s.sol:41`) while the gate itself
+   says it MUST be false in production (`EsseyPoolGate.sol:17`; `setOpenMode` at `:58-60`). Fix before deploy.
+3. **Unhaircut USDG pool.** The plain-USDG shielded pool has **no pro-rata haircut**
+   (`EsseyShieldedPool.sol:169-177`). Real USDG is pausable, per-address freezable, and an upgradeable
+   proxy (verified on-chain, `MAINNET-ACTIVATION.md` Update 3), so a pause/freeze/upgrade against the
+   pool could brick or seize funds with no defense. Shielded STOCK already handles issuer adminBurn via a
+   pro-rata haircut (`EsseyShieldedStock.sol:162-166`); shielded USDG does not.
+
 ## What's still ahead (before mainnet / real value)
 
-- A real **multi-party trusted-setup ceremony** for the circuit.
+- A real **multi-party trusted-setup ceremony** for the circuit (blocker 1 above).
 - A **formal specialist zk audit** by an outside firm.
 - The **production screening engine** behind the front door, and the operator's **MSB / AML** track.
 - **Production relayer hardening** (a gas-covering fee + rate-limiting) and mainnet token decimals.

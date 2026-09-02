@@ -8,10 +8,11 @@ All contract facts below were read from the **deployed, verified source** on
 several widely-cited third-party write-ups are wrong about transfer restrictions.
 
 > **Scope note.** This document is the **lending-engine** scope: the port of the Sui pool/borrow/
-> liquidate core to Robinhood Chain. It does **not** cover the **market layer** — the Dons, Tiers,
-> the Bell, the Exchange, Cases and Degen — which is now the primary deployed product and is
-> specified in [TOKENOMICS-v3.md](TOKENOMICS-v3.md). Read that document for the live product; read
-> this one for the lending engine underneath it.
+> liquidate core to Robinhood Chain. It does **not** cover the **base layer** ($ESSEY + the
+> equity-pegged reserve, LIVE on mainnet — see [BASE-LAYER.md](BASE-LAYER.md)), nor the **market /
+> D.O.N. game layer** (Dons, Tiers, the Bell, the Exchange, Cases and Degen), specified in
+> [TOKENOMICS-v3.md](TOKENOMICS-v3.md). Read BASE-LAYER for the live protocol; read this one for the
+> lending engine that borrows against Robinhood Stock Tokens underneath it.
 
 ---
 
@@ -246,19 +247,21 @@ token in wallet.
 
 ## 5. Phasing
 
-Status as of this revision: Phases 1–2 are **largely delivered on testnet** — the lending core
-(EsseyPool / EsseyMarkets / Borrow / Liquidate) is deployed on Robinhood Chain **testnet** and has
-been through adversarial audit rounds, with **open borrowing switching on ~Aug 5 2026**. What
-remains gated is **mainnet**: the Solidity has not been deployed to chainId 4663, and Phase 4's
-all-clean audit round plus the sequencer-feed blocker (Section 6) stand between testnet and mainnet.
+**Status (2026-09-01):** the **base layer is LIVE on mainnet (chainId 4663)** — $ESSEY
+(`0x3157…1610`) and EsseyReserve (`0xd970…05A7b`), adminless (see [BASE-LAYER.md](BASE-LAYER.md)). The
+**lending engine** described in this scope is **ported to `rh-chain` on the `RobinhoodMainnet` (4663)
+path and audited (three consecutive clean 3-agent rounds), but NOT yet deployed** — no borrow is live on
+mainnet. What remains before lending goes live: the yield-vault mainnet-fork test, the founder-gated
+deploy (funded deployer + operator-multisig roles), the deferred Multiply swap adapter, and the
+sequencer-feed disposition (Section 6). Tracked in [OUTSTANDING.md](OUTSTANDING.md).
 
 | Phase | Work | Status |
 |---|---|---|
-| **0 — Spike** | All assumptions verified against live mainnet with zero gas and no keys: deny-list default-open, sequencer uptime feed exists, testnet exists, and 67 contracts already hold Stock Tokens in production. `rh-chain/phase0-verify.mjs`, 7/7. | ✅ **DONE** — passed |
-| **1 — Core** | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | ✅ **DELIVERED on testnet** — deployed and adversarially audited; open borrowing switches on ~Aug 5 2026. Guard mutation-testing remains the standing discipline *(claimed-and-wrong twice before — an independent sweep of 139 mutations found 50 survivors — so treat coverage as continuously earned, not a checkbox).* |
-| **2 — RH hazards** | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | ✅ **Largely delivered on testnet** — fork tests against real Stock Tokens. |
-| **3 — Agent** | Essey MCP server, dApp borrow flow, Robinhood Wallet integration | In progress — end-to-end on testnet. |
-| **4 — Audit** | Fresh adversarial rounds on the Solidity | ⏳ **Gates mainnet** — all-clean round required before mainnet (chainId 4663). |
+| **0 — Spike** | All assumptions verified against live mainnet with zero gas and no keys: deny-list default-open, testnet exists, and 67 contracts already hold Stock Tokens in production. `rh-chain/phase0-verify.mjs`, 7/7. | ✅ **DONE** — passed |
+| **1 — Core** | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | ✅ **BUILT + AUDITED** (ported to `rh-chain`, 3 clean rounds); **not yet deployed to 4663**. Guard mutation-testing remains the standing discipline *(claimed-and-wrong twice before — an independent sweep of 139 mutations found 50 survivors — so treat coverage as continuously earned, not a checkbox).* |
+| **2 — RH hazards** | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | ✅ **Built + audited** — `CollateralReconciler` (per-token survival index) + fork tests against real Stock Tokens; needs a monitoring keeper. |
+| **3 — Agent** | Essey MCP server, dApp borrow flow, Robinhood Wallet integration | In progress. |
+| **4 — Deploy** | Yield-vault mainnet-fork test → founder-gated mainnet deploy (chainId 4663) | ⏳ **Gates go-live** — fork test + per-instance founder authorization required. |
 | **5 — Hybrid** (optional) | Sui pools for non-Robinhood RWA; shared markets/risk config. **CCIP** already moves Stock Tokens cross-chain — evaluate, do not assume Sui is a supported lane. | — |
 
 ---

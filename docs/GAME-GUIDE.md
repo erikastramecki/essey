@@ -615,6 +615,16 @@ Budget below, and both are checkable on chain. Every other stat on the chart, an
 in this wing, carries the mark **· ARRIVES WITH A LATER POSTING ·**: the sheet commits them permanently,
 nothing reads them yet.
 
+> **One honest note on trait honesty, and a fix on the way.** This season the trait decoder de-duplicates a
+> Don's preimage by leaf, not by mutually-exclusive group, so a determined minter can build a Don whose
+> committed sheet stacks traits that no legal wardrobe could wear at once — an "impossible" combo. It buys
+> nothing: every stat is soft-capped before it is read (RP tops out at +8%, NRV at +5pp) and the whole sheet
+> is then saturated onto the same Edge Budget every Don shares, so a forged stack can never out-read a
+> legally maxed sheet. No live edge exists, and none can. Even so, an impossible sheet should not mint, so a
+> **pre-mainnet fix is queued**: the decoder will validate one-choice-per-group on the preimage and reject
+> the combo outright. It lands before any real-asset season; the Skirmish's capped reads make it a
+> correctness cleanup, not a live exploit.
+
 ### The Starting Kit · ARRIVES WITH A LATER POSTING ·
 
 When it opens, your Don takes the item painted in his hand **off the canvas and into his wallet**: a

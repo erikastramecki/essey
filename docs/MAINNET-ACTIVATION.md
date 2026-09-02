@@ -33,7 +33,7 @@ Each flow below must satisfy all that apply before it activates on mainnet (4663
 | 1 | **Base layer — $ESSEY reserve** | /treasury · EsseyToken, EsseyReserve | **LIVE mainnet** | DONE (adminless, real-equity reserve). Ongoing: fee accretion, treasury deposits. | live |
 | 2 | **Shielded / private transfers** | /private · Stealth{Announcer,Registry,Pay}, Shielded{Pool,PoolGate,Verifier}, ShieldedSupply, ShieldedStock ×2, Poseidon | testnet (46630) | Deploy shielded set to mainnet; real USDG/AAPL/NVDA; funded mainnet relayer; adminBurn haircut on REAL shielded stock; re-audit config; re-wire /private; drop testnet framing. | [MAINNET-SHIELDED-SCOPE.md](MAINNET-SHIELDED-SCOPE.md) *(in progress)* |
 | 3 | **Stock-Token lending** | /lend · EsseyMarkets, EsseyPool, oracle layer, EsseyMultiply | testnet (essey-markets) | Reuse proven core; real feeds + beacon + real DEX for Multiply; adminBurn on collateral; risk calibration; audit; deploy. | [MAINNET-LENDING-SCOPE.md](MAINNET-LENDING-SCOPE.md) *(in progress)* |
-| 4 | **Don mint** | /builder · MintDistributor, DonMintSplitter | testnet | Real mint payment (USDG and/or fiat via CoinVoyage PayKit); real proceeds routing to reserve/treasury. | NEEDS SCOPE |
+| 4 | **Don mint** | /builder · MintDistributor, DonMintSplitter, DonDistributor | testnet | Real mint payment (USDG and/or fiat via CoinVoyage PayKit); real proceeds routing to reserve/treasury. **Controlled beta-mint phasing SCOPED** → [DONS-BETA-MINT-PHASING.md](DONS-BETA-MINT-PHASING.md) (reuse existing WL/stage/timelock mechanism; no new build). | [DONS-BETA-MINT-PHASING.md](DONS-BETA-MINT-PHASING.md) *(beta-mint phasing)* |
 | 5 | **Don trade (buy/snipe/sell)** | /market · EsseyExchange | testnet | Real settlement asset; real $ESSEY market (no AMM yet — dependency). | NEEDS SCOPE |
 | 6 | **Bell — stock payouts** | /bell · Bell, BundleConverter | testnet | Pays REAL stock: real converter feeds (session/staleness), real stock inventory, adminBurn exposure on held stock. | NEEDS SCOPE |
 | 7 | **Cases** | EsseyCases | testnet | Opens cases for REAL stock; StaleFeedGuard reconcile; real stock inventory + adminBurn. | NEEDS SCOPE |
@@ -46,7 +46,11 @@ Each flow below must satisfy all that apply before it activates on mainnet (4663
 
 ## Cross-flow gating dependencies (resolve early — they block multiple flows)
 - **Real USDG on mainnet** — blocks #2, #3, #6, #11 if absent. [VERIFY]
-- **A real DEX/AMM on RH mainnet** — blocks #3 (Multiply) and #5 (a real $ESSEY market). [VERIFY]
+- **A real DEX/AMM on RH mainnet** — blocks #3 (Multiply) and #5 (a real $ESSEY market). Uniswap V3 is
+  live on 4663 (factory `0x1f7d…2efa`, verified) → **$ESSEY launches V3-first** (V3-first vs Pons ruled
+  2026-08-30: [MAINNET-AMM-LAUNCH-SCOPE.md §9](MAINNET-AMM-LAUNCH-SCOPE.md)). **Pons launchpad
+  (factory `0x7eD5…EC7e`) CANNOT host the existing $ESSEY** — it only mints its own curve-bound tokens,
+  so it is not a launch venue for the already-deployed clean token.
 - **StaleFeedGuard reconciliation** — blocks #3, #6, #7, #9 sharing one guard.
 - **adminBurn handling pattern** — needed by every real-stock-holding flow (#2 stock, #3, #6, #7, #8).
 
@@ -180,3 +184,719 @@ freeze/adminBurn = FOUNDER-ACCEPTED (haircut already built, `EsseyShieldedStock.
   (#2) and blocks the beta's shielding leg.
 - **Founder gates** — every mainnet deploy (shielded set, game contracts); ceremony sign-off; `maxDeposit`
   cap + seed stock amount/tickers; `openMode=false`/`setApproved` posture.
+
+## Correction 2026-08-30 — the "USDG 18-dec frontend bug" is NOT a bug
+Earlier updates (and the PM status) called the frontend's hardcoded USDG `decimals:18` a bug. VERIFIED false:
+essey.xyz's app/web is testnet-only (chainId 46630) and reads a TESTNET USDG mock `0x7461E670…5De2`
+(symbol E20M) which IS 18-decimal — so 18 is CORRECT there; changing it to 6 would break the live testnet
+/private + DCA flows by 10^12. The mainnet 6-dec USDG `0x5fc5…d168` is NOT referenced in app/web. The only
+mainnet-facing layer (reserve.ts, chainId 4663) reads decimals LIVE from the contract — no hardcode. The 18→6
+change is only correct as part of a full testnet→mainnet address cutover of live.ts, not a standalone fix.
+
+## Update 2026-08-30 — Pons launchpad evaluated (V3-first for $ESSEY confirmed)
+
+Investigated whether $ESSEY should launch on **Pons** (the RH launchpad FLOOR/$FLR uses). Read the live
+$FLR deployment on 4663. Full analysis: [MAINNET-AMM-LAUNCH-SCOPE.md §9](MAINNET-AMM-LAUNCH-SCOPE.md).
+
+- **Pons is a bonding-curve launchpad** (factory `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e`, owner
+  `0x263ed295…19Dd`) that **mints its own curve-bound tokens and graduates them to a V3-style pool**. Its
+  fee is a **1.00% curve trade fee** (`feeBps=100`) split **30% Pons / 70% creator**; the "0.70% → floor"
+  is the creator share, routed by FLOOR to its own `RwaFloorTreasury`. It has a **built-in decaying snipe
+  tax (99%→0 over 3s)**. All read on-chain from $FLR's curve `0xE525…906b`.
+- **HARD BLOCKER for $ESSEY:** Pons has **no path to onboard an existing ERC-20** — `launchToken(...)` mints
+  a new token. The already-deployed, adminless, fully-minted $ESSEY **cannot be launched on Pons**, and
+  re-issuing it as a Pons token would orphan the live `EsseyReserve` (fixed `claimBase`). **V3-first stands.**
+- **The one transferable idea:** Pons's decaying launch snipe-tax is exactly the defense a clean-token V3
+  launch cannot have — a candidate to replicate at the pool/seeder or a future V4-hook layer (protocol-engineer).
+- **Founder dependency line updated** (cross-flow deps): $ESSEY = Uniswap V3-first; Pons ruled out for the
+  existing token.
+
+## Correction 2026-08-30 — Uniswap V4 WITH HOOKS is VERIFIED LIVE on RH mainnet (4663)
+Prior updates said "Uniswap V4 PoolManager on 4663 UNVERIFIED" and gated the taxed-hook flywheel on it.
+CORRECTED by on-chain trace of FLR (see MAINNET-AMM-LAUNCH-SCOPE.md §9.6): a working V4 PoolManager
+`0x8366a39CC670B4001A1121B8F6A443A643e40951` and a production afterSwap fee-hook `0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044`
+(address low-bits 0x2044 = BEFORE_INITIALIZE+AFTER_SWAP+AFTER_SWAP_RETURNS_DELTA) are LIVE on 4663; Pons/FLOOR run on them.
+So the $ESSEY pool-side buy/sell tax → buy-equities → EsseyReserve flywheel IS buildable NOW via a V4 hooked $ESSEY/USDG
+pool + our own audited hook — the clean $ESSEY token stays clean (hook is on the POOL). Earlier "V4 not on RH" was
+INCOMPLETE (only the canonical Uniswap V4 address was probed; this is a non-canonical deployment). UNVERIFIED: whether
+0x8366 is Uniswap-canonical vs a redeploy (irrelevant to feasibility); live fee throughput (escrow balances 0 at trace block).
+FLOOR fee reconciled: 1% total / 30-70 Pons-creator / 50-50 buyback-basket → ~0.35% of volume buys equities (docs' 3%/2% is WRONG).
+
+## Update 2026-08-30 — Option B (V4 hooked $ESSEY pool) — PoolManager AUDIT: GO
+essey-auditor verdict (docs/OPTION-B-V4-AUDIT.md), both make-or-break gates VERIFIED on-chain (4663):
+- `initialize` is PERMISSIONLESS (eth_call from a random EOA with an ESSEY/USDG key succeeds; bad inputs revert
+  with genuine v4-core errors) → we CAN create our own $ESSEY/USDG pool. Not Pons-gated.
+- `0x8366a39CC670B4001A1121B8F6A443A643e40951` is BYTE-IDENTICAL to Uniswap's official mainnet V4 PoolManager
+  (24,010 bytes; only delta = the 20-byte immutable self-address; identical CBOR metadata) → genuine, unmodified,
+  no added access control / no drain / no pause / no upgrade; protocol-fee cap 0.1%/dir intact. Owner = single EOA
+  (Pons/RH key), reach limited to ≤0.1% fee skim.
+Residuals (bounded, non-blocking): single-EOA PM owner (no timelock, ≤0.1% lever); USDG issuer-pause on the quote
+leg (founder-accepted). UNVERIFIED-but-bounded: fee-controller internals (PoolManager caps its output at 0.1%).
+REMAINING to ship Option B: build OUR EsseyReserveHook (fee→reserve + anti-snipe) → 3-agent audit + harness →
+CREATE2 address-mine → founder-gated deploy. Docs: OPTION-B-V4-BUILD.md, OPTION-B-V4-ECON.md, OPTION-B-V4-AUDIT.md.
+
+## Update 2026-08-30 (2) — anti-snipe HIGH: launch-seed SPEC delivered (docs/OPTION-B-V4-LAUNCH-SEED.md)
+3-agent gate found a HIGH: DeployEsseyV4Pool.s.sol `initialize`s the pool but seeds in a SEPARATE later tx →
+live-but-empty window. A dust swap on the empty pool (v4-core: 0-liquidity swap succeeds with (0,0) delta,
+Pool.sol:279/343) both starts the 45s decay clock early (EsseyReserveHook.sol:213 stamps launchTime with NO
+liquidity check) → real opening trade pays only 1% base; AND walks slot0 price (pin checked only at initialize,
+:189) → single-sided ladder lands at attacker's price. FIX (economist SPEC, engineer to build): 3 layers —
+(1) LaunchSeeder periphery does initialize+modifyLiquidity atomically in ONE tx (init needs no unlock,
+PoolManager.sol:117; POL locked by construction, no withdraw = no dent to adminlessness); (2) hook guard in
+beforeSwap reverts swaps while active liquidity==0 (StateLibrary.getLiquidity, :183; re-mine same 0x20CC flags)
+— THIS is what actually closes the HIGH, since initialize is permissionless and an attacker can front-run the
+init leg; (3) seeder tolerates a pre-initialized pool (anti-DoS). Layers 1-3 fully close BOTH the surcharge
+bypass and the repricing corollary. Residuals R2/R3 (tail window past decay) are inherent + a SNIPE_SECONDS
+params/reserve-funding decision, not a code defect. Fork suite (RED on split-tx, GREEN on fix) specified.
+NEXT: essey-protocol-engineer builds hook guard + LaunchSeeder + fork suite → 3-agent re-gate.
+
+### Update 2026-08-30 (3) — Dons settlement ruling (founder)
+Game (Dons House-layer) settlement is **in-kind / units, on-chain, 24/7, never gated on a price feed** —
+no quest/heal/raid/payout pauses when the equity market is closed. The oracle is **display-only**
+(dollar figures are labeled estimates; live during market hours, "as of last market close" off-hours).
+A variety of stocks does NOT pull an oracle into settlement: raids take a proportional in-kind slice of
+whatever tokens sit in the target's hopper. Details + supersession in DONS-HOUSE-LAYER-REWORK.md §4
+(RESOLVED 2026-08-30). Owners: don-designer + essey-web-designer.
+
+### Update 2026-08-30 (4) — founder rulings: POL, basket scope, lending roadmap
+- **POL slice APPROVED at 10%** of the swap fee, folded into the one hook rework (with the empty-pool
+  HIGH fix); launch-economist to recommend the 75/15/10 → four-way re-split, founder confirms the
+  number before the engineer builds. Then one gate re-run on the final hook shape.
+- **Basket-as-a-product**: designer scoping the Essey product/UX (reuses the reserve/converter);
+  PM + founder decide implement / shelf / ready-project after the scope lands.
+- **Lending direction (roadmap, not a build order yet):** Essey general lending sits UNDERNEATH the
+  Don layer and is DISTINCT from DonLoan — anyone borrows against their RH Stock Tokens without
+  selling (base layer already built). Roadmap extensions to scope later: (1) LOOPING / leverage loops
+  on the collateral; (2) a MORPHO-STYLE yield-aggregating vault so the stock earns yield while it sits
+  as collateral. Front and back end. Owner when scheduled: essey-protocol-engineer + essey-launch-economist.
+
+### Update 2026-08-30 (5) — fee adjustability ruling (founder): Option B + one-way lock
+Founder chose a BOUNDED, ADJUSTABLE fee-split governor over the hook (NOT a fully-immutable split),
+with progressive decentralization: adjustable during bootstrap, and a one-way `lock()` that permanently
+freezes the split and renounces the governor whenever the founder chooses (adjustable → immutable, never
+back). Constraints: governor touches the SPLIT ONLY (reserve/dons/ops/POL), within hard immutable rails
+(min reserve share, max ops share, POL 0–15% band); base fee + anti-snipe surcharge stay immutable;
+short timelock on changes; **EsseyReserve stays fully adminless — the governor can never touch deposited
+backing or redemptions.** Folded into the one hook rework (empty-pool fix + POL + governor). launch-economist
+specs the rail numbers + timelock; auditor reviews the governance surface in the gate.
+
+### Update 2026-08-30 (6) — hook-rework SPEC delivered (POL + re-split + governor): OPTION-B-V4-LAUNCH-SEED.md Part II
+launch-economist folded BOTH decisions into ONE spec (docs/OPTION-B-V4-LAUNCH-SEED.md Part II, §7-§12) so the
+engineer builds once and the gate runs once. Grounded on v4-core `Pool.sol:206-236` (read this session):
+ESSEY=currency0/USDG=currency1, so single-sided-USDG POL = a **bid wall BELOW spot** (owes only USDG, adds ZERO
+active liquidity → does NOT reopen the empty-pool HIGH). **POL cannot be launch-seeded** ($0 USDG at t=0) — it is
+**fee-COMPOUNDED** by a permissionless crank on a separate locked `EsseyPOL` holder (no withdraw), the hook just
+forwards a `polEscrow` bucket (mirrors fundReserve). REC re-split: **75/7.5/7.5/10** (reserve/dons/ops/POL,
+floor-protected). **FINAL split RULED by founder 2026-08-30: 75 reserve / 20 Dons / 5 POL / 0 ops**
+(7500+2000+500+0=10000 ✓) — ops ELIMINATED (funded later via bonds off the over-collateralized floor, needs no
+standing tax slice); freed 10 pts go +5 Dons (15→20), +5 live POL. Reserve untouched → $684k/yr equities @
+$250k/day; POL ≈ $45.6k/yr locked USDG bid; Dons ≈ $182.5k/yr. Code requirement pinned: the rounding remainder
+must move from ops to the RESERVE (`resPart = baseFee − donPart − opsPart − polPart`) so a 0% share accrues
+EXACTLY 0 (else 0-ops would still collect dust as the current remainder-holder, EsseyReserveHook.sol:242). 0
+shares are valid — sum-check is Σ==BPS with uint shares, no positivity assumption (EsseyReserveHook.sol:110).
+surcharge stays 100% reserve (NOT POL). Governor
+rails REC: **MIN_RESERVE=6000, MAX_OPS=1500, MAX_POL=1500, timelock=48h, one-way lock()**; split adjustable, RATE
+immutable; reserve stays fully adminless (EsseyReserve.sol:21). Founder confirms: default split numbers, rails,
+timelock, surcharge-POL=no. Tests F-K specified (POL unpullable/single-sided, empty-pool not reopened, rails
+enforced, timelock unbypassable, lock permanent, governor cannot reach reserve/rate). NEXT: essey-protocol-engineer
+builds the full rework in one pass → 3-agent gate incl. governor surface + byte-diff → harness.
+
+### Update 2026-08-30 (7) — Dons beta controlled-mint SCOPED (docs/DONS-BETA-MINT-PHASING.md)
+Founder asked for a throttled Don mint for the mainnet beta (~20 players first, then curated scale) and who owns
+the scope. **PM owns it** (launch program-management + gating), launch-economist consulted for Phase-3 open-mint
+anti-snipe only (Phases 1-2 are `publicOpen=false`, Merkle-gated → no snipe surface). Grounded deltas:
+- **Testnet play count (VERIFIED on-chain 2026-08-30, chainId 46630):** Don `0x582E…dB53c` `totalMinted`=**192**/8888;
+  **25** unique mint recipients (24 excl. deployer `0x976e…993d` whose 84 mints = desk seed/admin, `reserveMinted`=84);
+  **508** mission dispatches (`Departed`) across **73** unique Dons; those 73 held today by **8** wallets (7 non-infra)
+  = the **~7-wallet genuine active-player cohort**; **23** raid commits / 17 attacker Dons. **NOT on any whitelist** —
+  DonDistributor `publicOpen`=true, `stageRoot[0/1]`=0x00 (open public mint, no root committed).
+- **Throttle = REUSE, not build.** DonDistributor already IS a phasing engine: `claimWL(stage,allocation,proof,combos)`
+  Merkle-gated per (stage,account) (`DonDistributor.sol:150-171`, MintDistributor leaf format `:16-18,160`), per-stage
+  `stageOpen` (`:156`), 48h `rootTimelock` propose→commit (`:248-263`), `publicOpen` for open mint (`:52,205`). Hard-N =
+  curate an N-leaf root + `publicOpen=false`; allowlist membership IS the cap. No new contract.
+- **Phasing 1-2-3:** P1 = ~7 active testers + curated fill, **~20-leaf root**, `publicOpen=false`; P2 = add prior curated
+  WL (daodon 3,637-wallet list / go-live request-form roots — same leaf format); P3 = `publicOpen=true` + launch-economist
+  anti-snipe. Advance gates = money-path integrity (House-layer solvency invariant), no un-absorbed issuer-freeze, keeper
+  liveness, raid loop resolves, tester feedback triaged.
+- **Seed↔cap coupling:** provision-only missions need seed=0; $20-25 ≈ 0.087-0.11 AAPL of **starter provisioning stock**
+  for the cohort — thins past ~20 players, which is why ~20 is the right first cap. Gacha unfundable at $20-25 (≈$46/open).
+- **DEPENDENCY (load-bearing):** the throttle/WL half is DONE (reuse). The blocker to a live *playable* beta is the
+  **House-layer real-token custody BUILD** — still DESIGN-ONLY (`DONS-HOUSE-LAYER-REWORK.md:9`; mission/raid/House are
+  `IScrip` not `IERC20`). Before P1 gameplay runs: founder ruling route (a)/(b) → build → 3-agent audit → founder deploy
+  → seed + commit P1 root. Minting is ready; PLAYING needs the custody build first.
+- **Game readiness:** RULED = real-stock variety, in-kind 24/7 settlement, display-only oracle. DESIGN-ONLY = House-layer
+  custody rework (the one blocking build). OPEN mechanics = raid loop (H-1 fix landed commit 97196c1; V2 board mid-build
+  per `git status` GameControllerV2/HitterNFTV2/GameRaidH1), trait mis-calibration (defence ~9x offence), milk-run faucet —
+  all converge on the same V2 board / custody redeploy. Quest=Cases-reparametrized carried per founder framing but
+  UNVERIFIED at contract level (don-designer to confirm).
+
+### Update 2026-08-30 (8) — fee split FINALIZED (founder) + Dons-director added
+Founder finalized the hook fee split: **75 reserve / 20 Dons / 5 POL / 0 ops.** Ops eliminated (funded
+later via bonds off the over-collateralized floor); its slice went mostly to the Dons (15→20) with 5
+standing up live POL. All governor-adjustable within the rails (min-reserve 60 / max-ops 15 / POL 0–15).
+launch-economist to lock this into OPTION-B-V4-LAUNCH-SEED.md before the engineer builds. Also: added
+essey-dons-director (game-side program owner / lore-master).
+
+### Update 2026-08-31 — $ESSEY FEE-MODEL REDESIGN opened as a tracked program (supersedes Update (8))
+Founder ruled today: keep the 1% (100 bps) $ESSEY buy/sell fee; **re-split and DROP POL + ops.**
+- **45 bps → floor reserve** (existing `EsseyReserve`).
+- **40 bps → NEW holder stock-airdrop engine** — buy stocks each epoch (~twice daily), distribute to
+  $ESSEY holders pro-rata by holding value. A DEFAULT basket auto-assigned to non-choosers; opt-in
+  predetermined CATEGORY baskets (tech / Wall St / finance / …); holders CLAIM per epoch or AUTO-PUSH
+  at a dust threshold; a registry that lets us keep ADDING stocks and baskets with no redeploy. Modeled
+  on Floor/Floorify.
+- **15 bps → Dons ecosystem** (existing sink).
+This REPLACES the 75/20/5/0 split of Update (8): reserve 75→45, Dons 20→15, POL 5→0, ops already 0, and
+a new 40-bps holder bucket that does not exist today.
+
+**GROUNDING — why this is a rebuild, not a governor tweak (VERIFIED):**
+- The deployed-shape hook has a hard immutable rail `MIN_RESERVE_BPS = 6_000` (60%),
+  `EsseyReserveHook.sol:50`, enforced on every proposed split at `:395` → **the 45% floor is structurally
+  rejected** by the current contract. Not adjustable; it is a `constant`.
+- The hook has exactly FOUR buckets — `reserveShareBps / donsShareBps / opsShareBps / polShareBps`
+  (`EsseyReserveHook.sol:84-87`) — and **no holder bucket.** The 40-bps holder route has nowhere to land.
+- Therefore the hook must be REBUILT (new rail floor, drop POL/ops buckets, add a holder-distribution
+  route) → **full 3-round audit re-gate**, because a money-path contract changed.
+- The holder engine is a **brand-new money-moving contract** (`HolderStockDistributor`, name TBD). VERIFIED
+  it does not exist anywhere in the repo today (grep of all non-`out` `.sol` for `HolderStockDistributor /
+  holderShareBps / holderSink` → 0 matches). It needs its OWN dedicated 3-round audit gate.
+- **Hook build/gate state (VERIFIED):** the reworked hook `EsseyReserveHook.sol` + its three test files
+  (`EsseyReserveHook.t.sol`, `…LaunchSeed.t.sol`, `…Fork.t.sol`) are **untracked on `main`** (`git status`
+  `??`) — built locally, never committed/pushed. **UNVERIFIED:** whether it "cleared a 3-round gate" — no
+  audit doc for the hook exists under `docs/audits/` (only market-layer R1-6, circuit R1, solidity R1,
+  all pre-dating this hook). Load-bearing conclusion holds regardless: the split it was built/spec'd for is
+  now obsolete AND the 60% rail blocks 45%, so it is rebuilt-and-re-gated either way.
+
+**PROGRAM PHASES / OWNERS / DEPENDENCIES**
+| Phase | What | Owner | Depends on | State |
+|---|---|---|---|---|
+| R | Research Floor's epoch model (claim-vs-push, default+category baskets, dust threshold, per-user basket) | research-intern | may need founder's browser for Floor's app | IN FLIGHT |
+| S | Scope new split + distributor architecture + hook-rebuild scope (per-user baskets + add-stocks/baskets registry + claim/push, all v1-core) | launch-economist | R (informs epoch/UX shape) | IN FLIGHT |
+| B1 | Build hook rebuild (new floor rail, drop POL/ops, add holder route) | protocol-engineer | S locked | NOT STARTED |
+| B2 | Build `HolderStockDistributor` (epoch buy + pro-rata by holding value + default/category baskets + registry + claim/auto-push) | protocol-engineer | S locked | NOT STARTED |
+| G1 | 3-round audit gate — hook (governor + money-path surface, byte-diff vs prior) | essey-auditor | B1 all-clean-same-round | NOT STARTED |
+| G2 | 3-round audit gate — distributor (fresh money path: pro-rata math, basket registry, claim/push, dust) | essey-auditor | B2 all-clean-same-round | NOT STARTED |
+| I | Integration + adversarial harness — full epoch loop on chain (buy → distribute → claim/push) with real wallets | essey-harness | G1 + G2 clean | NOT STARTED |
+| D | FOUNDER-gated mainnet deploy (exact commands prepared; never self-deploy) | FOUNDER | I green | NOT STARTED |
+
+**Cross-flow dependencies (inherited, load-bearing):** the holder engine BUYS real stocks each epoch →
+it inherits every Universal mainnet condition (real RH Stock Tokens + beacon, real Chainlink feeds
+session/staleness fail-closed, adminBurn/pause/clawback on held stock, real USDG `0x5fc5…d168` 6-dec,
+real gas). It also needs a **real DEX/router on 4663 to source the stock each epoch** — the SAME
+unresolved dependency that DEFERRED Multiply (#3) and gates a real $ESSEY market (#5). This is a founder
+dependency, not a build item.
+
+**HONEST TIMELINE / EXPECTATION STATEMENT:** research + a LOCKED design land **today**. The two builds
+(hook rebuild + new distributor), their TWO separate 3-round audit gates, and integration/harness are a
+**FEW DAYS, not hours.** Nothing is live-and-audited today, and nothing should be implied as close. The
+two game cores' recent momentum does NOT transfer: this is a **fresh money path** (a never-before-audited
+distributor moving real stock to holders) plus a **re-gate of an already-money-critical hook** — the audit
+gate is the schedule, and it is deliberately slow. No date is committed until the design is locked (Phase S)
+and the engineer sizes the build; any "days" number before then is an estimate, not a commitment.
+
+**COMMS GUARD (Jester lane):** nothing about this redesign ships publicly ahead of what is actually
+deployed. The blog stays honest and current — roadmap is labeled roadmap, the 1% split described on the
+site remains the DEPLOYED reality until D lands. No post naming "45/40/15", "holder stock airdrops", or a
+launch date without (a) the contracts live on 4663 and (b) founder sign-off. This is a design ruling, not
+a shipped feature.
+
+**OPEN FOUNDER DECISIONS (surfaced by this scope — founder rules):**
+1. **Per-user baskets vs default-only for v1** — full per-user category selection is more contract
+   surface + more audit; if timeline presses, default-basket-only is the smaller, faster-to-gate v1 with
+   category opt-in as a fast-follow. Founder: full per-user in v1, or phase it?
+2. **Claim vs auto-push default** — is the default behavior manual CLAIM (holder pulls) or AUTO-PUSH at a
+   dust threshold (protocol pushes)? Auto-push costs gas per holder per epoch and scales with holder count.
+3. **Dust-threshold value** — the accrued-value floor below which a holder is NOT pushed (carries to next
+   epoch). Needs a number (in USDG terms) before the distributor is built.
+4. **Launch basket + stock set** — which stocks and which category baskets exist at launch (tech / Wall St /
+   finance / … + the DEFAULT basket composition). The registry lets us add later, but v1 ships with a set.
+5. **Epoch cadence confirm** — "~twice daily" needs a concrete interval (and who/what triggers each epoch —
+   permissionless crank vs keeper) before the distributor is built.
+
+### Update 2026-08-31 (2) — HARD GATE: VERIFY-BEFORE-BUILD against Floor's real flows (founder directive)
+Founder ruling: **nothing is built or drafted on the economist's scope until Floor's actual flows are fully
+VERIFIED — grounded on Floor's source/chain, not taken on anyone's word.** The launch-economist's fee-model
+scope (Model B / `HolderDistributor` / basket registry) is a **HYPOTHESIS, not approved.** It must be
+validated against how Floor actually implements every flow before it feeds any build (B1/B2). This inserts a
+new blocking phase **V** ahead of B1/B2 in the phase table above — B1/B2 do not start until V clears.
+
+**Intern's grounded ON-CHAIN verification of Floor (relayed via coordinator; intern-verified-on-chain, not
+re-run by PM) — corrects BOTH the economist's assumptions AND Floor's own marketing:**
+- $FLR, treasury `0x13ee…58Cb`, currently **epoch 281**.
+- Distribution = **per-epoch Merkle claim** → MATCHES Model B's claim mechanic.
+- **Epoch interval = 1 HOUR** — NOT the "~twice daily" in Update 2026-08-31. My prior cadence assumption is
+  REFUTED; see Decision 5 correction below.
+- **Single DEFAULT basket only.** NO per-user / per-category selection — that is a DIFFERENT product
+  (PAIR / Folio), not Floor. My prior "opt-in category baskets / per-user" framing described PAIR/Folio, not
+  the verified Floor mechanic; see Decision 1 & 4 corrections below.
+- **keeper + owner, NOT adminless.**
+
+**Remaining verification before ANY build (the content of Phase V):**
+- **(a) Full-SOURCE read of Floor's `RwaFloorTreasury`** — every flow: epoch publish/settle, claim/claimMany,
+  withdraw/sweep guards, TWAB. Coordinator is dispatching research-intern for this. BLOCKS B1/B2.
+- **(b) App-level flows** — claim-vs-push UX, and PAIR/Folio basket selection — via the founder's browser.
+  **FOUNDER-GATED** (needs the founder to drive their browser).
+Until BOTH land, the economist's architecture stays a hypothesis and the protocol-engineer does not start.
+
+**Phase table amendment:** insert **Phase V (Floor source + app verification; owner research-intern +
+founder-browser; blocks B1/B2)** between S and B1. Phase S (economist scope) output is now explicitly
+"proposed, pending V" — not "locked design today." The "locked design today" language in Update
+2026-08-31 is SUPERSEDED: design is not locked until V validates it.
+
+**COMMS (founder ruling, hardened):** Jester is **holding ALL drafts** while we are mid-implementation.
+Nothing public — no roadmap teaser, no mechanic description — until the founder lifts the hold. This is
+stricter than the prior comms guard: not just "nothing ahead of deploy," but "nothing at all right now."
+
+**Decision-list corrections (grounded by the intern's read — these were mis-scoped in Update 2026-08-31):**
+- **Decision 1 (per-user vs default-only):** Floor itself is DEFAULT-BASKET-ONLY; per-user/category is a
+  separate product (PAIR/Folio). So per-user is a DELIBERATE SCOPE-EXPANSION beyond Floor, not the Floor
+  baseline. Reframe the founder decision as: "ship the verified Floor model (single default basket) as v1,
+  or build BEYOND Floor to PAIR/Folio-style per-user baskets?" The latter needs its own verification (b).
+- **Decision 4 (launch basket set):** if v1 = verified Floor model, this collapses to ONE default basket
+  composition, not a multi-category set. Multi-category only applies if Decision 1 chooses the PAIR/Folio path.
+- **Decision 5 (epoch cadence):** REFUTED — Floor runs **hourly**, not twice-daily. Founder still rules the
+  cadence WE want (hourly is a lot of keeper txs + stock buys), but the "~twice daily" premise came from
+  marketing, not chain. Also note Floor is keeper+owner, not adminless — a trust-surface decision for us.
+Decisions 2 (claim vs auto-push default) and 3 (dust threshold) stand, pending Phase V(b) UX read.
+
+**Tracker state:** R = returned (on-chain layer) + intern being re-dispatched for source layer (a).
+S = in flight, now explicitly gated behind V. **V = the new blocking gate (a)+(b), NOT clear.** B1/B2/G1/G2/I/D
+all NOT STARTED and now downstream of V. Comms = full hold.
+
+### Update 2026-08-31 (3) — FOUNDER RULING: NO STAKING EVER → Model B (no-custody keeper) LOCKED; Phase V satisfied
+Founder resolved the pivotal decision. **NO STAKING, EVER** — passive hold-in-wallet-and-receive is a HARD
+product promise. Per the adminless three-way impossibility (adminless × passive-hold × on-chain-weighting
+can't all hold on a hookless token), this forces **Model B: a KEEPER.** **Model A (staking) is KILLED — removed
+from the design.** Justification the founder authorized: the hard passive requirement + the **hookless immutable
+token** (`EsseyToken.sol:21` — plain `ERC20/ERC20Burnable/ERC20Permit`, no transfer hook, so the token itself
+cannot compute holder weights on transfer). Do NOT reopen staking.
+
+**HolderDistributor design — LOCKED on Model B, MINIMIZED (build B2 to THIS shape):**
+- **Keeper has NO CUSTODY.** It ONLY posts a weight/Merkle root. It can NEVER move, hold, or drain holder stock.
+- **CHALLENGE WINDOW** on every root activation (root is not claimable until the window passes).
+- **BOND + permissionless deterministic FALLBACK** so liveness is not single-keeper (anyone can post the
+  deterministic root if the keeper stalls; bond is slashable).
+- **Honest residual (recorded, load-bearing):** there is **no pure on-chain fraud proof** of a TWAB weighting
+  for the raw token. Correctness = **bond + public recomputation + governance slash within the window.** A ZK
+  proof of the weighting is a **future v2** — the design MUST keep that door open (don't foreclose a verifier).
+- **Adminless surfaces stay adminless:** the `EsseyReserve` and the hook split-governor remain FULLY adminless.
+  The keeper touches ONLY the holder-weight snapshot — nothing in the reserve or the fee split.
+
+**PHASE V — SATISFIED (design gate cleared).** Floor fully mapped app + source; founder's own wallet cadence
+confirmed on-chain (~12h drops, per-stock minimum with dust carry) in `rh-chain/docs/research/floor-flr-scope.md`
+§C (intern-verified; PM confirmed the doc exists at that path, did not re-run the on-chain reads). V no longer
+blocks B1/B2. **Gate now:** once the five sub-decisions below are ruled, the design LOCKS and B1/B2 build scope
+can start. This SUPERSEDES the "V not clear" state of Update 2026-08-31 (2).
+
+**Phase-table amendment:** V = SATISFIED. B1 (hook rebuild) + B2 (HolderDistributor, Model-B-minimized shape
+above) unblocked, but **gated on the 5 remaining founder rulings** landing (they set B2's parameters). Owners
+unchanged: B1/B2 protocol-engineer → G1/G2 essey-auditor (two separate 3-round gates) → I essey-harness → D founder.
+
+**REMAINING FOUNDER DECISIONS (sequence for the founder — PM does not decide these):**
+1. **Epoch cadence + per-stock minimum threshold.** Floor = ~12h; match it? And the per-stock minimum buy
+   threshold — Floor's is off-chain; we set OURS on-chain → needs a concrete **USDG number** (below it, dust
+   carries to next epoch). (Replaces the old "~twice daily" premise, which was marketing — Update 2026-08-31 (2).)
+2. **Anti-snipe weighting: TWAB vs balance-at-snapshot.** Time-weighted balance (snipe-resistant, keeper-computed)
+   vs simple balance at the snapshot block. **Recommend TWAB** given no staking (a snapshot alone lets a buyer
+   snipe the block before a drop). Choice drives keeper compute + the residual above.
+3. **Basket rails.** Default basket + category packs + custom split, all selected via **gasless signed message**
+   (per Floor §B); plus min/max weight caps and a one-change-per-N cooldown. Confirm the rail set + the caps.
+4. **Launch basket + category-pack set** — which stocks in the default basket and each category pack at launch.
+5. **Keeper params** — who operates the keeper initially, the **bond size**, and the **challenge-window length**.
+
+**COMMS:** Jester hold stands (full hold, founder ruling) — no change. Nothing public.
+
+**Tracker state:** Model A KILLED; Model B LOCKED + minimized. V SATISFIED. B1/B2 unblocked but gated on the 5
+rulings. G1/G2/I/D downstream. Comms full hold. No build, no deploy.
+
+### Update 2026-08-31 (4) — SIM: snapshot-farming is net-profitable at launch → TWO-SNAPSHOT HOLDING GATE (hard B2 req)
+launch-economist ran a decisive sim (constant-product model + parameter sweep, NOT algebra). Recorded:
+- **Attack:** buy $ESSEY right before a snapshot, capture pro-rata airdrop weight, sell after — "snapshot
+  farming." **Net-profitable across a wide, realistic LAUNCH-WINDOW regime**: profitable once epoch volume
+  > **~5× the held ELIGIBLE FLOAT.** Eligible float is small at launch because pool/LP/treasury must be
+  EXCLUDED from the reward denominator → the attack is **worst exactly at launch.**
+- **Example:** $250k depth / $5M epoch volume / $50k float → attacker nets **~$9.9k/epoch capturing 65%** of
+  the holder distribution.
+- **Break-even (sim, load-bearing):** `V > (2 · tax / holder_share) · H` where H = eligible float. Cutting the
+  holder share only **MOVES this line**, it does not remove the profitable surface. **Only a holding gate
+  closes it structurally.**
+
+**MITIGATION — TWO-SNAPSHOT HOLDING GATE (sim-confirmed to close 100% of the profitable surface, ZERO cost to
+honest holders):** credit each wallet **`min(balance_at_prev_snapshot, balance_at_this_snapshot)`** — i.e.
+require presence at two consecutive snapshots. A flash farmer has prev-snapshot balance 0 → weight 0 → reward 0.
+This is exactly the founder's proposed "hold across a full epoch" gate.
+
+**RECORD AS: a HARD REQUIREMENT of the HolderDistributor / keeper design (B2)** — pending the founder's formal
+adoption (economist recommended he lock it; the founder designed the fix). Properties, grounded to Model B:
+- Lives **ENTIRELY in the keeper's off-chain distribution query** (Model B) → **NO contract change, NO redeploy.**
+- Does **NOT** affect the hook rebuild (B1), which is purely the split — B1 stays in flight, unaffected.
+- Composes with the weighting decision (Decision 2): the gate is the `min()` of two snapshots; whether each
+  snapshot is TWAB or point-balance is still Decision 2 — the gate applies either way.
+- **Open build detail for the engineer when B2 starts:** the **snapshot source.** The token has **no on-chain
+  checkpoint** (`EsseyToken.sol` is plain `ERC20/Burnable/Permit`, VERIFIED Update (3)) → the keeper does
+  **off-chain transfer-log balance reconstruction** for both snapshots. This is a B2 implementation item, not
+  a founder decision.
+
+**Decision-list touch:** Decision 2 (TWAB vs snapshot) is unchanged BUT now explicitly sits UNDER the
+two-snapshot gate — the gate is required regardless of which weighting wins. Parameter-only mitigations (e.g.
+cutting holder share, Decision-1 knobs) are recorded as INSUFFICIENT alone per the break-even result above.
+
+**Scope-doc fold:** launch-economist to fold this sim + the gate into their fee-model scope
+(`OPTION-B-V4-LAUNCH-SEED.md`) — PM keeps the register authoritative and does not edit the economist's live
+artifact mid-flight.
+
+**Tracker state:** Model A killed; Model B locked. Two-snapshot holding gate = HARD B2 requirement, pending
+founder formal adoption (surfaced as a ruling, below-list). V satisfied. B1 in flight (split only, unaffected).
+B2 gated on the 5 rulings + this gate's adoption. G1/G2/I/D downstream. Comms full hold. No build, no deploy.
+
+**FOUNDER RULING TO CONFIRM (adds to the pending list):** formally adopt the two-snapshot holding gate as a
+hard requirement of B2 (the economist recommends locking it; the founder designed it).
+
+## WORKSTREAM — Holder experience UI + site information-architecture cleanup (opened 2026-08-31)
+
+Founder opened a NEW product-UI workstream, distinct from the contract-side fee-model program above (this is
+its FRONT-END counterpart). Four pieces: (1) the $ESSEY holder experience — gasless-signature basket selection
+(default / category packs / custom split), claim view, pending/accrual display, in a HOLDER PROFILE inside
+essey.xyz; (2) a protocol LANDING PAGE (floorfi.app-style) + the app it funnels into; (3) site IA — cleanly
+SEPARATE Essey-the-protocol (base/reserve, fee engine, holder airdrop, lending, shielded) from Dons-the-GAME;
+(4) clean up the old audit backlog surfaced under "Learn". **PM owns scope + sequencing; essey-web-designer
+executes; essey-brand-designer sets the Essey-vs-Dons identity split + landing direction. PM does not build/deploy/publish.**
+
+**GROUNDED CURRENT STATE (VERIFIED this session):**
+- **IA is game-first and tangled (confirms founder).** Nav leads with The Game / Mint / Trade / How to Play /
+  Game Guide; every Essey-PROTOCOL surface is scattered behind two "Learn"/"More" doors — Treasury, Blog, The
+  Tape, Explorer, Private under "More"; Docs/Provable/Engine under "Learn" (`app/web/src/App.tsx:59-96`). Lending
+  is HIDDEN from nav entirely (route resolves) (`App.tsx:56-57,162-169`). Base layer $ESSEY + reserve are the
+  only mainnet-live flow (register #1); the whole site is testnet-FRAMED ("live on Robinhood Chain testnet",
+  `App.tsx:601-608`).
+- **Audit backlog surface.** Footer "Audits ↗" links the raw GitHub `docs/audits` tree (`App.tsx:640-644`);
+  `/docs` (reached via "Learn") carries an "Audits" doc group of 6 entries (`docs.generated.ts`). On disk
+  `docs/audits/` holds 10 files incl. **stale-pivot** rounds: `sui-rounds-1-6.md`, `solidity-round-1.md` (Jul 24,
+  Sui-era — predate the RH-chain/Essey pivot). Cleanup = archive stale + point the surface at CURRENT rounds, NOT
+  the raw tree. (Memory `public-audit-trail-fix-first`: audits are a kept public trail → ARCHIVE, do not delete.)
+- **Holder-airdrop CONTRACTS are NOT built** (guardrail-critical). No `HolderDistributor` contract definition
+  exists anywhere; the only reference is a `holdersSink` immutable in the UNTRACKED (`??`) reworked hook
+  (`EsseyReserveHook.sol:50`). Per the fee-model program above: B2 (distributor) NOT STARTED, gated on 5 founder
+  rulings + the two-snapshot gate; G1/G2/I/D downstream. **The holder UI has nothing live to wire to.**
+- **Holder UI spec is grounded.** The gasless-signature basket model (default / category packs / custom split;
+  rails NVDA≥35%, ≤75%/asset, 1 change/48h; claim + ~12h auto-push) is VERIFIED against Floor's live app in
+  `rh-chain/docs/research/floor-flr-scope.md §B`. Design-against-spec is possible NOW.
+
+**SPLIT — what can touch the live site vs what stays preview-only:**
+
+| Track | Work | Owner(s) | Live-site-safe? | Depends on |
+|---|---|---|---|---|
+| **NOW-1 IA reorg** | Restructure existing content into two coherent areas: Essey-protocol vs Dons-game. Reorganizes EXISTING deployed content only. | web-designer (build) · brand-designer (identity/visual split) | YES — no new claims | founder GO + IA-structure ruling |
+| **NOW-2 Audit cleanup** | Archive stale (Sui-era) rounds; point the surface at current rounds; replace raw-GitHub-tree link with a curated audits view. | web-designer | YES — reorganizes existing | founder GO + archive-vs-keep-visible ruling |
+| **SPEC-1 Holder profile UI** | Basket selection (default/category/custom, gasless sign), claim view, pending/accrual — designed against Floor §B spec, STAGED IN PREVIEW. | web-designer (build) · brand-designer (Essey visual language) | NO — advertises an undeployed feature | §B spec (have it); WIRED only at B2/D deploy |
+| **SPEC-2 Landing + app funnel** | floorfi.app-style protocol landing + the holder app it funnels into. PREVIEW-only (it funnels to the not-yet-built holder app). | web-designer (build) · brand-designer (landing direction) | NO — funnel to undeployed app | brand direction; WIRED at B2/D deploy |
+
+**SEQUENCING vs the contract build:** NOW-1/NOW-2 have zero contract dependency → start on founder GO. SPEC-1/SPEC-2
+DESIGN now against the §B spec but WIRE only when B1 (hook rebuild) + B2 (`HolderDistributor`) clear G1/G2 → I → D
+(founder deploy) in the fee-model program above. Until D lands: preview-branch only, never promoted to essey.xyz,
+factual copy matches deployed reality (web-designer's standing rule; founder's no-vapor guardrail).
+
+**DEPENDENCIES / FOUNDER DECISIONS NEEDED TO PROCEED:**
+1. **GO to start the designers** — essey-web-designer (NOW-1 + NOW-2 live; SPEC-1/2 in preview) and
+   essey-brand-designer (Essey-vs-Dons identity split + landing direction). The founder rules on kickoff.
+2. **IA-structure call** — the crux: does the protocol become the FRONT DOOR (essey.xyz = protocol home, game as
+   a routed section / `/dons` or `dons.*`), or a hard top-nav split within one site? The current "/" landing is
+   game-first (`App.tsx` Landing) — this decides whether NOW-1 re-fronts the site.
+3. **Audit cleanup policy** — archive stale Sui-era rounds out of the visible surface (recommended; trail kept in
+   repo/history per memory), or keep them visible? And curated-view vs raw-tree link.
+4. **Brand seam** — brand-designer scope is the Essey PROTOCOL only (hierarchy addendum); the Dons side keeps its
+   own aesthetic (don-designer/dons-director). The IA split must honor that seam — confirm the two identities are
+   deliberately DISTINCT, not unified.
+5. **Landing/app scope confirm** — SPEC-2 is the funnel to the holder airdrop → stays preview until B2/D. Confirm
+   the landing's job is the holder-airdrop story (not a general re-skin that could ship live piecemeal).
+
+**COMMS:** unaffected by the Jester full-hold (that governs blog/social). This is product UI. But the no-vapor
+guardrail is the same spine: SPEC-1/2 never advertise the holder airdrop on the live site until the contracts are
+on 4663. No build, no deploy, no publish by the PM — designers execute on founder GO.
+
+**Tracker state:** scoped. NOW-1/NOW-2 ready to start (blocked only on founder GO + decisions 2-3). SPEC-1/2
+design-ready against §B, wiring gated on the fee-model program's D. Owners: web-designer + brand-designer.
+
+### Update 2026-08-31 (5) — UI/UX workstream GO (founder) + deploy discipline locked
+Founder gave GO on the UI/UX workstream and answered the open UX decisions. Owners: essey-web-designer (build
++ PREVIEW deploy), brand-designer (identity EXTENSION), orchestrator (Chrome verify + prod promote). This runs
+ALONGSIDE the fee-model build; the holder-hub UI is downstream of B2 contracts for its live data, but the
+IA/brand/cleanup pieces are independent and ship now.
+
+**Locked rulings:**
+1. **IA:** `essey.xyz` = **PROTOCOL front door.** The Dons GAME moves into its own wing (`/dons` hierarchy)
+   with a bridge from the Don player view → the holder view. A protocol-only visitor must NEVER hit the Dons
+   piece unless they seek it.
+2. **Holder hub = a HUB, not all-new.** It chains **claim → (optional) shield → borrow (LTV / terms / manage)
+   → explorer visibility**, weaving the EXISTING shielded (`/private`), lending, and explorer surfaces into one
+   journey. Reuse, not rebuild.
+3. **Audit cleanup:** archive the stale **Sui-era** rounds out of the visible surface; **keep the trail in
+   repo.** (Targets `docs/audits/sui-rounds-1-6.md` + the Sui-era design docs — web-designer to confirm the
+   exact visible-surface set; repo history retained.)
+4. **BRANDING CORRECTION (revises the earlier "brand seam" decision):** NOT a new identity split. Keep the
+   existing Dons visual language EXACTLY; **EXTEND** it to the Essey protocol UI. Two distinct sections, ONE
+   identity. The brand-designer's job is **extension, not a new look.**
+5. **Blog navigation fix** folded into the web work: recent-first, scalable timeline.
+
+**DEPLOY DISCIPLINE (recorded, binding on this workstream):**
+- **web-designer builds + deploys to PREVIEW ONLY.** Never prod.
+- **ORCHESTRATOR verifies every page in Chrome, then handles the prod promote** to `essey.xyz`, with a
+  **HOLD-IF-BROKEN** safety valve.
+- **The airdrop / claim / borrow / shield-claim UI is PREVIEW-ONLY until its contract is live on 4663 — NO
+  VAPOR.** (Consistent with the register's rule: no mainnet copy over contracts that aren't deployed.)
+- **LIVE-NOW set** (no unshipped-contract dependency): **IA reorg + audit cleanup + blog fix + honest landing.**
+  Everything holder-hub-data-dependent stays preview until B2 → G2 → I → D lands the contract.
+
+**Tracker state:** fee-model program unchanged by this (Model A killed / Model B locked / two-snapshot gate =
+hard B2 req pending founder adoption / V satisfied / B1 in flight / B2 gated on the 6 rulings / G1-G2-I-D
+downstream). NEW parallel UI/UX workstream: LIVE-NOW pieces cleared to build→preview→(orchestrator)promote;
+holder-hub live UI preview-only until its contract deploys. Comms: Jester full hold unchanged. No build/deploy
+on PM's end.
+
+### Update 2026-08-31 (6) — B2 build STARTED (in tandem with B1 + UI/UX)
+Founder GO: the **HolderDistributor contract (B2) build is now ACTIVE** — was "NOT STARTED, gated on rulings."
+Reconciliation of the earlier gate: the **SHAPE is locked**, so B2 builds NOW with **placeholder params**; the
+6 founder rulings **tune the params before its GATE, not before the build.** Engineer builds to the locked
+Model-B-minimized shape:
+- keeper posts a **Merkle root**, **NO custody**;
+- **challenge window** on activation; **bond + permissionless deterministic fallback** for liveness;
+- **two-snapshot holding gate baked into the root** (`min(prev, this)` — Update (4));
+- **gasless-signature baskets**; **append-only basket registry** (add stocks/baskets, no redeploy);
+- **params flagged PENDING FOUNDER** (cadence, per-stock min, weighting TWAB/snapshot, basket rails/caps/
+  cooldown, launch set, keeper/bond/challenge-window — the 6 rulings).
+Reports to coordinator for the **3-round gate (G2) when done** — **gate not fired yet, nothing deployed.**
+
+**Now-in-tandem (three parallel workstreams):**
+- **B1** — hook rebuild (split-only: 45 floor / 40 holder / 15 Dons, new floor rail, drop POL+ops) — IN FLIGHT.
+- **B2** — HolderDistributor (locked shape, placeholder params) — **ACTIVE** (this update).
+- **UI/UX** — IA reorg + audit cleanup + blog fix + honest landing LIVE-NOW; holder-hub live UI preview-only
+  until B2's contract deploys.
+
+**Tracker state:** Model A killed / Model B locked. B1 in flight. **B2 ACTIVE** (placeholder params; 6 rulings
+tune before G2). Two-snapshot holding gate = hard B2 req (in the root), founder formal adoption still pending.
+V satisfied. G1 (hook) + G2 (distributor) = two separate 3-round gates, NOT fired. I (harness) + D (founder
+deploy) downstream. Comms: Jester full hold. No build/deploy on PM's end.
+
+### Update 2026-08-31 (7) — B2 CODE COMPLETE (tests green) → awaiting founder-fired G2 gate
+**Delta:** flow #12 fee/tokenomics → holder-airdrop leg. **B2 moves ACTIVE (in-build) → CODE COMPLETE,
+NOT audited / NOT committed / NOT pushed.** Reported by essey-protocol-engineer. Next gate is G2 (the
+3-round audit) — **founder fires it; PM did not.** No deploy, nothing public.
+
+**PM-VERIFIED this session (independent of the engineer's report):**
+- Three new files exist and are UNTRACKED (`??`, so uncommitted/unpushed — matches the report):
+  `rh-chain/src/market/HolderDistributor.sol` (327 lines, `wc -l`), `rh-chain/src/market/BasketRegistry.sol`
+  (148 lines, `wc -l`), `rh-chain/test/HolderDistributor.t.sol` (571 lines, `wc -l`). [`git status --porcelain`
+  + `wc -l`, PM ran this session]
+- **The holdersSink seam is REAL** (load-bearing wiring the auditor/harness will build on):
+  `EsseyReserveHook.sol:343-350` — `fundHolders(address token)` reads `holdersEscrow[token]`, zeroes it, then
+  `IERC20(token).safeTransfer(holdersSink, amount)`. The distributor receives USDG passively as `holdersSink`
+  and reads its own balance as the epoch pot, exactly as reported. [PM read `EsseyReserveHook.sol:340-352`]
+
+**ENGINEER-REPORTED (reproduce commands given; NOT re-run by PM — the founder-fired G2 gate is the real check):**
+- Both new contracts compile under solc 0.8.28.
+- `forge test --match-path test/HolderDistributor.t.sol` → 32 passed / 0 failed.
+- Full-repo `forge test` → 1355 passed / 2 failed; the 2 (`DonMainnetFork.t.sol`, `DonSolvencyStress.t.sol`)
+  fail identically in `setUp()` (`ERC721InvalidReceiver`) with B2 files stashed out → **PRE-EXISTING, no
+  regression from B2** (engineer's stash-diff test). PM has NOT re-run the stash diff.
+- 12 adversarial mutations against money-path guards, each turned its specific test RED then restored to
+  byte-identical source; suite back to 32/32.
+- `forge fmt` clean; comment density 12.5% / 11.9% (under the 15% chokepoint ceiling).
+- (Note: engineer quoted 288 / 126 SLOC; PM's `wc -l` totals are 327 / 148 — the delta ≈ comment lines, not
+  a discrepancy in substance.)
+
+**PENDING FOUNDER — immutable-at-deploy params, flagged in-contract, must be chosen BEFORE deploy** (these are
+the same open rulings tracked in Update (5)/(6) as "the 6 rulings", now enumerated by the engineer as the exact
+constructor knobs): epoch cadence (~12h min interval), challenge-window length, claim-window length, keeper-bond
+size, dark-keeper grace period, sweep/slash sink destinations, registry timelock length. **Placeholder values
+are in the code today; the founder's numbers replace them before G2→deploy.** [engineer-reported; each is a
+constructor/immutable param — PM did not enumerate them in source this session]
+
+**GATE LADDER position (unchanged owners):**
+- G2 (essey-auditor, 3 consecutive clean rounds: economics / access-oracle / mutation) — **founder fires. NOT
+  fired.** This is the single most security-critical piece in the program (real stock custody + Merkle claims),
+  so the 3-round bar is non-negotiable.
+- Then I (essey-harness) on-chain E2E, then D (founder mainnet deploy).
+- **guard-git note:** these are changed contracts; **no public push until G2 returns 3-round-clean** (hook rule 2,
+  guard-git-enforced). They correctly sit untracked right now.
+
+**Paired work:** B1 (hook rebuild) is in tandem; B2 depends on it ONLY for exposing `holdersSink` as the USDG
+destination, which the current hook source does (`EsseyReserveHook.sol:348`, PM-verified above). B1 has its own
+gate G1. Both must clear before D.
+
+**Tracker state:** Model A killed / Model B locked. **B2 = CODE COMPLETE, pre-G2.** B1 in flight. Two-snapshot
+holding gate = hard B2 req (in the root). V satisfied. G1 (hook) + G2 (distributor) = two separate 3-round gates,
+**NEITHER fired.** I (harness) + D (founder deploy) downstream. 7 immutable params await founder values before
+deploy. Comms: Jester full hold. **No gate fired, no push, no deploy on PM's end.**
+
+### Update 2026-08-31 (7) — NEW workstream: Oracle-deviation-aware treasury rebalancer / internal arb (DESIGN-ONLY)
+Founder opened a research/design workstream. **Owners:** launch-economist = analysis owner; PM = program owner.
+**Status: DESIGN-ONLY — NO BUILD.** Tracked alongside the fee-model + UI/UX streams.
+
+**The idea (as framed by founder — the economist is producing the substantive scope; NOT re-derived by PM):**
+- RH tokenized stocks can spike to a multiple of true price off-hours/weekends (thin liquidity + short
+  squeezes), then re-peg Monday when the RH market maker sells in.
+- **Two exposures:** (a) **treasury holdings look inflated then snap back**; (b) the **epoch buyback (B2) could
+  overpay** at an off-hours premium.
+- **Proposed value-add:** an active rebalancer that **sells the off-hours premium and rebuys on re-peg**, plus
+  **valuation discipline — mark backing at ORACLE, not pool.** Possibly externalized as an arb bot later.
+
+**Economist's scope in flight (their analysis to confirm/quantify — PM does not assert these):**
+- Quantify the deviation **empirically vs oracle on 4663** (real magnitude, not assumed).
+- Confirm whether **StockConverter's oracle-fairness + session gating already mitigates most of the buyback
+  exposure (b)** — [economist to confirm; not verified by PM]. If so, exposure (b) may be largely covered and
+  the net new work is (a) valuation discipline + the active rebalancer.
+- Design the rebalancer + its nuances: **session-gate tension** (can't trade the premium if the flow is
+  session-gated fail-closed), **liquidity/execution** (thin off-hours book), **re-peg timing risk**, and
+  **keeper-not-adminless** trust surface.
+
+**Cross-links (load-bearing for the founder):**
+- Directly touches **B2**: exposure (b) is the epoch buyback overpaying — a rebalancer/valuation-discipline
+  ruling may set constraints on how B2 sources stock each epoch (e.g. mark-at-oracle, skip/limit off-hours
+  buys). Flag for sequencing: if the economist finds (b) is real and NOT covered by StockConverter gating,
+  B2's buy path may need a param or guard — record it, do not fold into B2's build silently.
+- Touches the **base reserve (#1)** valuation: "mark backing at oracle, not pool" is a treasury-accounting
+  discipline that spans the reserve, not just the airdrop engine.
+
+**Tracker state:** THREE active build streams (B1 hook in flight / B2 distributor ACTIVE, placeholder params /
+UI/UX live-now + preview) PLUS TWO analysis-only threads: (i) the 6 B2 param rulings + holding-gate adoption
+pending founder; (ii) **NEW oracle-deviation rebalancer — DESIGN-ONLY, economist analyzing, no build.** V
+satisfied. G1/G2/I/D downstream, gates not fired. Comms: Jester full hold. No build/deploy on PM's end.
+
+**Economist findings (launch-economist, 2026-08-31, GROUNDED — delivered to founder, scope recorded here):**
+- **(a) valuation inflation — ALREADY FULLY MITIGATED, both layers.** `EsseyReserve` never touches a price:
+  `floorOf`/`reserveOf` return UNITS, not USD (`EsseyReserve.sol:197-205`); adminless (`:21-25`). The Treasury
+  UI renders units only and states "a backing ledger, not a price" (`app/web/src/treasury.tsx:154-155`,
+  `reserve.ts:88`) — no pool price, oracle price, or USD NAV anywhere (grep VERIFIED). A pool spike CANNOT leak
+  into any stated floor today. Residual: only IF a future USD-NAV display is added, it MUST value at
+  Chainlink oracle (session/staleness-gated), never pool spot. Cheap guardrail, not a live gap.
+- **(b) buyback overpay — bounded by StockConverter, BUT the accretion buy path does not use it yet.**
+  `StockConverter._oracleMinOut` enforces out ≥ oracle-fair·(1−maxSlippageBps) and reverts off-session
+  (`NotInSession`) — so THROUGH the converter, an over-pegged buy can overpay by at most `maxSlippageBps`
+  (hard-ceiled 5%, `StockConverter.sol:49,142,147`) in-session and ZERO off-hours. BUT reserve accretion as
+  scoped (flywheel §5 step 2) is a RAW SwapRouter02 call — no oracle-fair guard, no session gate. **Fix (cheap,
+  high-value): route accretion buys through StockConverter → `convert(amountIn, stock, reserveAddr)`** — the
+  converter is proven live on 4663 (floor-flr-scope §D). That closes (b) with an existing audited contract.
+- **Empirical magnitude — deviations are SMALL and bot-arbitraged; NO capturable multiple observed.** VERIFIED
+  on 4663 this session (Mon 2026-08-31 ~22:40 UTC, off-hours, market closed since 20:00): pool spot vs
+  Chainlink, NVDA −0.27%, AAPL −0.11%, TSLA +0.26%, SPY +0.22%, GOOGL +0.20%. Realized ranges from Swap logs:
+  NVDA (deep $3.48M pool) 485 swaps/13min held a 0.07% band; SPY (thin $15k pool) 263 swaps/~11h held 0.64%
+  range, max +0.54% vs oracle. Founder's "multiple of true price" is NOT present in current data — deep pools
+  are heavily bot-arbitraged even off-hours. CAVEAT: node prunes state (~<3h) and wide log windows time out, so
+  I could NOT reach the actual weekend (Sat/Sun) or rare halt/squeeze tails — absence in an 11h Monday sample is
+  weak evidence about a monthly tail.
+- **VERDICT: valuation discipline = keep + guardrail (nearly free); buyback guard = route B2 through the existing
+  converter (small); active rebalancer = NOT justified on current evidence (premium too thin to harvest, and the
+  session gate blocks the sell exactly when the deviation would occur). Recommend: adopt the two cheap mitigations
+  now; SHELVE the active rebalancer, revisit only if a real, repeated, capturable off-hours dislocation is
+  observed with a proper price indexer.** Full report + nuances delivered to founder.
+
+### Update 2026-08-31 (8) — FLR deposited to EsseyReserve → NEW daily-accrual workstream (VERIFY-gated)
+**Founder ACTION (on-chain):** deposited **1,133,023 FLR** from treasury wallet `0x93e6…b9e` INTO **EsseyReserve
+`0xd970Ca…05A7b`**, **block 51257763** — reported **VERIFIED `balanceOf` = `reserveOf` = 1.133e24**.
+[coordinator-relayed on-chain-verified; PM has NOT independently re-run the read — treat the figure as VERIFIED
+by the economist/coordinator, flagged for a PM re-read if it becomes a deploy-blocking number.] Note: this makes
+the reserve address CONCRETE — supersedes the memory note "[[essey-reserve-deposit-address]] NOT DEPLOYED yet."
+**Intent:** the reserve holds FLR so Floor stock airdrops land DIRECTLY in the reserve daily (auto-accruing
+backing). Owners: launch-economist = verify/framing; PM = program; web-designer = pages (gated).
+
+**Status: DESIGN / VERIFY-ONLY until the make-or-break gate resolves.**
+
+1. **MAKE-OR-BREAK GATE (blocks everything on accrual).** launch-economist is verifying NOW whether Floor's
+   distributor **PUSHES** stock to the reserve contract, or requires a **CLAIM** the **adminless reserve cannot
+   make.** If pull/claim → **the airdrops STRAND** in Floor's distributor and the whole daily-accrual premise
+   **FAILS.** Nothing is built on the accrual until this verdict lands. **This is the gate — record it as
+   blocking #2's accrual framing, #3 entirely, and #4's stock leg.**
+2. **PAGE FIX (small; after economist sets framing).** FLR is **NOT** in `app/web/src/reserve.ts` BASKET → the
+   backing page does not show the 1.133M FLR. Add FLR as a **NON-EQUITY line** — it **fails the RH-stock beacon
+   check**, so present it as a **protocol token backed by Floor's equities, one layer removed**, NOT mixed with
+   the direct-equity backing. Owner: web-designer, AFTER the economist's framing read. [PM to confirm the
+   `reserve.ts` BASKET path/line with web-designer before edit — cited from coordinator, not yet PM-grep'd.]
+3. **REAL-TIME ACCRUAL DISPLAY (explorer).** Show the reserve's backing value / accrual live as airdrops land.
+   Designer task, **GATED ON #1** — do NOT build accrual UI for airdrops that might strand.
+4. **DAILY TRACKING.** Standing day-over-day check of the reserve's FLR + stock holdings. (Once #1 clears for the
+   stock leg; the FLR leg can be tracked now.)
+
+**Cross-links:** this is the same Floor distributor the fee-model B2 mirrors — the push-vs-claim verdict (#1)
+also informs whether OUR HolderDistributor (B2) can push to an adminless reserve, or whether the reserve needs a
+claim path. Flag: if Floor requires a claim, an adminless reserve as a beneficiary is structurally hard — may
+force a design conversation (claimer contract vs non-adminless collector). Record, do not fold into B2 silently.
+
+**Tracker state:** build streams B1 (in flight) + B2 (ACTIVE, placeholder params) + UI/UX (live-now + preview).
+Analysis threads: oracle-deviation rebalancer (design-only); **NEW FLR daily-accrual (VERIFY-gated on #1
+push-vs-claim — make-or-break).** Pending founder: 6 B2 param rulings + holding-gate adoption. V satisfied.
+G1/G2/I/D downstream, not fired. Comms: Jester full hold. No build/deploy on PM's end.
+
+### Update 2026-08-31 (9) — NEW BUILD workstream: StockLpVault (single-sided stock LP earn vault)
+Founder: "do it." Scope: `docs/research/stock-earn-vaults-scope.md` (VERIFIED exists, 27KB). The retention/
+compounding layer of the flywheel — holders keep airdropped stock on-platform + compound the yield → TVL +
+bootstrapped fees. **Build-with-gate.** Owners: essey-protocol-engineer (build); launch/don-economist (net-of-IL
+yield + range/hedge sizing); PM (program). Reports to coordinator for its 3-round gate when done.
+
+- **Phase 1 MVP — engineer building NOW.** Single-sided concentrated-LP vault on the NVDA/USDG-500 pool;
+  **ERC-4626 oracle-valued shares** (valued at **Chainlink mark, NOT spot** — anti-manipulation); **permissionless
+  compound**; **keeper-gated rebalance**; **NO external hedge.** **Reuses `EsseyLadderSeeder`'s V3 mint/callback/
+  collect** (VERIFIED reuse target: `EsseyLadderSeeder.sol:10-11,25,29` — `pool.mint` + `uniswapV3MintCallback`
+  + permissionless `collectFees()` :54). `StockLpVault` VERIFIED does not exist yet (grep, 0 matches). → its own
+  **3-round audit gate (G3)** when done, NOT fired.
+- **Phase 2** — auto-compound + auto-pair + multi-pool. NOT STARTED.
+- **Phase 3 — Arcus perp-token hedge — GATED (blocking on-chain verification).** Arcus (24/7 stock perps +
+  ERC-20 pTokens, dYdX team) is **docs-claimed but on-chain-UNVERIFIED on 4663.** **Phase-3 gate = verify Arcus is
+  actually live on 4663 (contracts on chain), same pattern as the Multiply-DEX and Arcus-style dependencies.**
+  Do NOT build the hedge until Arcus is confirmed on-chain. [UNVERIFIED — founder/docs-supplied.]
+
+**Cross-links (load-bearing):**
+- **HolderDistributor (B2) is the deposit funnel** — airdropped stock → one-click LP into this vault. B2 and the
+  vault share the holder as the same user; the "claim → (optional) shield → borrow" hub journey (Update (5))
+  gains a "→ earn" leg. Coordinate the deposit seam so it's not two disjoint builds.
+- **StockConverter** for valuation; **keeper pattern SHARED** across B2 / rebalancer / this vault (one keeper
+  design discipline, not three).
+- Economist owns net-of-IL yield + range/hedge sizing.
+
+**Grounding note (intern-flagged, recorded for the team):** this RPC can misbehave on topic-filtered
+`eth_getLogs`. Earlier airdrop/reserve scans **RECONCILED to `balanceOf`** so those figures are solid, but
+**log-based analytics must tally client-side**, not trust a topic-filtered server-side log query. Applies to the
+daily-tracking (#4, Update (8)) and any explorer accrual analytics.
+
+**Tracker state — FOUR build streams + TWO analysis + gates:**
+- BUILD: **B1** hook (in flight) · **B2** HolderDistributor (ACTIVE, placeholder params) · **UI/UX** (live-now +
+  preview) · **StockLpVault Phase 1** (ACTIVE, build-with-gate; P3 Arcus-gated).
+- ANALYSIS/VERIFY: oracle-deviation rebalancer (design-only) · FLR daily-accrual (VERIFY-gated on push-vs-claim #1).
+- PENDING FOUNDER: 6 B2 param rulings + two-snapshot holding-gate adoption.
+- GATES (NONE fired): **G1** hook · **G2** distributor · **G3** vault — three separate 3-round audits → **I**
+  harness → **D** founder deploy. Phase-3 Arcus on-chain verify = its own blocking gate.
+- Comms: Jester full hold. No build/deploy on PM's end.
+
+### Update 2026-08-31 (10) — CONNECTED PRODUCT TRACKER created ([`PRODUCT-TRACKER.md`](PRODUCT-TRACKER.md))
+Founder directive ("things are not being connected together"): built the single at-a-glance matrix of EVERY
+product across CODE · UI/UX · DEPLOY · OWNER · next-action, with the process rule (designer maps/queues/builds UI
+as each contract lands), the ceremony as a tracked gating item, and the disconnects surfaced. This register stays
+the chronological/narrative source; the tracker is the connected matrix. **Update both when a gate moves.**
+
+**Two grounded corrections this reconciliation made to the narrative above (verified this session against the
+actual files, not recall):**
+- **B1 hook rebuild has LANDED locally** — updates (6)/(7) say "in flight," but `EsseyReserveHook.sol` on disk now
+  carries the three-bucket split (`reserveShareBps/holdersShareBps/donsShareBps` `:73-75`), `MIN_RESERVE_BPS=4_000`
+  (`:38`, was 6000 → the 45% floor is now structurally accepted, PENDING FOUNDER), POL+ops DROPPED, and the holder
+  route (`holdersSink`/`holdersEscrow`/`fundHolders` `:50,88,344-348`). Still UNTRACKED, unaudited.
+- **StockLpVault's two UI view fns now EXIST** — `previewWithdraw` (`:217`) + `pendingFees` (`:281`); closes gaps
+  G-UI-1/G-UI-2 from the vault scope. 23/23 in its own suite (coordinator-reported, not PM-re-run).
+
+**Two states the tracker records that this narrative did not:**
+- **D-1 audit-state UNVERIFIED:** the hook is founder-reported "R2 clean, 1 round to go," but no audit doc exists
+  under `docs/audits/` for it and the contract is untracked — recorded UNVERIFIED until the auditor commits round
+  receipts. Consistent with update `:366-368`.
+- **Wrap-up cleanup workstream:** `FOUNDRY_PROFILE=v4 forge test` has ~45 failing tests in unrelated suites
+  (GameRaid/Isolation/LivenessOracle/MarketHealthOracle/Note/NoteArt/RateModes/Succession/TravelCase), mostly
+  `OutOfGas` in `setUp()`, PRE-EXISTING/not regressions (coordinator-reported, PM has not re-run). Owner =
+  essey-protocol-engineer; a gating item for the "everything wrapped up" claim. Tracked in `PRODUCT-TRACKER.md §8`.
+
+### Update 2026-08-31 (11) — G1 (hook) MET + G3 (vault) firing
+- **G1 — $ESSEY launch hook (`EsseyReserveHook` + `LaunchSeeder`) is AUDIT-CLEAN.** Three consecutive
+  complete-clean 3-lens rounds on byte-identical code; committed receipt at
+  [`docs/audits/esseyreservehook-gate-2026-08-31.md`](audits/esseyreservehook-gate-2026-08-31.md) (verdict MET, 92
+  tests, F-C1 coverage gap caught mid-gate → test-only fix + mutation-verified → 3 clean rounds; 4 equivalent
+  survivors). This **resolves tracker disconnect D-1** (was UNVERIFIED — now grounded in a receipt, not chat). Rails
+  founder-confirmed 40/50/20. Two DEPLOY-CONFIG gates carry forward (feeCurrency must = USDG; ESSEY non-circulating
+  until the atomic seed). Contracts still UNTRACKED — guard-git now unblocks the push (3 clean rounds); commit next.
+- **G3 — StockLpVault gate FIRING (round 1 of 3).** CODE → `audit-in-progress`. Needs 3 consecutive clean rounds.
+- Register+tracker reconciled. No deploy, no push, no publish on PM's end.

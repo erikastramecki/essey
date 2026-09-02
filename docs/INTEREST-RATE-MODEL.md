@@ -77,9 +77,9 @@ utilization → low supply APY → no reason to supply.** The dynamic rate alone
 The standard fixes:
 
 1. **Seed the pool yourself** (protocol-owned liquidity). You/treasury supply the initial USDG so
-   borrowers have something to draw from day one. (This is exactly the testnet seed path on
-   Robinhood Chain — treasury deposits USDG into `EsseyPool` so there's lendable liquidity before
-   the first borrower arrives.)
+   borrowers have something to draw from day one. (This is the intended launch seed on Robinhood Chain
+   mainnet — treasury deposits USDG into `EsseyPool` so there's lendable liquidity before the first
+   borrower arrives. Lending is not yet live on mainnet; the seed happens at the founder-gated deploy.)
 2. **Liquidity incentives** — emit a token / points to supplement organic supply APY early
    ("supply USDG, earn 10% interest **+** X in rewards"). This is how essentially every new lending
    protocol got its first liquidity. Sunset it as organic utilization grows.
@@ -90,11 +90,11 @@ The standard fixes:
 The honest sequencing: **seed + incentivize to get initial liquidity and borrowers → real
 utilization builds → the dynamic curve takes over and you dial incentives down.**
 
-## 5. How Essey implements it (done — live in `EsseyPool`)
+## 5. How Essey implements it (implemented in `EsseyPool`; params set at deploy)
 
-The dynamic kinked curve above is **already implemented** in the deployed Solidity `EsseyPool` on
-Robinhood Chain testnet. There is no fixed `rate_bps`; the rate is a function of utilization,
-evaluated on every accrual:
+The dynamic kinked curve above is **already implemented** in the Solidity `EsseyPool` (ported to
+`rh-chain`, audited). There is no fixed `rate_bps`; the rate is a function of utilization, evaluated on
+every accrual. The curve params are set at deploy — **lending is not yet live on mainnet**:
 - The curve params live in the pool: `baseBps, slope1Bps, slope2Bps, kinkBps, reserveBps`, with
   `kinkBps = 8000` (the 80% target) and the sum of the legs bounded by `MAX_RATE_BPS`.
 - `borrowRateBps()` evaluates the kink: `base + slope1 * (U / kink)` up to the kink, then
@@ -108,8 +108,8 @@ evaluated on every accrual:
   panel), so it displays correctly straight off the live rate.
 
 No new external dependencies and no oracle changes: it's a self-balancing money market where
-"deposit USDG and earn yield" means something. Open borrowing switches on around Aug 5 2026, at
-which point real utilization begins driving the curve.
+"deposit USDG and earn yield" means something. Once lending is deployed to mainnet and borrowing opens,
+real utilization begins driving the curve.
 
 ---
 
@@ -120,5 +120,5 @@ which point real utilization begins driving the curve.
 - The rate model doesn't solve cold-start — **seed the pool + incentivize early supply**, then let the
   curve take over.
 - Implementation is **done**: `EsseyPool.accrue` computes the rate from utilization (kinked curve,
-  `kinkBps = 8000`) instead of a constant and routes a reserve factor, live on Robinhood Chain
-  testnet. The UI already shows the emergent APY.
+  `kinkBps = 8000`) instead of a constant and routes a reserve factor. Params are set at deploy;
+  lending is not yet live on mainnet. The UI already derives the emergent APY.

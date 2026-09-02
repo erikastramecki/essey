@@ -27,14 +27,24 @@ covered.
 | [Sui 1–6](sui-rounds-1-6.md) | `move/` — the Move protocol | 9, 10, 17, 9, 9, 12 | fixes committed; **no round ever came back clean** |
 | [Solidity 1](solidity-round-1.md) | `rh-chain/` — the Robinhood Chain port | 19 | criticals + highs fixed; tail open |
 | [Solidity 2](solidity-round-1.md) | `rh-chain/` — re-audit + mutation sweep | see round-1 report | **not clean**; ~50 mutations survive a green suite |
-| [Market layer 1](market-layer-round-1.md) | `rh-chain/src/market/` (Seats/Bell/Notes) + EsseyPool diff | 1 (fixed) | fix committed; **re-audit clean** |
+| [Market layer 1](market-layer-round-1.md) | game-era: `rh-chain/src/market/` (Seats/Bell/Notes) + EsseyPool diff | 1 (fixed) | fix committed; **re-audit clean** |
+| [Market layer 2](market-layer-round-2.md) | game-era: `EsseyToken.sol` + `EsseyExchange.sol` (the Seat AMM) | 1 hardening | **re-audit clean** |
+| [Market layer 3](market-layer-round-3.md) | game-era: `MintDistributor.sol` (the Seat minter + WL) | 2 hardenings | **re-audit clean** |
+| [Market layer 4](market-layer-round-4.md) | game-era: `EsseyCases.sol` (the fair-value stock gacha) | 2 HIGH + 1 MED + 3 LOW | 4 rounds; **final round clean** (all 3 lenses) |
+| [Market layer 5](market-layer-round-5.md) | game-era: `EsseyPool.sol` reserve-routing → the Bell | 1 (fixed) | **round-2 clean** (all 3 lenses) |
+| [Market layer 6](market-layer-round-6.md) | game-era: `SeatArt.sol` + `Seat.tokenURI` | 2 LOW + 5 hardenings | 3 rounds; **final round clean** (all 3 lenses) |
+| [$ESSEY launch hook — gate](esseyreservehook-gate-2026-08-31.md) | **protocol (base layer):** `EsseyReserveHook.sol` (50/40/10 fee model) + `LaunchSeeder.sol` | 1 (test-only, code CORRECT) | **GATE MET** — 3 consecutive clean rounds, all 3 lenses, byte-identical code; 92 tests pass |
 
-Round 2 has no separate file: its findings are corrections to round 1 and are folded into that
-report. It is listed separately here because the round-1 document, read alone, states a
-mutation-coverage claim that round 2 disproved by a factor of 50 — including that
-`MIN_RISK_GAP_BPS` and `PARAM_TIMELOCK`, the two constants we cite publicly as controls, can both
-be halved with every test passing. Anyone auditing us should know that before trusting round 1's
-coverage section.
+**Game-era vs protocol.** The **Market layer 1–6** rounds cover the D.O.N. **game / market layer**
+(Seats/Bell/Cases/Exchange/Notes/art) — the contract lineage of the gamification wing. The **$ESSEY
+launch-hook gate** is the **protocol base layer** — the fee model that accretes the adminless equity
+reserve ([BASE-LAYER.md](../BASE-LAYER.md)). The [Solidity 1–2] rounds are the lending-engine port.
+
+Round 2 (Solidity) has no separate file: its findings are corrections to round 1 and are folded into
+that report. It is listed separately here because the round-1 document, read alone, states a
+mutation-coverage claim that round 2 disproved by a factor of 50 — including that `MIN_RISK_GAP_BPS` and
+`PARAM_TIMELOCK`, the two constants we cite publicly as controls, can both be halved with every test
+passing. Anyone auditing us should know that before trusting round 1's coverage section.
 
 ## Method
 

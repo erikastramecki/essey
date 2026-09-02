@@ -5,6 +5,10 @@ how the big lenders do it, and the concrete schema for our assets (esp. the RWA 
 that makes tokenized equities special: a market-closed gap that an always-priced asset
 never has).
 
+> **Status:** these are the risk **params set at the lending deploy**. Lending is ported and audited but
+> **not yet live on mainnet** (chainId 4663) — no borrow exists on-chain yet. See
+> [OUTSTANDING.md](OUTSTANDING.md). The methodology below is what the founder-gated deploy configures.
+
 ## The one question LTV answers
 > If the collateral price falls, can a liquidation still fully cover the debt before the
 > position goes underwater?
@@ -78,7 +82,7 @@ This is why **tokenized equities need conservative LTV** — the LTV must surviv
 *discontinuous* overnight move, not just intraday drift:
 - **Single-name stock** overnight gaps can be 10–30% on bad news → a large cushion (a
   correspondingly low LTV).
-- A **diversified index** would gap far less and could carry a higher LTV — but the deployed
+- A **diversified index** would gap far less and could carry a higher LTV — but the in-scope
   collateral universe is single-name stock only (AAPL / NVDA), so single-name gap risk is the
   binding case.
 
@@ -94,10 +98,10 @@ LTV handles the *magnitude* of the gap; the guard handles *not lending on a stal
 
 **To onboard a market, classify it and set params from this table (conservative to start):**
 
-The deployed collateral universe is tokenized **single-name stock (AAPL / NVDA "Robinhood
+The launch collateral universe is tokenized **single-name stock (AAPL / NVDA "Robinhood
 Token")**, borrowing **USDG** from the pool. Those are the in-scope rows; the remaining rows
-are methodology sketches for classes we do not currently list (out of scope on Robinhood
-Chain today).
+are methodology sketches for classes we do not currently list (out of scope for the lending
+launch on Robinhood Chain).
 
 | Class | Example | Max LTV | Liq threshold | Rationale |
 |-------|---------|--------:|-------------:|-----------|
@@ -107,7 +111,7 @@ Chain today).
 
 **The onboarding checklist for a new asset's LTV:**
 1. **Classify** (single-name equity / index equity, and — if ever listed — stable / treasury)
-   → start from the row above. Single-name equity is the deployed case.
+   → start from the row above. Single-name equity is the launch case.
 2. **Adjust for the specifics:** vol percentile, on-chain liquidity/depth (→ maybe lower + a
    supply cap), feed heartbeat/staleness behavior, and — for equities — the plausible
    **overnight gap** for that name (single-stock > index).
@@ -124,13 +128,13 @@ Chainlink price x LTV`, checked in `EsseyMarkets` / `EsseyBorrow` at authorizati
 after the StaleFeedGuard has cleared the feed (session window + staleness bound + sequencer
 uptime). So the risk parameters are checked by the contract on every borrow, not asserted in
 a config. Liquidation applies the liquidation threshold the same way (`EsseyLiquidate`).
-There is no in-kernel ZK proof in the deployed lending path — enforcement is the Solidity
-market code against the Chainlink feed.
+There is no in-kernel ZK proof in the lending path — enforcement is the Solidity market code
+against the Chainlink feed.
 
 ## v1 vs. later
-- **v1 (now):** the conservative rules table above + the stress-formula onboarding checklist +
-  the oracle discipline. Deliberately conservative LTVs on the listed single-name stock (AAPL /
-  NVDA) so we're safe while small.
+- **v1 (at the lending launch, not yet live):** the conservative rules table above + the
+  stress-formula onboarding checklist + the oracle discipline. Deliberately conservative LTVs on the
+  listed single-name stock (AAPL / NVDA) so we're safe while small.
 - **Later (scale):** commission a Gauntlet/Chaos-style **simulation** of price paths +
   liquidation cascades to calibrate caps and thresholds precisely; add per-market isolation
   (Morpho-style) so a bad market can't contaminate the shared pool; a funded reserve.
