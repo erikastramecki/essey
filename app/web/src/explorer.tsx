@@ -113,7 +113,8 @@ const LEDGER_FILTERS: [string, string, (r: MainnetTapeRow) => boolean][] = [
 ];
 
 /// The backing bar. The figure is a MARK, not the claim, and a holding we cannot price is left OUT of
-/// the total rather than summed in as zero.
+/// the total rather than summed in as zero. The MARK column carries each line's price source per row,
+/// so the footer states the caveat once and sends the method to /treasury rather than restating it.
 function TreasuryBar({ st }: { st: TreasuryState | null }) {
   const held = st?.tokens.filter((t) => t.reserve > 0n) ?? [];
   return (
@@ -206,17 +207,9 @@ function TreasuryBar({ st }: { st: TreasuryState | null }) {
         </tbody>
       </table>
       <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>
-        a mark, not the claim · $ESSEY redeems pro-rata in UNITS of each token,
-        never dollars · lines with no price source are excluded from the total,
-        not counted as zero
+        indicative · redemption pays UNITS, not dollars · unpriced lines
+        excluded, not zeroed · <Link to="/treasury">how this is marked ↗</Link>
       </div>
-      {st?.poolMarked && (
-        <div className="muted" style={{ marginTop: 4, fontSize: 10 }}>
-          $FLR has no chainlink feed here — marked at the MEDIAN tick of its
-          last 50 uniswap v4 swaps, a pool ~8 ETH deep where ~$1k of trading
-          moves the price 10%. blank if it has not traded in an hour.
-        </div>
-      )}
     </div>
   );
 }

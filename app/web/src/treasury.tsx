@@ -166,13 +166,8 @@ export function TreasuryPage() {
         <div className="hw-card">
           <div className="hw-card-h">Reliable floor — tokenized equities</div>
           <p>
-            The equity legs of the basket. These are the backing the floor is
-            measured against — the reliable, stock-denominated claim under
-            $ESSEY. Each figure is read from the reserve right now; tap a symbol
-            to verify the contract&apos;s holding on the explorer. Not every
-            equity here has a Chainlink feed on this chain — the ones that
-            don&apos;t read <i>no feed · units only</i> and sit outside the
-            dollar total.
+            The stock-denominated claim under $ESSEY, read live from the
+            reserve. Tap a symbol to verify the holding on the explorer.
           </p>
           <BasketTable
             rows={equities}
@@ -184,16 +179,10 @@ export function TreasuryPage() {
         <div className="hw-card">
           <div className="hw-card-h">Additive upside — crypto lines</div>
           <p>
-            Volatile crypto lines ride in the same reserve and redeem the same
-            pro-rata way, but we{" "}
-            <b>do not count them toward the reliable floor</b> — they are upside
-            on top of it. The split is drawn on chain, not by hand: a token is
-            reliable only if it passes the Robinhood Stock Token beacon check;
-            anything else lands here. The reserve itself pays every token
-            identically. $FLR has no feed on this chain, so it is marked from
-            the median of its last 50 pool swaps and carries the thin-market
-            caveat above; $PONS and $CASHCAT have no price source we read at
-            all, so they show units and sit <b>outside the dollar total</b>.
+            Volatile lines redeem the same pro-rata way, but{" "}
+            <b>do not count toward the reliable floor</b> — they are upside on
+            top of it. The split is drawn on chain: reliable means the token
+            passes the Robinhood Stock Token beacon check.
           </p>
           <BasketTable
             rows={crypto}
@@ -287,8 +276,8 @@ function OfficialContract() {
 }
 
 /// The one figure on this page that is NOT a claim: a dollar mark sitting next to a redeemable claim is
-/// exactly what a reader will misread, so it says so, and it NAMES the lines it left out rather than
-/// letting a missing feed quietly shrink the total into a lie.
+/// exactly what a reader will misread. The stat labels carry the mark source, the excluded tickers are
+/// NAMED rather than summed as zero, and the method sits one click away instead of three paragraphs up.
 function Balance({ st }: { st: TreasuryState | null }) {
   const excluded = st?.unpricedSymbols ?? [];
   return (
@@ -299,51 +288,62 @@ function Balance({ st }: { st: TreasuryState | null }) {
       <div className="hw-card-big">
         {st ? usd(st.pricedUsd8) : "…"}{" "}
         <i>
-          marked value of {st ? st.pricedHeld : "…"} of{" "}
-          {st ? st.pricedHeld + st.unpricedHeld : "…"} funded holdings
+          {st ? st.pricedHeld : "…"} of{" "}
+          {st ? st.pricedHeld + st.unpricedHeld : "…"} holdings priced
         </i>
       </div>
-      <div className="hw-stats" style={{ margin: "0 0 12px" }}>
+      <p style={{ margin: 0 }}>
+        <b>Indicative only — redemption pays units, not dollars.</b>
+      </p>
+      <div className="hw-stats" style={{ margin: "12px 0" }}>
         <Stat
-          label="Tokenized equities · Chainlink feeds"
+          label="Equities · Chainlink feed"
           value={st ? usd(st.equityUsd8) : "…"}
         />
         <Stat
           label={
-            st?.poolMarked
-              ? "Crypto upside · thin-pool mark"
-              : "Crypto upside · no live pool mark"
+            st?.poolMarked ? "Crypto · thin-pool mark" : "Crypto · no pool mark"
           }
           value={st ? usd(st.upsideUsd8) : "…"}
         />
         <Stat
-          label="Excluded — no price source"
+          label="Excluded · no price source"
           value={
             excluded.length === 0 ? (st ? "none" : "…") : excluded.join(" · ")
           }
         />
       </div>
-      <p style={{ margin: 0 }}>
-        <b>This is not the claim.</b> Redeeming $ESSEY pays a pro-rata slice in{" "}
-        <b>units of each token</b>, never dollars, and no figure here touches
-        the floor, redemption, borrowing, or bonds — the units below are the
-        truth and this is an informational layer over them. Equity legs are
-        marked at their live Chainlink feed on Robinhood Chain and those feeds
-        run 24/5, so a line goes <i>price unavailable</i> rather than showing a
-        stale mark. Holdings with no price source anywhere are named above and
-        left <b>out</b> of the total, never counted as zero.
-      </p>
-      <p style={{ margin: "10px 0 0" }}>
-        <b>$FLR is marked from a thin pool.</b> It has no Chainlink feed on this
-        chain; its only venue is a single permanently-locked Uniswap V4 position
-        about 8 ETH deep, where roughly{" "}
-        <b>$1,000 of trading moves the price 10%</b>. To blunt that we mark it
-        at the <b>median tick of the last 50 swaps</b> rather than the latest
-        one, and show nothing at all if that pool has not traded in an hour.
-        Read the split above before you read the total: to whatever extent the
-        crypto line dominates it, the whole figure is an estimate a small trade
-        can move.
-      </p>
+      <MarkMethod />
+    </div>
+  );
+}
+
+/// Nothing here is optional to the honesty of the figure — it is the long form, moved behind a click.
+function MarkMethod() {
+  return (
+    <div className="hw-faq">
+      <details>
+        <summary>How this is marked</summary>
+        <div>
+          <p style={{ margin: "0 0 8px" }}>
+            <b>Equities</b> — live Chainlink feed on Robinhood Chain. Those
+            feeds run 24/5, so a line reads <i>price unavailable</i> rather than
+            showing a stale mark.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <b>$FLR</b> — no feed on this chain. Its only venue is a single
+            permanently-locked Uniswap V4 position about 8 ETH deep, where
+            roughly $1,000 of trading moves the price 10%. Marked at the{" "}
+            <b>median tick of the last 50 swaps</b>, and blank if that pool has
+            not traded in an hour.
+          </p>
+          <p style={{ margin: 0 }}>
+            <b>Excluded</b> — a holding with no price source is left out of the
+            total, never counted as zero. No figure here touches the floor,
+            redemption, borrowing, or bonds.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }
