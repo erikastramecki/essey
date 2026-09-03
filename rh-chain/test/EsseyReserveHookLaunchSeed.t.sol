@@ -574,6 +574,36 @@ contract EsseyReserveHookLaunchSeedTest is Test {
     seeder.recoverGriefedSeed();
   }
 
+  /// A recovered seeder is spent — it can never seed — so ESSEY that lands in it afterwards had no egress at
+  /// all and was stranded forever. Recovery stays open once it has fired, and deliberately stops re-checking
+  /// the off-peg precondition: anyone can repair the peg for gas, which would otherwise re-strand the deposit.
+  /// RED against making the hatch one-shot again, and against re-checking the price on the repeat call.
+  function test_recovery_does_not_strand_a_late_deposit() public {
+    manager.initialize(key, OPEN_PRICE);
+    LaunchSeeder seeder = _deploySeeder();
+    essey.transfer(address(seeder), 300e18);
+    manager.setSqrtPrice(OPEN_PRICE + 1);
+    seeder.recoverGriefedSeed();
+
+    essey.transfer(address(seeder), 1_000e18); // a late deposit into the spent seeder
+    manager.setSqrtPrice(OPEN_PRICE); // and the peg repaired underneath it, for gas, by anyone
+
+    uint256 before = essey.balanceOf(address(this));
+    assertEq(seeder.recoverGriefedSeed(), 1_000e18, "the late deposit was not recoverable");
+    assertEq(essey.balanceOf(address(this)) - before, 1_000e18, "the late deposit did not reach the founder");
+    assertEq(essey.balanceOf(address(seeder)), 0, "ESSEY stranded in the spent seeder");
+
+    // Still terminal, and still not a withdrawal backdoor for anyone else.
+    assertTrue(seeder.seeded(), "recovery stopped being terminal");
+    vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
+    seeder.seed(_ladder(OPEN_TICK));
+    vm.prank(address(0xBAD));
+    vm.expectRevert(LaunchSeeder.NotSeedCaller.selector);
+    seeder.recoverGriefedSeed();
+    vm.expectRevert(LaunchSeeder.NothingToRecover.selector);
+    seeder.recoverGriefedSeed();
+  }
+
   /// An off-peg pool with nothing pre-funded reverts rather than burning the one shot on a no-op.
   function test_recover_rejects_an_empty_seeder() public {
     manager.initialize(key, OPEN_PRICE);

@@ -25,6 +25,23 @@ keepers) — not a rebuild. Two labels in the brief are wrong and are corrected 
 - The leverage swap seam is `ISwapAdapter` (`essey-markets/src/interfaces/ISwapAdapter.sol:9`).
   No production implementation of it exists anywhere — see risk (d).
 
+> **STATUS 2026-09-02 — THE PORT IS DONE. The paragraph below is HISTORICAL; do not act on it.**
+> It described rh-chain before commit `75f90b0` ("feat(markets): mainnet Stock-Token lending —
+> port EsseyPool + reconcile shared oracle guard", 2026-08-30) and is now false.
+> VERIFIED by byte-comparing every `essey-markets/src/**.sol` against its `rh-chain/src`
+> counterpart: **all 20 are IDENTICAL**, including the fork's then-uncommitted `EsseyPool.sol`
+> (borrowMore/removeCollateral). `MarketHealthOracle`, `NoteArt`, `PoolFactory`, `EsseyMultiply`
+> and `InkFeeds` are all PRESENT in rh-chain. rh-chain is now AHEAD of the fork: it carries four
+> boundary tests the fork lacks (`EsseyMarkets.t.sol:127-134`, `EsseyPool.t.sol:168-204`,
+> `RiskModules.t.sol:145-160` and `:336-357`) added by the audit rounds. §5's StaleFeedGuard
+> migration is likewise COMPLETE — all 8 game call sites use the 5-arg API with a per-contract
+> `FEED_HEARTBEAT = 86_400` (`BundleConverter.sol:68`, `StockConverter.sol:48`,
+> `DonFeeRouter.sol:69`, `EsseyCases.sol:107`). The superseded copy was deleted in the same
+> commit (`DeployLending.s.sol`, `DeployLendingRehearsal.s.sol`, `rehearse-borrow.sh`).
+> **The reference fork `~/Developer/essey-markets` is archived and has nothing left to give.**
+> Remaining lending work is deploy-config + the two deferred items (§4d Multiply adapter, §2
+> beacon assert), NOT a port.
+
 rh-chain today carries an OLDER lending copy (`EsseyPool.sol` 473 lines vs 704; `EsseyMarkets.sol`
 317 vs 522; and it is MISSING `MarketHealthOracle`, `NoteArt`, `PoolFactory`, `EsseyMultiply`,
 `InkFeeds`). The port direction is therefore `essey-markets → rh-chain`, replacing rh-chain's older

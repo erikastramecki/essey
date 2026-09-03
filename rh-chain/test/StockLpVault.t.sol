@@ -48,6 +48,10 @@ contract MockToken is ERC20 {
 contract StockLpVaultTest is Test {
     // Monday 15:00 UTC — inside the conservative 14:30-20:00 UTC session window.
     uint256 constant MON_IN_SESSION = 1_753_110_000;
+    /// What re-flooring a pro-rata claim costs when supply grows: MEASURED at $1.14e-6 on a $7,202 claim
+    /// here (liquidity is lumpy, so alice's slice re-floors once she is no longer the whole supply).
+    /// NOT a tolerance for a mis-valuation: see the mutation delta recorded on the test below.
+    uint256 constant PRORATA_DUST_USD18 = 1e13; // $1e-5
 
     MockToken usdg; // token0, 6-dec, $1
     MockToken nvda; // token1, 18-dec, $220
@@ -146,21 +150,77 @@ contract StockLpVaultTest is Test {
         shares = vault.deposit(stockAmt, baseAmt, 0);
     }
 
+    /// USD × 1e18 at the FEEDS' marks, derived straight from the aggregators — deliberately NOT through
+    /// `_factor`/`totalValueUsd`, so a dilution measured with it is not measured by the suspect itself.
+    function _usd18(uint256 stockRaw, uint256 baseRaw) internal view returns (uint256) {
+        (, int256 sPx,,,) = stockFeed.latestRoundData();
+        (, int256 bPx,,,) = baseFeed.latestRoundData();
+        return Math.mulDiv(stockRaw, uint256(sPx) * 1e10, 1e18) + Math.mulDiv(baseRaw, uint256(bPx) * 1e10, 1e6);
+    }
+
+    /// What `who` could actually withdraw right now, in independent feed USD. `previewWithdraw` is a
+    /// separate code path from the oracle valuation and is pinned equal to a REAL pool.burn on the fork.
+    function _claimUsd18(address who) internal view returns (uint256) {
+        (uint256 s, uint256 b) = vault.previewWithdraw(vault.balanceOf(who));
+        return _usd18(s, b);
+    }
+
+    /// |pool spot − oracle| in bps of price, exactly as `_requireTradeable` computes it.
+    function _deviationBps() internal view returns (uint256) {
+        (uint160 spot,,,,,,) = pool.slot0();
+        uint256 r = Math.mulDiv(sqrtOracle, 1e18, spot);
+        uint256 ratio = Math.mulDiv(r, r, 1e18);
+        return (ratio > 1e18 ? ratio - 1e18 : 1e18 - ratio) * 10_000 / 1e18;
+    }
+
+    /// Park mock spot just inside the 1% gate. A price move is ~half that in sqrt space.
+    function _pushDeviation(bool stockDearer) internal {
+        uint256 halfBps = 45;
+        uint160 target = stockDearer
+            ? uint160(uint256(sqrtOracle) * (10_000 - halfBps) / 10_000)
+            : uint160(uint256(sqrtOracle) * (10_000 + halfBps) / 10_000);
+        pool.setSqrtPriceX96(target, 222362);
+        assertGe(_deviationBps(), 75, "deviation not pushed near the gate ceiling");
+        assertLe(_deviationBps(), 100, "deviation escaped the gate the vault enforces");
+    }
+
     // ================================================================ oracle-not-spot share valuation
 
-    /// The share price is the ORACLE mark, not pool spot: moving spot within the position's range
-    /// (which shifts the position's token composition) does NOT change the vault's reported value.
-    /// MUTATION: value the position at pool.slot0() instead of the oracle sqrt -> this goes RED.
-    function test_shareValueIsOracleMarkedNotPoolSpot() public {
+    /// G3-1 pin — PRICES come from the oracle, COMPOSITION comes from spot. The predecessor of this test
+    /// asserted the value was independent of spot, which is the defect itself: valuing the amounts the
+    /// position WOULD hold at the oracle sqrt priced tokens the vault does not have, and because a V3
+    /// position is concave in price that fiction sat BELOW the truth in both directions, under-stating
+    /// the vault and over-minting every depositor. Measured with the independent feed ruler.
+    /// MUTATION: `_positionAmounts` back to the oracle sqrt -> the value drops below the held ruler -> RED.
+    /// MUTATION: price the amounts at spot instead of fS/fB -> the marks move with spot -> RED.
+    function test_totalValueIsHeldCompositionMarkedAtOraclePrices() public {
         _seed(LO_WIDE, HI_WIDE);
         _deposit(alice, 10e18, 5_000e6); // two-sided, position lands in range
+        assertEq(vault.totalValueUsd(), _claimUsd18(alice), "aligned: value == what the sole holder can take");
 
-        uint256 v1 = vault.totalValueUsd();
-        // move pool spot to another IN-RANGE point: composition changes, oracle mark must not.
-        pool.setSqrtPriceX96(TickMath.getSqrtRatioAtTick(222100), 222100);
-        uint256 v2 = vault.totalValueUsd();
+        _pushDeviation(true); // composition shifts; the marks must not
+        assertEq(vault.totalValueUsd(), _claimUsd18(alice), "deviated: value == what the sole holder can take");
+    }
 
-        assertEq(v2, v1, "oracle-marked value must be independent of pool spot");
+    /// The other half of G3-1: the deviation term's SIGN. Marking the held composition at the oracle is
+    /// the tangent to a concave curve, so it can only RISE as spot leaves the oracle — which is what
+    /// makes manipulation mint FEWER shares. Nothing pinned the sign before, and a +8/+8 bps log in both
+    /// directions was read as a bounded skim when it was a concavity gap.
+    /// MUTATION: `_positionAmounts` back to the oracle sqrt -> the value falls instead -> RED.
+    function test_deviationCanOnlyRaiseTheMintDenominator() public {
+        _seed(LO_WIDE, HI_WIDE);
+        _deposit(alice, 10e18, 5_000e6);
+        uint256 aligned = vault.totalValueUsd();
+
+        _pushDeviation(true);
+        uint256 dearer = vault.totalValueUsd();
+        pool.setSqrtPriceX96(sqrtOracle, 222362);
+        assertEq(vault.totalValueUsd(), aligned, "restoring spot restores the aligned value");
+        _pushDeviation(false);
+        uint256 cheaper = vault.totalValueUsd();
+
+        assertGt(dearer, aligned, "stock-dearer spot must RAISE the denominator");
+        assertGt(cheaper, aligned, "stock-cheaper spot must RAISE it too");
     }
 
     /// F1 pin — the TWO-SIDED IN-RANGE fixture (the root cause). Every below-spot range is token1-only,
@@ -224,6 +284,43 @@ contract StockLpVaultTest is Test {
         uint256 shares = _deposit(alice, 1, 0); // one raw wei = 220.4321 share units
         assertEq(shares, 220, "floor, not the 221 a round-up would mint");
         assertEq(vault.totalValueUsd(), 220, "the view floors the same way");
+    }
+
+    /// G3-2 pin — a donated share-price inflation must not pay. The attacker seeds dust, bare-transfers a
+    /// large balance in (the vault credits balanceOf as backing), and waits for a victim. Before the
+    /// virtual offset this took $2,297 off a $202k deposit on the live pool with the attacker's capital
+    /// fully recoverable; the USD-anchored seed only made it cost 1e18x more than an ERC4626 default.
+    /// MUTATION: drop VIRTUAL_SHARES/VIRTUAL_ASSETS (restore the `supply == 0` seed branch) -> RED.
+    /// MUTATION: VIRTUAL_ASSETS off the 1e18-per-USD line -> the seed unit moves -> the seed pins go RED.
+    function test_donationInflationCannotSkimTheNextDepositor() public {
+        // No range set: the donation stays idle, exactly as it would before the keeper seeds.
+        uint256 attackerShares = _deposit(bob, 1, 0); // 1 wei of stock
+        uint256 donated = _usd18(500e18, 0);
+        vm.prank(bob);
+        nvda.transfer(address(vault), 500e18);
+
+        uint256 victimIn = _usd18(100e18, 0);
+        uint256 victimShares = _deposit(carol, 100e18, 0);
+        vm.prank(carol);
+        (uint256 vS, uint256 vB) = vault.withdraw(victimShares, 0, 0);
+        assertGe(_usd18(vS, vB), victimIn, "the victim's round trip must not lose value");
+
+        // And the donation is not recoverable: it was split with virtual shares nobody can redeem.
+        vm.prank(bob);
+        (uint256 aS, uint256 aB) = vault.withdraw(attackerShares, 0, 0);
+        assertLt(_usd18(aS, aB), donated / 1_000, "attacker must forfeit the donation, not park it");
+    }
+
+    /// G3-2, DoS arm — the same setup used to make every deposit below one inflated share unit revert
+    /// `Slippage` (a $217 deposit did, on the live pool). The offset floors value-per-share at
+    /// TVL / VIRTUAL_SHARES, so the floor is dust.
+    /// MUTATION: drop the virtual offset -> a $220 deposit prices to zero shares and reverts -> RED.
+    function test_donationInflationCannotBrickSmallDeposits() public {
+        _deposit(bob, 1, 0);
+        vm.prank(bob);
+        nvda.transfer(address(vault), 500e18); // $110,000 parked as backing
+
+        assertGt(_deposit(carol, 1e18, 0), 0, "a $220 deposit must still mint shares");
     }
 
     /// MARK_EXP is INCLUSIVE: an 18-dec feed on an 18-dec token sums to exactly 36, whose factor is an
@@ -364,16 +461,20 @@ contract StockLpVaultTest is Test {
         assertEq(outBase, 0, "no phantom USDG minted");
     }
 
-    /// A later depositor cannot dilute an existing holder's redeemable value.
+    /// A later depositor cannot dilute an existing holder's redeemable value — measured on a DEVIATED
+    /// pool, with the independent feed ruler.
+    /// This test used to measure the dilution with `vault.totalValueUsd()`, the same biased function the
+    /// deposit prices against: the suspect ruler applied to the suspect, green at any deviation with
+    /// G3-1 unfixed. It also ran only at spot == oracle, where the deviation term cannot exist at all.
+    /// MUTATION: `_positionAmounts` back to the oracle sqrt -> bob over-mints, alice's claim falls -> RED.
     function test_thirdPartyDepositDoesNotDiluteExistingHolder() public {
-        _seed(LO_BELOW, HI_BELOW);
-        uint256 aShares = _deposit(alice, 100e18, 0);
-        uint256 before = vault.totalValueUsd() * aShares / vault.totalSupply();
+        _seed(LO_WIDE, HI_WIDE); // straddles spot, so the position holds BOTH tokens and can be skewed
+        _deposit(alice, 10e18, 5_000e6);
+        _pushDeviation(true);
 
-        _deposit(bob, 250e18, 0); // bob enters
-
-        uint256 afterV = vault.totalValueUsd() * aShares / vault.totalSupply();
-        assertApproxEqAbs(afterV, before, before / 1e6 + 1, "alice's oracle-marked claim unchanged");
+        uint256 before = _claimUsd18(alice);
+        _deposit(bob, 100e18, 20_000e6); // enters LARGE against the deviated pool
+        assertGe(_claimUsd18(alice) + PRORATA_DUST_USD18, before, "alice's claim must not fall when bob enters");
     }
 
     /// M-1 pin: a depositor who enters while fees are PENDING (accrued to prior holders but not yet
@@ -424,6 +525,48 @@ contract StockLpVaultTest is Test {
         vm.prank(keeper);
         vm.expectRevert(); // ERC20 burn amount exceeds balance
         vault.withdraw(1, 0, 0);
+    }
+
+    /// G3-4 pin — the keeper is ROTATABLE. It was immutable with no setter, so a leaked keeper key could
+    /// park the range permanently out of position and a full vault migration was the only remedy.
+    /// MUTATION: drop `keeper = newKeeper` -> the old key keeps rebalance rights -> RED.
+    /// MUTATION: swap the KeeperRotated args -> the expectEmit shape mismatches -> RED.
+    function test_keeperRotationMovesRebalanceRights() public {
+        address newKeeper = address(0xCAFE2);
+        vm.expectEmit(true, true, false, false, address(vault));
+        emit StockLpVault.KeeperRotated(keeper, newKeeper);
+        vm.prank(governor);
+        vault.setKeeper(newKeeper);
+
+        vm.prank(keeper);
+        vm.expectRevert(StockLpVault.NotKeeper.selector);
+        vault.rebalance(LO_WIDE, HI_WIDE);
+
+        vm.prank(newKeeper);
+        vault.rebalance(LO_WIDE, HI_WIDE);
+        assertEq(vault.tickLower(), LO_WIDE, "the rotated keeper holds the range");
+    }
+
+    /// Rotation is governor-only and cannot brick rebalance by pointing at nobody.
+    /// MUTATION: drop onlyGovernor, or drop the zero check -> RED.
+    function test_keeperRotationIsGovernorOnlyAndNonZero() public {
+        vm.prank(alice);
+        vm.expectRevert(StockLpVault.NotGovernor.selector);
+        vault.setKeeper(alice);
+
+        vm.prank(governor);
+        vm.expectRevert(StockLpVault.ZeroAddress.selector);
+        vault.setKeeper(address(0));
+    }
+
+    /// The price of locking the fee: lockFee renounces the governor, so it freezes the keeper too.
+    /// Recorded here because it is a deliberate consequence, not an oversight.
+    function test_lockFeeAlsoFreezesTheKeeperForever() public {
+        vm.prank(governor);
+        vault.lockFee();
+        vm.prank(governor);
+        vm.expectRevert(StockLpVault.NotGovernor.selector);
+        vault.setKeeper(address(0xCAFE2));
     }
 
     /// Only the keeper may rebalance.

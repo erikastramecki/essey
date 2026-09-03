@@ -91,10 +91,34 @@ contract MockPoolManager {
     return hook.launchTime();
   }
 
+  /// Full fill. v4 runs the pool on `amountSpecified + hookDeltaSpecified`, so a complete fill returns exactly
+  /// that on the specified leg — NOT the caller's raw ask. Feeding the raw ask back is what made this mock
+  /// structurally blind to G1-1 (a fee charged on unfilled notional still balanced here). Callers pass what the
+  /// swapper ASKED for; the specified leg is corrected to what the pool would really have moved.
   function driveSwap(EsseyReserveHook hook, PoolKey calldata key, SwapParams calldata params, BalanceDelta swapDelta)
     external
     returns (uint256 feeTaken)
   {
+    return _driveSwap(hook, key, params, swapDelta, true);
+  }
+
+  /// Same path, but the delta is passed through untouched so a test can express a SHORT fill.
+  function driveSwapPartial(
+    EsseyReserveHook hook,
+    PoolKey calldata key,
+    SwapParams calldata params,
+    BalanceDelta swapDelta
+  ) external returns (uint256 feeTaken) {
+    return _driveSwap(hook, key, params, swapDelta, false);
+  }
+
+  function _driveSwap(
+    EsseyReserveHook hook,
+    PoolKey calldata key,
+    SwapParams calldata params,
+    BalanceDelta swapDelta,
+    bool fullFill
+  ) internal returns (uint256 feeTaken) {
     bool feeIs1 = hook.feeIsCurrency1();
     IERC20 feeTok = IERC20(Currency.unwrap(hook.feeCurrency()));
     IERC20 otherTok = IERC20(Currency.unwrap(feeIs1 ? key.currency0 : key.currency1));
@@ -105,6 +129,13 @@ contract MockPoolManager {
     require(bsel == IHooks.beforeSwap.selector, "bsel");
     int128 hookDeltaSpecified = bsd.getSpecifiedDelta();
     int128 hookDeltaUnspecified = bsd.getUnspecifiedDelta();
+
+    if (fullFill && hookDeltaSpecified != 0) {
+      bool specifiedIs1 = (params.amountSpecified < 0) != params.zeroForOne;
+      swapDelta = specifiedIs1
+        ? toBalanceDelta(swapDelta.amount0(), swapDelta.amount1() + hookDeltaSpecified)
+        : toBalanceDelta(swapDelta.amount0() + hookDeltaSpecified, swapDelta.amount1());
+    }
 
     (bytes4 asel, int128 charged) = hook.afterSwap(address(this), key, params, swapDelta, "");
     require(asel == IHooks.afterSwap.selector, "asel");
@@ -247,7 +278,9 @@ contract EsseyReserveHookTest is Test {
 
   /// SELL exact-out (want USDG out, pay ESSEY, specified=USDG output): USDG is the SPECIFIED leg → beforeSwap.
   function _sellExactOut(uint128 usdgOut, uint128 esseyIn) internal returns (uint256) {
-    usdg.mint(address(mgr), usdgOut);
+    // exactOut hands the hook the swapper's NET, so the pool has to move the ask PLUS the skim grossed up on
+    // it. Fund the manager for the worst case (the full surcharge), not for the bare ask.
+    usdg.mint(address(mgr), (uint256(usdgOut) * BPS) / (BPS - BASE - SNIPE_START));
     SwapParams memory p = SwapParams({zeroForOne: true, amountSpecified: int256(uint256(usdgOut)), sqrtPriceLimitX96: 0});
     BalanceDelta d = toBalanceDelta(-int128(esseyIn), int128(usdgOut));
     return mgr.driveSwap(hook, key, p, d);
@@ -263,7 +296,7 @@ contract EsseyReserveHookTest is Test {
 
   /// BUY exact-out (want ESSEY out, pay USDG, specified=ESSEY output): USDG is the UNSPECIFIED input → afterSwap.
   function _buyExactOut(uint128 esseyOut, uint128 usdgIn) internal returns (uint256) {
-    usdg.mint(address(mgr), usdgIn);
+    usdg.mint(address(mgr), (uint256(usdgIn) * BPS) / (BPS - BASE - SNIPE_START));
     SwapParams memory p = SwapParams({zeroForOne: false, amountSpecified: int256(uint256(esseyOut)), sqrtPriceLimitX96: 0});
     BalanceDelta d = toBalanceDelta(int128(esseyOut), -int128(usdgIn));
     return mgr.driveSwap(hook, key, p, d);
@@ -293,8 +326,10 @@ contract EsseyReserveHookTest is Test {
   function test_inv_fee_always_usdg_buy_exact_out() public {
     _openTrading();
     vm.warp(hook.launchTime() + 100);
+    // exactOut gives us the pool's NET intake, so BASE is charged on the gross the buyer parts with — which
+    // is intake + fee. Dividing by BPS here instead would bill ~1% less than the identical exactIn buy.
     uint256 taken = _buyExactOut(500_000e18, 1_000_000e6);
-    assertEq(taken, (uint256(1_000_000e6) * BASE) / BPS, "buy exactOut fee not base on USDG input");
+    assertEq(taken, (uint256(1_000_000e6) * BASE) / (BPS - BASE), "buy exactOut fee not base on the gross USDG");
     _assertUsdgOnly(taken);
   }
 
@@ -310,8 +345,71 @@ contract EsseyReserveHookTest is Test {
     _openTrading();
     vm.warp(hook.launchTime() + 100);
     uint256 taken = _sellExactOut(1_000_000e6, 500_000e18);
-    assertEq(taken, (uint256(1_000_000e6) * BASE) / BPS, "sell exactOut fee not base on USDG output");
+    assertEq(taken, (uint256(1_000_000e6) * BASE) / (BPS - BASE), "sell exactOut fee not base on the gross USDG");
     _assertUsdgOnly(taken);
+  }
+
+  // ================================================================= G1-1: the specified leg must fill whole
+
+  /// beforeSwap has to commit the specified-leg credit on the ASK. A short fill therefore bills notional the
+  /// pool never touched — the G1-1 HIGH. RED against dropping the guard in afterSwap.
+  function test_short_fill_on_the_specified_leg_reverts() public {
+    _openTrading();
+    vm.warp(hook.launchTime() + SNIPE_SECONDS); // base only, so the ask is not swamped by the surcharge
+    uint128 ask = 1_000_000e6;
+    usdg.mint(address(mgr), ask);
+
+    SwapParams memory p =
+      SwapParams({zeroForOne: false, amountSpecified: -int256(uint256(ask)), sqrtPriceLimitX96: 0});
+    vm.expectRevert(EsseyReserveHook.PartialFill.selector);
+    mgr.driveSwapPartial(hook, key, p, toBalanceDelta(int128(uint128(1e18)), -int128(ask / 10)));
+  }
+
+  /// The exactOUT gross-up must divide by the LIVE rate, surcharge included. Every other exactOut assertion
+  /// here runs after the decay, where `BPS - baseFeeBps - surcharge` and `BPS - baseFeeBps` are the same
+  /// number — so only a t0 case separates them, and getting it wrong hands a sniper ~50x the ESSEY.
+  /// RED against a denominator that drops the surcharge, and against dropping the gross-up entirely.
+  function test_exact_out_gross_up_uses_the_live_surcharge() public {
+    _openTrading();
+    vm.warp(hook.launchTime()); // full surcharge
+    uint128 usdgIn = 1_000e6;
+    uint256 total = BASE + SNIPE_START;
+
+    uint256 taken = _buyExactOut(500_000e18, usdgIn);
+    assertEq(taken, (uint256(usdgIn) * total) / (BPS - total), "exactOut gross-up ignored the live surcharge");
+    assertEq(taken, ((uint256(usdgIn) + taken) * total) / BPS, "the skim is not the live rate of the gross");
+  }
+
+  /// The OTHER specified-leg shape: an exactOUT sell whose pool leg comes up short. Its delta moves the
+  /// opposite way from the exactIn case, so a ONE-SIDED comparison guards one and silently leaves the other
+  /// open. RED against `>` (which catches only exactIn) as well as against dropping the guard.
+  function test_short_fill_on_an_exact_out_sell_reverts() public {
+    _openTrading();
+    vm.warp(hook.launchTime() + SNIPE_SECONDS);
+    uint128 ask = 1_000_000e6;
+    usdg.mint(address(mgr), ask);
+
+    SwapParams memory p = SwapParams({zeroForOne: true, amountSpecified: int256(uint256(ask)), sqrtPriceLimitX96: 0});
+    vm.expectRevert(EsseyReserveHook.PartialFill.selector);
+    mgr.driveSwapPartial(hook, key, p, toBalanceDelta(-int128(uint128(1e18)), int128(ask / 10)));
+  }
+
+  /// The boundary the off-by-one lives on: the exact fill v4 would return is accepted, one wei short is not.
+  /// RED against relaxing `!=` to `<`/`>` or shifting the target by a wei in either direction.
+  function test_exact_fill_is_accepted_and_one_wei_short_is_not() public {
+    _openTrading();
+    vm.warp(hook.launchTime() + SNIPE_SECONDS);
+    uint128 ask = 1_000_000e6;
+    uint128 fee = uint128((uint256(ask) * BASE) / BPS);
+    usdg.mint(address(mgr), ask);
+
+    SwapParams memory p =
+      SwapParams({zeroForOne: false, amountSpecified: -int256(uint256(ask)), sqrtPriceLimitX96: 0});
+    uint256 taken = mgr.driveSwapPartial(hook, key, p, toBalanceDelta(int128(uint128(1e18)), -int128(ask - fee)));
+    assertEq(taken, fee, "the exact fill did not skim the base fee");
+
+    vm.expectRevert(EsseyReserveHook.PartialFill.selector);
+    mgr.driveSwapPartial(hook, key, p, toBalanceDelta(int128(uint128(1e18)), -int128(ask - fee - 1)));
   }
 
   /// The whole point of the rework: escrow accrues USDG, ESSEY escrow stays exactly zero, hook holds no ESSEY.
@@ -363,6 +461,18 @@ contract EsseyReserveHookTest is Test {
     vm.warp(hook.launchTime() + dt);
     uint256 taken = _sellExactIn(1e18, usdgOut);
     assertLe(taken, (uint256(usdgOut) * hook.maxTotalFeeBps()) / BPS, "skim over cap");
+  }
+
+  /// The same cap on the exactOUT legs, where the base is the pool's NET and the fee is grossed up onto it.
+  /// It must stay within maxTotalFeeBps of the GROSS the swapper parts with (intake + fee) at every point in
+  /// the decay. RED against a denominator smaller than BPS - baseFeeBps - surcharge.
+  function test_inv_grossed_up_fee_within_cap(uint128 usdgIn, uint256 dt) public {
+    _openTrading();
+    usdgIn = uint128(bound(usdgIn, 1e6, 1e24));
+    dt = bound(dt, 0, SNIPE_SECONDS + 100);
+    vm.warp(hook.launchTime() + dt);
+    uint256 taken = _buyExactOut(500_000e18, usdgIn);
+    assertLe(taken, ((uint256(usdgIn) + taken) * hook.maxTotalFeeBps()) / BPS, "grossed-up skim over cap");
   }
 
   // ================================================================= (ii) surcharge decay

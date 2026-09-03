@@ -53,6 +53,7 @@ contract LaunchSeeder is IUnlockCallback {
   address public immutable seedCaller; // the founder key that may call seed(), once
 
   bool public seeded;
+  bool public recovered;
 
   struct Rung {
     int24 tickLower;
@@ -155,17 +156,21 @@ contract LaunchSeeder is IUnlockCallback {
   }
 
   /// Escape hatch for the one state where seed() can only ever revert PreInitWrongPrice: a pool live off the
-  /// pinned price (A-3). The launch redeploys against a fresh hook, abandoning the griefed pool. The guards
-  /// below close this in every state where seed() can still succeed, and it is terminal, so it never precedes one.
+  /// pinned price (A-3). The launch redeploys against a fresh hook, abandoning the griefed pool. The guards run
+  /// ONCE and close this in every state where seed() can still succeed; afterwards the seeder is spent and the
+  /// hatch stays open, because anyone can repair the peg for gas and a late deposit would otherwise be stranded.
   function recoverGriefedSeed() external returns (uint256 amount) {
     if (msg.sender != seedCaller) revert NotSeedCaller();
-    if (seeded) revert AlreadySeeded();
-    (uint160 sqrtP,,,) = poolManager.getSlot0(poolId());
-    if (sqrtP == 0 || sqrtP == expectedSqrtPriceX96) revert NotGriefed();
+    if (!recovered) {
+      if (seeded) revert AlreadySeeded();
+      (uint160 sqrtP,,,) = poolManager.getSlot0(poolId());
+      if (sqrtP == 0 || sqrtP == expectedSqrtPriceX96) revert NotGriefed();
+      seeded = true; // terminal: recovery and seeding are mutually exclusive, in either order
+      recovered = true;
+    }
     amount = essey.balanceOf(address(this));
     if (amount == 0) revert NothingToRecover();
 
-    seeded = true; // terminal: recovery and seeding are mutually exclusive, in either order
     essey.safeTransfer(seedCaller, amount);
     emit RecoveredUnseeded(amount);
   }

@@ -35,9 +35,9 @@ interface IUniV3PoolFees {
         );
 }
 
-/// StockLpVault — single-sided concentrated-LP earn vault (Phase 1 MVP). Shares are valued at the
-/// CHAINLINK ORACLE mark, never pool spot, so spot manipulation cannot move the share price. Withdraw
-/// is pure pro-rata of real holdings (24/7); deposit/rebalance are session + deviation gated. The
+/// StockLpVault — single-sided concentrated-LP earn vault (Phase 1 MVP). Shares are PRICED at the
+/// CHAINLINK ORACLE marks, applied to the composition the vault ACTUALLY HOLDS. Withdraw is pure
+/// pro-rata of real holdings (24/7); deposit/rebalance are session + deviation gated. The
 /// keeper can only rebalance/compound — no path to receive funds. One PERFORMANCE fee (governor-tunable
 /// behind a timelock, hard-capped) with a bounty carved from it; rates are PLACEHOLDERS pending founder.
 /// V3 plumbing is lifted from EsseyLadderSeeder; see the commit for the full rationale + invariants.
@@ -56,7 +56,9 @@ contract StockLpVault is ERC20, ReentrancyGuard {
     uint8 internal immutable baseDec;
     int24 public immutable tickSpacing;
     uint256 public immutable maxDeviationBps;
-    address public immutable keeper;
+    /// Rotatable: an immutable keeper made a full vault migration the only answer to a leaked key.
+    /// lockFee() renounces the governor and so freezes the keeper too — the price of locking.
+    address public keeper;
 
     // ---- fee governor: STORAGE behind rails + timelock + one-way lock (rates PENDING-FOUNDER)
     // _splitFee bare-transfers the in-kind fee here (no fund() call), so feeRecipient MUST credit bare
@@ -82,10 +84,17 @@ contract StockLpVault is ERC20, ReentrancyGuard {
     uint256 internal constant BPS = 10_000;
     uint256 public constant FEE_TIMELOCK = 48 hours;
     uint256 internal constant Q128 = 1 << 128; // V3 fee-growth accumulators are Q128.128 fixed point
-    /// Marks are carried at USD × 1e36 so _factor is a pure multiply that cannot floor a feed; the extra
-    /// 1e18 is stripped where the number leaves the path — totalValueUsd and the seed share mint.
+    /// Marks are carried at USD × 1e36 so _factor is a pure multiply that cannot floor a feed. The extra
+    /// 1e18 is stripped only where the number leaves the path: totalValueUsd, and VIRTUAL_ASSETS below.
     uint256 internal constant MARK_EXP = 36;
     uint256 internal constant PRICE_SCALE = 1e18;
+    /// ERC4626 virtual offset in this vault's USD unit. The pair sits exactly ON the seed share price
+    /// (1e18 shares per USD), so an empty vault still mints depositUsd / PRICE_SCALE with no seed branch.
+    /// It floors value-per-share at TVL / 1e12, which is what killed the donated-inflation skim; a
+    /// USD-anchored seed alone only made that skim cost 1e18x more. 1e12 measured centred: 1e6 still lets
+    /// the attacker recover 0.13% of a donation, 1e15 starts costing a real holder yield.
+    uint256 internal constant VIRTUAL_SHARES = 1e12;
+    uint256 internal constant VIRTUAL_ASSETS = VIRTUAL_SHARES * PRICE_SCALE; // USD × 1e36, i.e. $1e-6
     /// Round-up on mint can owe a wei or two above the liquidity math's floor; deploy leaves this
     /// much idle unspent so the pool's round-up is always payable (the Seeder's AMOUNT_MARGIN).
     uint256 internal constant AMOUNT_MARGIN = 1e3;
@@ -98,6 +107,7 @@ contract StockLpVault is ERC20, ReentrancyGuard {
     event FeeExecuted(address recipient, uint16 performanceBps, uint16 bountyBps);
     event FeeFrozen();
     event FeeRetained(address indexed token, uint256 amount);
+    event KeeperRotated(address indexed from, address indexed to);
 
     error ZeroAddress();
     error BadConfig();
@@ -167,27 +177,28 @@ contract StockLpVault is ERC20, ReentrancyGuard {
 
     // ================================================================== deposit (oracle-gated)
 
-    /// Single-side stock (and/or USDG). Shares are minted against the ORACLE mark of the vault's
-    /// existing value, so pool-spot manipulation cannot inflate them. Gated: a fresh in-session
-    /// price for both legs and |pool-spot − oracle| ≤ maxDeviation.
+    /// Single-side stock (and/or USDG). Shares are minted at the ORACLE marks on the vault's REAL
+    /// composition, so manipulating spot only RAISES the denominator and mints the manipulator FEWER
+    /// shares. Gated: a fresh in-session price for both legs, and |pool-spot − oracle| ≤ maxDeviation.
     function deposit(uint256 stockAmt, uint256 baseAmt, uint256 minShares)
         external
         nonReentrant
         returns (uint256 shares)
     {
         if (stockAmt == 0 && baseAmt == 0) revert ZeroAmount();
-        (uint256 fS, uint256 fB, uint160 sqrtO) = _requireTradeable();
+        (uint256 fS, uint256 fB) = _requireTradeable();
         _harvest(); // realize pending fees BEFORE pricing, else this deposit skims prior holders' unharvested yield
 
-        uint256 totalBefore = _valueAtOracle(fS, fB, sqrtO);
+        uint256 totalBefore = _valueAtOracle(fS, fB);
         uint256 supply = totalSupply();
 
         if (stockAmt > 0) stock.safeTransferFrom(msg.sender, address(this), stockAmt);
         if (baseAmt > 0) base.safeTransferFrom(msg.sender, address(this), baseAmt);
 
-        // The seed sets the share unit; later mints are a ratio of two 1e36 marks, where the carry cancels.
+        // One ratio of two USD×1e36 marks, where the carry cancels. The virtual pair carries the 1e18
+        // share unit an empty vault would otherwise have to special-case, and prices every later mint.
         uint256 depositUsd = stockAmt * fS + baseAmt * fB;
-        shares = supply == 0 ? depositUsd / PRICE_SCALE : Math.mulDiv(depositUsd, supply, totalBefore);
+        shares = Math.mulDiv(depositUsd, supply + VIRTUAL_SHARES, totalBefore + VIRTUAL_ASSETS);
         if (shares == 0 || shares < minShares) revert Slippage();
 
         _mint(msg.sender, shares);
@@ -411,30 +422,33 @@ contract StockLpVault is ERC20, ReentrancyGuard {
 
     // ================================================================== internal: oracle valuation
 
-    /// The vault's total value at the ORACLE mark, USD × 1e18: idle balances + the position priced at
-    /// the oracle-implied sqrt price. Uses ONLY the oracle, never pool spot — this is the load-bearing
-    /// anti-manipulation property. Reverts off-hours / on a stale feed (fail closed).
+    /// Real holdings at the ORACLE prices, USD × 1e18. PRICES come only from the oracle; the COMPOSITION
+    /// can only come from spot, because that is what a withdraw pays out. Marking the position at the
+    /// oracle-implied sqrt instead priced amounts the vault does not hold, and a V3 position is concave in
+    /// price, so that fiction sat BELOW the truth in BOTH directions and over-minted every depositor.
+    /// ACCEPTED residual: this figure RISES with |spot − oracle|, so a consumer of the VIEW must gate
+    /// deviation itself; deposit already does. Reverts off-hours / on a stale feed (fail closed).
     function totalValueUsd() public view returns (uint256) {
-        (uint256 fS, uint256 fB, uint160 sqrtO) = _prices();
-        return _valueAtOracle(fS, fB, sqrtO) / PRICE_SCALE;
+        (uint256 fS, uint256 fB) = _factors();
+        return _valueAtOracle(fS, fB) / PRICE_SCALE;
     }
 
-    function _valueAtOracle(uint256 fS, uint256 fB, uint160 sqrtO) internal view returns (uint256) {
+    function _valueAtOracle(uint256 fS, uint256 fB) internal view returns (uint256) {
         uint256 a0 = token0.balanceOf(address(this));
         uint256 a1 = token1.balanceOf(address(this));
-        (uint256 p0, uint256 p1) = _positionAmounts(sqrtO);
+        (uint256 p0, uint256 p1) = _positionAmounts();
         a0 += p0;
         a1 += p1;
         (uint256 aStock, uint256 aBase) = stockIs1 ? (a1, a0) : (a0, a1);
         return aStock * fS + aBase * fB;
     }
 
-    function _positionAmounts(uint160 sqrtO) internal view returns (uint256 amount0, uint256 amount1) {
+    function _positionAmounts() internal view returns (uint256 amount0, uint256 amount1) {
         uint128 liq = _liquidity();
         if (liq == 0) return (0, 0);
         uint160 sa = TickMath.getSqrtRatioAtTick(tickLower);
         uint160 sb = TickMath.getSqrtRatioAtTick(tickUpper);
-        return LiquidityAmounts.getAmountsForLiquidity(sqrtO, sa, sb, liq);
+        return LiquidityAmounts.getAmountsForLiquidity(_spotSqrt(), sa, sb, liq);
     }
 
     /// Read both legs' oracle prices, convert to per-raw-token USD factors (1e36-scaled) and the
@@ -466,7 +480,8 @@ contract StockLpVault is ERC20, ReentrancyGuard {
         return px * (10 ** (MARK_EXP - shift));
     }
 
-    function _requireTradeable() internal view returns (uint256 fS, uint256 fB, uint160 sqrtO) {
+    function _requireTradeable() internal view returns (uint256 fS, uint256 fB) {
+        uint160 sqrtO;
         (fS, fB, sqrtO) = _prices();
         uint256 r = Math.mulDiv(sqrtO, 1e18, _spotSqrt());
         uint256 ratio = Math.mulDiv(r, r, 1e18); // (oracle/spot)^2 = price ratio, 1e18-scaled
@@ -486,6 +501,14 @@ contract StockLpVault is ERC20, ReentrancyGuard {
     modifier onlyGovernor() {
         if (msg.sender != governor) revert NotGovernor();
         _;
+    }
+
+    /// Rotate the keeper. Deliberately NOT timelocked: this exists for a leaked key, and 48h of griefing
+    /// while the fix waits is worse than the governor's marginal power.
+    function setKeeper(address newKeeper) external onlyGovernor {
+        if (newKeeper == address(0)) revert ZeroAddress();
+        emit KeeperRotated(keeper, newKeeper);
+        keeper = newKeeper;
     }
 
     /// Queue new fee params. Applies only after FEE_TIMELOCK via executeFee — never immediately.

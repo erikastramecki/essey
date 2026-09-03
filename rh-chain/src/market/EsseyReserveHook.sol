@@ -35,6 +35,8 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
 
   // Hard immutable governor rails, enforced on every proposed split. FOUNDER-CONFIRMED 2026-09-02: every
   // bucket has a FLOOR, so no governor can zero holders or Dons and lock() that in. Floors sum to 7_000.
+  // The two CEILINGS are not independently reachable: the reserve floor caps them JOINTLY at
+  // holders + dons <= BPS - MIN_RESERVE_BPS == 6_000, so (5_000, 2_000) is rejected, not allowed.
   uint256 public constant MIN_RESERVE_BPS = 4_000;
   uint256 public constant MIN_HOLDERS_BPS = 2_500;
   uint256 public constant MAX_HOLDERS_BPS = 5_000;
@@ -109,6 +111,7 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
   error BadSplit();
   error NothingPending();
   error TimelockPending();
+  error PartialFill();
 
   constructor(
     IPoolManager _poolManager,
@@ -273,8 +276,14 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
 
     bool feeSpecified = _feeIsSpecified(params);
     uint256 amount = feeSpecified ? _absSpecified(params) : _absFeeLeg(delta);
-    (uint256 baseFee, uint256 surcharge, uint256 fee) = _feeParts(amount);
+    (uint256 baseFee, uint256 surcharge, uint256 fee) = _feeParts(amount, params.amountSpecified < 0);
     if (fee == 0) return (IHooks.afterSwap.selector, int128(0));
+
+    // beforeSwap must commit the specified-leg credit on the amount REQUESTED, and v4-core returns whatever the
+    // pool could not consume (Pool.sol :456-462) — so a short fill billed the unfilled notional at 100%. No
+    // refund is reachable from here: afterSwap's return delta is the UNSPECIFIED currency, and take()ing the
+    // surplus to `sender` pays the router, where it is anyone's to sweep. The leg must fill whole instead.
+    if (feeSpecified && !_filledWhole(params, delta, fee)) revert PartialFill();
 
     address token = Currency.unwrap(feeCurrency);
     poolManager.take(feeCurrency, address(this), fee);
@@ -313,23 +322,43 @@ contract EsseyReserveHook is IHooks, ReentrancyGuard {
 
   // ------------------------------------------------------------------ fee math
 
-  function _feeParts(uint256 amount) internal view returns (uint256 baseFee, uint256 surcharge, uint256 fee) {
-    baseFee = (amount * baseFeeBps) / BPS;
-    surcharge = (amount * surchargeBpsAt(block.timestamp)) / BPS;
+  /// The fee is the same share of the GROSS quote on all four swap shapes. exactIn hands us that gross (the
+  /// buyer's whole input, or the pool's whole output on a sell); exactOut hands us the NET and must be grossed
+  /// up, or the identical trade costs less for being routed exactOut — ~50x less at the launch surcharge.
+  /// maxTotalFeeBps < BPS (constructor) keeps the denominator non-zero.
+  function _feeParts(uint256 amount, bool exactIn)
+    internal
+    view
+    returns (uint256 baseFee, uint256 surcharge, uint256 fee)
+  {
+    uint256 sur = surchargeBpsAt(block.timestamp);
+    uint256 denom = exactIn ? BPS : BPS - baseFeeBps - sur;
+    baseFee = (amount * baseFeeBps) / denom;
+    surcharge = (amount * sur) / denom;
     fee = baseFee + surcharge;
   }
 
   function _feeOnSpecified(SwapParams calldata p) internal view returns (uint256 fee) {
-    (,, fee) = _feeParts(_absSpecified(p));
+    (,, fee) = _feeParts(_absSpecified(p), p.amountSpecified < 0);
   }
 
   function _absSpecified(SwapParams calldata p) internal pure returns (uint256) {
     return p.amountSpecified < 0 ? uint256(-p.amountSpecified) : uint256(p.amountSpecified);
   }
 
+  /// v4 ran the pool on `amountSpecified + fee` — the amount left after the beforeSwap credit — so a complete
+  /// fill returns exactly that on the specified leg. Equivalent to Pool.sol's amountSpecifiedRemaining == 0.
+  function _filledWhole(SwapParams calldata p, BalanceDelta delta, uint256 fee) internal view returns (bool) {
+    return _feeLegDelta(delta) == p.amountSpecified + int256(fee);
+  }
+
+  function _feeLegDelta(BalanceDelta delta) internal view returns (int256) {
+    return feeIsCurrency1 ? int256(delta.amount1()) : int256(delta.amount0());
+  }
+
   function _absFeeLeg(BalanceDelta delta) internal view returns (uint256) {
-    int128 leg = feeIsCurrency1 ? delta.amount1() : delta.amount0();
-    return leg < 0 ? uint256(uint128(-leg)) : uint256(uint128(leg));
+    int256 leg = _feeLegDelta(delta);
+    return leg < 0 ? uint256(-leg) : uint256(leg);
   }
 
   // ------------------------------------------------------------------ permissionless payouts (fixed sinks)

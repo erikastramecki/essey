@@ -343,6 +343,97 @@ contract EsseyHookRealSwapSeedForkTest is Test {
     );
   }
 
+  /// exactIN buy, measured: the USDG the hook skimmed and the ESSEY the swapper actually received.
+  function _buyMeasured(EsseyReserveHook hook, address who, uint256 usdgIn)
+    internal
+    returns (uint256 fee, uint256 esseyOut)
+  {
+    uint256 hookBefore = IERC20(USDG).balanceOf(address(hook));
+    uint256 whoBefore = IERC20(ESSEY).balanceOf(who);
+    _buy(hook, who, usdgIn);
+    fee = IERC20(USDG).balanceOf(address(hook)) - hookBefore;
+    esseyOut = IERC20(ESSEY).balanceOf(who) - whoBefore;
+  }
+
+  /// exactOUT buy: ask for a fixed ESSEY amount and let the swap pull whatever USDG it costs out of `budget`.
+  function _buyExactOut(EsseyReserveHook hook, address who, uint256 esseyOut, uint256 budget)
+    internal
+    returns (uint256 spent, uint256 fee)
+  {
+    V4Actor actor = new V4Actor(pm);
+    _giveUsdg(address(actor), budget);
+    uint256 hookBefore = IERC20(USDG).balanceOf(address(hook));
+    actor.swap(
+      _key(hook),
+      SwapParams({
+        zeroForOne: false,
+        amountSpecified: int256(esseyOut),
+        sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+      }),
+      who
+    );
+    spent = budget - IERC20(USDG).balanceOf(address(actor));
+    fee = IERC20(USDG).balanceOf(address(hook)) - hookBefore;
+  }
+
+  /// exactIN sell, measured: the USDG the seller kept, and the USDG the hook skimmed off the same leg.
+  function _sellMeasured(EsseyReserveHook hook, address who, uint256 esseyIn)
+    internal
+    returns (uint256 net, uint256 fee)
+  {
+    uint256 hookBefore = IERC20(USDG).balanceOf(address(hook));
+    uint256 whoBefore = IERC20(USDG).balanceOf(who);
+    _sell(hook, who, esseyIn);
+    net = IERC20(USDG).balanceOf(who) - whoBefore;
+    fee = IERC20(USDG).balanceOf(address(hook)) - hookBefore;
+  }
+
+  /// exactOUT sell: ask for a fixed USDG amount and pay ESSEY for it out of `esseyBudget`.
+  function _sellExactOut(EsseyReserveHook hook, address who, uint256 usdgOut, uint256 esseyBudget)
+    internal
+    returns (uint256 net, uint256 fee, uint256 esseySpent)
+  {
+    V4Actor actor = new V4Actor(pm);
+    _sendEssey(address(actor), esseyBudget);
+    uint256 hookBefore = IERC20(USDG).balanceOf(address(hook));
+    uint256 whoBefore = IERC20(USDG).balanceOf(who);
+    actor.swap(
+      _key(hook),
+      SwapParams({
+        zeroForOne: true,
+        amountSpecified: int256(usdgOut),
+        sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+      }),
+      who
+    );
+    net = IERC20(USDG).balanceOf(who) - whoBefore;
+    fee = IERC20(USDG).balanceOf(address(hook)) - hookBefore;
+    esseySpent = esseyBudget - IERC20(ESSEY).balanceOf(address(actor));
+  }
+
+  /// The real manager wraps a hook revert in ERC-7751, so match the hook's OWN selector inside the returndata.
+  /// A bare vm.expectRevert() passes on any revert at all, including the wrong one.
+  function _swapMustRevert(EsseyReserveHook hook, V4Actor actor, SwapParams memory p, bytes4 sel) internal {
+    (bool ok, bytes memory ret) = address(actor).call(abi.encodeCall(V4Actor.swap, (_key(hook), p, BUYER)));
+    assertFalse(ok, "the swap did not revert");
+    assertTrue(_carries(ret, sel), "the swap reverted, but not with the expected hook error");
+  }
+
+  function _carries(bytes memory data, bytes4 sel) internal pure returns (bool) {
+    for (uint256 i = 0; i + 4 <= data.length; i++) {
+      if (data[i] == sel[0] && data[i + 1] == sel[1] && data[i + 2] == sel[2] && data[i + 3] == sel[3]) return true;
+    }
+    return false;
+  }
+
+  /// How much USDG the seeded ladder can actually absorb, measured on the real pool by draining it with an
+  /// exactOUT buy — the leg that is ALLOWED to fill short, so this stays measurable after the G1-1 fix.
+  function _measureLadderDepth(EsseyReserveHook hook) internal returns (uint256 depth) {
+    uint256 snap = vm.snapshotState();
+    (depth,) = _buyExactOut(hook, address(0xDEAD), 10 * _seedLadderAmount(), 1_000_000_000e6);
+    vm.revertToState(snap);
+  }
+
   // ================================================================= 0. the substrate is real
 
   function test_R0_substrate_is_the_real_deployed_stack() public onFork {
@@ -993,7 +1084,11 @@ contract EsseyHookRealSwapSeedForkTest is Test {
     vm.warp(block.timestamp + SNIPE_SECONDS);
     assertGt(_liq(hook), 0, "precondition: pool is live");
 
-    _buy(hook, BUYER, 1_000_000e6); // walks price past the top rung
+    // Clearing the top is an exactOUT buy now: exactIn cannot fill past the ladder at all, because the
+    // specified-leg fee demands a complete fill (G1-1). exactOut is the leg that may fill short, and it prices
+    // the short fill correctly — which is the A-6 gap this test used to leave open by asserting no fee at all.
+    (uint256 spent, uint256 fee) = _buyExactOut(hook, BUYER, 10 * _seedLadderAmount(), 1_000_000_000e6);
+    assertEq(fee, (spent * BASE_FEE_BPS) / BPS, "the ladder-clearing buy paid something other than 100 bps");
     assertEq(_liq(hook), 0, "S-1 setup: liquidity survived the oversized buy");
 
     _sell(hook, SNIPER, 1_000_000e18);
@@ -1073,7 +1168,12 @@ contract EsseyHookRealSwapSeedForkTest is Test {
     _sendEssey(address(seeder), _seedLadderAmount());
     vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
     seeder.seed(_ladder());
-    vm.expectRevert(LaunchSeeder.AlreadySeeded.selector);
+
+    // This tail used to pin the LOW as intended behaviour: a second recovery reverted, so ESSEY sent to a
+    // SPENT seeder — one that can never seed again — had no egress and was stranded. The hatch now stays open.
+    assertEq(seeder.recoverGriefedSeed(), _seedLadderAmount(), "the late deposit is stranded in a spent seeder");
+    assertEq(IERC20(ESSEY).balanceOf(address(seeder)), 0, "ESSEY left behind after the second recovery");
+    vm.expectRevert(LaunchSeeder.NothingToRecover.selector);
     seeder.recoverGriefedSeed();
   }
 
@@ -1128,6 +1228,161 @@ contract EsseyHookRealSwapSeedForkTest is Test {
       }
     }
     revert("no salt");
+  }
+
+  // ================================================================= G1-1: the fee base is the FILL, not the ask
+
+  /// G1-1(b) (HIGH, fixed). Closes the A-6 gap: test_S1 placed the only oversized buy in the suite and asserted
+  /// nothing about the fee, which is why fee-on-request survived. The ladder is thin at open, so a seven-figure
+  /// market buy is an ORDINARY launch-day order — and beforeSwap billed the unfillable notional at 100%, an
+  /// effective 4,251 bps against an advertised 100. RED against charging on `_absSpecified` again, against
+  /// dropping the guard, and against loosening `!=` to a one-sided comparison.
+  function test_G1_oversized_buy_is_refused_not_charged_on_the_request() public onFork {
+    (EsseyReserveHook hook,) = _launch();
+    vm.warp(block.timestamp + SNIPE_SECONDS); // steady state: the advertised 100 bps
+
+    uint256 depth = _measureLadderDepth(hook);
+    uint256 ask = 40 * depth;
+    emit log_named_uint("USDG the ladder can absorb, measured", depth);
+    emit log_named_uint("the oversized ask", ask);
+
+    V4Actor actor = new V4Actor(pm);
+    _giveUsdg(address(actor), ask);
+    _swapMustRevert(
+      hook,
+      actor,
+      SwapParams({zeroForOne: false, amountSpecified: -int256(ask), sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1}),
+      EsseyReserveHook.PartialFill.selector
+    );
+
+    assertEq(IERC20(USDG).balanceOf(address(actor)), ask, "the refused buy still cost the buyer USDG");
+    assertEq(IERC20(USDG).balanceOf(address(hook)), 0, "the refused buy still skimmed");
+    assertEq(IERC20(ESSEY).balanceOf(BUYER), 0, "the refused buy delivered ESSEY");
+
+    // ...and an order the ladder CAN absorb still fills, at exactly the advertised rate on the whole ask.
+    uint256 sized = depth / 4;
+    (uint256 fee, uint256 esseyOut) = _buyMeasured(hook, BUYER, sized);
+    assertEq(fee, (sized * BASE_FEE_BPS) / BPS, "a fillable buy is no longer exactly 100 bps of the ask");
+    assertGt(esseyOut, 0, "the fillable buy got no ESSEY");
+    assertEq(
+      hook.reserveEscrow(USDG) + hook.holdersEscrow(USDG) + hook.donsEscrow(USDG),
+      IERC20(USDG).balanceOf(address(hook)),
+      "escrow does not reconcile to the wei"
+    );
+  }
+
+  /// G1-1(a) (HIGH, fixed). An attacker holding NO tokens free-walks the price below the ladder for gas alone
+  /// (the A-1 mechanism, which survives by design). A buy whose limit lands in that empty space consumed ZERO
+  /// and still paid the entire fee: 100% of the order forfeited, 99% of it during the surcharge. The tail also
+  /// pins that the fix did NOT re-brick A-1 — the healing buy must still go through.
+  /// RED against dropping the guard and against an off-by-one that tolerates a short fill.
+  function test_G1_zero_fill_cannot_burn_the_buyer() public onFork {
+    (EsseyReserveHook hook,) = _launch();
+    vm.warp(block.timestamp + SNIPE_SECONDS);
+
+    uint160 parked = TickMath.getSqrtPriceAtTick(OPEN_TICK - 60_000);
+    V4Actor attacker = _freeWalkDown(hook, parked);
+    assertEq(IERC20(ESSEY).balanceOf(address(attacker)), 0, "the park cost the attacker ESSEY");
+    assertEq(IERC20(USDG).balanceOf(address(attacker)), 0, "the park paid the attacker USDG");
+    (uint160 p,,,) = pm.getSlot0(PoolId.wrap(hook.poolIdRaw()));
+    assertEq(p, parked, "the price did not park below the ladder");
+
+    // A slippage limit that stops the buy while it is still in empty space: it can fill NOTHING.
+    V4Actor victim = new V4Actor(pm);
+    _giveUsdg(address(victim), 100_000e6);
+    _swapMustRevert(
+      hook,
+      victim,
+      SwapParams({
+        zeroForOne: false,
+        amountSpecified: -int256(uint256(100_000e6)),
+        sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(OPEN_TICK - 30_000)
+      }),
+      EsseyReserveHook.PartialFill.selector
+    );
+
+    assertEq(IERC20(USDG).balanceOf(address(victim)), 100_000e6, "the zero-fill buy burned the buyer's USDG");
+    assertEq(IERC20(USDG).balanceOf(address(hook)), 0, "the zero-fill buy still skimmed");
+    assertEq(IERC20(ESSEY).balanceOf(BUYER), 0, "a zero fill delivered ESSEY");
+
+    (uint256 fee, uint256 esseyOut) = _buyMeasured(hook, BUYER, 1_000e6);
+    assertGt(esseyOut, 0, "the fix bricked the healing buy that walks back into the ladder");
+    assertEq(fee, (uint256(1_000e6) * BASE_FEE_BPS) / BPS, "the healing buy paid the wrong rate");
+  }
+
+  /// G1-1(c) (HIGH, fixed). The tell: the same trade cost 42x more routed exactIn than exactOut, so retail
+  /// overpaid and a sophisticated caller did not. Both routes must now charge the same bps of the GROSS USDG
+  /// the swapper parts with. RED against fee-on-request (exactIn explodes) AND against dropping the exactOut
+  /// gross-up (exactOut comes in ~1% light at the base rate).
+  function test_G1_exact_in_and_exact_out_buys_cost_the_same_bps() public onFork {
+    (EsseyReserveHook hook,) = _launch();
+    vm.warp(block.timestamp + SNIPE_SECONDS);
+
+    uint256 target = _measureLadderDepth(hook) / 8;
+
+    uint256 snap = vm.snapshotState();
+    (uint256 inFee, uint256 inEssey) = _buyMeasured(hook, BUYER, target);
+    vm.revertToState(snap);
+    (uint256 outSpend, uint256 outFee) = _buyExactOut(hook, SNIPER, inEssey, target * 4);
+
+    emit log_named_uint("exactIn : USDG asked", target);
+    emit log_named_uint("exactIn : fee", inFee);
+    emit log_named_uint("exactOut: USDG spent for the identical ESSEY", outSpend);
+    emit log_named_uint("exactOut: fee", outFee);
+
+    assertEq(inFee, (target * BASE_FEE_BPS) / BPS, "exactIn is not 100 bps of the gross");
+    assertApproxEqAbs(outSpend, target, 2, "the two routes did not cost the same gross USDG");
+    assertApproxEqAbs(outFee, inFee, 2, "exactIn and exactOut charge different fees for the identical fill");
+  }
+
+  /// The mirror on the SELL side, which is where exactOut lands on the specified leg (and so also carries the
+  /// partial-fill guard). Both sell routes must skim the same bps of the gross USDG the pool releases.
+  /// RED against grossing up the wrong leg, and against dropping the gross-up.
+  function test_G1_exact_in_and_exact_out_sells_cost_the_same_bps() public onFork {
+    (EsseyReserveHook hook,) = _launch();
+    vm.warp(block.timestamp + SNIPE_SECONDS);
+    _buy(hook, BUYER, _measureLadderDepth(hook) / 4); // prime the pool with USDG to sell into
+
+    uint256 esseyIn = 20_000_000e18;
+
+    uint256 snap = vm.snapshotState();
+    (uint256 inNet, uint256 inFee) = _sellMeasured(hook, SNIPER, esseyIn);
+    vm.revertToState(snap);
+    (uint256 outNet, uint256 outFee, uint256 esseySpent) = _sellExactOut(hook, SNIPER, inNet, esseyIn * 4);
+
+    emit log_named_uint("exactIn : USDG kept by the seller", inNet);
+    emit log_named_uint("exactIn : fee", inFee);
+    emit log_named_uint("exactOut: USDG kept by the seller", outNet);
+    emit log_named_uint("exactOut: fee", outFee);
+
+    assertEq(inFee, ((inNet + inFee) * BASE_FEE_BPS) / BPS, "exactIn sell is not 100 bps of the gross released");
+    assertEq(outNet, inNet, "the exactOut sell did not deliver the same USDG");
+    assertApproxEqAbs(outFee, inFee, 2, "the two sell routes charge different fees for the identical fill");
+    assertApproxEqAbs(esseySpent, esseyIn, esseyIn / 1e4, "the two sell routes moved different ESSEY");
+  }
+
+  /// The same convention gap, but at t0 where the anti-snipe surcharge is live: charging the exactOut leg on
+  /// the pool's NET intake bills 9,900 bps ON TOP, an effective ~4,975 bps of what the sniper spends, while the
+  /// exactIn path pays the full 9,900. That is a ~50x hole straight through the anti-snipe, reachable by
+  /// changing one router flag. RED against dropping the exactOut gross-up.
+  function test_G1_exact_out_buy_cannot_dodge_the_launch_surcharge() public onFork {
+    (EsseyReserveHook hook,) = _launch(); // still inside the seed's block: the full surcharge is live
+    assertEq(hook.launchTime(), block.timestamp, "not at t0");
+    uint256 totalBps = BASE_FEE_BPS + SNIPE_START_BPS;
+    assertEq(hook.feeBpsAt(block.timestamp), totalBps, "the surcharge is not at its start");
+
+    uint256 budget = 100_000e6;
+    uint256 snap = vm.snapshotState();
+    (, uint256 inEssey) = _buyMeasured(hook, BUYER, budget);
+    vm.revertToState(snap);
+    (uint256 outSpend, uint256 outFee) = _buyExactOut(hook, SNIPER, inEssey, budget * 200);
+
+    emit log_named_uint("exactIn sniper spends", budget);
+    emit log_named_decimal_uint("...and receives", inEssey, 18);
+    emit log_named_uint("exactOut cost for the identical ESSEY", outSpend);
+
+    assertApproxEqAbs(outSpend, budget, budget / 1_000, "exactOut buys the surcharge cheaper than exactIn");
+    assertEq(outFee, (outSpend * totalBps) / BPS, "the exactOut skim is not the full surcharge on the gross");
   }
 
   function test_D2_zero_amount_swap_is_rejected_by_the_real_manager() public onFork {

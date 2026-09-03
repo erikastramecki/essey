@@ -91,8 +91,10 @@ contract StockLpVaultForkTest is Test {
     address constant USDG_FEED = 0x61B7e5650328764B076A108EFF5fa7282a1B9aD2;
 
     /// What a round trip may lose to V3 liquidity rounding and the AMOUNT_MARGIN left idle — NOT a
-    /// tolerance for a mis-mark, which moved dollars a trip. Measured at ~$0.0002 on the live pool.
+    /// tolerance for a mis-mark, which moved dollars a trip. Measured at ~$0.0002 on the live pool for
+    /// the small trips, and under $1e-6 for the ~$1.2M whale trip below, against the $1,040.97 G3-1 took.
     uint256 constant ROUNDING_DUST_USD18 = 1e15; // $0.001
+    uint256 constant MAX_DEV_CEIL_BPS = 500; // MAX_DEVIATION_CEIL_BPS: the highest the constructor admits
 
     uint16 constant PERF_BPS = 1_000;
     uint16 constant BOUNTY_BPS = 10;
@@ -203,8 +205,8 @@ contract StockLpVaultForkTest is Test {
         return vault.deposit(stockAmt, baseAmt, 0);
     }
 
-    /// Full-precision USD (1e18) at the live feed marks — deliberately NOT the vault's `_factor`, which
-    /// floors an 18-dec stock to whole dollars. Skim must be measured against the real price.
+    /// Full-precision USD (1e18) straight off the live feeds — deliberately NOT routed through the
+    /// vault's own `_factor`/`totalValueUsd`, so a skim is never measured with the function under test.
     function _usd18(uint256 stockRaw, uint256 baseRaw) internal view returns (uint256) {
         (uint256 pS, uint8 dS,) = oracle.priceOf(NVDA);
         (uint256 pB, uint8 dB,) = oracle.priceOf(USDG);
@@ -416,6 +418,7 @@ contract StockLpVaultForkTest is Test {
     /// (test/StockLpVault.t.sol:83) — which is why this lives on the fork.
     function test_fork_FINDING_whole_dollar_mark_truncation_is_fixed() public {
         if (_skip()) return;
+        _forceNonIntegralMark();
         uint256 wouldLeakBps = _priceRemainderBps();
         (int256 basePnl, uint256 baseIn) = _roundTripPnl(false, false, 0, 22_000e6);
         (int256 stockPnl,) = _roundTripPnl(false, false, 100e18, 0);
@@ -423,15 +426,23 @@ contract StockLpVaultForkTest is Test {
         emit log_named_int("zero-deviation base-only round trip, USD 1e18", basePnl);
         emit log_named_int("zero-deviation stock-only round trip, USD 1e18", stockPnl);
 
-        // A near-integral live price leaves nothing to leak either way, so the pins would assert on noise.
-        if (wouldLeakBps < 10) {
-            emit log("live price is near-integral this run; the fix is not being exercised");
-            return;
-        }
         // The band is only meaningful while it sits far below what the old mark actually moved.
+        assertGt(wouldLeakBps, 10, "the mark must be non-integral or this test asserts nothing");
         assertGt(wouldLeakBps * baseIn / 10_000, 100 * ROUNDING_DUST_USD18, "mis-mark too small to discriminate");
         assertLe(_abs(basePnl), ROUNDING_DUST_USD18, "the exactly-priced leg must extract nothing");
         assertLe(_abs(stockPnl), ROUNDING_DUST_USD18, "the stock depositor must no longer pay a mis-mark");
+    }
+
+    /// Stamp a DETERMINISTIC sub-dollar remainder onto the live price: floor it to whole dollars, add
+    /// $0.4321. The mark stays inside $1 of live so the alignment swap is small, and the remainder is
+    /// ~19 bps every run. Without this the test above early-returned whenever the live price happened to
+    /// land near-integral — roughly 1 run in 5 on a deliberately unpinned fork (:122-124), and it
+    /// reported PASS having asserted nothing. Observed self-skipping on the G3 evidence run at 6 bps.
+    function _forceNonIntegralMark() internal {
+        (uint256 px, uint8 dec,) = oracle.priceOf(NVDA);
+        uint256 unit = 10 ** dec;
+        oracle.setOverride(NVDA, (px / unit) * unit + (4_321 * unit) / 10_000);
+        _alignSpotToOracle();
     }
 
     /// The control that names the cause: same pool, same trip, a mark `_factor` represents EXACTLY. The
@@ -446,35 +457,101 @@ contract StockLpVaultForkTest is Test {
         assertEq(_roundTripBps(false, false, 100e18, 0), 0, "stock-only trip must be free of the mark");
     }
 
-    /// L-A-1 — deposit mints at the ORACLE mark while withdraw pays a SPOT-basis pro-rata slice, so a
-    /// round trip taken off-oracle skims the incumbent. Measured as the DIFFERENCE against the same trip
-    /// at zero deviation so the mis-mark is not double-counted, and in BOTH directions.
-    function test_fork_two_sided_roundtrip_skim_bounded_at_max_deviation() public {
+    /// G3-1 (was L-A-1) — the deposit/withdraw round trip at the CONFIG CEILING, taken by a WHALE, in
+    /// signed absolute USD on BOTH sides and in BOTH directions.
+    /// The predecessor bounded this at 25 bps OF THE ATTACKER'S INPUT — a metric that SHRINKS as the
+    /// attacker grows, and it hid the finding twice over. The real quantity is the pot: profit is
+    /// D·Δ/(V+D), so a whale takes nearly all of Δ. Against a $223k incumbent at maxDeviationBps 500 the
+    /// shipped code paid the round-tripper $1,040.97 and charged the incumbent the same $1,040.97,
+    /// zero-sum to 18 significant figures, while reading just 4 bps of input. And no test pinned the
+    /// SIGN: the old code logged +8 bps stock-dearer AND +8 bps stock-cheaper, which cannot be a signed
+    /// skim and was in fact the concavity gap.
+    /// MUTATION: `_positionAmounts` back to the oracle sqrt -> +$1,040.97 / -$1,040.97 -> RED both ways.
+    function test_fork_whale_roundtrip_at_the_config_ceiling_extracts_nothing() public {
         if (_skip()) return;
-        int256 flat = _roundTripBps(false, false, 100e18, 22_000e6);
-        int256 dearer = _roundTripBps(true, true, 100e18, 22_000e6);
-        int256 cheaper = _roundTripBps(true, false, 100e18, 22_000e6);
-        emit log_named_int("two-sided flat bps", flat);
-        emit log_named_int("two-sided stock-dearer bps", dearer);
-        emit log_named_int("two-sided stock-cheaper bps", cheaper);
-
-        assertLe(_abs(dearer - flat), 25, "L-A-1: deviation term above the pinned bound");
-        assertLe(_abs(cheaper - flat), 25, "L-A-1: deviation term above the pinned bound");
+        _assertNoExtraction(MAX_DEV_CEIL_BPS, true, "stock-dearer");
+        _assertNoExtraction(MAX_DEV_CEIL_BPS, false, "stock-cheaper");
     }
 
-    /// L-A-1 control — the single-sided MVP shape the scope calls arb-free. At ZERO deviation it now is:
-    /// while the mark truncated, the stock-only trip lost the mis-mark before any deviation term, and
-    /// this test asserted that it was NOT free. What remains is the deviation term alone, bounded.
-    function test_fork_single_sided_roundtrip_costs_only_the_deviation_term() public {
+    /// The same trip at the shipped 100 bps setting, so the pin is not only at the ceiling.
+    function test_fork_whale_roundtrip_at_the_shipped_deviation_extracts_nothing() public {
         if (_skip()) return;
-        (int256 flatPnl,) = _roundTripPnl(false, false, 100e18, 0);
-        int256 flat = _roundTripBps(false, false, 100e18, 0);
-        int256 dearer = _roundTripBps(true, true, 100e18, 0);
-        emit log_named_int("single-sided flat, USD 1e18", flatPnl);
-        emit log_named_int("single-sided stock-dearer bps", dearer);
+        _assertNoExtraction(DEV_BPS, true, "stock-dearer");
+    }
 
-        assertLe(_abs(dearer - flat), 25, "L-A-1: single-sided deviation term above the pinned bound");
-        assertLe(_abs(flatPnl), ROUNDING_DUST_USD18, "at zero deviation the single-sided trip is dust-free");
+    /// One whale round trip against a seeded incumbent on a pool pushed to the gate: the trip must not
+    /// pay, and the incumbent must not lose. Both legs valued at the independent feed marks.
+    function _assertNoExtraction(uint256 devBps, bool dearer, string memory tag) internal {
+        uint256 snap = vm.snapshotState();
+        vault = _newVault(devBps);
+        _fund(alice);
+        _fund(bob);
+        _seed(lowWide, highWide);
+        _deposit(alice, 500e18, 110_000e6); // ~$223k incumbent
+
+        _pushToGate(devBps, dearer);
+        emit log_named_string("--- leg", tag);
+        emit log_named_uint("deviation bps", _deviationBps());
+        // Taken AFTER the push, so the push's own trading fees sit in both arms and the only difference
+        // left is bob's round trip.
+        uint256 aliceBefore = _aliceExitValue();
+
+        uint256 valueIn = _usd18(5_000e18, 1_100_000e6); // ~10x the vault
+        vm.prank(bob);
+        uint256 sh = vault.deposit(5_000e18, 1_100_000e6, 0);
+        vm.prank(bob);
+        (uint256 outStock, uint256 outBase) = vault.withdraw(sh, 0, 0);
+        int256 pnl = int256(_usd18(outStock, outBase)) - int256(valueIn);
+        uint256 aliceAfter = _aliceExitValue();
+        emit log_named_int("round-tripper pnl, USD 1e18", pnl);
+        emit log_named_int("incumbent delta, USD 1e18", int256(aliceAfter) - int256(aliceBefore));
+
+        assertLe(pnl, int256(ROUNDING_DUST_USD18), "G3-1: the round-tripper profited");
+        assertGe(aliceAfter + ROUNDING_DUST_USD18, aliceBefore, "G3-1: the incumbent paid");
+        vm.revertToState(snap);
+    }
+
+    /// What alice could withdraw right now, at the independent feed marks — the ruler that is not the
+    /// function under test. Taken under a snapshot so measuring does not move anything.
+    function _aliceExitValue() internal returns (uint256 v) {
+        uint256 snap = vm.snapshotState();
+        uint256 held = vault.balanceOf(alice); // read BEFORE the prank: a view call would consume it
+        vm.prank(alice);
+        (uint256 s, uint256 b) = vault.withdraw(held, 0, 0);
+        v = _usd18(s, b);
+        vm.revertToState(snap);
+    }
+
+    /// Park the real pool just inside an arbitrary gate setting (`_pushDeviation` is fixed at DEV_BPS).
+    function _pushToGate(uint256 devBps, bool stockDearer) internal {
+        uint256 halfBps = (devBps * 9) / 20;
+        uint256 o = _oracleSqrt();
+        uint160 target =
+            stockDearer ? uint160(o * (10_000 - halfBps) / 10_000) : uint160(o * (10_000 + halfBps) / 10_000);
+        swapper.swapToPrice(stockDearer, target);
+        uint256 dev = _deviationBps();
+        assertGe(dev, devBps * 3 / 4, "deviation not pushed near the gate ceiling");
+        assertLe(dev, devBps, "deviation escaped the gate the vault enforces");
+    }
+
+    /// G3-1, the OTHER ruler — the oracle valuation must equal what the whole supply could actually
+    /// withdraw, on a live pool at a real deviation. `previewWithdraw` is a separate code path and is
+    /// pinned equal to a REAL pool.burn above, so this is not the suspect measuring itself.
+    /// MUTATION: `_positionAmounts` back to the oracle sqrt -> the mark drops below the holdings -> RED.
+    function test_fork_totalValue_equals_what_the_supply_can_withdraw_when_deviated() public {
+        if (_skip()) return;
+        _seed(lowWide, highWide);
+        _deposit(alice, 500e18, 110_000e6);
+        _pushDeviation(true);
+        vault.harvest(); // realize the push's fees, so both rulers cover the same assets
+
+        (uint256 s, uint256 b) = vault.previewWithdraw(vault.totalSupply());
+        emit log_named_uint("deviation bps", _deviationBps());
+        emit log_named_uint("oracle-marked value, USD 1e18", vault.totalValueUsd());
+        emit log_named_uint("what the supply can withdraw, USD 1e18", _usd18(s, b));
+        assertApproxEqAbs(
+            vault.totalValueUsd(), _usd18(s, b), ROUNDING_DUST_USD18, "G3-1: the mark is not what is held"
+        );
     }
 
     /// One round trip by a second entrant against a seeded incumbent, at TRUE marks, in bps of the input.
