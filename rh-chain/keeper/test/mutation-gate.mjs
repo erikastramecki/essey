@@ -80,8 +80,8 @@ const MUTATIONS = [
   ["keeper: sends transactions without a wallet check", "keeper.mjs", "if (!wallet) {", "if (false) {"],
 
   // --- the liveness supervisor's verdict (G-LEND R6 LOW-1) ---
-  ["health: BREAKER BLIND fatal again regardless of readability — red ~40h every week", "./keeper-health.mjs", "if (priceReadable) {", "if (true) {"],
-  ["health: BREAKER BLIND never fatal, so the mute costs the signal", "./keeper-health.mjs", "if (priceReadable) {", "if (false) {"],
+  ["health: BREAKER BLIND fatal again regardless of readability — red ~40h every week", "./keeper-health.mjs", "if (price.readable) {", "if (true) {"],
+  ["health: BREAKER BLIND never fatal, so the mute costs the signal", "./keeper-health.mjs", "if (price.readable) {", "if (false) {"],
   ["health: a dark feed alarms instead of reporting", "./keeper-health.mjs", "say(false, `FEED DARK  the price is unreadable", "say(true, `FEED DARK  the price is unreadable"],
   ["health: observation ceiling becomes exclusive", "./keeper-health.mjs", "const observing = confAge <= maxAge;", "const observing = confAge < maxAge;"],
   ["health: observation ceiling inverted", "./keeper-health.mjs", "const observing = confAge <= maxAge;", "const observing = confAge >= maxAge;"],
@@ -90,8 +90,24 @@ const MUTATIONS = [
   ["health: baseline checked on every market, healthy or not", "./keeper-health.mjs", "if (baseAge <= maxBaseline) return out;", ""],
   ["health: the delay floor becomes inclusive", "./keeper-health.mjs", "} else if (confAge < delay) {", "} else if (confAge <= delay) {"],
   ["health: a never-filled delay line falls through to the age tests", "./keeper-health.mjs", "if (confirmedAt === 0n) {", "if (false) {"],
-  ["health: a dead RPC reads as a dark feed (fail open)", "./keeper-health.mjs", "    await probeSameContract();\n    return false;", "    return false;"],
-  ["health: a reverting price reads as readable anyway", "./keeper-health.mjs", "    await probeSameContract();\n    return false;", "    await probeSameContract();\n    return true;"],
+  ["health: a dead RPC reads as a dark feed (fail open)", "./keeper-health.mjs", "    await probeSameContract();\n    return { readable: false", "    return { readable: false"],
+  ["health: a reverting price reads as readable anyway", "./keeper-health.mjs", "return { readable: false, revert: revertName(err) };", "return { readable: true, revert: null };"],
+
+  // --- unreadable is the schedule only for the schedule's REASON, and only for as long as the
+  // --- schedule can last (G-LEND R7 LOW-1). Both halves, both directions.
+  ["health: any refusal is the weekend again", "./keeper-health.mjs", "if (price.revert !== SCHEDULE_REVERT) {", "if (false) {"],
+  ["health: the revert test is inverted", "./keeper-health.mjs", "if (price.revert !== SCHEDULE_REVERT) {", "if (price.revert === SCHEDULE_REVERT) {"],
+  ["health: the weekend becomes a BROKEN aggregator's error", "./keeper-health.mjs", 'const SCHEDULE_REVERT = "PriceStale";', 'const SCHEDULE_REVERT = "PriceNotPositive";'],
+  ["health: a broken aggregator is reported, not alarmed", "./keeper-health.mjs", "say(true, `FEED BROKEN", "say(false, `FEED BROKEN"],
+  ["health: an undecodable revert inherits the weekend's exemption", "./keeper-health.mjs", "?.data?.errorName ?? null;", "?.data?.errorName ?? SCHEDULE_REVERT;"],
+  ["health: nothing is ever decodable", "./keeper-health.mjs", 'if (typeof err?.walk !== "function") return null;', "return null;"],
+  ["health: the dark ceiling is dropped (unbounded again)", "./keeper-health.mjs", "} else if (baseAge > maxDark) {", "} else if (false) {"],
+  ["health: the dark ceiling is inverted", "./keeper-health.mjs", "} else if (baseAge > maxDark) {", "} else if (baseAge < maxDark) {"],
+  ["health: the dark ceiling becomes inclusive", "./keeper-health.mjs", "} else if (baseAge > maxDark) {", "} else if (baseAge >= maxDark) {"],
+  ["health: a fortnight of darkness is reported, not alarmed", "./keeper-health.mjs", "say(true, `FEED DARK TOO LONG", "say(false, `FEED DARK TOO LONG"],
+  ["health: MAX_DARK_AGE widened to a year", "./keeper-health.mjs", "export const MAX_DARK_AGE = 345_600n;", "export const MAX_DARK_AGE = 31_536_000n;"],
+  ["health: MAX_DARK_AGE tightened below an ordinary weekend", "./keeper-health.mjs", "export const MAX_DARK_AGE = 345_600n;", "export const MAX_DARK_AGE = 86_400n;"],
+  ["health: classifying with no ceiling at all is allowed", "./keeper-health.mjs", 'if (typeof maxDark !== "bigint") throw new Error("classifyMarket: maxDark (seconds, bigint) is required");', ""],
 
   // --- config ---
   ["config: EXECUTE armed by any truthy value", "config.mjs", 'execute: env.EXECUTE === "1",', "execute: Boolean(env.EXECUTE),"],

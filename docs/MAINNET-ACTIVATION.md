@@ -1423,10 +1423,46 @@ every sha256 re-taken identical at end of round.
 *An earlier check in this session ran before 10:33 and reported the receipt absent. That finding is
 **withdrawn**; the timing was mine, not the auditor's.*
 
-**What still stands:** `docs/audits/glend-round-7.md` is **untracked**. The gate ladder's
-published-report step is not met until it is committed — we retracted someone else's "audit-clean"
-claim on 2026-09-03 for a missing artifact (§17.1, `:1409-1415`), and the rule binds us symmetrically.
-**Next action (engineer): commit the report.** Rounds 8 and 9 remain.
+**What still stood at the time of writing:** `docs/audits/glend-round-7.md` was **untracked**. The
+gate ladder's published-report step is not met until it is committed — we retracted someone else's
+"audit-clean" claim on 2026-09-03 for a missing artifact (§17.1, `:1409-1415`), and the rule binds us
+symmetrically. **Closed:** committed in `efe34aa` (`git show --stat efe34aa`). Rounds 8 and 9 remain.
+
+### 18.2a Round-7 LOWs and INFOs fixed (working tree, NOT committed)
+
+Engineer pass on top of `2309cb0`. `git diff --stat 2309cb0 -- rh-chain/src` is **one file, comment
+only** — proven by stripping `//` and blank lines from both versions and diffing (identical). No
+contract behaviour changed; everything below is tests, the keeper supervisor, and docs.
+
+| Finding | Fix | Where |
+|---|---|---|
+| **LOW-2** the warm push's multiplier half unpinned (survivor X-A, 397/397) | the discriminating test the auditor wrote, landing the leg while the feed still READS; verified green on the tree, red on X-A, red on M27 | `test/GLendR7.t.sol:26` · gate `M38` |
+| **LOW-1 A** `FEED DARK` unbounded in duration | `MAX_DARK_AGE = 345_600s` (4 days), overridable with `FEED_DARK_CEILING`; sized against the measured worst gap, which is the 2026-07-02 → 07-06 Independence Day weekend (79.74h AAPL / 76.09h NVDA) against 52-58h for an ordinary one | `keeper/keeper-health.mjs:32` |
+| **LOW-1 B** four `priceOf` reverts read as one | only a decoded `PriceStale` is the calendar; `PriceNotPositive` / `RoundIncomplete` / `FeedNotConfigured` and anything undecodable are fatal `FEED BROKEN`. Error definitions added to `marketsAbi` because viem decodes `errorName` only for declared errors | `keeper/keeper-health.mjs:25,38` · `check-liveness-keeper.mjs:80` |
+| **INFO-1** the horizon omitted the keeper term | stated as **max feed gap + tolerated keeper gap + `PRICE_CONFIRM_DELAY` + `CONFIRM_STEP`**, with the SLO that bounds the middle term named (**12h — 9h to `UNOBSERVED`, 3h to restore; an operational commitment awaiting the founder's ratification**). Full horizons 100h / 96h, worst move unchanged at 1.69x / 1.65x | `MAINNET-CONFIG.md` · `EsseyMarkets.sol:396` · `measure-feed-volatility.mjs:107` |
+| **INFO-2** two one-sided tests | `GLendR6WarmSource` now pins that the line MOVED (it passed under M27 before); `GLendR6.t.sol:126`'s assertion was identical in the opposite world and now reads what the observing keeper actually bought; the two `assertLt(secs, 12 hours)` bounds now use the same constant R5's sibling does | `test/GLendR6.t.sol` |
+
+**A SIXTH false green, found while fixing the fifth.** `head.mult` → `confirmedObservation(token).mult`
+— the multiplier half taken from the READ slot, four steps behind the head — **survived 398/398**,
+including the test just written for LOW-2. Every fixture in the suite varied five prices across the
+ring and held one multiplier, so R5's older-slot test pinned only the price half. Not equivalent: it
+pairs a post-leg price with a pre-leg multiplier for a whole outage, which is R4 MED-1's harm in both
+directions. Pinned by `test_theWarmedMultiplierIsTheLastKnownGoodPairNotAnOlderSlot`
+(`test/GLendR7.t.sol:59`), gate `M40`, with `M39`/`M41` added so each argument is attacked
+independently against each wrong source. That test pins the PROPERTY rather than one mutant — the
+two further wrong-slot variants (`+2`, `+3`) are killed by it too, on the same assertion.
+
+**Two tool defects fixed because they corrupt the evidence, not the code.** `test/mutants/glend-r4.py`
+restored its mutant in a `finally`, which a SIGTERM skips — a killed run left a live mutant on disk
+looking like an ordinary edit (observed: the age CEILING silently removed). And a fork-backend 429
+prints as `[FAIL: …`, so an unlucky mutant read as **KILLED by evidence that never ran**. Both are
+now handled: signal handlers restore every touched file, and a transport-only failure is retried and
+reported `RPC-FLAKE` rather than counted.
+
+**Not touched, by instruction:** `docs/RUNBOOK-EX-DATE-PAUSE.md` and `keeper/measure-halt-baddebt.mjs`.
+**Open, pre-existing, not mine:** `forge build` under the DEFAULT profile fails `Stack too deep` — 
+reproduced on a clean `git archive 2309cb0` tree, so it predates this work; `FOUNDRY_PROFILE=script`
+and `FOUNDRY_PROFILE=v4` both exit 0.
 
 ### 18.2b Citations decay — the `:274-282` post-mortem
 

@@ -99,27 +99,42 @@ const feeds = {
   NVDA: ["0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15", 981],
 };
 
+/// THE TERM THE FEED'S OWN GAP DOES NOT CARRY (R7 INFO-1). Since the warm ceiling, the horizon runs
+/// from the last OBSERVATION rather than the feed's last round, so a keeper gap starting while the
+/// feed still reads adds to it 1:1 (measured). Nothing on chain bounds it; the supervisor does, at
+/// MAX_CONFIRM_AGE. An OPERATIONAL COMMITMENT, not a code fact — stated here so the founder's number
+/// is conditioned on something falsifiable, and so changing the commitment moves it.
+const KEEPER_GAP_SLO_H = 12; // 9h to the UNOBSERVED alarm + 3h to restore the keeper
+
 for (const [name, [addr, latest]] of Object.entries(feeds)) {
   const rounds = normalise(await walk(addr, latest, latest));
   const gaps = [];
-  for (let i = 1; i < rounds.length; i++) gaps.push(rounds[i].t - rounds[i - 1].t);
-  gaps.sort((a, b) => a - b);
+  for (let i = 1; i < rounds.length; i++) gaps.push({ s: rounds[i].t - rounds[i - 1].t, from: rounds[i - 1].t });
+  gaps.sort((a, b) => a.s - b.s);
+  const maxGapH = gaps.at(-1).s / 3600;
   console.log(`\n=== ${name} (${addr}) ===`);
   console.log(`rounds ${rounds.length}  from ${new Date(rounds[0].t * 1000).toISOString()} to ${new Date(rounds.at(-1).t * 1000).toISOString()}`);
   console.log(`span days ${((rounds.at(-1).t - rounds[0].t) / 86400).toFixed(2)}`);
-  console.log(`median gap s ${gaps[Math.floor(gaps.length / 2)]}  max gap h ${(gaps.at(-1) / 3600).toFixed(2)}`);
+  console.log(`median gap s ${gaps[Math.floor(gaps.length / 2)].s}  max gap h ${maxGapH.toFixed(2)}`);
+  // Dated, because keeper-health's FEED DARK ceiling is sized against these — set below the longest
+  // closure the calendar makes and it cries wolf, which is what R6 LOW-1 cost.
+  for (const g of [...gaps].slice(-5).reverse()) {
+    console.log(`  gap ${(g.s / 3600).toFixed(2)}h  ${new Date(g.from * 1000).toISOString()} -> ${new Date((g.from + g.s) * 1000).toISOString()}`);
+  }
   // 21.25% is what the delay spends at 5000/7500/500: liquidation threshold (debt / 0.75) down to
   // liquidator indifference (1.05 x debt). Anything approaching it at the chosen horizon is bad debt.
   const { sigmaPct, n } = perRoundSigmaPct(rounds);
   console.log(`per-round sigma (log-return sample sd) ${sigmaPct.toFixed(4)}%  n ${n}`);
   // THE HORIZON IS MEASURED, NOT THE TYPICAL WEEKEND (R6 INFO-2). A position is genuinely
   // unliquidatable from the last print whose health was verifiable to the first moment it can be
-  // seized: this feed's own worst observed gap, plus the PRICE_CONFIRM_DELAY + CONFIRM_STEP of
-  // post-return observations the read slot owes. ~71h is the ordinary Friday-to-Monday case; the
-  // measured worst is what the buffer has to survive.
-  const horizonH = Math.ceil(gaps.at(-1) / 3600 + 7.5);
-  console.log(`design horizon h ${horizonH}  = max gap ${(gaps.at(-1) / 3600).toFixed(2)}h + delay 6h + step 1.5h`);
-  for (const h of [1, 2, 4, 6, 8, 12, 24, 48, 72, horizonH]) {
+  // seized: this feed's own worst observed gap, the longest tolerated keeper gap, and then the
+  // PRICE_CONFIRM_DELAY + CONFIRM_STEP of post-return observations the read slot owes. ~71h is the
+  // ordinary Friday-to-Monday case; the measured worst is what the buffer has to survive.
+  const feedOnlyHorizonH = Math.ceil(maxGapH + 7.5);
+  const horizonH = Math.ceil(maxGapH + KEEPER_GAP_SLO_H + 7.5);
+  console.log(`feed-only horizon h ${feedOnlyHorizonH}  = max gap ${maxGapH.toFixed(2)}h + delay 6h + step 1.5h`);
+  console.log(`design horizon h ${horizonH}  = the above + the ${KEEPER_GAP_SLO_H}h keeper-gap SLO (R7 INFO-1)`);
+  for (const h of [1, 2, 4, 6, 8, 12, 24, 48, 72, feedOnlyHorizonH, horizonH]) {
     const { worst, at } = worstMove(rounds, h * 3600);
     const headroom = (0.2125 / worst).toFixed(2);
     console.log(

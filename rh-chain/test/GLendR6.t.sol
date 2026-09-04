@@ -115,7 +115,11 @@ contract GLendR6ObservationGap is GLendR6Base {
         uint256 secs = _secondsToLiquidatable(id, (friday * 82) / 100);
         console.log("seconds from feed-return to liquidatable:", secs);
         assertGe(secs, markets.PRICE_CONFIRM_DELAY(), "a move that has stood zero seconds pays the delay in full");
-        assertLt(secs, 12 hours, "and it does open, so the bound above is not vacuous");
+        assertLe(
+            secs,
+            markets.PRICE_CONFIRM_DELAY() + 2 * markets.CONFIRM_STEP(),
+            "and it does open, within one ceiling of the delay"
+        );
     }
 
     /// The control, and the half of R6's residual that is CLOSED: an observing keeper leaves the
@@ -123,13 +127,27 @@ contract GLendR6ObservationGap is GLendR6Base {
     /// so every push in that window records the same close and overwrites the sample.
     function test_anObservingKeeperLeavesTheCallerNoChoiceOfFrozenPrint() public {
         (uint256 id, int256 friday, int256 wick,) = _wickThenAnObservationGap(true);
-        assertEq(markets.confirmedPrice(AAPL), uint256(friday), "the sample was overwritten by the close");
-        assertTrue(uint256(wick) != uint256(friday), "and the two really do differ");
+        assertTrue(uint256(wick) != uint256(friday), "the sample and the close really do differ");
+        // R7 INFO-2: `confirmedPrice` is Friday's close in BOTH worlds — the read slot is four behind
+        // the head, so the wick never reaches it either way, and asserting it here said nothing. What
+        // the observing keeper bought is a LIVE line: the close pushed the wick out of the head, so
+        // the head is inside its ceiling and still corroborates. Unobserved, the head IS the wick.
+        assertLe(
+            block.timestamp - markets.confirmedObservedAt(AAPL),
+            markets.MAX_CONFIRM_AGE(),
+            "the close overwrote the sample, so the head is inside its ceiling"
+        );
+        (, bool corroborated) = markets.corroboratedValue(AAPL, _coll());
+        assertTrue(corroborated, "and the line still corroborates, which the unobserved world does not");
 
         uint256 secs = _secondsToLiquidatable(id, (friday * 82) / 100);
         console.log("seconds from feed-return to liquidatable:", secs);
         assertGe(secs, markets.PRICE_CONFIRM_DELAY(), "the full delay, paid");
-        assertLt(secs, 12 hours, "so the bound above is not vacuous");
+        assertLe(
+            secs,
+            markets.PRICE_CONFIRM_DELAY() + 2 * markets.CONFIRM_STEP(),
+            "and it does open, within one ceiling of the delay"
+        );
     }
 
     /// The two ceilings are ONE ceiling. `corroboratedValue` refuses an observation STRICTLY older
@@ -184,10 +202,16 @@ contract GLendR6WarmSource is GLendR6Base {
         // Dark immediately, with no readable window at all: from here the only thing that can
         // advance the ring is the warm push.
         _neverReadable(leg);
+        uint256 observedAtBefore = markets.confirmedObservedAt(AAPL);
         for (uint256 i = 0; i < 6; i++) {
             _weekend(markets.CONFIRM_STEP() + 300);
             assertEq(markets.confirmedPrice(AAPL), prePrice, "every warm push stands on the ring head");
         }
+        // NOT VACUOUS (R7 INFO-2): an equality against the pre-outage value also holds if the ring
+        // never moved, which is why this whole test used to pass with the warm push deleted (M27).
+        assertGt(markets.confirmedObservedAt(AAPL), observedAtBefore, "and the line really did warm");
+        (, bool corroborated) = markets.corroboratedValue(AAPL, _coll());
+        assertTrue(corroborated, "with a corroborated price still standing at the end of the outage");
         console.log("corroborated price after the outage:", markets.confirmedPrice(AAPL));
         console.log("the raw read it must NOT have used :", markets.seenPrice(AAPL));
         assertEq(markets.seenPrice(AAPL), uint256(leg), "and the raw read still differs, so the test discriminates");

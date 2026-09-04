@@ -23,14 +23,23 @@ equivalent because `_syncPrice` writes `seenPrice` unconditionally while `_confi
 rate-limited. M33 widens MULTIPLIER_READ_GAS instead of narrowing it, which is the direction the
 constant exists for; R5 mutated it downward only, and half a pin is not a pin. M34-M37 are the warm
 ceiling that closes R6 MED-1, removed, inverted, at its boundary, and against a different constant.
+
+Round 7 added M38-M41, the third and fourth instances of one rule: a call forwarding two sibling
+values needs each argument mutated INDEPENDENTLY, against every source the wrong value could come
+from. M32 swapped both halves of the warmed pair at once and left the one-half variants unattacked,
+and the multiplier-only variant then survived 397/397 (R7 LOW-2) — because the test named for the
+matched pair mocks the split AFTER the feed is dark, and a dark feed is exactly when `seenMultiplier`
+cannot advance, so the two values are equal by construction there. M40 is the same gap against the
+READ slot rather than the raw read, and it survived 398/398 including the test written for M38,
+because every fixture in the suite left the ring's five MULTIPLIERS identical while varying prices.
 """
-import subprocess, sys, pathlib
+import signal, subprocess, sys, pathlib
 
 # resolve the repo from this file, never the caller's cwd (lesson of 9b6d047)
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKETS = ROOT / "src/EsseyMarkets.sol"
 LIVENESS = ROOT / "src/LivenessOracle.sol"
-SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|GLendR6|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
+SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|GLendR6|GLendR7|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
 
 MUTANTS = [
     # --- the magnitude of the safety constant, in BOTH directions ---
@@ -157,33 +166,82 @@ MUTANTS = [
     ("M37 warm ceiling measured against a DIFFERENT constant", MARKETS,
      "        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;",
      "        if (block.timestamp - head.takenAt > PRICE_CONFIRM_DELAY) return;"),
+    # --- R7 LOW-2: the two halves of the warmed pair, mutated INDEPENDENTLY ---
+    ("M38 warm the MULTIPLIER half from the raw read (R7 LOW-2)", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmable(token, head.price, seenMultiplier[token]);"),
+    ("M39 warm the PRICE half from the raw read", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmable(token, seenPrice[token], head.mult);"),
+    # The same independence against the OTHER slot. R5's older-slot test varies five PRICES and holds
+    # one multiplier, so M40 survived 398/398 including M38's own test — the sixth false green.
+    ("M40 warm the MULTIPLIER half from the READ slot, four steps behind the head", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmable(token, head.price, confirmedObservation(token).mult);"),
+    ("M41 warm the PRICE half from the READ slot", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmable(token, confirmedObservation(token).price, head.mult);"),
 ]
+
+
+# A `finally` does not run on SIGTERM, and this script holds a MUTATED contract on disk for minutes
+# at a time. Killing a run therefore left the working tree carrying a live mutant that looks like an
+# ordinary edit — found the hard way on 2026-09-04, with the age CEILING silently removed.
+PRISTINE = {}
+
+
+def restore_all(*_):
+    for path, src in PRISTINE.items():
+        path.write_text(src)
+    sys.exit(130)
+
+
+# The fork backend answers 429 under load, and its failures print as `[FAIL: ...` like any other —
+# so an unlucky mutant reads as KILLED by evidence that never ran. Named, retried, and reported as
+# INCONCLUSIVE rather than folded into the count.
+TRANSPORT = ("Max retries exceeded HTTP error 429", "database error:", "Failed to get EIP-1559")
+
+
+def is_transport(line):
+    return any(t in line for t in TRANSPORT)
+
+
+def suite_verdict():
+    p = subprocess.run(
+        ["forge", "test", "--match-contract", SELECT],
+        cwd=ROOT, capture_output=True, text=True, timeout=2400,
+    )
+    out = p.stdout + p.stderr
+    if "Compiler run failed" in out or "Error: Compilation failed" in out:
+        return "NO-COMPILE", "the mutant does not build"
+    fails = [l for l in out.splitlines() if l.startswith("[FAIL")]
+    if not fails:
+        return "SURVIVED", "the whole targeted suite stayed green"
+    real = [l for l in fails if not is_transport(l)]
+    if not real:
+        return "RPC-FLAKE", fails[0][:150]
+    return "KILLED", real[0][:150]
 
 
 def run(mut):
     label, path, old, new = mut
-    src = path.read_text()
+    src = PRISTINE.setdefault(path, path.read_text())
     n = src.count(old)
     if n != 1:
         return label, "ANCHOR-MISS", f"anchor matched {n} times"
     path.write_text(src.replace(old, new))
     try:
-        p = subprocess.run(
-            ["forge", "test", "--match-contract", SELECT],
-            cwd=ROOT, capture_output=True, text=True, timeout=2400,
-        )
-        out = p.stdout + p.stderr
-        if "Compiler run failed" in out or "Error: Compilation failed" in out:
-            return label, "NO-COMPILE", "the mutant does not build"
-        fails = [l for l in out.splitlines() if l.startswith("[FAIL")]
-        if fails:
-            return label, "KILLED", fails[0][:150]
-        return label, "SURVIVED", "the whole targeted suite stayed green"
+        verdict, detail = suite_verdict()
+        if verdict == "RPC-FLAKE":
+            verdict, detail = suite_verdict()
+        return label, verdict, detail
     finally:
         path.write_text(src)
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, restore_all)
+    signal.signal(signal.SIGINT, restore_all)
     results = []
     for m in MUTANTS:
         label, verdict, detail = run(m)

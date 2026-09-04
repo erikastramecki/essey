@@ -395,9 +395,14 @@ contract EsseyMarkets is StaleFeedGuard {
     ///
     /// THE HORIZON IS EACH FEED'S OWN WORST GAP PLUS THE DELAY, NOT THE TYPICAL WEEKEND (R6 INFO-2).
     /// Friday-close-to-Monday is ~71h and reads 1.68x, which is not the number to size against: the
-    /// measured max gaps are 79.74h AAPL and 76.09h NVDA, so the horizons are 88h and 84h, where the
-    /// worst move is 12.61% (1.69x) and 12.90% (1.65x). Warming the line removes only the 6h that
-    /// used to be added ON TOP of the dark window; the dark window is the feed's.
+    /// measured max gaps are 79.74h AAPL and 76.09h NVDA, so the feed-only horizons are 88h and 84h.
+    /// Warming the line removes only the 6h that used to be added ON TOP of the dark window; the dark
+    /// window is the feed's.
+    /// AND A KEEPER TERM, which the warm CEILING introduced (R7 INFO-1): the horizon runs from the
+    /// last OBSERVATION, so a keeper gap starting while the feed still reads adds to it 1:1, bounded
+    /// only by the operational SLO (12h — MAX_CONFIRM_AGE to the UNOBSERVED alarm, plus 3h to
+    /// restore). Full horizons 100h and 96h; the worst move is 12.61% (1.69x) and 12.90% (1.65x) at
+    /// both, since neither feed's worst window grows past 84h.
     uint256 public constant PRICE_CONFIRM_DELAY = 6 hours;
 
     /// R4 HIGH-1: one promoted snapshot cannot deliver a delay however it is rate-limited, because

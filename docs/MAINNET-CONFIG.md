@@ -124,16 +124,32 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   report had assumed it would be.
   **Read the derivation at the MEASURED horizon — not at 6h, and not at the typical weekend.** The
   window a position is genuinely unliquidatable for runs from the last print whose health was
-  verifiable to the first moment it can be seized: the feed's own worst observed gap, plus the
-  `PRICE_CONFIRM_DELAY + CONFIRM_STEP` of post-return observations the read slot owes. Friday's close
-  to ~19:30 UTC Monday (~71h) is the ORDINARY case, and this document previously stated it as the
-  horizon. The measured worst gaps are **79.74h AAPL / 76.09h NVDA**, so the horizons are **88h** and
-  **84h**, where the worst move is **12.61% AAPL (1.69x) / 12.90% NVDA (1.65x)** inside the 21.25%
-  buffer — not the 2.51x / 2.70x the 6h row shows. Solvency is not broken on the measured
-  distribution, but the margin is materially thinner than the 6h figure implies and **the founder
-  should read the risk against 1.65x**, not the 1.68x this section asked for at 72h (R6 INFO-2).
-  Reproduce with `node keeper/measure-feed-volatility.mjs`, which now derives and prints the horizon
-  from each feed's own max gap rather than assuming a weekend.
+  verifiable to the first moment it can be seized. It has FOUR terms, and R6 INFO-2 stated it with
+  only three:
+
+  > **max feed gap + longest tolerated keeper gap + `PRICE_CONFIRM_DELAY` + `CONFIRM_STEP`**
+
+  Friday's close to ~19:30 UTC Monday (~71h) is the ORDINARY case for the first term, and this
+  document once stated it as the whole horizon. The measured worst gaps are **79.74h AAPL / 76.09h
+  NVDA** — both the same 2026-07-02 → 2026-07-06 window, Thursday to Monday, because 4 July 2026 fell
+  on a Saturday and was observed the Friday. That three-day shape is the longest closure the US equity
+  calendar makes; ordinary weekends in the same sample measure 52-58h.
+
+  **The keeper term is the one R7's warm ceiling introduced (R7 INFO-1).** Since the ceiling landed,
+  "the last print whose health was verifiable" is the last OBSERVATION, not the feed's last round: a
+  keeper gap beginning while the feed is still live pushes the horizon back **1:1** (measured at
+  exactly 1:1 across 0/8/24/72h of pre-dark keeper gap). Nothing on chain bounds it. **The SLO does,
+  and it is an operational commitment rather than a code fact: 12h — 9h until `UNOBSERVED` goes fatal
+  at `MAX_CONFIRM_AGE`, plus 3h to restore observation.** It needs the founder's ratification, and
+  changing it moves every number below.
+
+  At **100h AAPL / 96h NVDA** the worst measured move is **12.61% (1.69x) / 12.90% (1.65x)** inside
+  the 21.25% buffer — unchanged from the 88h/84h feed-only horizons, because neither feed's worst
+  window grows past 84h, and not the 2.51x / 2.70x the 6h row shows. Solvency is not broken on the
+  measured distribution, but the margin is materially thinner than the 6h figure implies and **the
+  founder should read the risk against 1.65x**, not the 1.68x this section asked for at 72h.
+  Reproduce with `node keeper/measure-feed-volatility.mjs`, which prints both horizons, the SLO it
+  conditions the second on, and the five worst gaps with their dates.
 - **Liquidation pause:** capped at `MAX_LIQUIDATION_PAUSE` per call AND followed by a cooldown as
   long as the pause itself (R3 MED-3), so chained calls cannot become a permanent freeze.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.

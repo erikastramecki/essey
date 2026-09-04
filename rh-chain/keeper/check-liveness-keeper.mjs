@@ -18,11 +18,12 @@
 // doing. Read-only: no key, safe to run from anywhere, exits non-zero when something is wrong.
 //
 // The third one is qualified by whether the PRICE READS — see keeper-health.mjs. A 24/5 feed is dark
-// ~40h of every 168h and the unqualified check was red for all of it (R6 LOW-1).
+// ~40h of every 168h and the unqualified check was red for all of it (R6 LOW-1). That qualification
+// is itself bounded, on the revert's REASON and on its duration (R7 LOW-1).
 //
 //   RH_RPC=... LIVENESS_ORACLE=0x... ESSEY_MARKETS=0x... node keeper/check-liveness-keeper.mjs
 import { createPublicClient, http, defineChain, parseAbiItem } from "viem";
-import { classifyMarket, priceReadable } from "./keeper-health.mjs";
+import { classifyMarket, MAX_DARK_AGE, priceState } from "./keeper-health.mjs";
 import { reconcileMarkets } from "./market-list.mjs";
 
 const RPC = process.env.RH_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -73,7 +74,19 @@ const marketsAbi = [
     outputs: [{ type: "uint256" }, { type: "uint8" }, { type: "bool" }],
     stateMutability: "view",
   },
+  // LOAD-BEARING, not documentation: viem decodes `errorName` only for errors the ABI declares, and
+  // `revertName` reads it to tell the weekend from a broken aggregator. Drop one and its revert goes
+  // fatal-but-unnamed — safe, and a false alarm rather than a diagnosis. Mirrors StaleFeedGuard:24-29.
+  { type: "error", name: "PriceStale", inputs: [{ type: "uint256" }, { type: "uint256" }, { type: "bool" }] },
+  { type: "error", name: "PriceNotPositive", inputs: [{ type: "int256" }] },
+  { type: "error", name: "RoundIncomplete", inputs: [] },
+  { type: "error", name: "FeedNotConfigured", inputs: [addr] },
+  { type: "error", name: "SequencerDown", inputs: [] },
+  { type: "error", name: "SequencerGracePeriod", inputs: [{ type: "uint256" }] },
 ];
+
+/// The exchange calendar's own ceiling, overridable for a market whose feed does not follow it.
+const DARK_CEILING = process.env.FEED_DARK_CEILING ? BigInt(process.env.FEED_DARK_CEILING) : MAX_DARK_AGE;
 const marketCommitted = parseAbiItem("event MarketCommitted(address indexed token, uint16 ltvBps, uint16 liqThresholdBps)");
 
 const read = (address, abi, functionName, args) => pub.readContract({ address, abi, functionName, args });
@@ -123,12 +136,12 @@ for (const token of inspect) {
     read(MARKETS, marketsAbi, "confirmedObservedAt", [token]),
     read(MARKETS, marketsAbi, "seenPriceAt", [token]),
   ]);
-  const readable = await priceReadable(
+  const price = await priceState(
     () => read(MARKETS, marketsAbi, "priceOf", [token]),
     () => read(MARKETS, marketsAbi, "seenPriceAt", [token]),
   );
   const findings = classifyMarket({
-    token, confirmedAt, seenAt, now, delay, maxAge, maxBaseline, priceReadable: readable,
+    token, confirmedAt, seenAt, now, delay, maxAge, maxBaseline, maxDark: DARK_CEILING, price,
   });
   for (const f of findings) {
     if (f.fatal) fail(f.line);

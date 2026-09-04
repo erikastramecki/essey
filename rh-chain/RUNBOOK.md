@@ -96,6 +96,26 @@ red a quarter of the time gets muted. **`BREAKER BLIND` is now raised only when 
 answering. `UNOBSERVED` is unchanged and stays fatal whether or not the feed is dark: that is the
 line that says the keeper has stopped.
 
+**And `FEED DARK` is bounded on both axes, because a downgrade granted on the word "unreadable"
+covers a broken oracle too (G-LEND R7 LOW-1).** Two further fatal lines:
+
+- **`FEED BROKEN`** — `priceOf` refuses with anything other than `PriceStale`. It reverts four
+  reachable ways on 4663, and only `PriceStale` is the exchange calendar; `PriceNotPositive`,
+  `RoundIncomplete` and `FeedNotConfigured` are a silent or misconfigured aggregator. So is a revert
+  the ABI cannot decode — including the asymmetric case where the heavy `priceOf` fails on transport
+  while the one-`SLOAD` probe succeeds. **The error definitions in `marketsAbi` are load-bearing:**
+  viem decodes `errorName` only for errors the ABI declares.
+- **`FEED DARK TOO LONG`** — unreadable for more than `MAX_DARK_AGE` (4 days, override with
+  `FEED_DARK_CEILING`). The worst gap either listed feed has produced is 79.74h AAPL / 76.09h NVDA,
+  both of them the 2026-07-02 → 2026-07-06 window — Thursday to Monday, because 4 July 2026 fell on a
+  Saturday and was observed the Friday. That three-day shape is the longest closure the US equity
+  calendar makes; ordinary weekends in the same sample measure 52-58h. Reproduce with
+  `node keeper/measure-feed-volatility.mjs`, which now prints the five worst gaps with their dates.
+
+Both matter more than the noise they replace because **the feed is append-only per market** —
+`commitMarket` reverts `FeedIsImmutable` — so the remedy for a broken aggregator is onboarding a new
+listing behind `PARAM_TIMELOCK`, and the alarm is the whole of the operator's warning.
+
 After 2 days:
 
 ```bash
