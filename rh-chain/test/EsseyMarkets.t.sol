@@ -144,6 +144,20 @@ contract EsseyMarketsTest is Test {
         assertTrue(mk.isUnderwater(address(tok), 10e18, debt), "and break somewhere past that");
     }
 
+    /// ROUNDING DIRECTION at all three valuation sites. Every other price here is a whole dollar, so
+    /// nothing truncates and a ceil reads identically — while a ceil over-values collateral in the
+    /// UNSAFE direction: maxBorrow over-lends, isUnderwater under-reports, the pool eats the rest.
+    ///   value 10e18 x 20_000_000_011 x 1e6 / (1e18 x 1e8) = 2_000_000_001.1
+    ///   LTV 35% = 700_000_000.35 · liq 55% = 1_100_000_000.55
+    function test_valuationRoundsDownAtEveryStage() public {
+        px.set(20_000_000_011, block.timestamp); // $200.00000011/share, 8dp
+        (uint256 v,) = mk.collateralValue(address(tok), 10e18);
+        assertEq(v, 2_000_000_001, "collateral value truncates, never rounds up");
+        assertEq(mk.maxBorrow(address(tok), 10e18), 700_000_000, "the LTV cut truncates too");
+        assertFalse(mk.isUnderwater(address(tok), 10e18, 1_100_000_000), "debt == the FLOORED threshold is healthy");
+        assertTrue(mk.isUnderwater(address(tok), 10e18, 1_100_000_001), "one unit past the FLOORED threshold is not");
+    }
+
     // ---------------------------------------------------------------- gating
 
     function test_borrowAllowedInSessionOnly() public {

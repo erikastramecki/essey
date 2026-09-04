@@ -207,7 +207,7 @@ contract MarketHealthOracleTest is EsseyPoolTest {
     function test_anyLowerPostCancelsAnArmedRaise() public {
         uint128 spike = 40_000_000e6;
         _post(spike);
-        assertGt(hox.capState(address(tok)).pendingRaiseAt, 0, "armed");
+        assertEq(hox.capState(address(tok)).pendingRaiseAt, block.timestamp + 2 days, "armed through the FULL delay");
         vm.warp(block.timestamp + 1 days);
         _post(spike);
         vm.warp(block.timestamp + 1 days);
@@ -276,7 +276,9 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         assertEq(mk2.borrowCap(address(tok)), 10_000e6, "2.4h in: 1% of the static cap, not 100%");
         vm.warp(maturity + 22 hours); _post2(hox2, absurd);
         vm.warp(maturity + 1 days);
-        assertLt(mk2.borrowCap(address(tok)), 100_000e6 + 1, "one day past maturity: <= 10% of static");
+        // Exact, both directions: `< 100_000e6 + 1` cannot see a ramp that is too SLOW. The odd
+        // 99_999_999_999 is the crystallizing post at +22h truncating its own gain.
+        assertEq(mk2.borrowCap(address(tok)), 99_999_999_999, "one day past maturity: exactly 10% of static, floored");
 
         // ride the ramp with 12h keeper posts until the pool-facing cap reaches the ceiling
         uint256 reachedAt;
@@ -286,7 +288,8 @@ contract MarketHealthOracleTest is EsseyPoolTest {
             _post2(hox2, absurd);
         }
         assertGt(reachedAt, 0, "must reach the static cap inside the 60-day horizon");
-        assertGe(reachedAt - maturity, 10 days, "from-zero to static: never under BPS/maxRaisePerDayBps days");
+        // Exact, not `>= 10 days`: the floor alone blesses an arbitrarily slow ramp.
+        assertEq(reachedAt - maturity, 10 days + 12 hours, "from-zero to static: the full slew schedule, no more");
     }
 
     /// Honest bootstrap is SUSTAINED posting, not one post and a silent warp (the old shape
@@ -627,6 +630,80 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         assertEq(hox.capFractionBps(), 2_000);
         _post(SEED_DEPTH); // 4_000_000e6 x 2_000bps = 800_000e6: the new fraction is live
         assertEq(hox.effectiveCap(address(tok)), 800_000e6);
+    }
+
+    /// EVERY timelocked param, committed OFF DEFAULT and observed in BEHAVIOUR. Only capFractionBps
+    /// had a behavioural fixture; the other four were checked by getters reading the same storage
+    /// the commit writes, so hardcoding the DEFAULT at each USE site survived — governance
+    /// timelocking a 5-day arming delay while the contract keeps arming at 2.
+    function test_committedParamsGovernTheRatchetNotJustTheGetters() public {
+        vm.prank(ADMIN);
+        hox.proposeParams(MarketHealthOracle.Params({
+            capFractionBps: 3_333, hysteresisBps: 2_000, maxRaisePerDayBps: 2_000,
+            v4DiscountBps: 4_000, raiseDelay: 5 days
+        }));
+        for (uint256 i = 0; i < 4; i++) { vm.warp(block.timestamp + 12 hours); _postD(); }
+        hox.commitParams();
+        assertEq(hox.v4DiscountBps(), 4_000, "the keeper-side V4 haircut is live too");
+
+        // HYSTERESIS, now 20% of 1_333_200e6 = 266_640e6.
+        _post(3_200_000e6); // target 1_066_560e6: exactly one band below
+        assertEq(hox.effectiveCap(address(tok)), C_SEED, "a drop of exactly the GOVERNED band is ignored");
+        uint256 base = 1_066_226_700_000;
+        _post(3_199_000e6); // target 1_066_226.7e6: past the band
+        assertEq(hox.effectiveCap(address(tok)), base, "past the band it ratchets down, same block");
+
+        // RAISE DELAY: five days, not two.
+        uint256 t0 = block.timestamp;
+        _post(40_000_000e6); // target 13_332_000e6, far above: arms
+        assertEq(hox.capState(address(tok)).pendingRaiseAt, t0 + 5 days, "armed through the GOVERNED delay");
+        vm.warp(t0 + 23 hours); _post(40_000_000e6);
+        vm.warp(t0 + 46 hours); _post(40_000_000e6);
+        vm.warp(t0 + 69 hours); _post(40_000_000e6);
+        assertEq(hox.effectiveCap(address(tok)), base, "flat 21h past where the DEFAULT delay would have matured");
+
+        // SLEW: 20%/day of the arm-time base, not the default 10%.
+        vm.warp(t0 + 92 hours); _post(40_000_000e6);
+        vm.warp(t0 + 115 hours); _post(40_000_000e6);
+        vm.warp(t0 + 5 days);
+        assertEq(hox.effectiveCap(address(tok)), base, "maturity instant: the ramp gain is still zero");
+        vm.warp(t0 + 5 days + 12 hours);
+        assertEq(hox.effectiveCap(address(tok)), 1_172_849_370_000, "half a day in: 10% of base, i.e. 20%/day");
+    }
+
+    /// The from-zero base is min(target, static cap), and the min() only bites when the target is
+    /// BELOW the ceiling — every other from-zero fixture posts a target that dwarfs it, where min
+    /// and "take the ceiling" agree. Taking the ceiling here is a 2x slew bypass, more on a thinner
+    /// market.
+    function test_unwiredArmRampsOnItsOwnTargetNotTheStaticCap() public {
+        MarketHealthOracle bare = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
+        uint128 modest = 1_500_000e6; // target 499_950e6, BELOW mk's 1_000_000e6 static cap
+        _post2(bare, modest);
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + 23 hours); _post2(bare, modest);
+        vm.warp(t0 + 46 hours); _post2(bare, modest);
+        assertEq(bare.capState(address(tok)).rampBase, 0, "armed unwired: the base is derived in the view");
+
+        vm.warp(t0 + 2 days + 1);
+        assertEq(bare.effectiveCap(address(tok)), 0, "unwired: the from-zero base is 0");
+        vm.prank(ADMIN);
+        bare.wireMarkets(address(mk));
+        assertEq(bare.effectiveCap(address(tok)), 0, "the wire itself earns no retroactive credit");
+
+        vm.warp(block.timestamp + 8_640); // 2.4h = 1% of a day
+        assertEq(bare.effectiveCap(address(tok)), 4_999_500_000, "1% of its OWN target, not 1% of the static cap");
+    }
+
+    /// Depth target and hysteresis band are both truncating divisions, and every depth literal here
+    /// divides exactly. A ceil on the BAND widens the dead zone by a unit: a real drop in venue
+    /// depth that should have closed the cap silently does not.
+    function test_depthTargetAndHysteresisBandBothTruncate() public {
+        _post(90_000_000_004); // x 3_333 / 10_000 = 29_997_000_001.3332
+        assertEq(hox.effectiveCap(address(tok)), 29_997_000_001, "the depth target truncates");
+        _post(81_000_000_004); // target 26_997_300_001: down by exactly the 2_999_700_000.1 band, floored
+        assertEq(hox.effectiveCap(address(tok)), 29_997_000_001, "a drop of exactly the FLOORED band is ignored");
+        _post(81_000_000_000); // target 26_997_300_000: one unit further
+        assertEq(hox.effectiveCap(address(tok)), 26_997_300_000, "one unit past the FLOORED band applies");
     }
 
     function test_paramProposalCanBeCancelled() public {

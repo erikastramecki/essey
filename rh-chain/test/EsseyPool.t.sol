@@ -281,12 +281,26 @@ contract EsseyPoolTest is Test {
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
 
-        // debt 700 + 8% bonus = 756 of value; at $125/share that is 6.048 shares
-        uint256 seized = tok.balanceOf(LIQUIDATOR);
-        assertApproxEqAbs(seized, 6.048e18, 1e15, "liquidator takes debt+bonus, not everything");
-        // the rest returns to Alice
-        assertApproxEqAbs(tok.balanceOf(ALICE), 990e18 + (10e18 - seized), 1e15, "surplus refunded");
-        assertLt(seized, 10e18, "must never be the whole position");
+        // debt 700 + 8% bonus = 756 of value; at $125 exactly 6.048 shares. Exact, not approx:
+        // the old 1e15 window hid a bonus-magnitude error.
+        assertEq(tok.balanceOf(LIQUIDATOR), 6.048e18, "liquidator takes debt+bonus, not everything");
+        assertEq(tok.balanceOf(ALICE), 990e18 + 3.952e18, "the rest returns to Alice, to the wei");
+    }
+
+    /// ROUNDING DIRECTION on the seizure. `_rawWorth` converts the debt+bonus VALUE back into raw
+    /// collateral; rounding UP hands the liquidator collateral the bonus did not buy, out of the
+    /// borrower's refund. Every other liquidation fixture prices at a whole dollar, where a ceil is
+    /// invisible. unitValue = 120_000_007; seize = 756e6 x 1e18 / 120_000_007 = ...437.5
+    function test_liquidationSeizureRoundsDownNotUp() public {
+        uint256 id = _borrow(700e6);
+        px.set(12_000_000_700, block.timestamp); // $120.000007/share: $1200.000007 backing $700
+        assertTrue(mk.isUnderwater(address(tok), 10e18, 700e6), "fixture must actually be liquidatable");
+
+        vm.prank(LIQUIDATOR);
+        pool.liquidate(id);
+
+        assertEq(tok.balanceOf(LIQUIDATOR), 6_299_999_632_500_021_437, "seizure truncates against the borrower");
+        assertEq(tok.balanceOf(ALICE), 990e18 + 3_700_000_367_499_978_563, "and the remainder stays in the refund");
     }
 
     function test_liquidationBlockedWithoutChainLiveness() public {
@@ -382,8 +396,58 @@ contract EsseyPoolTest is Test {
 
         vm.warp(block.timestamp + 365 days);
         p2.accrue();
-        assertApproxEqRel(p2.debtOf(id), 770e6, 0.01e18, "10% APR on 700");
-        assertGt(p2.totalAssets(), 100_000e6, "lenders earn the interest");
+        // Exact, not 1% relative: a 1% window swallows a wrong year length (360 days is 0.126%
+        // off) — every borrower overcharged ~1.4% of all interest, permanently, on a green suite.
+        assertEq(p2.debtOf(id), 770e6, "10% APR on 700, to the wei");
+        assertEq(p2.totalAssets(), 100_070e6, "lenders earn the whole 70 at reserveBps 0");
+    }
+
+    /// The year-length constant over a dt that is neither a whole year nor a divisor of one. The
+    /// whole-year case pins the ratio; this pins the division, so a wrong SECONDS_PER_YEAR cannot
+    /// hide behind a fixture that happens to cancel.
+    function test_accrualOverANonRoundIntervalIsExact() public {
+        EsseyPool p2 = new EsseyPool(usdg, address(tok), mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        _activate(p2);
+        vm.startPrank(LENDER);
+        usdg.approve(address(p2), type(uint256).max);
+        p2.deposit(100_000e6, LENDER);
+        vm.stopPrank();
+        vm.startPrank(ALICE);
+        tok.approve(address(p2), type(uint256).max);
+        usdg.approve(address(p2), type(uint256).max);
+        uint256 id = p2.borrow(10e18, 700e6);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1_000_000);
+        p2.accrue();
+        assertEq(p2.borrowIndex(), 1_003_170_979_198_376_458, "index truncates at the stated year length");
+        assertEq(p2.debtOf(id), 702_219_685, "and the debt with it");
+        assertEq(p2.totalBorrows(), 702_219_685);
+    }
+
+    /// reserveBps MAGNITUDE. The one "lenders earn" assertion runs on a reserveBps 0 pool and the
+    /// writeOff fixtures only assert `reserves > 30e6` against a true 35e6, so doubling the
+    /// protocol's cut survives — which on a 5_000bps pool pays lenders nothing at all.
+    function test_reserveSplitIsExactBothWays() public {
+        EsseyPool p2 = new EsseyPool(usdg, address(tok), mk, 1_000, 0, 0, 5_000, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        _activate(p2);
+        vm.startPrank(LENDER);
+        usdg.approve(address(p2), type(uint256).max);
+        p2.deposit(100_000e6, LENDER);
+        vm.stopPrank();
+        vm.startPrank(ALICE);
+        tok.approve(address(p2), type(uint256).max);
+        usdg.approve(address(p2), type(uint256).max);
+        uint256 id = p2.borrow(10e18, 700e6);
+        vm.stopPrank();
+        assertEq(p2.totalAssets(), 100_000e6, "lender claim before accrual");
+
+        vm.warp(block.timestamp + 365 days);
+        p2.accrue();
+        assertEq(p2.debtOf(id), 770e6, "70 of interest charged");
+        assertEq(p2.totalReserves(), 35e6, "the protocol takes exactly half");
+        assertEq(p2.totalAssets(), 100_035e6, "and lenders keep exactly the other half");
+        assertEq(p2.previewRedeem(p2.balanceOf(LENDER)), 100_034_999_999, "the share price carries it");
     }
 
     /// R1-AUDIT: an adminBurn must make a position MORE liquidatable, not less. Reading the
@@ -860,6 +924,23 @@ contract EsseyPoolTest is Test {
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.ExceedsPositionCap.selector, 500e6 + 1, 500e6));
         pool.borrow(10e18, 500e6 + 1);
+    }
+
+    /// ROUNDING DIRECTION on the floating per-position limit. Every other cap fixture uses a
+    /// remainder-free (cap, bps) pair, so a ceil reads identically — while a ceil lets one position
+    /// hold more of a thin market than the depth oracle says the venue can absorb.
+    ///   cap 90_000_000_004 x 3_333 / 1e4 = 29_997_000_001.3332 -> posLimit 9_998_000_100.3333
+    function test_positionLimitTruncatesAgainstTheLiveCap() public {
+        _setPositionCap(3_333, pool);
+        vm.prank(KEEPER);
+        hox.postDepth(address(tok), 90_000_000_004, uint64(block.number), "fork-swap-v1"); // ratchets down same block
+        assertEq(mk.borrowCap(address(tok)), 29_997_000_001, "the depth target truncates too");
+
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(EsseyPool.ExceedsPositionCap.selector, 9_998_000_101, 9_998_000_100));
+        pool.borrow(200e18, 9_998_000_101);
+        vm.prank(ALICE);
+        pool.borrow(200e18, 9_998_000_100); // exactly at the FLOORED limit
     }
 
     /// The position cap gates NEW borrows only: an interest rebase may carry a position past it,

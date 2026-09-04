@@ -51,9 +51,8 @@ contract BorrowMoreRemoveCollateralTest is EsseyPoolTest {
     function test_borrowMoreOnUnderwaterPositionReverts() public {
         uint256 id = _borrow(700e6);
         px.set(125e8, block.timestamp); // 10 @ $125 = $1250; LTV max = $437.5 << $700 owed
-        uint256 max = mk.maxBorrow(address(tok), 10e18);
         vm.prank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(EsseyPool.Undercollateralised.selector, 700e6 + 1e6, max));
+        vm.expectRevert(abi.encodeWithSelector(EsseyPool.Undercollateralised.selector, 700e6 + 1e6, 437.5e6));
         pool.borrowMore(id, 1e6);
     }
 
@@ -188,10 +187,12 @@ contract BorrowMoreRemoveCollateralTest is EsseyPoolTest {
         uint256 id = _borrow(350e6);
         vm.prank(ALICE);
         pool.removeCollateral(id, 5e18); // at the floor
-        uint256 owed = pool.debtOf(id);
-        uint256 max = mk.maxBorrow(address(tok), 5e18 - 1);
+        // Literals, not `mk.maxBorrow(...)` read back: this is the file's one deterministic
+        // remainder (5e18 - 1 @ $200 = 999_999_999.9998), and the old self-referential form made
+        // both the truncation and the LTV cut unfalsifiable.
+        assertEq(pool.debtOf(id), 350e6, "zero-rate pool: the debt did not move");
         vm.prank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(EsseyPool.Undercollateralised.selector, owed, max));
+        vm.expectRevert(abi.encodeWithSelector(EsseyPool.Undercollateralised.selector, 350e6, 349_999_999));
         pool.removeCollateral(id, 1);
     }
 
