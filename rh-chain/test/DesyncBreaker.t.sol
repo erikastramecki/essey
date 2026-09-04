@@ -110,7 +110,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
     /// cost a liquidation window — the walk in _walkPrice is what every other suite relies on.
     function test_stepsInsideTheBoundNeverArm() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8); // $2,000 -> $600 in observed steps
+        _walkPriceAndSettle(60e8); // $2,000 -> $600 in observed steps
         assertEq(mk.priceDesyncAt(address(tok)), 0, "no arm from a walked move");
         assertTrue(mk.canLiquidate(address(tok)));
         vm.prank(LIQUIDATOR);
@@ -118,14 +118,35 @@ contract DesyncBreakerTest is EsseyPoolTest {
         assertEq(pool.debtOf(id), 0);
     }
 
-    /// The bound is DERIVED: it must sit below the smallest under-read that can flip a position
-    /// opened at max LTV, for the most fragile market _validate can ever admit.
-    function test_theBoundSitsBelowTheWorstListableMarketsHarmThreshold() public view {
+    /// The bound is DERIVED, and this is the exact claim it supports: it sits below the smallest
+    /// under-read that can flip a position AT ORIGINATION, for the most fragile market _validate can
+    /// admit. R3 HIGH-1: that is a statement about a NEW position and nothing more. A loan's cushion
+    /// shrinks as the price moves against it and is zero by definition at the threshold, so for ANY
+    /// bound there are open positions inside it — the previous name of this test ("no listable market
+    /// can be flipped un-armed") asserted something no bound can deliver. What protects a seasoned
+    /// position is isUnderwaterCorroborated, pinned in DesyncStateMachine.t.sol.
+    function test_theBoundSitsBelowTheHarmThresholdOfAFRESHLYOPENEDPosition() public view {
         uint256 worstLtv = mk.MAX_LIQ_THRESHOLD_BPS() - mk.MIN_RISK_GAP_BPS();
         uint256 harmBps = 10_000 - (worstLtv * 10_000) / mk.MAX_LIQ_THRESHOLD_BPS();
         assertEq(harmBps, 2_223, "9,000 threshold over 7,000 ltv");
-        assertLt(mk.MAX_PRICE_DEVIATION_BPS(), harmBps, "no listable market can be flipped un-armed");
+        assertLt(mk.MAX_PRICE_DEVIATION_BPS(), harmBps, "at origination, and only at origination");
         assertEq(mk.MAX_PRICE_DEVIATION_BPS(), 2_000);
+    }
+
+    /// The other half of the same honesty: a position seasoned to inside the bound really is
+    /// flippable by a sub-bound move, and the breaker really does stay silent through it. Stated as
+    /// a measurement so the residual the bound leaves is a number, not a footnote.
+    function test_aSeasonedPositionSitsInsideTheBoundAndTheBreakerStaysSilent() public {
+        uint256 id = _borrow(700e6);
+        _walkPriceAndSettle(130e8);
+        uint256 threshold = mk.market(address(tok)).liqThresholdBps;
+        uint256 flipBps = 10_000 - (700e6 * 10_000) / ((1_300e6 * threshold) / 10_000);
+        assertLt(flipBps, mk.MAX_PRICE_DEVIATION_BPS(), "its cushion is now INSIDE the bound");
+
+        px.set(117e8, block.timestamp);
+        mk.syncMultiplier(address(tok));
+        assertEq(mk.priceDesyncAt(address(tok)), 0, "so the breaker sees nothing");
+        assertTrue(mk.isUnderwater(address(tok), 10e18, pool.debtOf(id)), "while the position reads underwater");
     }
 
     /// EXACT BOUNDARY on the bound itself. 2,000bps must NOT arm and one wei past it must, or the
@@ -194,9 +215,11 @@ contract DesyncBreakerTest is EsseyPoolTest {
         pool.liquidate(id);
     }
 
-    /// Bounded per call, and standable-down by the same key — the pause must never become the
-    /// permanent freeze that the missing `enabled` conjunct exists to prevent.
-    function test_thePauseIsBoundedAndClearable() public {
+    /// Bounded per call, and standable-down by the same key. THIS TESTS ONE CALL, and R3 MED-3 was
+    /// the gap between that and the property the old name claimed: the per-call cap said nothing
+    /// about chaining, and daily calls held liquidation off forever. What makes the permanent freeze
+    /// impossible is the cooldown, pinned in DesyncStateMachine.t.sol.
+    function test_thePauseIsBoundedAndClearableWithinASingleCall() public {
         uint256 ceiling = block.timestamp + mk.MAX_LIQUIDATION_PAUSE();
         vm.prank(GUARDIAN);
         vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.PauseTooLong.selector, ceiling + 1, ceiling));
@@ -239,7 +262,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
     /// froze the asset.
     function test_liquidationEscrowsWhenTheCollateralCannotMove() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8); // $600 backing $700: seizure takes everything, refund is 0
+        _walkPriceAndSettle(60e8); // $600 backing $700: seizure takes everything, refund is 0
         tok.setPaused(true);
 
         vm.expectEmit(true, true, false, true, address(pool));
@@ -262,7 +285,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
     /// The borrower must not keep a claim on a position that was fully seized.
     function test_theBorrowerCannotClaimAnEscrowedLiquidation() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         tok.setPaused(true);
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
@@ -277,7 +300,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
     /// exists only while the collateral is worth more than 1.08x the debt.
     function test_aLiquidationWithASurplusStillRefusesUnderAFreeze() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(100e8); // $1,000 backing $700: underwater, but $756 of seizure leaves a refund
+        _walkPriceAndSettle(100e8); // $1,000 backing $700: underwater, but $756 of seizure leaves a refund
         tok.setPaused(true);
         vm.prank(LIQUIDATOR);
         vm.expectRevert(bytes("token paused"));
@@ -295,7 +318,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
     function test_writeOffEscrowsUnderAFreeze() public {
         uint256 id = _borrow(700e6);
         address R = _installResolver(); // before the walk: it re-stamps the price to $200
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         tok.setPaused(true);
 
         vm.prank(R);
@@ -327,13 +350,13 @@ contract DesyncBreakerTest is EsseyPoolTest {
     /// diluted, and the pool's books must keep matching its balance.
     function test_theLiquidationEscrowKeepsTheBooksMatchingTheBalance() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         tok.setPaused(true);
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
         tok.setPaused(false);
 
-        _walkPrice(200e8); // back to a borrowable price
+        _walkPriceAndSettle(200e8); // back to a borrowable price
         address BOB = makeAddr("bob");
         tok.mint(BOB, 10e18);
         usdg.mint(BOB, 10_000e6);
@@ -358,7 +381,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
     /// escrow rather than be read as delivery.
     function test_aFalseReturningTransferEscrowsRatherThanCountingAsDelivery() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         tok.setTransferReturnsFalse(true);
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);

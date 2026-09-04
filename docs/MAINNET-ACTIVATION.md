@@ -1445,7 +1445,7 @@ blockers now have a fixture:
 | 3 | `reserveBps` magnitude unpinned — doubling it routes 100% of interest to the protocol, zero to lenders | ✅ | `EsseyPool.t.sol` `test_reserveSplitIsExactBothWays` — a `reserveBps 5_000` pool pinning `totalReserves == 35e6`, `totalAssets == 100_035e6`, and `previewRedeem` |
 | 4 | `EsseyMultiply` only tested at 18 decimals; **mainnet USDG is 6** | ❌ **not started** | `test/EsseyMultiply.t.sol` still binds `ScaledUIStockMock usdg` (`:58`) and the only decimal bound in the file is `1e18` (`:321`) |
 | 5 | The swap mock reproduces the contract's own formula, so `maxSlippageBps` is unpinned | ❌ **not started** | `MockSwapAdapter` (`EsseyMultiply.t.sol:20-26`) is constructed from the same `MockFeed` the contract prices against (`EsseyMultiply.sol:258-265` `_buyStock` derives `minOut` from that feed) |
-| 6 | Four of five `MarketHealthOracle` timelocked params have no behavioural fixture | ❌ **not started** | `Params` = `capFractionBps, hysteresisBps, maxRaisePerDayBps, v4DiscountBps, raiseDelay` (`src/MarketHealthOracle.sol:59-65`). `test/MarketHealthOracle.t.sol` pins the **mechanism** (`test_paramChangeIsAdminProposedTimelockedAndPermissionlesslyCommitted:614`, `..Cancelled:632`, `..BoundsAreValidatedAtPropose:645`) — no test changes a param and asserts the behaviour moves |
+| 6 | Four of five `MarketHealthOracle` timelocked params have no behavioural fixture | ❌ **not started** | `Params` = `capFractionBps, hysteresisBps, maxRaisePerDayBps, raiseDelay` (`src/MarketHealthOracle.sol:58-63`) — R3 INFO-3: `v4DiscountBps` was deleted and this row still cited it. `test/MarketHealthOracle.t.sol` pins the **mechanism** (`test_paramChangeIsAdminProposedTimelockedAndPermissionlesslyCommitted:614`, `..Cancelled:632`, `..BoundsAreValidatedAtPropose:645`) — no test changes a param and asserts the behaviour moves |
 | 7 | The `rampBase == 0` path never exercises its `min()` | ❌ **not started** | `src/MarketHealthOracle.sol:140-145` — `if (base == 0) { base = _clampedBase(token, c.pendingRaiseTo); … }`; no test in the file's 32 named tests targets it |
 
 **#5 is the one to watch, and it is not a fixture problem — it is the circular-mock class again.**
@@ -1577,7 +1577,41 @@ have and it is labelled.
 
 | Gate | Product | State 2026-09-03 | What moves it |
 |---|---|---|---|
-| **G-LEND** *(new — this gate did not exist before tonight)* | Lending: `EsseyPool`, `EsseyMarkets`, `CollateralReconciler`, `StaleFeedGuard`, `MarketHealthOracle`, `Note`/`NoteArt` | ❌ **ZERO. Treat as UNAUDITED** (17.1). Fixture hardening in flight, 3 of 7 blockers fixtured | Finish 7 blockers + 8 weak assertions → commit at a frozen SHA → **3 consecutive clean rounds, all lenses, on a real 4663 fork** → **report published to `docs/audits/`** → harness → founder deploy |
+| **G-LEND** | Lending: `EsseyPool`, `EsseyMarkets`, `CollateralReconciler`, `StaleFeedGuard`, `MarketHealthOracle`, `Note`/`NoteArt` | ❌ **ZERO — round 3 returned NOT CLEAN (1 CRIT, 1 HIGH, 3 MED, 2 LOW), counter reset** (`docs/audits/glend-round-3.md`). All 7 findings fixed in the working tree, **uncommitted and re-audit pending** — see Update 17.2 below | Round-4 re-audit from zero → **3 consecutive clean rounds, all lenses, on a real 4663 fork** → **report published to `docs/audits/`** → harness → founder deploy |
+
+### Update 17.2 — G-LEND round-3 findings fixed (2026-09-04, working tree, NOT committed)
+
+Round 3 (`docs/audits/glend-round-3.md`, frozen SHA `0cf6831`) returned **NOT CLEAN**. Every finding is
+now fixed and each one's proof-of-concept, run from the auditor's own fork harness, is RED.
+
+| Finding | Fix | Where |
+|---|---|---|
+| **CRIT-1** one unresolved >20% move permanently disarmed the breaker | the armed pair is released when the hold expires, and the same observation re-baselines and can re-arm; `_disarm` is the ONLY writer that clears it, so the two slots cannot come apart | `rh-chain/src/EsseyMarkets.sol` `_breaker` / `_disarm` |
+| **HIGH-1** the 2,000bps bound protects a position only at ORIGINATION | no bound can cover a seasoned loan (cushion → 0 at the threshold), so seizure now needs the move CORROBORATED: underwater/insolvent at an observation ≥ `PRICE_CONFIRM_DELAY` (1h) old as well as live | `EsseyMarkets.isUnderwaterCorroborated` / `isInsolventCorroborated`; gates in `EsseyPool.liquidate` and `_writeOffFloor` |
+| **MED-1** the breaker measured between OBSERVATIONS and nothing made them dense | `MAX_BASELINE_AGE = 1h`: across a longer gap the comparison is drift and does not arm; the liveness keeper now calls `syncMultiplier` for every market on its existing heartbeat | `EsseyMarkets.MAX_BASELINE_AGE`; `rh-chain/keeper/liveness-keeper.mjs` |
+| **MED-2** `GUARDIAN == LIVENESS_GUARDIAN` reached the forbidden union in one un-timelocked tx | the deploy refuses it, matching the existing `GUARDIAN != LIVENESS_KEEPER` rule | `rh-chain/script/DeployMarkets.s.sol` `_checkRoles` |
+| **MED-3** `pauseLiquidation` chained into a permanent freeze | a new pause may not start until the last one has been over for as long as it lasted, so liquidation is open ≥ half of any span | `EsseyMarkets.pauseLiquidation` / `pauseCooldownUntil` |
+| **LOW-1** `test_C7` was a false green | deleted, with the reason recorded in place; the property is proven by `G_EngineerProof::test_G1/G2` and `J_Escrow` ×6 | round-2 harness `C_Escrow.t.sol` |
+| **INFO-1/2/3** stale doc claims | corrected | `DeployMarkets.s.sol`, `MAINNET-CONFIG.md`, this file (row 6 of the Multiply table) |
+
+**OPEN DECISION FOR THE FOUNDER / don-economist — `PRICE_CONFIRM_DELAY` is a RISK PARAMETER, not a bug
+fix.** HIGH-1 has no bounded fix: any mechanism that stops a sub-bound corporate action from harvesting a
+seasoned position must also delay a liquidation triggered by a genuine move of the same size, because on
+chain at that instant the two are the same evidence. The delay is set to 1 hour, reusing
+`MULTIPLIER_GUARD_WINDOW`'s own derivation, and it applies ONLY to a position the latest uncorroborated
+move has just flipped — one already past the bar is seized with no delay, and a completed corporate
+action costs nothing. The trade is wrongful-seizure risk down, bad-debt risk up. **The engineer does not
+own this call.**
+
+**Residual, stated rather than closed:** the exposure is bounded, not removed — a single-leg move whose
+other leg lands more than `PRICE_CONFIRM_DELAY` later still harvests, which is the same residual the file
+already documents for the super-bound case and the reason `pauseLiquidation` exists for a known ex-date.
+Whether Robinhood expresses dividends through `uiMultiplier` at all remains **UNVERIFIED** and is not
+observable on chain.
+
+**Pre-existing and NOT introduced here:** `DonSolvencyStressTest::setUp` and `DonMainnetForkTest::setUp`
+both fail `ERC721InvalidReceiver(0xaE0b…1946)` — verified identical at HEAD `0cf6831` with the working
+tree stashed. Don game layer, unrelated to lending; needs its own ticket.
 | **G1** hook + LaunchSeeder | $ESSEY launch | ❌ **ZERO** — reset by `58523e1`'s new bytes. R1 HIGH (G1-1) closed | 3 clean rounds on the fee-on-fill bytes, real-fork harness |
 | **G2** HolderDistributor + BasketRegistry | Holder Hub | ❌ **ZERO — FIRED AND FAILED.** 3 HIGH / 4 MED / 5 LOW (17.5) | Fix H-1/H-2/H-3 + M-1…M-4 → 3 fresh rounds |
 | **G3** StockLpVault | Earn | ❌ **ZERO** — reset by `58523e1`'s new bytes. R1 HIGH (G3-1) + first-depositor MED closed | 3 clean rounds on the new bytes |

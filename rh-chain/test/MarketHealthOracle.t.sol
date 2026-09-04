@@ -124,12 +124,12 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         pool.repay(idRepay, 700e6);
         vm.stopPrank();
 
-        _walkPrice(30e8); // $300 collateral vs $700 debt
+        _walkPriceAndSettle(30e8); // $300 collateral vs $700 debt
         assertTrue(mk.canLiquidate(address(tok)), "liquidation never consults depth");
         vm.prank(LIQUIDATOR);
         pool.liquidate(idLiq);
 
-        _walkPrice(5e8); // $50 collateral vs $700 debt: beyond recovery
+        _walkPriceAndSettle(5e8); // $50 collateral vs $700 debt: beyond recovery
         vm.prank(makeAddr("resolver"));
         pool.writeOff(idWoff, 60e6);
         assertEq(pool.debtOf(idWoff), 0, "written off at cap 0");
@@ -149,7 +149,7 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         pool.addCollateral(id, add);
         vm.stopPrank();
 
-        _walkPrice(5e8);
+        _walkPriceAndSettle(5e8);
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
         assertEq(pool.debtOf(id), 0);
@@ -507,11 +507,11 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         pool.repay(idRepay, 700e6);
         vm.stopPrank();
 
-        _walkPrice(30e8);
+        _walkPriceAndSettle(30e8);
         vm.prank(LIQUIDATOR);
         pool.liquidate(idLiq);
 
-        _walkPrice(5e8);
+        _walkPriceAndSettle(5e8);
         vm.prank(R);
         pool.writeOff(idWoff, 60e6);
         assertEq(pool.marketBorrows(address(tok)), 0, "full lifecycle closed out at cap 0");

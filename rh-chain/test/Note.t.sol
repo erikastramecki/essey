@@ -71,7 +71,7 @@ contract NoteTest is EsseyPoolTest {
         vm.prank(ALICE);
         n.transferFrom(ALICE, BOB, id);
 
-        _walkPrice(125e8); // $2000 -> $1250 collateral: underwater at 55% threshold
+        _walkPriceAndSettle(125e8); // $2000 -> $1250 collateral: underwater at 55% threshold
         _beat();
 
         uint256 bobBefore = tok.balanceOf(BOB);

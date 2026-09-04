@@ -177,6 +177,14 @@ contract DeployMarkets is Script {
             testnet || r.guardian != r.livenessKeeper,
             "GUARDIAN must not be the liveness keeper - refusing to deploy"
         );
+        // G-LEND R3 MED-2. The rule above is worth nothing on its own: LivenessOracle.setKeeper is
+        // guardian-only, immediate and un-timelocked, so GUARDIAN == LIVENESS_GUARDIAN reaches the
+        // same union in ONE transaction with no notice — and EsseyMarkets.guardian is immutable, so
+        // the posture cannot be rotated out of afterwards.
+        require(
+            testnet || r.guardian != r.livenessGuardian,
+            "GUARDIAN must not be the liveness guardian - refusing to deploy"
+        );
         return r;
     }
 
@@ -255,8 +263,9 @@ contract DeployMarkets is Script {
         // gapThreshold 900s is BOTH the outage bound and the liveness bound (G-LEND HIGH-1: two
         // bounds meant a 25-hour window in which a halted chain was still liquidatable-into). It
         // implies a 5-minute keeper cadence — gapThreshold / 3 — which is what keeper/liveness-keeper.mjs
-        // already runs. resumeGrace 1h is Chainlink's recommended sequencer grace and exactly the
-        // 4x gapThreshold ceiling the constructor enforces.
+        // already runs. resumeGrace 1h is Chainlink's recommended sequencer grace, and sits under
+        // LivenessOracle's MAX_RESUME_GRACE of 6h (LivenessOracle.sol:68). R3 INFO-1: the `4x
+        // gapThreshold` ratio this used to cite was replaced by absolute ceilings and no longer exists.
         LivenessOracle liveness = new LivenessOracle(roles.livenessKeeper, roles.livenessGuardian, 900, 1 hours);
         // AD-2: markets sit at borrowCap 0 until the depth keeper posts and the raise matures.
         MarketHealthOracle health = new MarketHealthOracle(roles.depthKeeper, roles.guardian, msg.sender);

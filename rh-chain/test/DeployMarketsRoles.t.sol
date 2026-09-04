@@ -122,6 +122,15 @@ contract DeployMarketsRolesTest is Test {
         h.check(false, _withRole(0, address(0xA1)));
     }
 
+    /// R3 MED-2. The rule above is worth nothing without this one. `LivenessOracle.setKeeper` is
+    /// guardian-only, immediate and un-timelocked, so GUARDIAN == LIVENESS_GUARDIAN reaches the same
+    /// forbidden union in ONE transaction and with no notice — and `EsseyMarkets.guardian` is
+    /// immutable, so a deployment that admits it can never be rotated out of that posture.
+    function test_theGuardianMayNotBeTheLivenessGuardianEither() public {
+        vm.expectRevert(bytes("GUARDIAN must not be the liveness guardian - refusing to deploy"));
+        h.check(false, _withRole(2, address(0xA0))); // livenessGuardian == guardian
+    }
+
     /// And the pair that stays allowed, deliberately: both are borrow-side only, and the guardian
     /// already rotates the depth keeper — separating them buys nothing.
     function test_theGuardianMayStillBeTheDepthKeeper() public view {

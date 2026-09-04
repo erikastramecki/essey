@@ -165,6 +165,24 @@ contract EsseyPoolTest is Test {
         px.set(target, block.timestamp); // re-stamp even when already there: some callers want freshness
     }
 
+    /// G-LEND R3 HIGH-1. A seizure needs the move CORROBORATED: EsseyMarkets promotes an EARLIER
+    /// observation to `confirmedPrice`, and only once PRICE_CONFIRM_DELAY has passed, so a price
+    /// that has just moved cannot justify a liquidation until it has stood for that long. That is
+    /// the separation the desync bound could not make — a real move stands, a corporate action's
+    /// feed leg is joined by its other leg — and it is why a 16.67% split leg can no longer harvest
+    /// a seasoned position. Tests that move the price and then seize say so HERE, in the open,
+    /// rather than depending on the same-block behaviour that made the harvest free.
+    function _corroborate() internal {
+        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 1);
+        mk.syncMultiplier(address(tok));
+    }
+
+    /// Walk the market to a new level and let that level stand long enough to justify a seizure.
+    function _walkPriceAndSettle(int256 target) internal {
+        _walkPrice(target);
+        _corroborate();
+    }
+
     /// 10 shares at $200 = $2000 collateral; 35% LTV = $700 max.
     function _borrow(uint256 debt) internal returns (uint256 id) {
         vm.prank(ALICE);
@@ -295,7 +313,7 @@ contract EsseyPoolTest is Test {
     function test_liquidationRefundsSurplusToBorrower() public {
         uint256 id = _borrow(700e6);
         // drop to $125: collateral $1250, threshold 55% = $687.50 < $700 debt
-        _walkPrice(125e8);
+        _walkPriceAndSettle(125e8);
         assertEq(tok.balanceOf(ALICE), 990e18); // 10 posted
 
         vm.prank(LIQUIDATOR);
@@ -313,7 +331,7 @@ contract EsseyPoolTest is Test {
     /// invisible. unitValue = 120_000_007; seize = 756e6 x 1e18 / 120_000_007 = ...437.5
     function test_liquidationSeizureRoundsDownNotUp() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(12_000_000_700); // $120.000007/share: $1200.000007 backing $700
+        _walkPriceAndSettle(12_000_000_700); // $120.000007/share: $1200.000007 backing $700
         assertTrue(mk.isUnderwater(address(tok), 10e18, 700e6), "fixture must actually be liquidatable");
 
         vm.prank(LIQUIDATOR);
@@ -926,7 +944,7 @@ contract EsseyPoolTest is Test {
 
     function test_addCollateralAfterLiquidationReverts() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(125e8); // $1250 backing, 55% threshold = $687.50 < $700
+        _walkPriceAndSettle(125e8); // $1250 backing, 55% threshold = $687.50 < $700
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
         vm.prank(ALICE);
@@ -1225,11 +1243,11 @@ contract EsseyPoolTest is Test {
     function test_writeOffMerelyUnderwaterReverts() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(125e8); // underwater (threshold $687.50) yet worth $1250 > $700
+        _walkPriceAndSettle(125e8); // underwater (threshold $687.50) yet worth $1250 > $700
         vm.prank(R);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.NotInsolvent.selector, 1250e6, 700e6));
         pool.writeOff(id, 0);
-        _walkPrice(70e8); // worth EXACTLY the debt: still not beyond recovery
+        _walkPriceAndSettle(70e8); // worth EXACTLY the debt: still not beyond recovery
         vm.prank(R);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.NotInsolvent.selector, 700e6, 700e6));
         pool.writeOff(id, 0);
@@ -1250,7 +1268,7 @@ contract EsseyPoolTest is Test {
     function test_writeOffRecoveredAboveOwedReverts() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8); // $600 backing $700: beyond recovery
+        _walkPriceAndSettle(60e8); // $600 backing $700: beyond recovery
         vm.prank(R);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.RecoveredExceedsOwed.selector, 700e6 + 1, 700e6));
         pool.writeOff(id, 700e6 + 1);
@@ -1262,7 +1280,7 @@ contract EsseyPoolTest is Test {
     function test_writeOffSharePriceDeltaIsExact() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         uint256 assetsBefore = pool.totalAssets();
         uint256 sharesBefore = pool.balanceOf(LENDER);
 
@@ -1293,12 +1311,14 @@ contract EsseyPoolTest is Test {
 
         vm.warp(block.timestamp + 365 days);
         _beat(); _advanceLive(GRACE);
+        _walkPriceAndSettle(1e8); // $10 backing ~$770: beyond recovery
+        // Read the book AFTER the corroboration hour: this pool actually charges interest (10% APR,
+        // unlike the zero-rate main fixture), so a figure taken before it is stale by an hour and the
+        // residual would no longer be the 30e6 the assertions below are about.
         p2.accrue();
         uint256 owed = p2.debtOf(id);
         uint256 reserves = p2.totalReserves();
         assertGt(reserves, 30e6, "fixture: a year of reserves to absorb with");
-
-        _walkPrice(1e8); // $10 backing ~$770: beyond recovery
         uint256 assetsBefore = p2.totalAssets();
         vm.startPrank(R);
         usdg.approve(address(p2), type(uint256).max);
@@ -1321,7 +1341,7 @@ contract EsseyPoolTest is Test {
 
         vm.warp(block.timestamp + 365 days);
         _beat(); _advanceLive(GRACE);
-        _walkPrice(1e8);
+        _walkPriceAndSettle(1e8);
         vm.startPrank(R);
         usdg.approve(address(p2), type(uint256).max);
         p2.writeOff(id, 10e6); // 10 shares @ $1 = the $10 floor; no accrue() since the warp except writeOff's own
@@ -1333,7 +1353,7 @@ contract EsseyPoolTest is Test {
     function test_writeOffTwiceReverts() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         vm.prank(R);
         pool.writeOff(id, 600e6);
         vm.prank(R);
@@ -1359,7 +1379,7 @@ contract EsseyPoolTest is Test {
     function test_writeOffDepositSandwichCannotProfit() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8);
         address ATT = makeAddr("sandwich");
         usdg.mint(ATT, 100_000e6);
         vm.startPrank(ATT);
@@ -1380,7 +1400,7 @@ contract EsseyPoolTest is Test {
     function test_writeOffRecoveredBelowCollateralFloorReverts() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8); // 10 shares @ $60 = $600 floor against $700 owed
+        _walkPriceAndSettle(60e8); // 10 shares @ $60 = $600 floor against $700 owed
         vm.prank(R);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.RecoveredBelowFloor.selector, 600e6 - 1, 600e6));
         pool.writeOff(id, 600e6 - 1);
@@ -1393,7 +1413,7 @@ contract EsseyPoolTest is Test {
 
     function test_liquidateSucceedsOnADisabledMarket() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(125e8); // underwater: $1250 backing, threshold $687.50 < $700
+        _walkPriceAndSettle(125e8); // underwater: $1250 backing, threshold $687.50 < $700
         vm.prank(ADMIN);
         mk.disableMarket(address(tok));
         vm.prank(LIQUIDATOR);
@@ -1404,7 +1424,7 @@ contract EsseyPoolTest is Test {
     function test_writeOffSucceedsOnADisabledMarket() public {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8); // $600 backing $700: beyond recovery
+        _walkPriceAndSettle(60e8); // $600 backing $700: beyond recovery
         vm.prank(ADMIN);
         mk.disableMarket(address(tok));
         vm.prank(R);
@@ -1452,7 +1472,7 @@ contract EsseyPoolTest is Test {
         vm.prank(ALICE);
         deed.transferFrom(ALICE, BUYER, id);
 
-        _walkPrice(125e8); // underwater: $1250 backing, threshold $687.50 < $700
+        _walkPriceAndSettle(125e8); // underwater: $1250 backing, threshold $687.50 < $700
         uint256 aliceTokBefore = tok.balanceOf(ALICE);
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);

@@ -202,7 +202,7 @@ contract SuccessionTest is Test {
         pool1.repay(id1, 700e6);
         vm.stopPrank();
 
-        _walkPrice(80e8); // $800 backing $600 at a 55% threshold: id3 is underwater
+        _walkPriceAndSettle(80e8); // $800 backing $600 at a 55% threshold: id3 is underwater
         vm.prank(LIQUIDATOR);
         pool1.liquidate(id3);
         assertEq(pool1.debtOf(id3), 0, "liquidate survives succession");
@@ -339,6 +339,15 @@ contract SuccessionTest is Test {
     /// Walk the feed to `target` in observed steps inside EsseyMarkets.MAX_PRICE_DEVIATION_BPS. A
     /// market MOVES; a corporate action GAPS, and since G-LEND R2 HIGH-1 a single step past the bound
     /// arms the desync breaker and holds both gates. See EsseyPool.t.sol:_walkPrice.
+    /// G-LEND R3 HIGH-1: a seizure needs the move CORROBORATED — EsseyMarkets promotes an EARLIER
+    /// observation to `confirmedPrice`, and only once PRICE_CONFIRM_DELAY has passed, so a level
+    /// that has just moved cannot justify a liquidation until it has stood for that long.
+    function _walkPriceAndSettle(int256 target) internal {
+        _walkPrice(target);
+        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 1);
+        mk.syncMultiplier(address(tok));
+    }
+
     function _walkPrice(int256 target) internal {
         int256 cur = px.answer();
         while (cur != target) {

@@ -61,12 +61,25 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   `maxHeartbeatAge` no longer exists: one bound serves the view and the beat (G-LEND HIGH-1). The
   grace GRANTED is the observed gap, capped at `resumeGrace` (G-LEND R2 MED-1), so a 901s gap costs
   ~1,802s of outage, not 4,501s. Keeper hot key ≠ guardian cold key, and `_checkRoles` additionally
-  requires GUARDIAN ≠ LIVENESS_KEEPER and RESERVE_TREASURY ≠ every operational key.
+  requires GUARDIAN ≠ LIVENESS_KEEPER, GUARDIAN ≠ LIVENESS_GUARDIAN (R3 MED-2: `setKeeper` is
+  guardian-only and un-timelocked, so that pair reaches the same union in one transaction) and
+  RESERVE_TREASURY ≠ every operational key.
 - **Corporate-action breaker:** `MAX_PRICE_DEVIATION_BPS = 2000`, `PRICE_DESYNC_HOLD = 6h`,
-  `MULTIPLIER_GUARD_WINDOW = 1h`, `MAX_LIQUIDATION_PAUSE = 24h` (`EsseyMarkets`). A one-step move of
-  `price x uiMultiplier` past the bound holds both gates until the two legs agree again, or for the
-  hold. Operational note: after such a move a standalone permissionless `markets.syncMultiplier(token)`
-  is what starts the hold — **no keeper calls it today**.
+  `MULTIPLIER_GUARD_WINDOW = 1h`, `MAX_BASELINE_AGE = 1h`, `MAX_LIQUIDATION_PAUSE = 24h`
+  (`EsseyMarkets`). A move of `price x uiMultiplier` past the bound, measured **between two
+  observations no more than `MAX_BASELINE_AGE` apart**, holds both gates until the two legs agree
+  again or until the hold expires — and when it expires without agreement the reference is RELEASED,
+  so the market can arm again on the next event (R3 CRIT-1). Across a longer gap the comparison is
+  drift rather than a discontinuity and does not arm (R3 MED-1); `keeper/liveness-keeper.mjs` calls
+  `syncMultiplier` for every market on its heartbeat, which is what keeps observations that dense.
+- **Seizure corroboration:** `PRICE_CONFIRM_DELAY = 1h` (`EsseyMarkets`). The bound above is a
+  DISLOCATION detector and protects a position only at origination; a seasoned loan's cushion is
+  smaller than any bound (R3 HIGH-1). So `liquidate` and `writeOff` additionally require the position
+  to be underwater / insolvent at an observation at least `PRICE_CONFIRM_DELAY` old. A position
+  already past the bar is seized with no delay, and a COMPLETED corporate action costs nothing —
+  only a position that the latest, uncorroborated move has just flipped waits.
+- **Liquidation pause:** capped at `MAX_LIQUIDATION_PAUSE` per call AND followed by a cooldown as
+  long as the pause itself (R3 MED-3), so chained calls cannot become a permanent freeze.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.
 
 ## Deploy sequence (greenfield)

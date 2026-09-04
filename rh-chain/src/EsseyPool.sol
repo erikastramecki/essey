@@ -63,6 +63,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     error RecoveredBelowFloor(uint256 recovered, uint256 floor);
     error DebtOutstanding(uint256 id);
     error NothingToClaim(uint256 id);
+    error PriceNotCorroborated(address token);
 
     event Borrowed(uint256 indexed id, address indexed borrower, address indexed token, uint256 collateral, uint256 debt);
     event BorrowedMore(uint256 indexed id, address indexed borrower, uint256 drawn, uint256 newDebt);
@@ -718,6 +719,11 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         if (effective > heldForLiq) effective = heldForLiq;
         uint256 owed = debtOf(id);
         if (!markets.isUnderwater(p.token, effective, owed)) revert PositionHealthy();
+        // G-LEND R3 HIGH-1: the live read alone let a corporate action's feed leg — 16.67% for a 6:5
+        // split, well under the desync bound — flip a seasoned position and hand the liquidator
+        // 2,600bps of the debt. A seizure needs the move to have STOOD for PRICE_CONFIRM_DELAY, not
+        // merely to be large. A position already underwater before the move is unaffected.
+        if (!markets.isUnderwaterCorroborated(p.token, effective, owed)) revert PriceNotCorroborated(p.token);
 
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), owed);
         _releaseDebt(p, owed);
@@ -780,6 +786,20 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// skimReserves is permissionless and race-able. Accepted (A-L2): loss-recognition latency
     /// between insolvency and the resolver's call is inherent to manual recognition and bounded
     /// per-market by isolation.
+    /// The price side of recognising a loss, and what the resolver must pay at minimum: the swept
+    /// collateral is worth this much. Corroboration is required for the same reason liquidate
+    /// requires it (R3 HIGH-1) — without it the resolver is the cheaper way to take collateral at a
+    /// half-landed price, and the loss recognised is one the issuer's other leg would have erased.
+    function _writeOffFloor(address token, uint256 effective, uint256 owed) internal view returns (uint256) {
+        if (!markets.canLiquidate(token)) revert LiquidationNotAllowed(token);
+        (uint256 value,) = markets.collateralValue(token, effective);
+        // Live bar first, so a SOLVENT position is told it is solvent rather than being told its
+        // price is uncorroborated — both refuse, and only one of them is the reason.
+        if (value >= owed) revert NotInsolvent(value, owed);
+        if (!markets.isInsolventCorroborated(token, effective, owed)) revert PriceNotCorroborated(token);
+        return value;
+    }
+
     function writeOff(uint256 id, uint256 recovered) external nonReentrant {
         address resolver_ = markets.resolver();
         if (msg.sender != resolver_) revert NotResolver();
@@ -794,12 +814,7 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         if (effective > held) effective = held; // the liquidate/repay dust-cap
         uint256 owed = debtOf(id);
         uint256 floor;
-        if (effective != 0) {
-            if (!markets.canLiquidate(p.token)) revert LiquidationNotAllowed(p.token);
-            (uint256 value,) = markets.collateralValue(p.token, effective);
-            if (value >= owed) revert NotInsolvent(value, owed);
-            floor = value; // the swept `effective` is worth this much — the resolver pays at least it
-        }
+        if (effective != 0) floor = _writeOffFloor(p.token, effective, owed);
         if (recovered > owed) revert RecoveredExceedsOwed(recovered, owed);
         if (recovered < floor) revert RecoveredBelowFloor(recovered, floor);
 

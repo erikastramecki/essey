@@ -257,7 +257,7 @@ contract BorrowMoreRemoveCollateralTest is EsseyPoolTest {
         uint256 id = _borrow(350e6);
         vm.prank(ALICE);
         pool.removeCollateral(id, 5e18); // remaining 5e18
-        _walkPrice(120e8); // 5 @ $120 = $600; 55% = $330 < $350 owed => liquidatable
+        _walkPriceAndSettle(120e8); // 5 @ $120 = $600; 55% = $330 < $350 owed => liquidatable
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
         assertEq(pool.debtOf(id), 0, "closed via liquidation on the reduced collateral");

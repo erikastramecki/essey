@@ -527,16 +527,22 @@ contract EsseyMultiplyTest is Test {
         uint256[] memory ids = _open18();
         // $175 -> $110: rung 2 (50 NVDA / 4_375 debt) and rung 1 go underwater; rung 3 stays
         // healthy. A third party liquidates rung 2; the surplus lands with the USER (bearer Note).
-        _walkPrice(110e8);
+        _walkPriceAndSettle(110e8);
         usdg.mint(liquidator, 10_000e6);
+        pool.accrue();
+        uint256 owed = pool.debtOf(ids[1]);
         vm.startPrank(liquidator);
         usdg.approve(address(pool), type(uint256).max);
         pool.liquidate(ids[1]);
         vm.stopPrank();
-        // `> before` passes for any surplus at all, so a hardcoded bonus survived: 4_375e6 debt +
-        // the market's 500bp = 4_593.75e6 of value, at $110 = 41.7613... of the 50 NVDA posted.
-        assertEq(nvda.balanceOf(liquidator), 41_761_363_636_363_636_363, "debt + the 5% bonus, and no more");
-        assertEq(nvda.balanceOf(user), 8_238_636_363_636_363_637, "surplus refunded to the Note holder");
+        // `> before` passes for any surplus at all, so a hardcoded bonus survived. The debt is read
+        // rather than hardcoded because the corroboration delay this pool now waits out (R3 HIGH-1)
+        // charges an hour of interest on it — but the BONUS and the price conversion stay the test's
+        // own arithmetic, so a mis-scaled or mis-sized bonus still fails here. NVDA is 18dp, the feed
+        // 8dp, USDG 6dp, so one whole unit is worth price/1e2 USDG.
+        uint256 seized = ((owed * 10_500) / 10_000) * 1e18 / (110e8 / 1e2);
+        assertEq(nvda.balanceOf(liquidator), seized, "debt + the 5% bonus, and no more");
+        assertEq(nvda.balanceOf(user), 50e18 - seized, "surplus refunded to the Note holder");
 
         // Passing the dead rung fails loudly...
         usdg.mint(user, 10_000e6);
@@ -549,10 +555,15 @@ contract EsseyMultiplyTest is Test {
         // ...and the surviving rungs close normally, at the crashed price: 130 NVDA sold at $110.
         uint256[] memory alive = new uint256[](2);
         (alive[0], alive[1]) = (ids[2], ids[0]);
+        pool.accrue();
+        // The one figure the corroboration delay moves (R3 HIGH-1): an hour of interest on the two
+        // surviving rungs, over their 9_625e6 of principal. Measured, so the literals below stay the
+        // interest-free arithmetic they were written to pin.
+        uint256 accrued = pool.totalBorrows() - 9_625e6;
         vm.prank(user);
         (uint256 assetOut,) = multiply.close(pool, alive, 10_000e6, false, 0, block.timestamp);
         assertEq(assetOut, 11_550e6, "the surviving rungs' proceeds, at the crashed price");
-        assertEq(usdg.balanceOf(user), 10_000e6 - 6_875e6 + 11_550e6, "seed consumed by the cascade");
+        assertEq(usdg.balanceOf(user), 10_000e6 - 6_875e6 + 11_550e6 - accrued, "seed consumed by the cascade");
         assertEq(pool.marketBorrows(address(nvda)), 0);
         _assertNoResidue();
     }
@@ -719,6 +730,15 @@ contract EsseyMultiplyTest is Test {
     /// Walk the feed to `target` in observed steps inside EsseyMarkets.MAX_PRICE_DEVIATION_BPS. A
     /// market MOVES; a corporate action GAPS, and since G-LEND R2 HIGH-1 a single step past the bound
     /// arms the desync breaker and holds both gates. See EsseyPool.t.sol:_walkPrice.
+    /// G-LEND R3 HIGH-1: a seizure needs the move CORROBORATED — EsseyMarkets promotes an EARLIER
+    /// observation to `confirmedPrice`, and only once PRICE_CONFIRM_DELAY has passed, so a level
+    /// that has just moved cannot justify a liquidation until it has stood for that long.
+    function _walkPriceAndSettle(int256 target) internal {
+        _walkPrice(target);
+        _advanceLive(markets.PRICE_CONFIRM_DELAY() + 1);
+        markets.syncMultiplier(address(nvda));
+    }
+
     function _walkPrice(int256 target) internal {
         (, int256 cur,,,) = nvdaFeed.latestRoundData();
         while (cur != target) {

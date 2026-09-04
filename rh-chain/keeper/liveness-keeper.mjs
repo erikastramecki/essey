@@ -6,7 +6,16 @@
 // cannot send its pause transaction, because the chain it would send it to is down. It could only
 // act after restart, racing the same backlog as the liquidation bots, and it would lose.
 //
-//   RH_RPC=... KEEPER_PRIVKEY=0x... LIVENESS_ORACLE=0x... node keeper/liveness-keeper.mjs
+// It also OBSERVES each market on the same beat. EsseyMarkets' desync breaker compares consecutive
+// observations, not consecutive feed rounds, and the five pool paths that observe all revert when
+// the guard fires and take their write with them — so without a standalone caller the only durable
+// observations are whatever traffic happens to produce, and across a quiet week the breaker measures
+// drift instead of a discontinuity (G-LEND R3 MED-1). syncMultiplier is permissionless and
+// non-reverting; the contract's MAX_BASELINE_AGE is what makes an outage here safe rather than
+// silently wrong, so this is the liveness half of that pair, not the whole of it.
+//
+//   RH_RPC=... KEEPER_PRIVKEY=0x... LIVENESS_ORACLE=0x... \
+//   ESSEY_MARKETS=0x... MARKET_TOKENS=0xAAPL,0xNVDA node keeper/liveness-keeper.mjs
 //
 // Run it under a supervisor (systemd / pm2 / a container restart policy). Alert on the WARN lines:
 // a keeper that dies silently degrades to "liquidations off", which is safe but is an outage of
@@ -41,6 +50,15 @@ const abi = [
   { type: "function", name: "secondsUntilLiquidationsAllowed", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
 ];
 
+const MARKETS = process.env.ESSEY_MARKETS;
+const TOKENS = (process.env.MARKET_TOKENS || "").split(",").map((t) => t.trim()).filter(Boolean);
+if (MARKETS && TOKENS.length === 0) console.warn("ESSEY_MARKETS set with no MARKET_TOKENS — nothing will be observed");
+if (!MARKETS) console.warn("ESSEY_MARKETS unset — the desync breaker will only see traffic-driven observations");
+
+const marketsAbi = [
+  { type: "function", name: "syncMultiplier", inputs: [{ type: "address" }], outputs: [], stateMutability: "nonpayable" },
+];
+
 const account = privateKeyToAccount(PK);
 const pub = createPublicClient({ chain: rhChain, transport: http(RPC) });
 const wallet = createWalletClient({ account, chain: rhChain, transport: http(RPC) });
@@ -71,6 +89,31 @@ async function beat() {
   }
 }
 
+// Sequential, and never inside beat()'s try: an observation that fails must not suppress the
+// heartbeat, because the heartbeat is the one whose absence disables liquidations.
+async function observe() {
+  if (!MARKETS) return;
+  for (const token of TOKENS) {
+    try {
+      const hash = await wallet.writeContract({
+        address: MARKETS,
+        abi: marketsAbi,
+        functionName: "syncMultiplier",
+        args: [token],
+      });
+      await pub.waitForTransactionReceipt({ hash, timeout: 60_000 });
+    } catch (e) {
+      console.error(`${ts()}  WARN observe ${token} failed: ${e.shortMessage || e.message}`);
+    }
+  }
+}
+
+async function tick() {
+  await beat();
+  await observe();
+}
+
 console.log(`${ts()}  liveness keeper up  oracle=${ORACLE}  signer=${account.address}  every ${INTERVAL / 1000}s`);
-await beat();
-setInterval(beat, INTERVAL);
+console.log(`${ts()}  observing ${TOKENS.length} market(s) on the same beat  markets=${MARKETS || "(none)"}`);
+await tick();
+setInterval(tick, INTERVAL);

@@ -146,13 +146,13 @@ contract AdapterSeamTest is Test {
         vm.stopPrank();
         assertEq(wtok.balanceOf(ALICE), 1_000e18 - 20e18, "repay returned the first position's collateral");
 
-        _walkPrice(80e8); // $800 collateral vs $600 debt: past the 55% threshold
+        _walkPriceAndSettle(80e8); // $800 collateral vs $600 debt: past the 55% threshold
         assertTrue(mk.canLiquidate(address(wtok)));
         vm.prank(LIQUIDATOR);
         pool.liquidate(idLiq);
         assertEq(pool.debtOf(idLiq), 0, "liquidated through the adapter path");
 
-        _walkPrice(1e8); // $10 collateral vs $600 debt: beyond recovery
+        _walkPriceAndSettle(1e8); // $10 collateral vs $600 debt: beyond recovery
         (uint256 floor,) = mk.collateralValue(address(wtok), 10e18);
         vm.prank(RESOLVER);
         pool.writeOff(idWoff, floor);
@@ -256,6 +256,15 @@ contract AdapterSeamTest is Test {
     /// Walk the feed to `target` in observed steps inside EsseyMarkets.MAX_PRICE_DEVIATION_BPS. A
     /// market MOVES; a corporate action GAPS, and since G-LEND R2 HIGH-1 a single step past the bound
     /// arms the desync breaker and holds both gates. See EsseyPool.t.sol:_walkPrice.
+    /// G-LEND R3 HIGH-1: a seizure needs the move CORROBORATED — EsseyMarkets promotes an EARLIER
+    /// observation to `confirmedPrice`, and only once PRICE_CONFIRM_DELAY has passed, so a level
+    /// that has just moved cannot justify a liquidation until it has stood for that long.
+    function _walkPriceAndSettle(int256 target) internal {
+        _walkPrice(target);
+        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 1);
+        mk.syncMultiplier(address(wtok));
+    }
+
     function _walkPrice(int256 target) internal {
         int256 cur = px.answer();
         while (cur != target) {
