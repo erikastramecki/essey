@@ -393,10 +393,11 @@ contract EsseyMarkets is StaleFeedGuard {
     /// why PRICE_DESYNC_HOLD is already 6h; equal, the sub-bound and above-bound cases get the same
     /// protection. 74 days holding one stress episode cannot BOUND a 21.25% tail, only miss it.
     ///
-    /// 72h IS THE HORIZON THE DESIGN CARRIES (R5 MED-1): the feed goes dark ~25h after Friday's close
-    /// (measured max gap 79.7h AAPL / 76.1h NVDA) and a position healthy at that print waits six
-    /// hours of MONDAY observations. Warming the line removes only the 6h that used to be added ON
-    /// TOP of that; the dark window is the feed's.
+    /// THE HORIZON IS EACH FEED'S OWN WORST GAP PLUS THE DELAY, NOT THE TYPICAL WEEKEND (R6 INFO-2).
+    /// Friday-close-to-Monday is ~71h and reads 1.68x, which is not the number to size against: the
+    /// measured max gaps are 79.74h AAPL and 76.09h NVDA, so the horizons are 88h and 84h, where the
+    /// worst move is 12.61% (1.69x) and 12.90% (1.65x). Warming the line removes only the 6h that
+    /// used to be added ON TOP of the dark window; the dark window is the feed's.
     uint256 public constant PRICE_CONFIRM_DELAY = 6 hours;
 
     /// R4 HIGH-1: one promoted snapshot cannot deliver a delay however it is rate-limited, because
@@ -408,7 +409,10 @@ contract EsseyMarkets is StaleFeedGuard {
     uint256 public constant CONFIRM_STEP = PRICE_CONFIRM_DELAY / (CONFIRM_SLOTS - 1);
     /// And a CEILING, which is what makes an observation outage fail CLOSED (R4 HIGH-2): without it
     /// a market the keeper stopped observing vouches forever for a price nobody has checked. One
-    /// CONFIRM_STEP above the steady-state maximum, so a live keeper never trips it.
+    /// CONFIRM_STEP above the steady-state maximum, so a live keeper never trips it. Enforced in TWO
+    /// places — on the read below AND on the warm push in `_holdConfirmable` — because a warm push
+    /// that ignores it re-stamps the head and demotes the ceiling to a bound on the age of the last
+    /// CALL, which is R6 MED-1.
     uint256 public constant MAX_CONFIRM_AGE = PRICE_CONFIRM_DELAY + 2 * CONFIRM_STEP;
 
     /// The last uiMultiplier this registry observed for a token, and when it last MOVED. `syncMultiplier`
@@ -524,11 +528,26 @@ contract EsseyMarkets is StaleFeedGuard {
     /// return — 21,900s to the first liquidation of a position 60% underwater, `writeOff` included.
     /// So the last MATCHED pair keeps standing, both halves together (re-reading either alone is the
     /// R4 MED-1 bug). It opens no gate: liquidate and writeOff also require underwater at the LIVE
-    /// price, which an unreadable feed refuses. R4 HIGH-2 survives — this ages the line only when
-    /// someone CALLS. The breaker's baseline is NOT warmed; it compares two real observations.
+    /// price, which an unreadable feed refuses. The breaker's baseline is NOT warmed; it compares
+    /// two real observations.
+    ///
+    /// A WARM PUSH REFRESHES THE SCHEDULE, NEVER A PRICE'S CLAIM TO HAVE BEEN CHECKED (R6 MED-1).
+    /// Re-stamping the head made MAX_CONFIRM_AGE bound the age of the last CALL, so R4 HIGH-2's
+    /// fail-closed held only for a PERMANENTLY dead keeper: one observation gap outlasting
+    /// `maxStaleness` and spanning the feed's final round leaves an arbitrarily old print as the
+    /// head, and an intermittent keeper warmed it back into "corroborated" — 300s from Monday's gap
+    /// to a seizure, against 27,000s for the same position under a keeper that never stopped
+    /// observing. A head already past the ceiling is therefore not warmed, and the refusal is
+    /// MONOTONE: nothing advances `takenAt` from here, so only a readable price can revive the line.
+    ///
+    /// ONE reason to refuse, the same one `corroboratedValue` uses, and for the reason stated there:
+    /// a never-observed head reads as older than any ceiling, so the explicit `takenAt == 0` guard
+    /// that used to stand here became a SECOND reason and made the first unfalsifiable — M30 stopped
+    /// being killable the moment the ceiling landed above it. Warming a never-observed market would
+    /// seed a zero pair; the ceiling is what refuses that now, and M30 attacks it there.
     function _holdConfirmable(address token) internal {
         Observation memory head = _confirmRing[token][_confirmHead[token]];
-        if (head.takenAt == 0) return; // never observed: seeding a zero pair would only add noise
+        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;
         _confirmable(token, head.price, head.mult);
     }
 

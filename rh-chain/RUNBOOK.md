@@ -84,6 +84,18 @@ and exited 0. Every address named here is now read on chain whether or not the s
 any disagreement between the two lists exits non-zero. **Add a market to this variable in the same
 change that commits it.**
 
+**What a healthy weekend prints, so nobody wires this to a pager and then turns it off.** The 24/5
+feeds are unreadable for roughly 40h of every 168h — from Friday's close plus `maxStaleness` (25h)
+until Monday's open — and the check reports that as `FEED DARK` and still exits **0**. It is not an
+alarm: the keeper is demonstrably calling (`confirmedObservedAt` stays inside `MAX_CONFIRM_AGE`,
+because the delay line is warmed through the outage), and every gate behind an unreadable price is
+already closed — no borrow, no seizure, no write-off. G-LEND R6 LOW-1: this used to be a fatal
+`BREAKER BLIND` for the whole dark window, which is red a quarter of the time, and an alarm that is
+red a quarter of the time gets muted. **`BREAKER BLIND` is now raised only when the registry's own
+`priceOf` ANSWERS and the baseline is still stale** — the keeper not reading a feed that is
+answering. `UNOBSERVED` is unchanged and stays fatal whether or not the feed is dark: that is the
+line that says the keeper has stopped.
+
 After 2 days:
 
 ```bash

@@ -16,6 +16,13 @@ cut to 5,000 — below what the deployed AAPL token needs, which would stop ever
 liquidation on every market. M27-M31 for the delay line's new clock, which now ages on wall time
 rather than on feed availability: never ageing, splitting the pair, outrunning the rate limit,
 seeding a zero pair, and never advancing are each mutated.
+
+Round 6 added M32-M37, and two of them were SURVIVORS found by the auditor rather than by this file.
+M32 replaces the warm push's source with the last raw read — the natural simplification, which is not
+equivalent because `_syncPrice` writes `seenPrice` unconditionally while `_confirmable` is
+rate-limited. M33 widens MULTIPLIER_READ_GAS instead of narrowing it, which is the direction the
+constant exists for; R5 mutated it downward only, and half a pin is not a pin. M34-M37 are the warm
+ceiling that closes R6 MED-1, removed, inverted, at its boundary, and against a different constant.
 """
 import subprocess, sys, pathlib
 
@@ -23,7 +30,7 @@ import subprocess, sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKETS = ROOT / "src/EsseyMarkets.sol"
 LIVENESS = ROOT / "src/LivenessOracle.sol"
-SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
+SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|GLendR6|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
 
 MUTANTS = [
     # --- the magnitude of the safety constant, in BOTH directions ---
@@ -122,12 +129,34 @@ MUTANTS = [
     ("M29 warm past the rate limit, collapsing the line to one step", MARKETS,
      "        _confirmable(token, head.price, head.mult);",
      "        _confirmRing[token][_confirmHead[token] = (_confirmHead[token] + 1) % CONFIRM_SLOTS] =\n            Observation(head.price, head.mult, block.timestamp);"),
+    # R6: this used to remove a standalone `takenAt == 0` guard, and SURVIVED once the warm ceiling
+    # landed above it — the ceiling already refuses a zero head, so the guard was dead and the mutant
+    # equivalent. The guard is gone; the property it named is attacked where it actually lives.
     ("M30 warm a never-observed market too, seeding a zero pair", MARKETS,
-     "        if (head.takenAt == 0) return;",
-     "        // seed guard removed"),
+     "        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;",
+     "        if (head.takenAt != 0 && block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;"),
     ("M31 warm from the READ slot instead of the head, so the line never advances", MARKETS,
      "        Observation memory head = _confirmRing[token][_confirmHead[token]];",
      "        Observation memory head = _confirmRing[token][(_confirmHead[token] + 1) % CONFIRM_SLOTS];"),
+    # --- R6 MED-1: the warm push may refresh the SCHEDULE, never a price's claim to be checked ---
+    ("M32 warm from the last RAW read instead of the ring head (R6 LOW-2)", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmable(token, seenPrice[token], seenMultiplier[token]);"),
+    ("M33 MULTIPLIER_READ_GAS 200,000 -> 30,000,000 (effectively uncapped)", MARKETS,
+     "    uint256 public constant MULTIPLIER_READ_GAS = 200_000;",
+     "    uint256 public constant MULTIPLIER_READ_GAS = 30_000_000;"),
+    ("M34 drop the warm ceiling, so a gap resurrects an ancient print (the R6 MED-1 bug)", MARKETS,
+     "        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;",
+     "        // warm ceiling removed"),
+    ("M35 warm ceiling inverted", MARKETS,
+     "        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;",
+     "        if (block.timestamp - head.takenAt < MAX_CONFIRM_AGE) return;"),
+    ("M36 warm ceiling > -> >= (boundary: it must be the read's ceiling exactly)", MARKETS,
+     "        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;",
+     "        if (block.timestamp - head.takenAt >= MAX_CONFIRM_AGE) return;"),
+    ("M37 warm ceiling measured against a DIFFERENT constant", MARKETS,
+     "        if (block.timestamp - head.takenAt > MAX_CONFIRM_AGE) return;",
+     "        if (block.timestamp - head.takenAt > PRICE_CONFIRM_DELAY) return;"),
 ]
 
 

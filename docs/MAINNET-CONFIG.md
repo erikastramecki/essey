@@ -101,7 +101,13 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   return. It used to, and a position 60% underwater measured **21,900s** from Monday's first print to
   its first liquidation, `writeOff` included, every Monday and every market holiday, with no operator
   override. A market **nobody observes** still fails closed — the line ages only when someone calls
-  `syncMultiplier`, so a dead feed is not a dead keeper.
+  `syncMultiplier`, so a dead feed is not a dead keeper. **And a warm push refreshes the SCHEDULE
+  only, never a price's claim to have been checked** (R6 MED-1): a head already past
+  `MAX_CONFIRM_AGE` is not carried forward, so an INTERMITTENT keeper cannot resurrect a print that
+  an observation gap left standing. Without that the ceiling bounded the age of the last CALL rather
+  than of the PRICE, and a 36h-old sample was warmed back into "corroborated" — measured at **300s**
+  from Monday's gap to a seizure, against **27,000s** for the same position under a keeper that
+  never stopped observing.
   **R4 HIGH-1 rebuilt the mechanism and set the number.** The old rule rate-limited the PROMOTION
   clock, not the age of the observation being promoted, and `syncMultiplier` is permissionless — so
   the delivered delay was whatever was left of an interval the attacker positioned, measured at ONE
@@ -116,12 +122,18 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   those horizons came within a third of it, and NVDA is NOT materially more volatile than AAPL at
   these horizons (per-round log-return sample sd 0.5712% n=554 vs 0.5602% n=980), which the round-4
   report had assumed it would be.
-  **Read the derivation at 72h, not 6h.** The window a position is genuinely unliquidatable for is
-  the feed's dark weekend plus the delay Monday's observations owe: Friday's close to ~19:30 UTC
-  Monday, ~71h. At 72h the worst move is **12.61% AAPL / 12.62% NVDA — 1.69x / 1.68x** inside the
-  21.25% buffer, not the 2.51x / 2.70x the 6h row shows. Solvency is not broken on the measured
-  distribution, but the margin is materially thinner than the 6h figure implies and the founder
-  should read the risk against 1.68x. Reproduce with `node keeper/measure-feed-volatility.mjs`.
+  **Read the derivation at the MEASURED horizon — not at 6h, and not at the typical weekend.** The
+  window a position is genuinely unliquidatable for runs from the last print whose health was
+  verifiable to the first moment it can be seized: the feed's own worst observed gap, plus the
+  `PRICE_CONFIRM_DELAY + CONFIRM_STEP` of post-return observations the read slot owes. Friday's close
+  to ~19:30 UTC Monday (~71h) is the ORDINARY case, and this document previously stated it as the
+  horizon. The measured worst gaps are **79.74h AAPL / 76.09h NVDA**, so the horizons are **88h** and
+  **84h**, where the worst move is **12.61% AAPL (1.69x) / 12.90% NVDA (1.65x)** inside the 21.25%
+  buffer — not the 2.51x / 2.70x the 6h row shows. Solvency is not broken on the measured
+  distribution, but the margin is materially thinner than the 6h figure implies and **the founder
+  should read the risk against 1.65x**, not the 1.68x this section asked for at 72h (R6 INFO-2).
+  Reproduce with `node keeper/measure-feed-volatility.mjs`, which now derives and prints the horizon
+  from each feed's own max gap rather than assuming a weekend.
 - **Liquidation pause:** capped at `MAX_LIQUIDATION_PAUSE` per call AND followed by a cooldown as
   long as the pause itself (R3 MED-3), so chained calls cannot become a permanent freeze.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.

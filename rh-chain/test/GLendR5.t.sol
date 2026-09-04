@@ -142,10 +142,20 @@ contract GLendR5WeekendBlackout is GLendR5Base {
         uint256 seconds_ = _secondsToLiquidatable(id, monday);
         console.log("seconds from a weekend GAP to liquidatable:", seconds_);
         assertGe(seconds_, markets.PRICE_CONFIRM_DELAY(), "a fresh move pays the delay in full");
+        // R6 LOW-3: `_secondsToLiquidatable` answers type(uint256).max when it never opens, which
+        // satisfies the floor above. A mutant that broke corroboration on EVERY market passed this
+        // test reporting a 2^256-1 second wait. The delay is a floor AND a ceiling.
+        assertLe(
+            seconds_,
+            markets.PRICE_CONFIRM_DELAY() + 2 * markets.CONFIRM_STEP(),
+            "and it does open, within one ceiling of the delay"
+        );
     }
 
-    /// R4 HIGH-2 survives it. The line ages only when someone CALLS, so a market the keeper stopped
-    /// observing still runs past the ceiling and refuses — a dead feed is not a dead keeper.
+    /// R4 HIGH-2 survives it, for a keeper that stops and never returns: the line ages only when
+    /// someone CALLS, so a market nobody observes runs past the ceiling and refuses — a dead feed is
+    /// not a dead keeper. That is HALF the property. An INTERMITTENT keeper is R6 MED-1, and lives in
+    /// GLendR6ObservationGap, because this test cannot see it — nobody calls here, so nothing warms.
     function test_anUnobservedMarketStillFailsClosedWhileTheFeedIsDead() public {
         _hold(realPrice, markets.PRICE_CONFIRM_DELAY() + 2 * markets.CONFIRM_STEP());
         (, bool okBefore) = markets.corroboratedValue(AAPL, _coll());
@@ -295,6 +305,12 @@ contract GLendR5ReadBudget is GLendR5Base {
         // Headroom, not just coverage: this is a beacon-upgradeable contract the protocol does not
         // own, so the budget has to survive the token getting more expensive without a redeploy.
         assertGt(markets.MULTIPLIER_READ_GAS(), used * 4, "and with room for the token to grow");
+        // R6 INFO-1: pinned DOWNWARD only, and the unpinned direction is the vector the constant
+        // exists for. Widened to 30,000,000 the cap stops being a cap — a staticcall is bounded by
+        // 63/64 of the gas remaining — and the untrusted token gets to burn whatever it likes on
+        // five entry points. A token that grows an order of magnitude is plausible; one costing
+        // 1,900x a real read is a burn loop. The deployed 200,000 is 12.7x the measured cost.
+        assertLt(markets.MULTIPLIER_READ_GAS(), used * 40, "and a cap that is still a cap");
 
         // And BOTH reads the budget is for still work end to end at it, which is the part a
         // revert-branch assertion cannot see: starve the budget and each returns 0 instead.

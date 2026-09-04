@@ -17,8 +17,12 @@
 // Any of those false means that market is unprotected or unliquidatable, whatever the process is
 // doing. Read-only: no key, safe to run from anywhere, exits non-zero when something is wrong.
 //
+// The third one is qualified by whether the PRICE READS — see keeper-health.mjs. A 24/5 feed is dark
+// ~40h of every 168h and the unqualified check was red for all of it (R6 LOW-1).
+//
 //   RH_RPC=... LIVENESS_ORACLE=0x... ESSEY_MARKETS=0x... node keeper/check-liveness-keeper.mjs
 import { createPublicClient, http, defineChain, parseAbiItem } from "viem";
+import { classifyMarket, priceReadable } from "./keeper-health.mjs";
 import { reconcileMarkets } from "./market-list.mjs";
 
 const RPC = process.env.RH_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -59,6 +63,16 @@ const marketsAbi = [
   u("MAX_BASELINE_AGE"),
   u("confirmedObservedAt", [addr]),
   u("seenPriceAt", [addr]),
+  // The registry's own freshness bound rather than a timestamp heuristic: this reverts PriceStale
+  // past the market's maxStaleness, and reverting is exactly the state `_syncPrice` records nothing
+  // for. Asked per market, so "dark" is the feed's answer and not this file's guess.
+  {
+    type: "function",
+    name: "priceOf",
+    inputs: [addr],
+    outputs: [{ type: "uint256" }, { type: "uint8" }, { type: "bool" }],
+    stateMutability: "view",
+  },
 ];
 const marketCommitted = parseAbiItem("event MarketCommitted(address indexed token, uint16 ltvBps, uint16 liqThresholdBps)");
 
@@ -103,22 +117,26 @@ if (missing.length > 0) {
   fail(`LIST STALE  the registry committed ${missing.length} market(s) MARKET_TOKENS does not name: ${missing.join(",")}`);
 }
 
+let dark = 0;
 for (const token of inspect) {
   const [confirmedAt, seenAt] = await Promise.all([
     read(MARKETS, marketsAbi, "confirmedObservedAt", [token]),
     read(MARKETS, marketsAbi, "seenPriceAt", [token]),
   ]);
-  if (confirmedAt === 0n) {
-    fail(`${token}  UNCORROBORATED  the delay line has never filled — liquidation is refused`);
-    continue;
+  const readable = await priceReadable(
+    () => read(MARKETS, marketsAbi, "priceOf", [token]),
+    () => read(MARKETS, marketsAbi, "seenPriceAt", [token]),
+  );
+  const findings = classifyMarket({
+    token, confirmedAt, seenAt, now, delay, maxAge, maxBaseline, priceReadable: readable,
+  });
+  for (const f of findings) {
+    if (f.fatal) fail(f.line);
+    else {
+      console.log(f.line);
+      dark++;
+    }
   }
-  const confAge = now - confirmedAt;
-  // Too old is the keeper having stopped observing; too young means the ring is running ahead of
-  // its own cadence, which should be impossible and is worth seeing if it ever happens.
-  if (confAge > maxAge) fail(`${token}  UNOBSERVED  corroborated observation is ${confAge}s old, ceiling ${maxAge}s — liquidation is refused`);
-  else if (confAge < delay) fail(`${token}  PREMATURE  corroborated observation is only ${confAge}s old, floor ${delay}s`);
-  const baseAge = now - seenAt;
-  if (baseAge > maxBaseline) fail(`${token}  BREAKER BLIND  baseline is ${baseAge}s old, MAX_BASELINE_AGE ${maxBaseline}s — a split leg will not arm it`);
 }
 
 if (bad) {
@@ -127,4 +145,4 @@ if (bad) {
   process.exit(1);
 }
 console.log(`--- LIVENESS KEEPER: OK --- beat ${beatAge}s ago, ${inspect.length} market(s) observed and corroborated`);
-console.log(`    scan and MARKET_TOKENS agree on all ${inspect.length}.`);
+console.log(`    scan and MARKET_TOKENS agree on all ${inspect.length}.${dark ? ` ${dark} dark, which is the feed's schedule, not the keeper's.` : ""}`);

@@ -112,10 +112,14 @@ for (const [name, [addr, latest]] of Object.entries(feeds)) {
   // liquidator indifference (1.05 x debt). Anything approaching it at the chosen horizon is bad debt.
   const { sigmaPct, n } = perRoundSigmaPct(rounds);
   console.log(`per-round sigma (log-return sample sd) ${sigmaPct.toFixed(4)}%  n ${n}`);
-  // 72h is the horizon the design actually carries, not 6h: the feed goes dark ~25h after Friday's
-  // close and a position healthy at that last print cannot be seized until PRICE_CONFIRM_DELAY of
-  // Monday observations have aged in — Friday 20:00 UTC to Monday ~19:30 UTC (R5 MED-1).
-  for (const h of [1, 2, 4, 6, 8, 12, 24, 48, 72]) {
+  // THE HORIZON IS MEASURED, NOT THE TYPICAL WEEKEND (R6 INFO-2). A position is genuinely
+  // unliquidatable from the last print whose health was verifiable to the first moment it can be
+  // seized: this feed's own worst observed gap, plus the PRICE_CONFIRM_DELAY + CONFIRM_STEP of
+  // post-return observations the read slot owes. ~71h is the ordinary Friday-to-Monday case; the
+  // measured worst is what the buffer has to survive.
+  const horizonH = Math.ceil(gaps.at(-1) / 3600 + 7.5);
+  console.log(`design horizon h ${horizonH}  = max gap ${(gaps.at(-1) / 3600).toFixed(2)}h + delay 6h + step 1.5h`);
+  for (const h of [1, 2, 4, 6, 8, 12, 24, 48, 72, horizonH]) {
     const { worst, at } = worstMove(rounds, h * 3600);
     const headroom = (0.2125 / worst).toFixed(2);
     console.log(

@@ -98,7 +98,9 @@ Run it under `keeper/xyz.essey.liveness-keeper.plist` and alert on the WARN/ALER
 keeper degrades to "liquidations off" on BOTH halves — the stale heartbeat closes the liveness gate
 within `gapThreshold`, and the un-refreshed observation ages past `MAX_CONFIRM_AGE` — so it is safe
 and it is an outage. `keeper/check-liveness-keeper.mjs` is the check that answers whether it is
-actually working, per market, rather than whether the process is up.
+actually working, per market, rather than whether the process is up. It separates the FEED being
+dark — expected ~40h of every 168h on a 24/5 feed, reported and exit 0 — from the KEEPER not
+observing, which stays fatal (G-LEND R6 LOW-1); `RUNBOOK.md` lists what a healthy weekend prints.
 
 ## Modules
 

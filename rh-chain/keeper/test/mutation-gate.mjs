@@ -11,7 +11,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = (f) => join(ROOT, "holder-airdrop", f);
+// The airdrop module is the bulk of this. A name carrying a path separator is resolved from
+// `keeper/` instead, so the liveness supervisor's classifier is mutated by the same gate.
+const SRC = (f) => (f.includes("/") ? join(ROOT, f) : join(ROOT, "holder-airdrop", f));
 
 const MUTATIONS = [
   // --- the two-snapshot holding gate ---
@@ -76,6 +78,20 @@ const MUTATIONS = [
   ["keeper: snapshot window never advances", "keeper.mjs", "saveState(cfg.stateDir, { prevSnapshotBlock: head, lastSnapshotAt: now, lastEpochPosted: epoch });", "saveState(cfg.stateDir, { prevSnapshotBlock: state.prevSnapshotBlock, lastSnapshotAt: now, lastEpochPosted: epoch });"],
   ["keeper: posts something other than the manifest's root", "keeper.mjs", "args: [manifest.root],", "args: [manifest.snapshots.curr.digest],"],
   ["keeper: sends transactions without a wallet check", "keeper.mjs", "if (!wallet) {", "if (false) {"],
+
+  // --- the liveness supervisor's verdict (G-LEND R6 LOW-1) ---
+  ["health: BREAKER BLIND fatal again regardless of readability — red ~40h every week", "./keeper-health.mjs", "if (priceReadable) {", "if (true) {"],
+  ["health: BREAKER BLIND never fatal, so the mute costs the signal", "./keeper-health.mjs", "if (priceReadable) {", "if (false) {"],
+  ["health: a dark feed alarms instead of reporting", "./keeper-health.mjs", "say(false, `FEED DARK  the price is unreadable", "say(true, `FEED DARK  the price is unreadable"],
+  ["health: observation ceiling becomes exclusive", "./keeper-health.mjs", "const observing = confAge <= maxAge;", "const observing = confAge < maxAge;"],
+  ["health: observation ceiling inverted", "./keeper-health.mjs", "const observing = confAge <= maxAge;", "const observing = confAge >= maxAge;"],
+  ["health: a stopped keeper is reported, not alarmed", "./keeper-health.mjs", "say(true, `UNOBSERVED", "say(false, `UNOBSERVED"],
+  ["health: baseline ceiling becomes exclusive", "./keeper-health.mjs", "if (baseAge <= maxBaseline) return out;", "if (baseAge < maxBaseline) return out;"],
+  ["health: baseline checked on every market, healthy or not", "./keeper-health.mjs", "if (baseAge <= maxBaseline) return out;", ""],
+  ["health: the delay floor becomes inclusive", "./keeper-health.mjs", "} else if (confAge < delay) {", "} else if (confAge <= delay) {"],
+  ["health: a never-filled delay line falls through to the age tests", "./keeper-health.mjs", "if (confirmedAt === 0n) {", "if (false) {"],
+  ["health: a dead RPC reads as a dark feed (fail open)", "./keeper-health.mjs", "    await probeSameContract();\n    return false;", "    return false;"],
+  ["health: a reverting price reads as readable anyway", "./keeper-health.mjs", "    await probeSameContract();\n    return false;", "    await probeSameContract();\n    return true;"],
 
   // --- config ---
   ["config: EXECUTE armed by any truthy value", "config.mjs", 'execute: env.EXECUTE === "1",', "execute: Boolean(env.EXECUTE),"],
