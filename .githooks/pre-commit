@@ -18,11 +18,31 @@ say() { printf '%s\n' "$*" >&2; fail=1; }
 
 # 1. Files that must never be committed at all.
 for f in $staged; do
-  # A .example/.sample is a TEMPLATE by convention and is meant to be committed. Blocking it made the
-  # gate cry wolf on liveness-pager.env.example — placeholders only, and its own first line says no key
-  # belongs in it. A gate with false positives is a gate people learn to bypass, which is the failure
-  # this file exists to prevent. The CONTENT scan below still reads these files for real secrets.
-  case "$f" in *.example|*.sample|*.template) continue ;; esac
+  # A .example/.sample is a TEMPLATE and is meant to be committed, so the FILENAME rule skips it —
+  # a gate that cries wolf is a gate people learn to bypass. But exempting it removed cover the content
+  # scan never had: OPERATOR_PK=, DEPLOYER_KEY= and a real webhook URL all passed, because the content
+  # patterns look for the literal words private_key/mnemonic. This repo's own memory note reads "public
+  # repo with a live operator key" — OPERATOR_PK is exactly the name that slips.
+  #
+  # So a template is checked by what a template IS, not by guessing secret shapes: every NAME=VALUE must
+  # be EMPTY or an obvious placeholder. That needs no list of key names and fails closed on shapes nobody
+  # has thought of yet. Verified adversarially (OPERATOR_PK, DEPLOYER_KEY, a webhook, an RPC with a key),
+  # not by re-planting the PRIVATE_KEY the scan already caught — which is what the first version did.
+  case "$f" in
+    *.example|*.sample|*.template)
+      _filled=$(
+        git cat-file blob ":$f" 2>/dev/null | grep -nE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' \
+          | grep -vE '=[[:space:]]*("")?$|=[[:space:]]*0x[[:space:]]*$|=[[:space:]]*(<|\{\{|\$\{|CHANGE|REPLACE|YOUR|TODO|FIXME|xxx|XXX|\.\.\.|__)'
+      )
+      # NB: assign in the PARENT. Piping into `while ... say` put the flag in a subshell, so the gate
+      # printed BLOCKED and still exited 0 — reporting without enforcing, which is the defect this
+      # file exists to catch. Verified by exit code, not by the message.
+      if [ -n "$_filled" ]; then
+        say "BLOCKED: $f — a template must hold placeholders, not values:"
+        printf '%s\n' "$_filled" | sed 's/^/    /' >&2
+      fi
+      continue ;;
+  esac
   case "$f" in
     *.env|*.env.*|.env|.env.*|*.pem|*.key|*.keypair.json|*.keystore)
       say "BLOCKED: $f — secrets file staged." ;;
