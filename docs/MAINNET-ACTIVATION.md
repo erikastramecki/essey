@@ -32,7 +32,7 @@ Each flow below must satisfy all that apply before it activates on mainnet (4663
 |---|------|-------------------|-------------|--------------------------|-------|
 | 1 | **Base layer — $ESSEY reserve** | /treasury · EsseyToken, EsseyReserve | **LIVE mainnet** | DONE (adminless, real-equity reserve). Ongoing: fee accretion, treasury deposits. | live |
 | 2 | **Shielded / private transfers** | /private · Stealth{Announcer,Registry,Pay}, Shielded{Pool,PoolGate,Verifier}, ShieldedSupply, ShieldedStock ×2, Poseidon | testnet (46630) | Deploy shielded set to mainnet; real USDG/AAPL/NVDA; funded mainnet relayer; adminBurn haircut on REAL shielded stock; re-audit config; re-wire /private; drop testnet framing. | [MAINNET-SHIELDED-SCOPE.md](MAINNET-SHIELDED-SCOPE.md) *(in progress)* |
-| 3 | **Stock-Token lending** | /lend · EsseyMarkets, EsseyPool, oracle layer, EsseyMultiply | testnet (essey-markets) | Reuse proven core; real feeds + beacon + real DEX for Multiply; adminBurn on collateral; risk calibration; audit; deploy. | [MAINNET-LENDING-SCOPE.md](MAINNET-LENDING-SCOPE.md) *(in progress)* |
+| 3 | **Stock-Token lending** | /lend · EsseyMarkets, EsseyPool, oracle layer, EsseyMultiply | **ported into `rh-chain`; NOT DEPLOYED on any chain.** `/lend` UI rewired to mainnet 4663 with an honest not-deployed state (`lending.ts:30` is the one activation switch) | ⚠️ **Gate G-LEND at ZERO — `built-not-audited`** (Update 17.1; the old "3 clean rounds" claim is retracted as unevidenced). Then: real feeds + beacon (**beacon VERIFIED on chain 2026-09-02**); adminBurn on collateral; risk calibration; 3 clean rounds on a real 4663 fork with the report published; harness; founder deploy. **Multiply DEFERRED** — no DEX/adapter on 4663. | [MAINNET-LENDING-SCOPE.md](MAINNET-LENDING-SCOPE.md) *(in progress)* |
 | 4 | **Don mint** | /builder · MintDistributor, DonMintSplitter, DonDistributor | testnet | Real mint payment (USDG and/or fiat via CoinVoyage PayKit); real proceeds routing to reserve/treasury. **Controlled beta-mint phasing SCOPED** → [DONS-BETA-MINT-PHASING.md](DONS-BETA-MINT-PHASING.md) (reuse existing WL/stage/timelock mechanism; no new build). | [DONS-BETA-MINT-PHASING.md](DONS-BETA-MINT-PHASING.md) *(beta-mint phasing)* |
 | 5 | **Don trade (buy/snipe/sell)** | /market · EsseyExchange | testnet | Real settlement asset; real $ESSEY market (no AMM yet — dependency). | NEEDS SCOPE |
 | 6 | **Bell — stock payouts** | /bell · Bell, BundleConverter | testnet | Pays REAL stock: real converter feeds (session/staleness), real stock inventory, adminBurn exposure on held stock. | NEEDS SCOPE |
@@ -1392,3 +1392,275 @@ is clean (verified: zero occurrences tree-wide); the COMMIT is not. The hook doe
 because a bare name is not a path.
 **MUST run a second filter-branch over `origin/main..HEAD` before any push.** Verify with a
 per-commit loop, not a worktree grep — that is the check that missed it the first time.
+
+---
+
+## Update 2026-09-03 (17) — OVERNIGHT PROGRAM RECONCILE: lending is UNAUDITED, two HIGHs closed, G2 not clean
+
+Written by the PM at the start of the founder's ~12-hour overnight window. Every claim below was
+re-derived this pass from the repo, the gate receipts, and the working tree. **Recall was not used.**
+Where this entry disagrees with Update (16) or the tracker, **this entry wins**; where it repeats a
+claim it could not re-verify, it says so and names what would settle it.
+
+### 17.1 THE HEADLINE CORRECTION — lending has NEVER been through a clean audit gate
+
+Both docs currently assert lending is done. **`PRODUCT-TRACKER.md` row D1 reads
+"audit-clean, 3 consecutive clean rounds, pushed public."** That claim is **RETRACTED as
+unevidenced.** There is **no receipt of any kind** behind it:
+
+- `docs/audits/` holds 11 reports (`ls docs/audits/`). The **only** ones covering the lending engine
+  are **Solidity 1 and Solidity 2**, and `docs/audits/README.md:36-37` records them as
+  *"criticals + highs fixed; tail open"* and **"not clean; ~50 mutations survive a green suite."**
+- `~/.claude/gate-receipts/` holds no lending receipt. The Essey receipts there are
+  `audit-7fe1cb8` (G1 R1), `audit-g1-r1`, `audit-g3-r1`, `audit-g2-r1`, `audit-esseyreserve-r1` —
+  all 2026-09-02, none naming `EsseyPool` / `EsseyMarkets` / `EsseyMultiply` / `MarketHealthOracle`.
+  *(The 2026-09-03 receipts in that directory — `audit-fb55aca`, `audit-79e1860`, `audit-704493d`,
+  `audit-9894a18`, `audit-62ef234`, `audit-aa3a255` — belong to a **different project**; they name
+  `feat/consume-name-guard`, `feat/bookkeeper-receipt` and an auth-database suite. The receipts
+  directory is shared across repos. Do not count them here.)*
+
+**RULING, standing until a receipt exists: lending is `built-not-audited`.** Every downstream
+statement — the register's flow #3, the tracker's D1 and the "audited flow with a finished UI"
+framing in the hand-off list — inherits that. **This time the artifact gets published**: the round
+does not count until a report lands in `docs/audits/` naming the files and pinning their sha256.
+
+**The process defect worth keeping.** This is the *third* time a gate was believed met on evidence
+that did not exist or did not test what it claimed: G1's three clean rounds (real, but run without a
+real-PoolManager harness — Update 16.2), the vault's circular-in-mock `LiquidityAmounts` (F-C,
+Update 15), and now lending's rounds, for which nothing was written down at all. The pattern is not
+carelessness in the audit; it is **a claim entering the register without a receipt attached**.
+
+### 17.2 Fixture hardening — RUNNING NOW, and 5 of the 7 blockers already have fixtures in tree
+
+Seven blockers were raised where a named mutation currently SURVIVES the lending suite, plus eight
+weak assertions. **Source: relayed to the PM by the orchestrator; the PM did not run the mutation
+campaign and does not report the survivor set as independently verified.** What the PM *did* verify,
+by reading `git diff` on a dirty tree at 2026-09-03 (2 files, +42/−6 → since grown), is which
+blockers now have a fixture:
+
+| # | Blocker | Fixture in tree? | Evidence |
+|---|---|---|---|
+| 1 | Rounding direction unpinned across the valuation stack (every test price is a whole dollar, so truncation has nothing to truncate) | ✅ **three sites** | `test/EsseyMarkets.t.sol` `test_valuationRoundsDownAtEveryStage` (price `20_000_000_011`, pins `collateralValue`, `maxBorrow`, both sides of `isUnderwater`); `test/EsseyPool.t.sol` `test_liquidationSeizureRoundsDownNotUp`; `test_positionLimitTruncatesAgainstTheLiveCap` |
+| 2 | Interest accrual pinned once at 1% relative tolerance — a 365→360 day year survives | ✅ | `EsseyPool.t.sol`: `assertApproxEqRel(...,0.01e18)` replaced with `assertEq(debtOf, 770e6)`, plus a new `test_accrualOverANonRoundIntervalIsExact` pinning `borrowIndex` to the wei over a 1,000,000 s interval |
+| 3 | `reserveBps` magnitude unpinned — doubling it routes 100% of interest to the protocol, zero to lenders | ✅ | `EsseyPool.t.sol` `test_reserveSplitIsExactBothWays` — a `reserveBps 5_000` pool pinning `totalReserves == 35e6`, `totalAssets == 100_035e6`, and `previewRedeem` |
+| 4 | `EsseyMultiply` only tested at 18 decimals; **mainnet USDG is 6** | ❌ **not started** | `test/EsseyMultiply.t.sol` still binds `ScaledUIStockMock usdg` (`:58`) and the only decimal bound in the file is `1e18` (`:321`) |
+| 5 | The swap mock reproduces the contract's own formula, so `maxSlippageBps` is unpinned | ❌ **not started** | `MockSwapAdapter` (`EsseyMultiply.t.sol:20-26`) is constructed from the same `MockFeed` the contract prices against (`EsseyMultiply.sol:258-265` `_buyStock` derives `minOut` from that feed) |
+| 6 | Four of five `MarketHealthOracle` timelocked params have no behavioural fixture | ❌ **not started** | `Params` = `capFractionBps, hysteresisBps, maxRaisePerDayBps, v4DiscountBps, raiseDelay` (`src/MarketHealthOracle.sol:59-65`). `test/MarketHealthOracle.t.sol` pins the **mechanism** (`test_paramChangeIsAdminProposedTimelockedAndPermissionlesslyCommitted:614`, `..Cancelled:632`, `..BoundsAreValidatedAtPropose:645`) — no test changes a param and asserts the behaviour moves |
+| 7 | The `rampBase == 0` path never exercises its `min()` | ❌ **not started** | `src/MarketHealthOracle.sol:140-145` — `if (base == 0) { base = _clampedBase(token, c.pendingRaiseTo); … }`; no test in the file's 32 named tests targets it |
+
+**#5 is the one to watch, and it is not a fixture problem — it is the circular-mock class again.**
+A mock that recomputes the contract's own formula cannot falsify the contract. That exact shape
+voided G1 (A-6, 90 of 92 tests blind to the swap loop) and G3 (F-C, the vault's dilution test
+measuring dilution with the biased function it was auditing). Making it the third occurrence in one
+week. **The slippage fixture must drive the adapter's output from an independently specified value,
+never from the oracle the contract reads.**
+
+### 17.3 Two HIGHs CLOSED overnight; G1 and G3 both restart from ZERO
+
+`58523e1` *fix(hook,vault): charge the fee on the fill, price the vault at the composition it holds*
+(2026-09-03 10:02 PT, `git show --stat 58523e1`) closes the two round-1 HIGHs:
+
+- **G1-1 (HIGH), hook** — the swap fee was charged on the amount **requested**, not the amount
+  **filled** (`EsseyReserveHook.sol:260,275,326`; receipt `~/.claude/gate-receipts/audit-g1-r1`).
+  Measured on a real 4663 fork: a 5,000,000 USDG buy filled 117,616 and was charged 50,000 —
+  **4,251 bps against an advertised 100**. A specified-leg fee now demands a complete fill; an
+  over-ladder exactIn buy reverts `PartialFill` instead of filling short. The refund alternative was
+  rejected in writing (v4's `afterSwap` can only move the unspecified currency, and the refund path
+  pays the router).
+- **second hook finding, founder-flagged** — exactIn charged bps of the gross, exactOut bps of the
+  net. Harmless at the 1% steady state; **at the t0 anti-snipe surcharge it was a ~50x hole** — a
+  sniper flipping one router flag paid ~4,975 effective bps instead of 9,900. `_feeParts` now
+  grosses up on exactOut.
+- **G3-1 (HIGH), vault** — `_valueAtOracle` priced the LP position at the composition it *would*
+  hold at the oracle price, not the one it holds at spot (`StockLpVault.sol:422-438`; receipt
+  `audit-g3-r1`). V3 position value is concave, so the as-held figure sits strictly above the curve
+  and **understated the vault in both directions**: measured $206.73 skimmed at 90 bps deviation,
+  $1,040.97 at 465 bps, zero-sum to 18 significant figures. Now reads spot, which inverts the sign.
+- **vault first-depositor inflation (MEDIUM)** — closed with an ERC4626 virtual offset,
+  `VIRTUAL_SHARES = 1e12`, sized three orders inside both measured failure bounds.
+
+**Gate consequence: G1 and G3 are each at ZERO with new bytes.** Neither contract is deployed
+anywhere (verified in the commit's own claim and by the absence of any 4663 broadcast for either).
+
+### 17.4 EsseyReserve — round 1 CLEAN on the money, with deployed bytecode verified against source
+
+Receipt: `~/.claude/gate-receipts/audit-esseyreserve-r1` (2,113 bytes, 2026-09-02).
+
+- **Bytecode verification — VERIFIED.** `cast code 0xd970Ca72…5A7b` on chain 4663 is byte-identical
+  to `solc 0.8.28` over `rh-chain/src/market/EsseyReserve.sol` (optimizer disabled, legacy pipeline)
+  after masking the 11 immutable slots and the 53-byte metadata trailer. `EsseyToken` likewise.
+  **This is the first time a deployed Essey contract has been proven to be the source we publish.**
+- **VERDICT: CLEAN** on custody, solvency, authority, rounding, reentrancy and paused-token
+  isolation. **No fund-loss finding. No patchable defect.**
+- Three non-blocking findings recorded: **R-1** self-backing not enforced + `circulatingSupply`
+  manipulable; **R-2** a 5% terminal strand; **R-3** a test gap — the CEI-removal mutant (MUT4)
+  **survived both suites** while 9 of 10 others were killed.
+- **The two risks that dominate contract risk are operational, not code:** the treasury EOA is a
+  single key over 100% of redemption rights, and issuer pause/upgrade on the stock legs is
+  unrecoverable inside an adminless vault.
+
+**`docs/CUSTODY-AUDIT-STATUS.md` was STALE against this** — it still read *"UNAUDITED at the time
+value was deposited… Accepted by: nobody yet"* a day after the round came back clean. Corrected in
+this pass. **And the gate that file feeds has a hole worth naming:** `app/web/check-custody-audit.mjs:52-53`
+tests only that the contract's **name appears** in the status file — it cannot distinguish "audited
+clean" from "unaudited, accepted by nobody." A stale scare-line passes the build exactly as well as
+a clean receipt. The gate proves the question was *asked*, not that it was *answered*.
+
+**Not published yet, deliberately.** The receipt does not go into `docs/audits/` as-is: R-1 and R-2
+are unpatchable residuals on a **live, immutable, adminless** contract holding real value, and the
+fix-first policy (`docs/audits/README.md:12-16`) publishes exploit detail only after the fix lands.
+A public report needs a redaction pass and founder sign-off. **Queued, not skipped.**
+
+### 17.5 G2 — NOT CLEAN. 3 HIGH, 4 MEDIUM, 5 LOW. Round counter at ZERO.
+
+Receipt: `~/.claude/gate-receipts/audit-g2-r1` (4,409 bytes, 2026-09-02), over
+`HolderDistributor.sol` and `BasketRegistry.sol`, sha256-pinned. The suite was **green at audit
+time** — 32 + 5 Solidity, 92 keeper, 46/46 mutation gate — and **caught none of these**.
+
+| ID | Sev | What |
+|---|---|---|
+| **H-1** | HIGH | `postRoot` is unconstrained: the poster can name **itself** sole recipient of a whole epoch (`HolderDistributor.sol:173-188`, `_settle:256-271`). The stated containment "cannot name a payout recipient" (`keeper.mjs:8,14-17`) is **FALSE**. Only defence is the governor's `challengeRoot`. |
+| **H-2** | HIGH | `renounceGovernor():307-310` deletes that only defence permanently, and makes the H-1 theft **permissionless** (fallback `_authorizePoster:149-153`) and **free** (bond unslashable, withdrawn after `activeAt`). |
+| **H-3** | HIGH | No on-chain exclusion enforcement; `config.mjs:33 EXCLUSIONS` is optional and defaults to `[]`. On chain 2026-09-02, ESSEY `totalSupply == balanceOf(0x93e6…4B9E)` = 100%. **Unset EXCLUSIONS silently routes 99.77% of every epoch to ops.** `env.example:24` lists 1 of the 5 ruled addresses. |
+| M-1 | MED | A `slashSink` that rejects ETH bricks `challengeRoot` (`:203-204`) — the only defence against H-1 cannot run. The test `RevertingSink` (`:73`) is **dead code, never instantiated**, while its comment claims it proves this case. |
+| M-2 | MED | USDG has no exit but `converter.convert`; a dead oracle / delisted stock / off-session strands the pot forever. No timeout rescue for an un-rooted epoch. |
+| M-3 | MED | `lastRootAt` is global (`:176,185`): a fallback poster locks the keeper out every cycle, so the fallback stays open forever. |
+| M-4 | MED | The root commits to nothing off-chain — no manifest hash, preferences in a private JSON with no on-chain anchor. **`challengeRoot` has no evidentiary basis.** |
+| L-1…L-5 | LOW | `minBond`/`minEpochInterval` accept 0; registry proposals never expire; `leafOf:314-316` omits `address(this)`/`chainId` (cross-deploy root replay); `ChallengeWindowActive` means opposite conditions at `:196` and `:259`; preference sigs never consumed on-chain and have no nonce floor. |
+
+Verified clean and worth keeping: the Merkle construction (double-hashed, domain-separated,
+second-preimage safe), claim accounting (CEI + `nonReentrant` + per-`(epoch,holder,token)` flag +
+per-epoch reserved cap), epoch isolation, `sweepEpoch` bounds, and the EIP-712 domain binding.
+
+**Register consequence: the tracker's "G2 — not fired, now genuinely fireable" is superseded. G2
+HAS fired, and it came back NOT CLEAN.** Fix → three fresh rounds.
+
+### 17.6 Push state, and one pre-push item that is now CLOSED plus one that is not
+
+- **`origin/main..HEAD` = 17 commits** (`git rev-list --count`, 2026-09-03). origin/main is
+  `6903bc6`. Update (16)'s "ahead 14" is stale by three.
+- **The Update (16) PRE-PUSH BLOCKER (history scrub #2) is RESOLVED.** It named commits `ae62d34`
+  and `04e763d` as carrying the other private repo's name inside `.githooks/pre-commit`'s own
+  comment. Re-derived this pass: `ae62d34` **is no longer in the range** at all, and the hook file
+  is touched by exactly two commits in the range (`65ca1fc`, `cbbc3cd` — `git log -- '.githooks/pre-com*'`).
+  Reading the blob at each: `65ca1fc` already carries `"[redacted]"` in place of the name, and
+  `cbbc3cd` generalises it further to "another private repo". **No commit in the current range
+  carries the bare name in that file.**
+  *Scope limit, stated plainly:* the PM verified the **one file the register named**. A full-range
+  scan for the two actual names cannot be run from a tracked doc without re-creating the leak —
+  **the founder should run it from the shell before authorising the push.**
+- **NEW, and open: four files at HEAD carry an absolute home path** — `git grep -lE
+  '/Users/[A-Za-z0-9._-]+/(Developer|Documents|Desktop)/' HEAD` returns
+  `app/web/_private_haircut_smoke.mjs`, `docs/RESUME-balance-and-h1.md`,
+  `docs/RESUME-trait-calibration.md`, `rh-chain/xyz.essey.game-keeper.plist`. The only string
+  present is the repo's own absolute path — **not** another repo's name, so this is
+  username/layout disclosure on a public repo, not a private-repo leak. **But it is precisely the
+  class `.githooks/pre-commit:42-43` blocks**, which means these four files would fail the repo's own
+  gate if re-staged today. Pre-existing (they predate the hook); the hook only sees newly staged
+  blobs. **Clear before the push.**
+
+### 17.7 Test-count contradiction — one number now, still not PM-verified
+
+Update (16.9) left two irreconcilable figures ("~45 failing" vs "1431 pass / 2 fail"). The
+`58523e1` commit body reports **1438 pass / 2 fail against a 1431/2 baseline, same two pre-existing
+`setUp` failures**, plus V4 146/146, vault in-mock 65/65, vault fork 13/13.
+
+**Still not settled, and deliberately so.** That is an engineer-reported figure in a commit message,
+not output the PM ran. **The PM did not run `forge test` this pass on purpose:** the engineer is
+mid-edit on `test/EsseyPool.t.sol` and `test/EsseyMarkets.t.sol` right now, and a second concurrent
+`forge` invocation shares `out/` and `cache/` in the same checkout — a collision would produce
+failures neither agent could attribute. **Settled by:** the engineer pasting a full-tree run on a
+clean tree at a named SHA when the fixture work lands. Until then, `1438/2` is the best number we
+have and it is labelled.
+
+### 17.8 GATE LADDER — state at the top of the overnight window
+
+| Gate | Product | State 2026-09-03 | What moves it |
+|---|---|---|---|
+| **G-LEND** *(new — this gate did not exist before tonight)* | Lending: `EsseyPool`, `EsseyMarkets`, `CollateralReconciler`, `StaleFeedGuard`, `MarketHealthOracle`, `Note`/`NoteArt` | ❌ **ZERO. Treat as UNAUDITED** (17.1). Fixture hardening in flight, 3 of 7 blockers fixtured | Finish 7 blockers + 8 weak assertions → commit at a frozen SHA → **3 consecutive clean rounds, all lenses, on a real 4663 fork** → **report published to `docs/audits/`** → harness → founder deploy |
+| **G1** hook + LaunchSeeder | $ESSEY launch | ❌ **ZERO** — reset by `58523e1`'s new bytes. R1 HIGH (G1-1) closed | 3 clean rounds on the fee-on-fill bytes, real-fork harness |
+| **G2** HolderDistributor + BasketRegistry | Holder Hub | ❌ **ZERO — FIRED AND FAILED.** 3 HIGH / 4 MED / 5 LOW (17.5) | Fix H-1/H-2/H-3 + M-1…M-4 → 3 fresh rounds |
+| **G3** StockLpVault | Earn | ❌ **ZERO** — reset by `58523e1`'s new bytes. R1 HIGH (G3-1) + first-depositor MED closed | 3 clean rounds on the new bytes |
+| **G-RESERVE** | EsseyReserve (live mainnet) | 🟢 **R1 CLEAN**, deployed bytecode verified against source (17.4). R-3 test gap open | Public report (redaction + founder sign-off); R-3 CEI fixture |
+| **Ceremony** | Shielded set | ⏸️ **ON HOLD at the founder's word (R-16.7). DO NOT RE-RAISE.** | Founder, when he chooses |
+| **D** founder deploy | all | Founder-gated, per-instance. Unchanged. | — |
+
+### 17.9 Records corrected by this pass
+
+| Was recorded as | Actually | Evidence |
+|---|---|---|
+| D1 lending "**audit-clean**, 3 consecutive clean rounds, pushed public" | **UNEVIDENCED — retracted.** No receipt anywhere; the only lending reports are Solidity 1–2, recorded "not clean" | `docs/audits/README.md:36-37`; `ls ~/.claude/gate-receipts/` |
+| G2 "not fired — now genuinely fireable" | **FIRED, NOT CLEAN** — 3 HIGH | `~/.claude/gate-receipts/audit-g2-r1` |
+| `EsseyReserve` "appears in NO audit doc" (16.9, H4) | **Audited R1 CLEAN 2026-09-02**, bytecode verified against source | `~/.claude/gate-receipts/audit-esseyreserve-r1` |
+| `CUSTODY-AUDIT-STATUS.md`: reserve "UNAUDITED… accepted by nobody yet" | **STALE by one day** — corrected in this pass | same receipt |
+| "ahead 14" of origin | **ahead 17** | `git rev-list --count origin/main..HEAD` |
+| PRE-PUSH BLOCKER: `04e763d` carries the private repo name in the hook comment | **RESOLVED** — `ae62d34` is out of the range; `65ca1fc`/`cbbc3cd` both carry redacted text | per-blob read of `.githooks/pre-com*` at each commit |
+| G1 "REOPENED, fix in flight (uncommitted)" (16.6) | **Fix COMMITTED** `58523e1`; a *second* HIGH (G1-1, fee-on-requested) was found and closed after that entry | `git show --stat 58523e1`; `audit-g1-r1` |
+| G3 "code sound, no vulnerability found in any round" | **A HIGH was found** (G3-1, oracle-composition mispricing) once a real-fork lens ran | `~/.claude/gate-receipts/audit-g3-r1` |
+
+### 17.10 Still UNVERIFIED — flagged, not fixed
+
+- **The 7 fixture blockers + 8 weak assertions are orchestrator-relayed, not PM-reproduced.** The PM
+  verified which have fixtures in tree (17.2), **not** that each named mutation survives. Settled by
+  the engineer's mutation log at hand-off.
+- **`1438 pass / 2 fail`** — engineer-reported in a commit body. Settled by a clean-tree run (17.7).
+- **`EsseyLadderSeeder` at `0x1c9fd50d…5876a` is a live mainnet-4663 deployment nobody tracks**
+  (`broadcast/RehearseEsseyLadder.s.sol/4663/run-latest.json`). Unchanged from 16.9. **Founder.**
+- **The blog's "repeated adversarial audits" claim over `EsseyReserve`** is now *partly* supported —
+  one round, clean. "**Repeated**" is still false at n=1. Cut the plural or wait for round 3.
+- **Multiply's mainnet DEX** (`MAINNET-LENDING-SCOPE.md:193-217`) — no router, no `ISwapAdapter`
+  implementation, no verified liquid USDG↔Stock pool on 4663. Multiply stays **DEFERRED**; base
+  lending needs no DEX. Unchanged.
+
+*This entry is committed, not left in the tree.*
+
+### 17.11 `PRODUCT-TRACKER.md` IS GITIGNORED — the two-doc rule has a one-legged doc
+
+`git check-ignore -v docs/PRODUCT-TRACKER.md` → **`.gitignore:67`**. `git ls-files --error-unmatch`
+confirms it has **never been tracked**.
+
+Consequences, stated plainly because nothing else in our records says this:
+
+- The tracker — named in the PM charter as one of the two sources of truth, and the first doc a new
+  session is told to read — **exists only in this working directory.** It has no history, no diff,
+  no backup, and would not survive a fresh clone.
+- **Update (14)'s standing rule "a doc reconcile is not done until it is committed" cannot be
+  satisfied for the tracker.** Every reconcile written into it since it was created has been, in
+  git's terms, unsaved work.
+- It is 88 KB of the program's only at-a-glance state.
+
+**This is most likely deliberate** — the repo is public and the tracker carries internal sequencing,
+founder decisions and unfixed findings. **That is a good reason to keep it out of the public repo and
+a bad reason to have no copy of it anywhere.** *(INFERRED intent; the PM did not find a written
+ruling. Founder: confirm.)*
+
+**Founder decision:** keep it gitignored **and** give it a durable home (a private repo, or the
+project memory), or reclassify it as publishable. Either is fine. "Ignored and nowhere else" is not.
+
+### 17.12 IN FLIGHT ALONGSIDE THIS PASS — a blog post about the reserve audit
+
+Untracked and being written right now: `app/web/src/blog/posts/reserve-audit.md`, plus a one-line
+edit to `app/web/src/blog/posts/put-your-stocks-to-work.md` retiring the false *"repeated adversarial
+audits"* claim. Read this pass. **Hard rule 3 applies: nothing publishes without founder sign-off**
+(the time-boxed autonomy grant expired ~2026-09-01).
+
+**The good news, recorded so it is not re-litigated:** the draft names R-1/R-2/R-3 in plain language
+with **no mechanism and no exploit path**, so the fix-first concern in 17.4 is largely already
+answered by the framing. It also states the surviving mutant rather than rounding "9 of 10" up, and
+it says the exit is unproven in production. That is the standard.
+
+**Three corrections it needs before sign-off, each cited:**
+
+1. **"thirteen tokenized equities plus 3,150,505 FLR" is wrong twice.** `app/web/src/reserve.ts:44-58`
+   holds 13 addresses **including FLR**, and its own comment (`:41-43`) says the list is *"only what
+   the page KNOWS to look up… Any token in here that the reserve does not hold simply reads zero"* —
+   **a lookup list, not holdings.** Three of the 13 are not equities (CASHCAT, PONS, FLR). Update
+   (16.9) separately records a *"re-derived on-chain basket of six."* **Publish a live per-token read
+   or no number at all.**
+2. **"It went live on 2026-08-29" has no source in our records.** The tracker's A2 row states the
+   deploy is proven by a recorded `cast codesize`, **not** by a broadcast receipt
+   (`broadcast/DeployEsseyFoundation.s.sol/4663/` is dry-run only). A date asserted in a post about
+   audit rigour needs a block number, not a recollection.
+3. **"It goes there with the next push"** commits us to publishing the receipt. Publish a written
+   **report** in the house format, not the raw gate receipt — the receipt carries more than the post
+   does, on a contract that can never be patched.

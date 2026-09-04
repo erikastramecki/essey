@@ -43,16 +43,45 @@ const auditNames = () => {
 const isAudited = (name, corpus) =>
   new RegExp(`\\b${name}\\b(?!Hook)`).test(corpus);
 
+// The first version of this gate asked only whether the contract's NAME appeared in the status file.
+// That proves the question was asked, never that it was answered — a stale "UNAUDITED, accepted by
+// nobody yet" line held the build green for a full day after round 1 came back clean. So the section
+// must now carry a verdict word, and UNAUDITED alone is not one.
+const VERDICT = /\b(CLEAN|ACCEPTED-RISK)\b/;
+
+const sectionFor = (name, doc) => {
+  const heads = [...doc.matchAll(/^##\s+(.+)$/gm)];
+  for (let i = 0; i < heads.length; i++) {
+    if (!new RegExp(`\\b${name}\\b(?!Hook)`).test(heads[i][1])) continue;
+    const from = heads[i].index;
+    const to = i + 1 < heads.length ? heads[i + 1].index : doc.length;
+    return doc.slice(from, to);
+  }
+  return "";
+};
+
 const status = existsSync(STATUS) ? readFileSync(STATUS, "utf8") : "";
 const corpus = auditNames();
 const problems = [];
 
 for (const c of CUSTODY) {
-  const audited = isAudited(c.name, corpus);
-  const acked = new RegExp(`\\b${c.name}\\b`).test(status);
-  if (!audited && !acked) {
+  const section = sectionFor(c.name, status);
+  if (!section) {
     problems.push(
-      `${c.name} takes custody, has NO audit document naming it, and is not acknowledged in docs/CUSTODY-AUDIT-STATUS.md.`,
+      `${c.name} takes custody and has no "## ${c.name}" section in docs/CUSTODY-AUDIT-STATUS.md.`,
+    );
+    continue;
+  }
+  if (!VERDICT.test(section)) {
+    problems.push(
+      `${c.name}'s section states no verdict. It must say CLEAN (an audit reached that conclusion) or ` +
+        `ACCEPTED-RISK (someone decided, with a date, to carry it anyway). "UNAUDITED" on its own is ` +
+        `the question, not the answer, and it must not hold the build green.`,
+    );
+  }
+  if (!isAudited(c.name, corpus) && !/\bACCEPTED-RISK\b/.test(section)) {
+    problems.push(
+      `${c.name} has NO audit document naming it, so its section must carry an explicit dated ACCEPTED-RISK.`,
     );
   }
 }
