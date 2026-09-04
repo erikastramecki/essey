@@ -106,6 +106,36 @@ contract DesyncBreakerTest is EsseyPoolTest {
         assertTrue(mk.canLiquidate(address(tok)), "and then both gates are open");
     }
 
+    /// THE OTHER LEG ORDER, which is what pins the breaker's BASELINE product. The issuer's
+    /// uiMultiplier lands FIRST and the feed has not repriced, so the last matched pair is (P, M)
+    /// against an observation of (P, 2M) — a 100% dislocation that must arm. Every other fixture
+    /// here either varies the multiplier from an ARMED state, where `prev` is never read, or holds
+    /// one multiplier throughout, where `prevPrice * prevMult` and `prevPrice * curMult` are the
+    /// same expression. R8 LOW-2 / M42.
+    function test_theBaselineIsTheLastMATCHEDPairNotAHalfUpdatedOne() public {
+        address t = address(tok);
+        _borrow(700e6);
+        assertEq(mk.priceDesyncAt(t), 0, "unarmed to begin with");
+        assertEq(mk.desyncRefProduct(t), 0, "and no reference held");
+
+        uint256 priceBefore = mk.seenPrice(t);
+        uint256 multBefore = mk.seenMultiplier(t);
+        assertGt(priceBefore, 0, "there is a real baseline pair to stand on");
+
+        tok.setMultiplier(2 * multBefore);
+        mk.syncMultiplier(t);
+        assertEq(mk.seenPrice(t), priceBefore, "the feed leg has not moved");
+        assertEq(mk.seenMultiplier(t), 2 * multBefore, "and the multiplier leg has");
+
+        assertEq(
+            mk.desyncRefProduct(t),
+            priceBefore * multBefore,
+            "the reference is the last MATCHED pair, not the old price against the new multiplier"
+        );
+        assertEq(mk.priceDesyncAt(t), block.timestamp, "a multiplier leg landing alone arms the breaker");
+        assertFalse(mk.canLiquidate(t), "and both gates close for the full PRICE_DESYNC_HOLD");
+    }
+
     /// A market MOVE is not a gap. Steps inside the bound never arm, so ordinary volatility does not
     /// cost a liquidation window — the walk in _walkPrice is what every other suite relies on.
     function test_stepsInsideTheBoundNeverArm() public {

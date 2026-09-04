@@ -32,14 +32,29 @@ matched pair mocks the split AFTER the feed is dark, and a dark feed is exactly 
 cannot advance, so the two values are equal by construction there. M40 is the same gap against the
 READ slot rather than the raw read, and it survived 398/398 including the test written for M38,
 because every fixture in the suite left the ring's five MULTIPLIERS identical while varying prices.
+
+Round 8 added M42, the fifth instance of that same rule and the first one applied a call DEEPER than
+`_holdConfirmable`. `_syncPrice` builds two sibling products and forwards both; the baseline half was
+never attacked, and `prevPrice * curMult` survived the whole targeted suite. Round 8 also made the
+gate self-validating: a verdict is now believed only from a run that reached its completion summary
+with the expected test count, and a failure counts as a kill only when the failure text is EVIDENCE
+the repo itself can account for — the old three-string transport denylist failed OPEN on every
+transport shape nobody had seen yet.
 """
-import signal, subprocess, sys, pathlib
+import re, signal, subprocess, sys, pathlib
 
 # resolve the repo from this file, never the caller's cwd (lesson of 9b6d047)
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKETS = ROOT / "src/EsseyMarkets.sol"
 LIVENESS = ROOT / "src/LivenessOracle.sol"
 SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|GLendR6|GLendR7|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
+# Measured on the clean tree with the exact invocation in suite_verdict. Re-measure and update it
+# whenever a test is added to the selected suites, or every mutant reports RUN-INCOMPLETE. It moves
+# by more than the tests you wrote: EsseyPoolTest is a base, so a test added there lands once per
+# subclass. THREE contracts in SELECT carry it (EsseyPoolTest, DesyncBreakerTest,
+# DesyncStateMachineTest); R8's net +4 accrual tests therefore moved this 400 -> 412, while the
+# whole tree moved 1808 -> 1840 across eight. GLendR4Base descends from Test, not from the pool.
+EXPECTED_TESTS = 412
 
 MUTANTS = [
     # --- the magnitude of the safety constant, in BOTH directions ---
@@ -181,6 +196,10 @@ MUTANTS = [
     ("M41 warm the PRICE half from the READ slot", MARKETS,
      "        _confirmable(token, head.price, head.mult);",
      "        _confirmable(token, confirmedObservation(token).price, head.mult);"),
+    # --- R8 LOW-2: the same independence rule one call deeper, on _syncPrice's BASELINE product ---
+    ("M42 breaker baseline is the old price against the NEW multiplier (R8 LOW-2)", MARKETS,
+     "        uint256 prev = prevPrice * prevMult; // 0 when either half has no baseline yet",
+     "        uint256 prev = prevPrice * curMult; // 0 when either half has no baseline yet"),
 ]
 
 
@@ -197,13 +216,50 @@ def restore_all(*_):
 
 
 # The fork backend answers 429 under load, and its failures print as `[FAIL: ...` like any other —
-# so an unlucky mutant reads as KILLED by evidence that never ran. Named, retried, and reported as
-# INCONCLUSIVE rather than folded into the count.
-TRANSPORT = ("Max retries exceeded HTTP error 429", "database error:", "Failed to get EIP-1559")
+# so an unlucky mutant reads as KILLED by evidence that never ran. R8 LOW-4: this used to be three
+# observed transport strings, so `error sending request`, `operation timed out` and `connection reset
+# by peer` were REAL kills. A denylist of the failures you have already seen cannot cover the one you
+# have not, so the test is inverted and anything unrecognised is INCONCLUSIVE.
+COMPLETION = re.compile(r"Ran \d+ test suites?.*?: (\d+) tests passed, (\d+) failed", re.S)
+REASON = re.compile(r"\[FAIL: (.*?)(?:\] \S+\(.*)?$")
+# Two concrete operands compared — how forge renders assertEq/assertLt and friends.
+COMPARISON = re.compile(r"(?:0x[0-9a-fA-F]+|\d+) ?(?:!=|==|<=|>=|<|>) ?(?:0x[0-9a-fA-F]+|\d+)")
+DECODED_REVERT = re.compile(r"^([A-Za-z_]\w*)\(")
+# Forge's and the EVM's own verdicts, which are a CLOSED set produced locally — unlike the open set
+# of things a rate-limited backend can say. OutOfFunds and OutOfGas stay out: those are the R5
+# fixture-funding shape, indistinguishable from a mutant that never got to run.
+HARNESS_VERDICT = (
+    "did not revert as expected", "reverted as expected, but without data",
+    "Error != expected error", "log != expected log", "assertion failed",
+    "panic:", "EvmError: Revert",
+)
+_OWN_TEXT = []
 
 
-def is_transport(line):
-    return any(t in line for t in TRANSPORT)
+def own_text():
+    if not _OWN_TEXT:
+        _OWN_TEXT.append("".join(
+            p.read_text(errors="ignore") for d in ("src", "test") for p in sorted((ROOT / d).rglob("*.sol"))
+        ))
+    return _OWN_TEXT[0]
+
+
+def is_evidence(line):
+    """Whether a [FAIL line is something the repo can account for, rather than an unread run."""
+    m = REASON.match(line)
+    if not m:
+        return False
+    reason = m.group(1)
+    if COMPARISON.search(reason) or any(s in reason for s in HARNESS_VERDICT):
+        return True
+    err = DECODED_REVERT.match(reason)
+    # A decoded revert counts only when THIS repo declares the error. An ERC20InsufficientBalance or
+    # an OutOfFunds decodes just as cleanly and means the fixture never funded — the R5 shape.
+    if err:
+        return f"error {err.group(1)}(" in own_text()
+    # An assertTrue message renders with no operands, so the last recogniser is the message as a
+    # string LITERAL. A bare substring would recognise any English word the repo happens to contain.
+    return f'"{reason.removeprefix("revert: ")}"' in own_text()
 
 
 def suite_verdict():
@@ -215,12 +271,19 @@ def suite_verdict():
     if "Compiler run failed" in out or "Error: Compilation failed" in out:
         return "NO-COMPILE", "the mutant does not build"
     fails = [l for l in out.splitlines() if l.startswith("[FAIL")]
-    if not fails:
-        return "SURVIVED", "the whole targeted suite stayed green"
-    real = [l for l in fails if not is_transport(l)]
-    if not real:
+    real = [l for l in fails if is_evidence(l)]
+    if real:
+        return "KILLED", real[0][:150]
+    if fails:
         return "RPC-FLAKE", fails[0][:150]
-    return "KILLED", real[0][:150]
+    # R8 LOW-3: zero [FAIL lines used to be enough to call a mutant SURVIVED, so the run a stray
+    # pkill took down mid-flight on 2026-09-04 reported as a clean green suite. Pinning the count
+    # also catches the mutant that DELETES tests rather than failing them.
+    m = COMPLETION.search(out)
+    ran = int(m.group(1)) + int(m.group(2)) if m else None
+    if ran != EXPECTED_TESTS:
+        return "RUN-INCOMPLETE", f"{ran if ran is not None else 'no'} tests ran, expected {EXPECTED_TESTS}"
+    return "SURVIVED", "the whole targeted suite stayed green"
 
 
 def run(mut):

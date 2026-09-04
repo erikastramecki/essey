@@ -355,6 +355,13 @@ contract EsseyMarkets is StaleFeedGuard {
     /// so no bound covers every open position — a 6:5 split's 16.67% leg harvested one for 2,600bps.
     /// This detects a DISLOCATION; PRICE_CONFIRM_DELAY is what protects a position. Constant because
     /// it is a function of constants already here, and a settable copy could only drift from them.
+    ///
+    /// THE ABSOLUTE STATISTIC BELONGS HERE, not under the delay (R8 INFO-1): `_deviates` compares one
+    /// direction-free `diff` against this bound, so up and down of equal size arm identically. The
+    /// windows that reach it are short — `_breaker` refuses a baseline older than MAX_BASELINE_AGE
+    /// and the armed branch holds at most PRICE_DESYNC_HOLD — and the worst absolute moves there are
+    /// 7.06% at 1h and 7.88% at 6h, i.e. 2.83x and 2.54x inside the 20% bound. No spurious arming is
+    /// reachable on the measured sample. Quote DOWN-only figures under PRICE_CONFIRM_DELAY.
     uint16 public constant MAX_PRICE_DEVIATION_BPS = 2_000;
     /// How old the baseline may be before a move measured against it stops being evidence of a
     /// DISCONTINUITY rather than drift (R3 MED-1: _breaker compares observations, not feed rounds).
@@ -399,10 +406,18 @@ contract EsseyMarkets is StaleFeedGuard {
     /// Warming the line removes only the 6h that used to be added ON TOP of the dark window; the dark
     /// window is the feed's.
     /// AND A KEEPER TERM, which the warm CEILING introduced (R7 INFO-1): the horizon runs from the
-    /// last OBSERVATION, so a keeper gap starting while the feed still reads adds to it 1:1, bounded
-    /// only by the operational SLO (12h — MAX_CONFIRM_AGE to the UNOBSERVED alarm, plus 3h to
-    /// restore). Full horizons 100h and 96h; the worst move is 12.61% (1.69x) and 12.90% (1.65x) at
-    /// both, since neither feed's worst window grows past 84h.
+    /// last OBSERVATION, so a keeper gap starting while the feed still reads adds to it 1:1, and
+    /// nothing on chain bounds it. QUOTED AT 48h, WHICH IS NOT AN SLO (R8 LOW-1). It was 12h —
+    /// MAX_CONFIRM_AGE to the UNOBSERVED alarm plus 3h to restore — a promise about a human, and at
+    /// the time nothing in the repo even scheduled the check that raises the alarm. A pager now runs
+    /// it every 900s (keeper/xyz.essey.liveness-pager.plist), but 48h is quoted anyway: it costs
+    /// 0.08x and takes the derivation off the operator's response time entirely.
+    /// Full horizons 135.2h AAPL and 131.6h NVDA (R8 LOW-1 SLO table, row 48h). Worst move 12.61%
+    /// (1.69x) and 13.52% (1.57x). Per feed and NOT interchangeable: NVDA's worst window DOES grow
+    /// past 84h — 12.90% at 96h, 13.52% at 100h — which the 12h text denied (R8 INFO-1).
+    /// THOSE TWO ARE ABSOLUTE. Only a DOWN move makes bad debt, and down is 12.61% AAPL / 10.58%
+    /// NVDA, so the risk-side binding number is AAPL's 1.69x. NVDA's 1.57x is an UP move (its worst
+    /// is UP at every window) — conservative here, wrong to copy into the next listing's sizing.
     uint256 public constant PRICE_CONFIRM_DELAY = 6 hours;
 
     /// R4 HIGH-1: one promoted snapshot cannot deliver a delay however it is rate-limited, because

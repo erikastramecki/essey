@@ -116,6 +116,41 @@ Both matter more than the noise they replace because **the feed is append-only p
 `commitMarket` reverts `FeedIsImmutable` — so the remedy for a broken aggregator is onboarding a new
 listing behind `PARAM_TIMELOCK`, and the alarm is the whole of the operator's warning.
 
+### Schedule the check — it is a pager, not a checklist step
+
+**G-LEND R8 LOW-1: this check shipped with the R4 HIGH-2 fix and nothing in the repo ever ran it** —
+no plist, no cron, no timer; only the manual command above. The keeper's own unit
+(`keeper/xyz.essey.liveness-keeper.plist`) has `KeepAlive`, which restarts a **crashed** keeper — it
+cannot see a keeper that is up and observing nothing, which is R4 HIGH-2 and the reason this check
+was written. Install the second unit:
+
+```bash
+cp keeper/liveness-pager.env.example ../.env.liveness-pager    # then fill it in; it is gitignored
+sed "s|__REPO__|$(git rev-parse --show-toplevel)|g" keeper/xyz.essey.liveness-pager.plist \
+  > ~/Library/LaunchAgents/xyz.essey.liveness-pager.plist
+launchctl load -w ~/Library/LaunchAgents/xyz.essey.liveness-pager.plist
+```
+
+It runs `keeper/page-liveness-keeper.sh` every **900s** (`StartInterval`; `RunAtLoad`, and
+deliberately **no** `KeepAlive` — this is an interval job, not a daemon). The wrapper exists only
+because launchd cannot turn an exit code into a notification: it runs the check, and on **any**
+non-zero exit it writes `.keeper-state/liveness-pager.alert`, POSTs `PAGER_WEBHOOK_URL`, and raises a
+local banner. Exit **2** (a missing `LIVENESS_ORACLE` / `ESSEY_MARKETS` / `MARKET_TOKENS`) pages too —
+a supervisor that cannot run is not a quieter supervisor, it is the same blind spot wearing a hat.
+
+**A dark weekend does not page.** `FEED DARK` is non-fatal and the check exits 0, which is the whole
+point of the R6 LOW-1 work above — read that section before anyone proposes muting this.
+
+**If `PAGER_WEBHOOK_URL` is unset, or the POST fails, the run prints `NO PAGE SENT` / `PAGE
+UNDELIVERED` and the alert lives only in the file and the log.** A 404 from a revoked webhook counts
+as undelivered (`curl --fail`), not as a delivered page. Check
+`.keeper-state/liveness-pager.log` after installing and confirm you are not reading that line.
+
+**Detection time, stated from the mechanism rather than promised:** the condition goes fatal at
+`MAX_CONFIRM_AGE` = 9h after the keeper stops observing, and a 15-minute poll makes delivered
+detection ~9.25h. That is far inside the **48h** keeper gap the `PRICE_CONFIRM_DELAY` derivation is
+now quoted at (R8 LOW-1) — the margin the old 12h SLO asserted but had no mechanism for.
+
 After 2 days:
 
 ```bash

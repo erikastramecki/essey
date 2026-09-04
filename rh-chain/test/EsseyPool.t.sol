@@ -580,31 +580,102 @@ contract EsseyPoolTest is Test {
         pool.borrow(10e18, 0);
     }
 
-    /// R1-AUDIT + fix #5: accrual suspends ONLY while the BORROW ASSET is paused (the one pause that blocks
-    /// every repayment). A COLLATERAL-token pause must NOT forgive interest pool-wide — watching collateral
-    /// tokens let an unrelated pause hand every borrower a free loan.
-    function test_accrualSuspendsOnlyWhenBorrowAssetPaused() public {
-        EsseyPool p2 = new EsseyPool(usdg, address(tok), mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
-        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
-        _activate(p2);
-        vm.startPrank(ALICE);
-        tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
-        uint256 id = p2.borrow(10e18, 700e6);
-        vm.stopPrank();
-
-        // A COLLATERAL pause must NOT forgive interest (the fix): it still accrues.
+    /// R1-AUDIT + fix #5: a COLLATERAL-token pause must NOT forgive interest pool-wide — watching
+    /// collateral tokens let an unrelated pause hand every borrower a free loan.
+    function test_aCollateralPauseDoesNotForgiveInterest() public {
+        (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
         tok.setPaused(true);
         vm.warp(block.timestamp + 365 days);
         p2.accrue();
         assertGt(p2.debtOf(id), 700e6, "a collateral pause must NOT hand a free loan");
+    }
 
-        // The BORROW ASSET pause DOES suspend accrual (no one can repay while it holds).
-        uint256 debtBefore = p2.debtOf(id);
-        usdg.setPausedWord(1);
+    /// R8 MED-1. The property ranges over TWO dimensions — pause state AND time — and the test this
+    /// replaced varied one: it set the pause BEFORE the warp, so pause state was constant across the
+    /// interval and the fixture passed identically against the defect and against the fix.
+    ///
+    /// Here the pause lands INSIDE the interval. A year in which repayment was possible on every one
+    /// of its seconds must still be charged, however the last second reads.
+    function test_aPauseAtTheCallInstantCannotEraseAnUnpausedInterval() public {
+        (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
+        uint256 snap = vm.snapshotState();
+
         vm.warp(block.timestamp + 365 days);
         p2.accrue();
-        assertEq(p2.debtOf(id), debtBefore, "no interest while the borrow asset is paused");
+        uint256 honest = p2.debtOf(id);
+        uint256 honestAssets = p2.totalAssets();
+        vm.revertToState(snap);
+
+        vm.warp(block.timestamp + 365 days);
+        usdg.setPausedWord(1); // the issuer pauses in the final second; a STRANGER calls accrue()
+        vm.prank(address(0xBAD));
+        p2.accrue();
+
+        assertGt(honest, 700e6, "the control really accrued, so this is not vacuous");
+        assertEq(p2.debtOf(id), honest, "an unpaused year is charged whatever the closing read says");
+        assertEq(p2.totalAssets(), honestAssets, "and no lender interest is destroyed");
+    }
+
+    /// The pause moves in BOTH directions inside one measured span, against a control that varies
+    /// only time. The witnessed paused year must contribute exactly nothing and the two unpaused
+    /// days must contribute exactly what they would have with no pause at all.
+    function test_onlyTheWitnessedPausedWindowIsForgiven() public {
+        (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
+        uint256 snap = vm.snapshotState();
+
+        vm.warp(block.timestamp + 1 days); p2.accrue();
+        vm.warp(block.timestamp + 1 days); p2.accrue();
+        uint256 twoUnpausedDays = p2.debtOf(id);
+        vm.revertToState(snap);
+
+        vm.warp(block.timestamp + 1 days);
+        usdg.setPausedWord(1);
+        p2.accrue(); // charges day one, and WITNESSES the pause
+        vm.warp(block.timestamp + 365 days);
+        p2.accrue(); // both endpoints paused: forgiven
         usdg.setPausedWord(0);
+        vm.warp(block.timestamp + 1 days);
+        p2.accrue(); // charges day two
+
+        assertGt(twoUnpausedDays, 700e6, "the control really accrued, so this is not vacuous");
+        assertEq(p2.debtOf(id), twoUnpausedDays, "the witnessed paused year cost the borrower nothing");
+    }
+
+    /// The accepted residual, pinned so a later "fix" that forgives it goes red. `paused()` is a bare
+    /// boolean and the live USDG proxy exposes no timestamp variant, so a window nobody called
+    /// accrue() inside leaves no on-chain trace. Forgiving it on the strength of the closing read is
+    /// exactly the erasure above. Witnessing costs one permissionless call, which anyone may make.
+    function test_anUnwitnessedPausedWindowIsCharged() public {
+        (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
+        usdg.setPausedWord(1);
+        vm.warp(block.timestamp + 365 days);
+        usdg.setPausedWord(0);
+        p2.accrue();
+        assertGt(p2.debtOf(id), 700e6, "no witness, no record, no forgiveness");
+    }
+
+    /// An idle pool has nothing to accrue, which is NOT the same as a suspended one: its clock must
+    /// still advance, or the first borrower is billed for the wait. This is what rules out the
+    /// minimal fix for MED-1 — moving the clock below the early return conflates the three reasons
+    /// `_growth` can report no growth. No borrower here, so it asserts on the clock and nothing else.
+    function test_anIdlePoolKeepsItsAccrualClockCurrent() public {
+        EsseyPool p2 = new EsseyPool(usdg, address(tok), mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
+        p2.accrue();
+        assertEq(p2.totalBorrows(), 0, "the pool is idle: nothing to accrue");
+        vm.warp(block.timestamp + 30 days);
+        p2.accrue();
+        assertEq(p2.lastAccrual(), block.timestamp, "an idle clock still runs");
+    }
+
+    function _pausePoolWithABorrower() internal returns (EsseyPool p2, uint256 id) {
+        p2 = new EsseyPool(usdg, address(tok), mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
+        _activate(p2);
+        vm.startPrank(ALICE);
+        tok.approve(address(p2), type(uint256).max); usdg.approve(address(p2), type(uint256).max);
+        id = p2.borrow(10e18, 700e6);
+        vm.stopPrank();
     }
 
     /// CRITICAL (fix #1): a BORROW ASSET whose paused() returns a NON-boolean word must not freeze the pool.

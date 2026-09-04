@@ -138,18 +138,51 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   **The keeper term is the one R7's warm ceiling introduced (R7 INFO-1).** Since the ceiling landed,
   "the last print whose health was verifiable" is the last OBSERVATION, not the feed's last round: a
   keeper gap beginning while the feed is still live pushes the horizon back **1:1** (measured at
-  exactly 1:1 across 0/8/24/72h of pre-dark keeper gap). Nothing on chain bounds it. **The SLO does,
-  and it is an operational commitment rather than a code fact: 12h — 9h until `UNOBSERVED` goes fatal
-  at `MAX_CONFIRM_AGE`, plus 3h to restore observation.** It needs the founder's ratification, and
-  changing it moves every number below.
+  exactly 1:1 across 0/8/24/72h of pre-dark keeper gap). Nothing on chain bounds it, and **nothing
+  off chain bounds it either** — which is why this term is now quoted at a deliberately pessimistic
+  **48h rather than the 12h SLO this document used to state** (R8 LOW-1).
 
-  At **100h AAPL / 96h NVDA** the worst measured move is **12.61% (1.69x) / 12.90% (1.65x)** inside
-  the 21.25% buffer — unchanged from the 88h/84h feed-only horizons, because neither feed's worst
-  window grows past 84h, and not the 2.51x / 2.70x the 6h row shows. Solvency is not broken on the
-  measured distribution, but the margin is materially thinner than the 6h figure implies and **the
-  founder should read the risk against 1.65x**, not the 1.68x this section asked for at 72h.
-  Reproduce with `node keeper/measure-feed-volatility.mjs`, which prints both horizons, the SLO it
-  conditions the second on, and the five worst gaps with their dates.
+  **The 12h was a promise about a human, not a fact about the code.** Its arithmetic was right — 9h
+  until `UNOBSERVED` goes fatal at `MAX_CONFIRM_AGE`, plus 3h to restore — but 9h is when the alarm
+  CONDITION becomes true, not when anyone is told. The only thing that evaluates that condition is
+  `keeper/check-liveness-keeper.mjs`, so the delivered detection time was 9h plus however often it
+  ran. **48h costs 0.08x of headroom and needs no one to answer a page at 03:00 on a Sunday.** The
+  sensitivity is flat: the R8 SLO table measures 1.65x at both 0h and 12h, 1.57x at 24h and 48h, and
+  1.24x at a full week — an SLO of 12h bought **0.00x**. Ratify 48h, not a response time.
+
+  At **135.2h AAPL / 131.6h NVDA** (R8 LOW-1 table, row `48h`) the worst measured **absolute** move
+  is **12.61% / 13.52%** inside the 21.25% buffer, i.e. 1.69x / 1.57x. Quote these per feed and do
+  not cross them: NVDA's worst window **does** grow past 84h — 12.90% at 96h, 13.52% at 100h — which
+  the previous "neither feed's worst window grows past 84h" denied (R8 INFO-1).
+
+  **Read the risk against AAPL's 1.69x** — not the 1.65x this section used to name. Only a **DOWN**
+  move turns collateral into bad debt, and 1.65x is an NVDA **UP**-move figure: NVDA's worst move is
+  up at every window measured, so its risk-side number is 10.58% down (2.01x), while AAPL's worst is
+  down at every window and 12.61% down (1.69x) is genuinely risk-side. Conservative-and-wrong is
+  still wrong when it is about to be copied into the next listing's sizing, and the next name may not
+  be one that happened to trend up over the sample. Solvency is not broken on the measured
+  distribution, but the margin is materially thinner than the 6h row's 2.51x / 2.70x implies.
+  Reproduce with `node keeper/measure-feed-volatility.mjs`, which prints both horizons, the keeper
+  gap it conditions the second on, and the five worst gaps with their dates. It ceils the design
+  horizon to a whole hour, so it reports **136h / 132h** for the same 135.2h / 131.6h. The gap is
+  `KEEPER_GAP_H` (default 48) — override it to re-derive the sensitivity table rather than trusting
+  the one quoted here.
+
+  **Two caveats on that tool, both open findings, neither moving the numbers above.** It walks from a
+  hard-coded round count, so it reads a progressively staler window than a live `latestRoundData()`
+  would (R8 INFO-3). And `worstMove` is direction-blind — `Math.abs` at
+  `keeper/measure-feed-volatility.mjs:90` — so it prints **absolute** moves only. AAPL's worst is
+  down at every window, so its 12.61% / 1.69x reproduces directly; **NVDA's down figures do not**,
+  and the directional split above comes from the R8 independent walker, not from this script. Make
+  `worstMove` return both directions before anyone sizes the next listing with it.
+- **Absolute (both-direction) figures belong under `MAX_PRICE_DEVIATION_BPS = 2_000`, not under the
+  delay.** `_deviates` (`rh-chain/src/EsseyMarkets.sol:640-643`) takes `observed > ref ? observed -
+  ref : ref - observed` and compares that one `diff` against `ref * MAX_PRICE_DEVIATION_BPS`, so up
+  and down of equal size are treated identically — this is the constant an absolute statistic
+  actually describes. The windows that reach it are short: `_breaker` refuses a baseline older than
+  `MAX_BASELINE_AGE = 1 hour` before calling `_deviates`, and the armed branch holds at most
+  `PRICE_DESYNC_HOLD = 6 hours`. Worst absolute moves there are **7.06% at 1h and 7.88% at 6h** —
+  2.83x and 2.54x inside the 20% bound, so no spurious arming is reachable on the measured sample.
 - **Liquidation pause:** capped at `MAX_LIQUIDATION_PAUSE` per call AND followed by a cooldown as
   long as the pause itself (R3 MED-3), so chained calls cannot become a permanent freeze.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.

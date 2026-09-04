@@ -18,6 +18,11 @@ say() { printf '%s\n' "$*" >&2; fail=1; }
 
 # 1. Files that must never be committed at all.
 for f in $staged; do
+  # A .example/.sample is a TEMPLATE by convention and is meant to be committed. Blocking it made the
+  # gate cry wolf on liveness-pager.env.example — placeholders only, and its own first line says no key
+  # belongs in it. A gate with false positives is a gate people learn to bypass, which is the failure
+  # this file exists to prevent. The CONTENT scan below still reads these files for real secrets.
+  case "$f" in *.example|*.sample|*.template) continue ;; esac
   case "$f" in
     *.env|*.env.*|.env|.env.*|*.pem|*.key|*.keypair.json|*.keystore)
       say "BLOCKED: $f — secrets file staged." ;;

@@ -109,6 +109,9 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     uint256 public totalReserves;
     uint256 public borrowIndex = WAD;
     uint256 public lastAccrual;
+    /// Whether the accrual at `lastAccrual` saw the borrow asset paused — the opening endpoint of
+    /// the next interval. Without it, one instantaneous read stood for a whole interval (R8 MED-1).
+    bool public pauseObserved;
 
     uint256 public baseBps;
     uint256 public slope1Bps;
@@ -216,9 +219,12 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     ///
     /// PAUSE-AWARE. A Robinhood token pause blocks transfers, so a borrower physically cannot
     /// repay. Charging interest across that window bills them for time in which repayment was
-    /// impossible — and it is the issuer's pause, not theirs. `accrueFor` skips paused intervals.
+    /// impossible — and it is the issuer's pause, not theirs. `_growth` forgives such an interval
+    /// only when BOTH endpoints were observed paused; the clock then advances across it, which is
+    /// what keeps the forgiveness deliberate rather than a side effect of the closing read.
     function accrue() public {
-        (uint256 num, uint256 denom) = _growth();
+        (uint256 num, uint256 denom, bool paused) = _growth();
+        pauseObserved = paused;
         lastAccrual = block.timestamp;
         if (num == denom) return;
 
@@ -251,17 +257,26 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// borrower a free loan (fix #5). Accepted residual: a borrower whose collateral is paused still
     /// accrues during the freeze. That is a cost now, not a trap — repay() closes under a collateral
     /// pause and escrows the collateral (MED-1), so the borrower can always stop the clock.
-    function _growth() internal view returns (uint256 num, uint256 denom) {
+    ///
+    /// R8 MED-1: forgive an interval only when the pause was seen at BOTH endpoints. `paused()` is a
+    /// bare boolean and the live USDG proxy exposes no timestamp variant, so the closing read is
+    /// evidence about its own instant and nothing else — treating it as evidence about the interval
+    /// let any address erase a fully unpaused year of lender interest for gas. Ambiguous windows
+    /// therefore resolve toward the lender, and witnessing one costs a single permissionless
+    /// `accrue()`: an unwitnessed pause is charged, because on chain it did not happen.
+    function _growth() internal view returns (uint256 num, uint256 denom, bool paused) {
         denom = BPS * SECONDS_PER_YEAR;
+        paused = _borrowAssetPaused();
+        if (paused && pauseObserved) return (denom, denom, paused); // suspended: both endpoints paused
         uint256 dt = block.timestamp - lastAccrual;
-        if (dt == 0 || totalBorrows == 0 || _borrowAssetPaused()) return (denom, denom);
-        return (denom + borrowRateBps() * dt, denom);
+        if (dt == 0 || totalBorrows == 0) return (denom, denom, paused); // nothing to accrue, clock still runs
+        return (denom + borrowRateBps() * dt, denom, paused);
     }
 
     /// `totalAssets()` as withdraw/redeem will see it — they accrue first, so a max* computed
     /// against today's price is computed against the wrong one.
     function _accruedAssets() internal view returns (uint256) {
-        (uint256 num, uint256 denom) = _growth();
+        (uint256 num, uint256 denom,) = _growth();
         uint256 borrows_ = (totalBorrows * num) / denom;
         uint256 reserves_ = totalReserves + ((borrows_ - totalBorrows) * reserveBps) / BPS;
         uint256 gross = IERC20(asset()).balanceOf(address(this)) + borrows_;

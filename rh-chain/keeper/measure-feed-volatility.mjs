@@ -101,10 +101,13 @@ const feeds = {
 
 /// THE TERM THE FEED'S OWN GAP DOES NOT CARRY (R7 INFO-1). Since the warm ceiling, the horizon runs
 /// from the last OBSERVATION rather than the feed's last round, so a keeper gap starting while the
-/// feed still reads adds to it 1:1 (measured). Nothing on chain bounds it; the supervisor does, at
-/// MAX_CONFIRM_AGE. An OPERATIONAL COMMITMENT, not a code fact — stated here so the founder's number
-/// is conditioned on something falsifiable, and so changing the commitment moves it.
-const KEEPER_GAP_SLO_H = 12; // 9h to the UNOBSERVED alarm + 3h to restore the keeper
+/// feed still reads adds to it 1:1 (measured). Nothing on chain bounds it.
+///
+/// 48h, AND IT IS NOT AN SLO (R8 LOW-1). This was 12h — 9h to the UNOBSERVED alarm plus 3h to
+/// restore — which promised a human response nothing in the repo delivered. Overridable so the
+/// sensitivity is reproducible rather than asserted: it is flat, 1.65x at both 0 and 12, and 48
+/// costs 0.08x.
+const KEEPER_GAP_H = Number(process.env.KEEPER_GAP_H || 48);
 
 for (const [name, [addr, latest]] of Object.entries(feeds)) {
   const rounds = normalise(await walk(addr, latest, latest));
@@ -131,9 +134,9 @@ for (const [name, [addr, latest]] of Object.entries(feeds)) {
   // PRICE_CONFIRM_DELAY + CONFIRM_STEP of post-return observations the read slot owes. ~71h is the
   // ordinary Friday-to-Monday case; the measured worst is what the buffer has to survive.
   const feedOnlyHorizonH = Math.ceil(maxGapH + 7.5);
-  const horizonH = Math.ceil(maxGapH + KEEPER_GAP_SLO_H + 7.5);
+  const horizonH = Math.ceil(maxGapH + KEEPER_GAP_H + 7.5);
   console.log(`feed-only horizon h ${feedOnlyHorizonH}  = max gap ${maxGapH.toFixed(2)}h + delay 6h + step 1.5h`);
-  console.log(`design horizon h ${horizonH}  = the above + the ${KEEPER_GAP_SLO_H}h keeper-gap SLO (R7 INFO-1)`);
+  console.log(`design horizon h ${horizonH}  = the above + a ${KEEPER_GAP_H}h keeper gap (R8 LOW-1)`);
   for (const h of [1, 2, 4, 6, 8, 12, 24, 48, 72, feedOnlyHorizonH, horizonH]) {
     const { worst, at } = worstMove(rounds, h * 3600);
     const headroom = (0.2125 / worst).toFixed(2);
