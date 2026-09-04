@@ -11,6 +11,7 @@ import {CollateralReconciler} from "../src/CollateralReconciler.sol";
 import {MockFeed, MockStock} from "./RiskModules.t.sol";
 import {Note} from "../src/market/Note.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 
 /// Real USDG on Robinhood Chain has SIX decimals (verified by eth_call against mainnet).
 /// The first version of this mock used 18, which made a 1e12 collateral-valuation error
@@ -45,7 +46,6 @@ contract EsseyPoolTest is Test {
     address LIQUIDATOR;
 
     uint256 constant MON_IN_SESSION = 1_753_110_000;
-    uint256 constant MAX_AGE = 15 minutes;
     uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
 
@@ -58,7 +58,7 @@ contract EsseyPoolTest is Test {
         px = new MockFeed(200e8, 8); // $200/share
         tok = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, GAP);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6); // USDG is 6dp
         vm.prank(ADMIN);
@@ -602,16 +602,225 @@ contract EsseyPoolTest is Test {
         assertGe(back, 99_000e6, "victim recovers substantially all of their deposit");
     }
 
+
+    // ------------------------------------------------- MED-1: the collateral-pause exit
+
+    /// G-LEND MED-1. repay() used to END in a collateral transfer, so the Robinhood issuer's
+    /// PAUSER_ROLE pinned a borrower inside a position that kept accruing: repay, addCollateral and
+    /// removeCollateral all reverted and only repayPartial survived, which cannot close (UseFullRepay
+    /// at amount >= owed). The DEBT must settle regardless of whether the collateral can move.
+    function test_repayClosesTheDebtUnderACollateralPause() public {
+        uint256 id = _borrow(700e6);
+        uint256 stockBefore = tok.balanceOf(ALICE);
+        tok.setPaused(true);
+
+        // the trap that remains, and is now merely a delay: the collateral cannot physically move
+        vm.prank(ALICE);
+        vm.expectRevert(bytes("token paused"));
+        pool.addCollateral(id, 1e18);
+
+        vm.prank(ALICE);
+        pool.repay(id, 700e6);
+        assertEq(pool.debtOf(id), 0, "the debt settles even though the collateral cannot move");
+        assertEq(pool.totalBorrows(), 0, "and is released from the pool's books");
+        assertEq(pool.marketBorrows(address(tok)), 0, "and from the market's exposure");
+        assertEq(tok.balanceOf(ALICE), stockBefore, "the collateral is still held by the pool");
+        assertEq(pool.note().ownerOf(id), ALICE, "the Note survives as the claim ticket");
+
+        tok.setPaused(false);
+        vm.prank(ALICE);
+        assertEq(pool.claimCollateral(id), 10e18, "the full collateral comes back on the unpause");
+        assertEq(tok.balanceOf(ALICE), stockBefore + 10e18);
+        Note spent = pool.note(); // hoisted: an inline call would be what expectRevert catches
+        vm.expectRevert();
+        spent.ownerOf(id); // the deed is spent
+    }
+
+    /// The other way an ERC-20 declines — `return false`, revert nothing. A caller that only handled
+    /// the revert would treat this as delivery and burn the Note against collateral it never sent.
+    function test_aSilentlyFailingTransferEscrowsRatherThanBurningTheDeed() public {
+        uint256 id = _borrow(700e6);
+        uint256 stockBefore = tok.balanceOf(ALICE);
+        tok.setTransferReturnsFalse(true);
+
+        vm.prank(ALICE);
+        pool.repay(id, 700e6);
+        assertEq(tok.balanceOf(ALICE), stockBefore, "nothing was delivered");
+        assertEq(pool.note().ownerOf(id), ALICE, "so the deed must NOT have been burned");
+
+        tok.setTransferReturnsFalse(false);
+        vm.prank(ALICE);
+        assertEq(pool.claimCollateral(id), 10e18);
+    }
+
+    /// The escrow keeps bearer semantics: the claim follows the Note, not the original borrower.
+    function test_theEscrowedClaimFollowsTheNote() public {
+        uint256 id = _borrow(700e6);
+        tok.setPaused(true);
+        vm.prank(ALICE);
+        pool.repay(id, 700e6);
+        tok.setPaused(false);
+
+        Note deed = pool.note(); // hoisted: an inline call would eat the prank
+        vm.prank(ALICE);
+        deed.transferFrom(ALICE, LIQUIDATOR, id);
+        vm.prank(ALICE);
+        vm.expectRevert(EsseyPool.NotBorrower.selector);
+        pool.claimCollateral(id); // the former holder has no claim left
+        vm.prank(LIQUIDATOR);
+        assertEq(pool.claimCollateral(id), 10e18, "the new holder collects");
+        assertEq(tok.balanceOf(LIQUIDATOR), 10e18);
+    }
+
+    /// An OPEN position is not an escrow, and a spent one is not either. Both must be refused by
+    /// name — `claimCollateral` is the only path that can touch a principal-zero position, so a
+    /// wrong guard here is a way to walk collateral out of a live loan.
+    function test_claimCollateralRefusesOpenAndSpentPositions() public {
+        uint256 id = _borrow(700e6);
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(EsseyPool.DebtOutstanding.selector, id));
+        pool.claimCollateral(id);
+
+        vm.prank(ALICE);
+        pool.repay(id, 700e6); // unpaused: the normal path, which closes fully
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(EsseyPool.NothingToClaim.selector, id));
+        pool.claimCollateral(id);
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(EsseyPool.NothingToClaim.selector, uint256(999)));
+        pool.claimCollateral(999);
+    }
+
+    /// The escrowed collateral stays ON THE BOOKS under its own index snapshot, so an adminBurn
+    /// during the freeze is shared exactly as it would have been before the repay. Holding it off
+    /// the reconciler instead would have made the surviving balance look larger than it is and
+    /// masked the burn for everyone still open.
+    function test_anAdminBurnDuringTheEscrowIsStillShared() public {
+        uint256 idA = _borrow(700e6);
+        vm.prank(LIQUIDATOR);
+        tok.approve(address(pool), type(uint256).max);
+        tok.mint(LIQUIDATOR, 10e18);
+        vm.prank(LIQUIDATOR);
+        uint256 idB = pool.borrow(10e18, 700e6); // same cohort, both pre-burn
+
+        tok.setPaused(true);
+        vm.prank(ALICE);
+        pool.repay(idA, 700e6); // escrowed, still booked
+        tok.setPaused(false);
+
+        tok.adminBurn(address(pool), 10e18); // the issuer destroys half of the pool's stock
+        vm.prank(ALICE);
+        uint256 claimed = pool.claimCollateral(idA);
+        assertEq(claimed, 5e18, "the escrowed claim takes its pro-rata share of the burn");
+        assertEq(pool.recordedRaw(address(tok)), 10e18, "and B's nominal collateral is untouched");
+        vm.prank(LIQUIDATOR);
+        pool.repay(idB, 700e6);
+        assertEq(tok.balanceOf(LIQUIDATOR), 5e18, "B takes the other half of the loss, not all of it");
+    }
+
     // ------------------------------------------------- guards found by mutation sweep
 
-    function test_withdrawBeyondAvailableCashReverts() public {
+    /// G-LEND LOW-1. The pool's cash constraint has to be visible in maxWithdraw/maxRedeem, or a
+    /// spec-following 4626 router asks for the advertised figure and reverts — measured at cash
+    /// 148355994889 against maxWithdraw 150000000000. Three assertions, because "it reverts" was
+    /// what the old test settled for and it is the weakest of the three: the advertised figure
+    /// EQUALS the cash, handing it straight back SUCCEEDS, and one wei more is refused by the 4626
+    /// max gate. Assert the SPECIFIC error — a bare expectRevert() also matches the SafeERC20
+    /// failure that would happen anyway, which is how the deleted-guard mutant used to survive.
+    function test_maxWithdrawIsCappedAtCashAndRoundTrips() public {
         _borrow(700e6);
         uint256 cash = usdg.balanceOf(address(pool));
+        assertGt(pool.convertToAssets(pool.balanceOf(LENDER)), cash, "fixture must be cash-constrained");
+        assertEq(pool.maxWithdraw(LENDER), cash, "maxWithdraw must not advertise past the cash");
+
         vm.prank(LENDER);
-        // Assert the SPECIFIC error: a bare expectRevert() also matches the SafeERC20 failure
-        // that would occur anyway, so it passed with the guard deleted. Found by mutation sweep.
-        vm.expectRevert(abi.encodeWithSelector(EsseyPool.InsufficientLiquidity.selector, cash + 1, cash));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC4626.ERC4626ExceededMaxWithdraw.selector, LENDER, cash + 1, cash)
+        );
         pool.withdraw(cash + 1, LENDER, LENDER);
+
+        uint256 advertised = pool.maxWithdraw(LENDER); // hoisted: an inline call would eat the prank
+        vm.prank(LENDER);
+        pool.withdraw(advertised, LENDER, LENDER);
+        assertEq(usdg.balanceOf(address(pool)), 0, "the advertised figure must be exactly withdrawable");
+    }
+
+    /// The redeem side is the one that needed the ACCRUED price. redeem() accrues before it previews,
+    /// and accrual raises the share price — so shares sized at today's cheaper price redeem for MORE
+    /// assets than the pool holds, and the advertised figure reverts.
+    ///
+    /// This runs on its own INTEREST-BEARING pool on purpose. The suite's shared fixture is
+    /// deliberately zero-rate, which means `_accruedAssets()` and `totalAssets()` are always equal
+    /// there and the distinction under test is invisible — the mutation that swaps one for the other
+    /// survives every zero-rate test in this file.
+    function test_maxRedeemIsCappedAtTheACCRUEDPriceNotTodays() public {
+        EsseyPool ip = _interestPool();
+        uint256 cash = usdg.balanceOf(address(ip));
+        assertGt(ip.balanceOf(LENDER), 0);
+        vm.warp(block.timestamp + 3650 days); // a decade at 10%: the share price moves materially
+
+        uint256 shares = ip.maxRedeem(LENDER);
+        assertLt(shares, ip.balanceOf(LENDER), "fixture must be cash-constrained");
+        vm.prank(LENDER);
+        uint256 got = ip.redeem(shares, LENDER, LENDER); // the whole property: it must NOT revert
+        assertLe(got, cash, "and it must not pay out more than the pool held");
+        assertGt(got, 0);
+    }
+
+    /// The assets side of the same claim, on the same interest-bearing pool.
+    function test_maxWithdrawIsCappedAtTheACCRUEDPriceNotTodays() public {
+        EsseyPool ip = _interestPool();
+        uint256 cash = usdg.balanceOf(address(ip));
+        vm.warp(block.timestamp + 3650 days);
+        uint256 advertised = ip.maxWithdraw(LENDER);
+        assertEq(advertised, cash, "still capped at the cash");
+        vm.prank(LENDER);
+        ip.withdraw(advertised, LENDER, LENDER);
+        assertEq(usdg.balanceOf(address(ip)), 0, "every advertised wei was withdrawable");
+    }
+
+    /// The OTHER direction of the same choice, and the one the cash clamp hides: when the pool is
+    /// NOT cash-constrained, maxWithdraw is the lender's whole claim — and pricing it at today's
+    /// assets rather than the post-accrual ones UNDERSTATES it by every second of pending interest.
+    /// A 4626 router that withdraws the advertised maximum would then leave shares behind and call
+    /// the position closed. Two lenders, so one lender's claim sits inside the cash.
+    function test_maxWithdrawAdvertisesTheWholeClaimWhenCashIsNotTheBinding() public {
+        EsseyPool ip = _interestPool();
+        usdg.mint(LIQUIDATOR, 100_000e6);
+        vm.startPrank(LIQUIDATOR);
+        usdg.approve(address(ip), type(uint256).max);
+        ip.deposit(100_000e6, LIQUIDATOR);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 3650 days); // a decade of pending, un-accrued interest
+
+        uint256 advertised = ip.maxWithdraw(LENDER);
+        assertLt(advertised, usdg.balanceOf(address(ip)), "fixture must NOT be cash-constrained");
+
+        // What the lender is owed once the pending interest is booked — which is precisely what
+        // `withdraw` will price against, because it accrues first.
+        uint256 snap = vm.snapshotState();
+        ip.accrue();
+        uint256 trueClaim = ip.convertToAssets(ip.balanceOf(LENDER));
+        vm.revertToState(snap);
+        assertEq(advertised, trueClaim, "maxWithdraw must quote the ACCRUED claim, not today's");
+
+        vm.prank(LENDER);
+        ip.withdraw(advertised, LENDER, LENDER); // and it is executable, not merely quotable
+        assertLt(ip.maxWithdraw(LENDER), 1, "nothing withdrawable is left behind");
+    }
+
+    /// A pool that actually charges interest, funded and drawn so the cash constraint binds.
+    function _interestPool() internal returns (EsseyPool ip) {
+        ip = new EsseyPool(usdg, address(tok), mk, 1_000, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        vm.startPrank(LENDER);
+        usdg.approve(address(ip), type(uint256).max);
+        ip.deposit(100_000e6, LENDER);
+        vm.stopPrank();
+        _activate(ip);
+        vm.startPrank(ALICE);
+        tok.approve(address(ip), type(uint256).max);
+        ip.borrow(10e18, 700e6);
+        vm.stopPrank();
     }
 
     /// F-5 sweep survivor: the withdraw liquidity guard is `>`, not `>=` — draining the pool's

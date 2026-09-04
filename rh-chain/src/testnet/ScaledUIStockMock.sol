@@ -15,8 +15,16 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 ///
 /// `setUIMultiplier` models a corporate action (a split re-scales every holder's UI balance while
 /// raw balances are untouched), so the split-handling path can be exercised on testnet too.
+/// `shape` exists because the interface lies about the deployed token. Real Robinhood Stock Tokens
+/// answer `newUIMultiplier()` with ONE word, not the two `IScaledUI` declares (verified on a 4663
+/// fork), and a typed `try` cannot survive that mismatch — G-LEND CRIT-1, which stayed invisible
+/// precisely because this fixture could only produce the interface's own shape. OneWord is the
+/// default so a testnet stack behaves like mainnet.
 contract ScaledUIStockMock is ERC20 {
+    enum Shape { OneWord, TwoWords, Garbage, Reverts }
+
     uint256 public uiMultiplier = 1e18;
+    Shape public shape = Shape.OneWord;
     uint256 private _newMultiplier;
     uint256 private _effectiveAt;
 
@@ -34,9 +42,29 @@ contract ScaledUIStockMock is ERC20 {
         emit UIMultiplierSet(m);
     }
 
+    function setShape(Shape s) external {
+        shape = s;
+    }
+
+    /// A pause on the real token BLOCKS TRANSFERS — that is the whole hazard (G-LEND MED-1). A mock
+    /// that could not express it could not stand in for the token it stands in for.
+    bool public paused;
+
+    function setPaused(bool v) external {
+        paused = v;
+    }
+
+    function _update(address from, address to, uint256 amount) internal override {
+        require(!paused, "token paused");
+        super._update(from, to, amount);
+    }
+
+    /// Publishing a schedule implies the two-word shape: a token with no second word has no
+    /// effectiveAt to publish.
     function scheduleUIMultiplier(uint256 m, uint256 effectiveAt_) external {
         _newMultiplier = m;
         _effectiveAt = effectiveAt_;
+        shape = Shape.TwoWords;
     }
 
     function balanceOfUI(address account) external view returns (uint256) {
@@ -48,6 +76,14 @@ contract ScaledUIStockMock is ERC20 {
     }
 
     function newUIMultiplier() external view returns (uint256, uint256) {
-        return (_newMultiplier, _effectiveAt);
+        Shape s = shape;
+        if (s == Shape.TwoWords) return (_newMultiplier, _effectiveAt);
+        if (s == Shape.Reverts) revert("no schedule surface");
+        uint256 word = uiMultiplier;
+        uint256 len = s == Shape.OneWord ? 32 : 5;
+        assembly ("memory-safe") {
+            mstore(0x00, word)
+            return(0x00, len)
+        }
     }
 }

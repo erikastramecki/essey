@@ -9,15 +9,14 @@ contract LivenessOracleTest is Test {
     address KEEPER;
     address GUARDIAN;
 
-    uint256 constant MAX_AGE = 15 minutes;
     uint256 constant GRACE = 30 minutes;
-    uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
+    uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence, and THE bound
 
     function setUp() public {
         KEEPER = makeAddr("keeper");
         GUARDIAN = makeAddr("guardian");
         vm.warp(1_753_110_000);
-        o = new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, GAP);
+        o = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
     }
 
     function _beat() internal {
@@ -36,8 +35,8 @@ contract LivenessOracleTest is Test {
     /// minus a zero lastHeartbeat is small — so without the explicit zero check the oracle would
     /// read as OPEN on a fresh chain. Found by mutation: deleting that check passed every other test.
     function test_neverBeatIsClosedEvenAtLowTimestamps() public {
-        LivenessOracle fresh = new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, GAP);
-        vm.warp(60); // 60s after genesis: younger than maxHeartbeatAge
+        LivenessOracle fresh = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
+        vm.warp(60); // 60s after genesis: younger than gapThreshold
         assertEq(fresh.lastHeartbeat(), 0);
         assertFalse(fresh.liquidationsAllowed(), "must be closed because it has NEVER beat");
     }
@@ -105,30 +104,62 @@ contract LivenessOracleTest is Test {
     /// Keeper failure is indistinguishable from chain failure, and must be treated identically.
     function test_keeperFailureIsTreatedAsAnOutage() public {
         _bringOnline();
-        vm.warp(block.timestamp + MAX_AGE + 1); // keeper simply stopped
+        vm.warp(block.timestamp + GAP + 1); // keeper simply stopped
         assertFalse(o.liquidationsAllowed());
     }
 
-    /// SHORT OUTAGE. An outage briefer than maxHeartbeatAge used to be invisible: the heartbeat
-    /// never went stale, no gap was recorded, and liquidations resumed in the first block back —
-    /// the exact restart-liquidation this contract exists to prevent, at a smaller scale.
-    function test_outageShorterThanMaxAgeStillTripsTheGrace() public {
+    /// SHORT OUTAGE. It must trip the grace on the beat that ends it, as well as closing the view
+    /// while it lasts.
+    function test_shortOutageStillTripsTheGrace() public {
         _bringOnline();
-        // 12 minutes: longer than the 10-minute gap threshold, SHORTER than the 15-minute
-        // liveness bound, so liveness alone would never have noticed.
         vm.warp(block.timestamp + 12 minutes);
-        assertLt(12 minutes, MAX_AGE, "fixture must be inside the liveness bound");
         _beat();
         assertFalse(o.liquidationsAllowed(), "a short outage must still start the grace");
         _advanceLive(GRACE);
         assertTrue(o.liquidationsAllowed());
     }
 
-    function test_gapThresholdMustBeTighterThanLiveness() public {
+    /// G-LEND HIGH-1. The shipped pair was maxHeartbeatAge 90,000 against gapThreshold 900, and the
+    /// whole 25-hour interval between them was open season: after any halt shorter than that,
+    /// liquidationsAllowed() was still TRUE in the first block back, so a bot's queued liquidation
+    /// executed before the keeper could post the beat that registers the gap. Proven at 6 hours.
+    /// There is no such interval now — one threshold serves both sides.
+    function test_shortOutageClosesLiquidationsWithNoTransaction() public {
+        _bringOnline();
+        vm.warp(block.timestamp + 6 hours);
+        assertFalse(o.liquidationsAllowed(), "HIGH-1: a 6h halt must close BEFORE the keeper posts");
+    }
+
+    /// "Closes eventually" is not the property. The property is that the view and heartbeat() agree
+    /// on the SAME instant, so no interval is an outage to one and normal to the other.
+    function test_theViewAndTheBeatShareOneBoundary() public {
+        _bringOnline();
+        vm.warp(o.lastHeartbeat() + GAP);
+        assertTrue(o.liquidationsAllowed(), "at the threshold: not an outage");
+        _beat();
+        assertTrue(o.liquidationsAllowed(), "and the beat agrees - no gap registered");
+
+        vm.warp(block.timestamp + GAP + 1);
+        assertFalse(o.liquidationsAllowed(), "one second past: closed with NO tx sent");
+        _beat();
+        assertFalse(o.liquidationsAllowed(), "and the beat hands straight over to the grace");
+    }
+
+    /// The cadence the contract recommends must not itself look like an outage. It used to: the old
+    /// advice was maxHeartbeatAge / 3 = 8.3h against a 900s gapThreshold, so every beat at the
+    /// recommended cadence registered a gap and re-armed an hour of grace, indefinitely.
+    function test_theRecommendedCadenceNeverTripsAGap() public {
+        _bringOnline();
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(block.timestamp + o.gapThreshold() / 3);
+            _beat();
+            assertTrue(o.liquidationsAllowed(), "the recommended cadence must not arm the grace");
+        }
+    }
+
+    function test_gapThresholdMustBeNonZero() public {
         vm.expectRevert(LivenessOracle.BadGapThreshold.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, MAX_AGE + 1);
-        vm.expectRevert(LivenessOracle.BadGapThreshold.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, 0);
+        new LivenessOracle(KEEPER, GUARDIAN, 0, GRACE);
     }
 
     /// Borrow-path fix #8: the post-gap grace must not dwarf the gap that triggers it. A gap barely over
@@ -137,11 +168,11 @@ contract LivenessOracleTest is Test {
     /// is un-deployable; the previously-shipped 1h grace over a 10m gap (6x) now fails at construction.
     function test_resumeGraceCannotDwarfTheGapThreshold() public {
         vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 15 minutes, 1 hours, 10 minutes); // the old shipped 6x config
+        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 1 hours); // the old shipped 6x config
         // exactly 4x is allowed; strictly more is not
-        new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, 40 minutes, 10 minutes); // 4x -> ok
+        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 40 minutes); // 4x -> ok
         vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, 40 minutes + 1, 10 minutes); // just over 4x
+        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 40 minutes + 1); // just over 4x
     }
 
     function test_onlyKeeperCanBeat() public {
@@ -181,8 +212,8 @@ contract LivenessOracleTest is Test {
 
     function test_zeroAddressRejected() public {
         vm.expectRevert(LivenessOracle.ZeroAddress.selector);
-        new LivenessOracle(address(0), GUARDIAN, MAX_AGE, GRACE, GAP);
+        new LivenessOracle(address(0), GUARDIAN, GAP, GRACE);
         vm.expectRevert(LivenessOracle.ZeroAddress.selector);
-        new LivenessOracle(KEEPER, address(0), MAX_AGE, GRACE, GAP);
+        new LivenessOracle(KEEPER, address(0), GAP, GRACE);
     }
 }

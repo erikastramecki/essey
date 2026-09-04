@@ -103,6 +103,60 @@ contract DeployMarkets is Script {
         revert("no deploy profile for this chain id");
     }
 
+    /// Every privileged key the stack bakes in. Read and CHECKED before any broadcast (G-LEND MED-2).
+    struct Roles {
+        address guardian;
+        address livenessKeeper;
+        address livenessGuardian;
+        address depthKeeper;
+        address reserveTreasury;
+    }
+
+    /// One role key. On a non-testnet profile it MUST be set and MUST NOT be the deploy key.
+    ///
+    /// The previous version console.log'd a warning and broadcast anyway, which is not a control:
+    /// EsseyMarkets.guardian and EsseyPool.reserveTreasury are immutable, so a single-key posture
+    /// shipped once is shipped forever — one key that was market admin, market guardian, liveness
+    /// keeper, liveness guardian, depth keeper, health admin AND the reserve treasury.
+    function _roleKey(string memory name, address a, bool mainnet) internal view returns (address) {
+        if (!mainnet) return a == address(0) ? msg.sender : a;
+        require(a != address(0), string.concat(name, " is required on mainnet - refusing to deploy"));
+        require(a != msg.sender, string.concat(name, " must not be the deploy key - refusing to deploy"));
+        return a;
+    }
+
+    function _roles(bool testnet) internal view returns (Roles memory) {
+        return _checkRoles(
+            testnet,
+            Roles({
+                guardian: vm.envOr("GUARDIAN", address(0)),
+                livenessKeeper: vm.envOr("LIVENESS_KEEPER", address(0)),
+                livenessGuardian: vm.envOr("LIVENESS_GUARDIAN", address(0)),
+                depthKeeper: vm.envOr("DEPTH_KEEPER", address(0)),
+                reserveTreasury: vm.envOr("RESERVE_TREASURY", address(0))
+            })
+        );
+    }
+
+    /// The RULE, separated from the lookup so a test can exercise it without mutating the process
+    /// environment — `vm.setEnv` is global and forge runs test cases concurrently, so an env-driven
+    /// test of this races every other suite.
+    function _checkRoles(bool testnet, Roles memory r) internal view returns (Roles memory) {
+        bool mainnet = !testnet;
+        r.guardian = _roleKey("GUARDIAN", r.guardian, mainnet);
+        r.livenessKeeper = _roleKey("LIVENESS_KEEPER", r.livenessKeeper, mainnet);
+        r.livenessGuardian = _roleKey("LIVENESS_GUARDIAN", r.livenessGuardian, mainnet);
+        r.depthKeeper = _roleKey("DEPTH_KEEPER", r.depthKeeper, mainnet);
+        r.reserveTreasury = _roleKey("RESERVE_TREASURY", r.reserveTreasury, mainnet);
+        // The liveness guardian's only power is rotating the liveness keeper. Held by the same
+        // address, that rotation is not a recovery path from anything.
+        require(
+            testnet || r.livenessKeeper != r.livenessGuardian,
+            "LIVENESS_KEEPER must not be its own guardian - refusing to deploy"
+        );
+        return r;
+    }
+
     struct MarketCfg {
         string symbol;
         string tokenEnv; // env var naming the collateral token; ignored under TESTNET=1
@@ -158,6 +212,9 @@ contract DeployMarkets is Script {
             );
         }
 
+        // Before the broadcast, so a missing or shared key costs nothing but a re-run.
+        Roles memory roles = _roles(prof.testnet);
+
         vm.startBroadcast();
 
         if (testnet) {
@@ -167,19 +224,17 @@ contract DeployMarkets is Script {
         }
         uint8 assetDecimals = IERC20Metadata(usdg).decimals();
 
-        // Testnet keeps working single-key on the default; mainnet MUST set a real split key.
-        address guardian = vm.envOr("GUARDIAN", address(0));
-        if (guardian == address(0)) {
-            guardian = msg.sender;
-            console.log("!!! GUARDIAN unset - defaulting to the admin key. Single-key posture; !!!");
-            console.log("!!! set GUARDIAN to a separate hot key before any mainnet deploy.     !!!");
-        }
-
-        LivenessOracle liveness = new LivenessOracle(msg.sender, msg.sender, 90_000, 1 hours, 900);
+        // gapThreshold 900s is BOTH the outage bound and the liveness bound (G-LEND HIGH-1: two
+        // bounds meant a 25-hour window in which a halted chain was still liquidatable-into). It
+        // implies a 5-minute keeper cadence — gapThreshold / 3 — which is what keeper/liveness-keeper.mjs
+        // already runs. resumeGrace 1h is Chainlink's recommended sequencer grace and exactly the
+        // 4x gapThreshold ceiling the constructor enforces.
+        LivenessOracle liveness = new LivenessOracle(roles.livenessKeeper, roles.livenessGuardian, 900, 1 hours);
         // AD-2: markets sit at borrowCap 0 until the depth keeper posts and the raise matures.
-        MarketHealthOracle health = new MarketHealthOracle(msg.sender, guardian, msg.sender);
-        EsseyMarkets markets =
-            new EsseyMarkets(AggregatorV3Interface(seqFeed), liveness, health, msg.sender, guardian, assetDecimals);
+        MarketHealthOracle health = new MarketHealthOracle(roles.depthKeeper, roles.guardian, msg.sender);
+        EsseyMarkets markets = new EsseyMarkets(
+            AggregatorV3Interface(seqFeed), liveness, health, msg.sender, roles.guardian, assetDecimals
+        );
         // The oracle's from-zero ramp base is 0 until wired: same broadcast, always.
         health.wireMarkets(address(markets));
         PoolFactory factory = new PoolFactory(markets);
@@ -187,13 +242,14 @@ contract DeployMarkets is Script {
 
         MarketCfg[] memory list = _marketList(block.chainid);
         for (uint256 i = 0; i < list.length; i++) {
-            _listMarket(markets, usdg, assetDecimals, prof, sharedMultiplier, list[i]);
+            _listMarket(markets, usdg, assetDecimals, prof, sharedMultiplier, roles.reserveTreasury, list[i]);
         }
 
         // LivenessOracle starts CLOSED and treats the first heartbeat as a gap, so it serves out
         // `resumeGrace` before liquidations — and therefore borrows — are allowed. Without this the
         // stack deploys, the timelock elapses, and canBorrow is STILL false with nothing saying why.
-        liveness.heartbeat();
+        // Only the keeper may post it, and on mainnet that is deliberately not the deploy key.
+        if (roles.livenessKeeper == msg.sender) liveness.heartbeat();
 
         vm.stopBroadcast();
 
@@ -207,9 +263,17 @@ contract DeployMarkets is Script {
         console.log("profile   ", prof.name);
         console.log("liveness  ", address(liveness));
         console.log("markets   ", address(markets));
-        console.log("guardian  ", guardian);
+        console.log("admin     ", msg.sender);
+        console.log("guardian  ", roles.guardian);
+        console.log("liv keeper", roles.livenessKeeper);
+        console.log("liv guard ", roles.livenessGuardian);
+        console.log("depth keep", roles.depthKeeper);
+        console.log("reserve tr", roles.reserveTreasury);
         console.log("factory   ", address(factory));
         console.log("usdg      ", usdg);
+        if (roles.livenessKeeper != msg.sender) {
+            console.log("LIVENESS_KEEPER must post the FIRST heartbeat - resumeGrace starts there, not at deploy");
+        }
         console.log("commitMarket callable in 2 days");
         console.log("AT COMMIT: factory.register(token, pool) per market (CommitAndRehearse does");
         console.log("both) - register requires activePool, which only the commit sets.");
@@ -225,6 +289,7 @@ contract DeployMarkets is Script {
         uint8 assetDecimals,
         Profile memory prof,
         address sharedMultiplier,
+        address reserveTreasury,
         MarketCfg memory cfg
     ) internal {
         address token;
@@ -238,7 +303,7 @@ contract DeployMarkets is Script {
 
         RateModes.Curve memory c = RateModes.curve(cfg.mode, cfg.policyRateBps);
         EsseyPool pool = new EsseyPool(
-            IERC20(usdg), token, markets, c.baseBps, c.slope1Bps, c.slope2Bps, 1000, address(0), msg.sender, 0,
+            IERC20(usdg), token, markets, c.baseBps, c.slope1Bps, c.slope2Bps, 1000, address(0), reserveTreasury, 0,
             _identity(cfg.symbol)
         );
         pool.setNoteArt(address(new NoteArt(pool, pool.note())));

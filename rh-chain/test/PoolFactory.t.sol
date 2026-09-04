@@ -42,7 +42,7 @@ contract PoolFactoryTest is Test {
         MockFeed seq = new MockFeed(0, 0);
         seq.setStartedAt(block.timestamp - 2 days);
         LivenessOracle liv =
-            new LivenessOracle(makeAddr("keeper"), makeAddr("guardian"), 15 minutes, 30 minutes, 10 minutes);
+            new LivenessOracle(makeAddr("keeper"), makeAddr("guardian"), 10 minutes, 30 minutes);
         MarketHealthOracle hox = new MarketHealthOracle(makeAddr("keeper"), makeAddr("guardian"), admin);
         EsseyMarkets m = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, admin, makeAddr("mk-guardian"), 6);
         vm.prank(admin);

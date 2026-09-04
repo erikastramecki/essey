@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {EsseyMarkets} from "./EsseyMarkets.sol";
 import {CollateralReconciler} from "./CollateralReconciler.sol";
@@ -60,10 +61,14 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     error NotInsolvent(uint256 value, uint256 owed);
     error RecoveredExceedsOwed(uint256 recovered, uint256 owed);
     error RecoveredBelowFloor(uint256 recovered, uint256 floor);
+    error DebtOutstanding(uint256 id);
+    error NothingToClaim(uint256 id);
 
     event Borrowed(uint256 indexed id, address indexed borrower, address indexed token, uint256 collateral, uint256 debt);
     event BorrowedMore(uint256 indexed id, address indexed borrower, uint256 drawn, uint256 newDebt);
     event Repaid(uint256 indexed id, uint256 paid, uint256 collateralReturned);
+    event CollateralEscrowed(uint256 indexed id, address indexed holder, uint256 amount);
+    event CollateralClaimed(uint256 indexed id, address indexed to, uint256 amount);
     event RepaidPartial(uint256 indexed id, address indexed payer, uint256 paid, uint256 remainingDebt);
     event CollateralAdded(uint256 indexed id, address indexed payer, uint256 added, uint256 newCollateralRaw);
     event CollateralRemoved(uint256 indexed id, address indexed to, uint256 removed, uint256 newCollateralRaw);
@@ -212,25 +217,9 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// repay. Charging interest across that window bills them for time in which repayment was
     /// impossible — and it is the issuer's pause, not theirs. `accrueFor` skips paused intervals.
     function accrue() public {
-        uint256 dt = block.timestamp - lastAccrual;
-        if (dt == 0 || totalBorrows == 0) {
-            lastAccrual = block.timestamp;
-            return;
-        }
-        // Only a BORROW-ASSET pause suspends the clock. Every repay and liquidate transfers the borrow
-        // asset, so its pause is the one event that blocks EVERY position from closing — the sole case
-        // where forgiving interest pool-wide is correct. A COLLATERAL-token pause blocks only that token's
-        // positions, not everyone's, so it must NOT forgive interest for the whole pool: watching
-        // collateral tokens (the previous behaviour) let an unrelated token's pause hand every borrower a
-        // free loan (fix #5). Accepted residual: a borrower whose collateral is paused still accrues during
-        // the freeze; suspending only the affected positions would need per-market accrual indices.
-        if (_borrowAssetPaused()) {
-            lastAccrual = block.timestamp;
-            return;
-        }
-        uint256 rate = borrowRateBps();
-        uint256 denom = BPS * SECONDS_PER_YEAR;
-        uint256 num = denom + rate * dt;
+        (uint256 num, uint256 denom) = _growth();
+        lastAccrual = block.timestamp;
+        if (num == denom) return;
 
         // Guard the index multiply: borrowIndex is monotonic and never rebased, so at a sustained
         // maximum rate it would eventually overflow. Stop compounding rather than trap funds.
@@ -241,8 +230,41 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         uint256 scaled = (prev * num) / denom;
         totalBorrows = scaled;
         uint256 interest = scaled - prev;
+        // LOW-4, accepted with its threshold recorded rather than left as an oversight: `scaled` is
+        // raw 6-decimal, so it truncates to zero below totalBorrows * rate * dt < BPS * SECONDS_PER_YEAR
+        // — about $630 of book at 5% with dt = 1. Under that, a per-second accrue advances borrowIndex
+        // (WAD-scaled) while the aggregate and the reserve cut stay flat. The cost is the reserve cut
+        // on a dust book, griefable only by paying gas. Not worth a WAD-scaled aggregate.
         totalReserves += (interest * reserveBps) / BPS;
-        lastAccrual = block.timestamp;
+    }
+
+    /// The compounding factor for the elapsed interval as (num, denom); num == denom means nothing
+    /// accrues. ONE place computes it, so `accrue()` and the 4626 max* views can never disagree
+    /// about what the next accrual will do.
+    ///
+    /// Only a BORROW-ASSET pause suspends the clock. Every repay and liquidate transfers the borrow
+    /// asset, so its pause is the one event that blocks EVERY position from closing — the sole case
+    /// where forgiving interest pool-wide is correct. A COLLATERAL-token pause blocks only that
+    /// token's positions, not everyone's, so it must NOT forgive interest for the whole pool:
+    /// watching collateral tokens (the previous behaviour) let an unrelated token's pause hand every
+    /// borrower a free loan (fix #5). Accepted residual: a borrower whose collateral is paused still
+    /// accrues during the freeze. That is a cost now, not a trap — repay() closes under a collateral
+    /// pause and escrows the collateral (MED-1), so the borrower can always stop the clock.
+    function _growth() internal view returns (uint256 num, uint256 denom) {
+        denom = BPS * SECONDS_PER_YEAR;
+        uint256 dt = block.timestamp - lastAccrual;
+        if (dt == 0 || totalBorrows == 0 || _borrowAssetPaused()) return (denom, denom);
+        return (denom + borrowRateBps() * dt, denom);
+    }
+
+    /// `totalAssets()` as withdraw/redeem will see it — they accrue first, so a max* computed
+    /// against today's price is computed against the wrong one.
+    function _accruedAssets() internal view returns (uint256) {
+        (uint256 num, uint256 denom) = _growth();
+        uint256 borrows_ = (totalBorrows * num) / denom;
+        uint256 reserves_ = totalReserves + ((borrows_ - totalBorrows) * reserveBps) / BPS;
+        uint256 gross = IERC20(asset()).balanceOf(address(this)) + borrows_;
+        return gross > reserves_ ? gross - reserves_ : 0;
     }
 
     /// Does the BORROW ASSET report itself paused? Its pause blocks every repayment and liquidation, so
@@ -334,6 +356,35 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         return super.redeem(shares, receiver, owner_);
     }
 
+    /// LOW-1. `_withdraw` enforces a cash constraint OZ's unconstrained max* know nothing about, so
+    /// both advertised more than the pool could pay and reverted when handed straight back (measured:
+    /// cash 148355994889 vs maxWithdraw 150000000000). A human retries smaller; a 4626 router does not.
+    ///
+    /// Both clamp at cash and price against `_accruedAssets`, because withdraw/redeem accrue BEFORE
+    /// previewing: shares sized at today's cheaper price redeem for more assets than the cash on hand.
+    function maxWithdraw(address owner_) public view override returns (uint256) {
+        uint256 owned = _accruedConvertToAssets(balanceOf(owner_));
+        uint256 cash = IERC20(asset()).balanceOf(address(this));
+        return owned < cash ? owned : cash;
+    }
+
+    function maxRedeem(address owner_) public view override returns (uint256) {
+        uint256 shares = balanceOf(owner_);
+        uint256 cash = IERC20(asset()).balanceOf(address(this));
+        uint256 affordable = _accruedConvertToShares(cash);
+        return shares < affordable ? shares : affordable;
+    }
+
+    /// OZ's virtual-share conversions, evaluated against the POST-accrual assets. Floor in both
+    /// directions: the max* family must never round up into a revert.
+    function _accruedConvertToAssets(uint256 shares) internal view returns (uint256) {
+        return Math.mulDiv(shares, _accruedAssets() + 1, totalSupply() + 10 ** _decimalsOffset(), Math.Rounding.Floor);
+    }
+
+    function _accruedConvertToShares(uint256 assets_) internal view returns (uint256) {
+        return Math.mulDiv(assets_, totalSupply() + 10 ** _decimalsOffset(), _accruedAssets() + 1, Math.Rounding.Floor);
+    }
+
     // ---------------------------------------------------------------- reserves -> the Bell
 
     /// Route accrued protocol reserves: `bellShareBps` to the Bell's pot, the rest to the reserve
@@ -381,8 +432,8 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         IERC20(token).safeTransferFrom(msg.sender, address(this), collateralRaw);
         uint256 collSnap = _creditCollateral(token, collateralRaw);
 
-        // A zero-debt position can never be repaid (repay reverts NoDebt) nor liquidated
-        // (isUnderwater is false at zero), so its collateral would be trapped forever.
+        // A zero-debt position is not openable: repay reverts NotBorrower at principal 0 and
+        // isUnderwater is false at zero, so nothing but claimCollateral could ever touch it.
         if (debt == 0) revert NoDebt();
         // A fresh position draws, adds to marketBorrows, and pulls cash all in the one amount `debt`.
         _gateNewDebt(token, collateralRaw, debt, debt, debt);
@@ -486,9 +537,56 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // wei stays in the pool (safe direction).
         uint256 heldForRepay = IERC20(p.token).balanceOf(address(this));
         if (give > heldForRepay) give = heldForRepay;
-        _closePosition(id, p, owed); // burns the Note; msg.sender was verified as its holder above
-        IERC20(p.token).safeTransfer(msg.sender, give);
-        emit Repaid(id, owed, give);
+
+        // The DEBT settles unconditionally; only the collateral return is allowed to fail.
+        _releaseDebt(p, owed);
+        positions[id].principal = 0;
+        if (_tryReturnCollateral(p.token, msg.sender, give)) {
+            _closePositionTail(id, p); // burns the Note; msg.sender was verified as its holder above
+            emit Repaid(id, owed, give);
+            return;
+        }
+        // MED-1. repay used to END in that transfer, so the issuer's PAUSER_ROLE (or a blocklist)
+        // could pin a borrower inside a position that kept accruing: repay, addCollateral and
+        // removeCollateral all reverted and only repayPartial survived, which cannot close. Now the
+        // debt is gone the moment they pay, and the Note stays alive as the claim ticket. The
+        // collateral stays on the books under this position's own index snapshot, so an adminBurn
+        // during the freeze is shared exactly as it would have been before the repay.
+        emit Repaid(id, owed, 0);
+        emit CollateralEscrowed(id, msg.sender, give);
+    }
+
+    /// Collect the collateral of a position whose debt is settled but whose collateral could not be
+    /// transferred at the time. Bearer auth like every other position path — whoever holds the Note
+    /// — and permissionlessly retryable: no keeper, no privilege, no deadline. A still-failing
+    /// transfer reverts the whole call, so nothing is consumed by a doomed attempt.
+    function claimCollateral(uint256 id) external nonReentrant returns (uint256 given) {
+        Position memory p = positions[id];
+        if (p.token == address(0)) revert NothingToClaim(id);
+        if (p.principal != 0) revert DebtOutstanding(id);
+        if (note.ownerOf(id) != msg.sender) revert NotBorrower();
+
+        _reconcile(p.token);
+        given = _effectiveCollateral(p.token, p.collateralRaw, p.collIndexSnapshot);
+        uint256 held = IERC20(p.token).balanceOf(address(this));
+        if (given > held) given = held; // the repay/liquidate dust-cap
+        _closePositionTail(id, p);
+        IERC20(p.token).safeTransfer(msg.sender, given);
+        emit CollateralClaimed(id, msg.sender, given);
+    }
+
+    /// Return collateral without letting its failure block the close. A revert, a `false` return and
+    /// a short return all mean "not delivered" and route to the escrow.
+    ///
+    /// Decoded as a RAW WORD like _borrowAssetPaused, never abi.decode(_, (bool)), which panics on any
+    /// word other than 0/1 and would bubble out of the repay it protects. The call precedes
+    /// _closePositionTail, which looks like inverted CEI and is not: every entry point is nonReentrant,
+    /// and the state visible during it IS the escrow state — a resting state, not a half-finished one.
+    function _tryReturnCollateral(address token, address to, uint256 amount) internal returns (bool) {
+        if (amount == 0) return true;
+        (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transfer, (to, amount)));
+        if (!ok) return false;
+        return ret.length == 0 || (ret.length >= 32 && abi.decode(ret, (uint256)) != 0);
     }
 
     /// Pay down part of the debt. PERMISSIONLESS and ungated (LivenessOracle.sol:109-111): paying
@@ -505,6 +603,13 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // Rebase: remaining debt becomes the new principal at the current index. marketBorrows takes the
         // SIGNED delta and the rebased principal may sit past the market OR position cap — never revert
         // ExceedsMarketCap/ExceedsPositionCap here: both gate new borrows only.
+        //
+        // LOW-3, accepted. This call is permissionless, so a STRANGER paying 1 wei folds someone
+        // else's accrued interest into principal when they choose, and marketBorrows takes the jump —
+        // an outsider timing a figure that gates every new borrow. Accepted because the new figure is
+        // the MORE honest one and the move is strictly toward LESS headroom: it can make the cap bind
+        // sooner, never admit a borrow it should have refused. Folding interest in on accrue() instead
+        // would desynchronise marketBorrows from _releaseDebt, which decrements by p.principal.
         uint256 oldPrincipal = p.principal;
         uint256 newPrincipal = owed - amount;
         p.principal = newPrincipal;
@@ -678,15 +783,11 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         return (value * WAD) / unitValue;
     }
 
-    /// The ONE place a position's exposure is released (R5/R6). Two release paths on Sui
-    /// double-released and made the cap stop binding; there is exactly one here by construction.
-    function _closePosition(uint256 id, Position memory p, uint256 owed) internal {
-        _releaseDebt(p, owed);
-        _closePositionTail(id, p);
-    }
-
-    /// Debt-side release. Separated so liquidate can settle the debt, compute the seizure against
-    /// the still-intact ledger, and only then retire the position.
+    /// Debt-side release, and the ONE place a position's exposure is released (R5/R6). Two release
+    /// paths on Sui double-released and made the cap stop binding; there is exactly one here by
+    /// construction. Separated from the collateral side so liquidate can settle the debt, compute
+    /// the seizure against the still-intact ledger, and only then retire the position — and so
+    /// repay can settle the debt whether or not the collateral can physically move (MED-1).
     function _releaseDebt(Position memory p, uint256 owed) internal {
         totalBorrows = totalBorrows > owed ? totalBorrows - owed : 0;
         uint256 mb = marketBorrows[p.token];

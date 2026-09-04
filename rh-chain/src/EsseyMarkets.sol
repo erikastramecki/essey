@@ -101,8 +101,15 @@ contract EsseyMarkets is StaleFeedGuard {
     uint256 public constant PARAM_TIMELOCK = 2 days;
 
     address public immutable admin;
-    /// Hot emergency key, safe-direction only: it may call disableMarket and NOTHING else — the
-    /// LivenessOracle.keeper trust shape. Compromise cost is a market outage, never funds.
+    /// Hot emergency key, safe-direction only: disableMarket and nothing else, so its compromise
+    /// cost is stopping new borrows — never funds, never liquidation.
+    ///
+    /// G-LEND MED-3: that claim used to be extended to "the LivenessOracle.keeper trust shape" and it
+    /// was FALSE. The health keeper does share it (effectiveCap is read only at canBorrow and
+    /// EsseyPool._gateNewDebt — zero liquidation authority). The LIVENESS keeper does not: it need not
+    /// be compromised at all, only SILENT, and liquidations then close protocol-wide while interest
+    /// compounds. Inherent to a fail-closed gate, and bounded only OPERATIONALLY: two independent
+    /// keepers, and page on lastHeartbeat ageing past gapThreshold / 2.
     address public immutable guardian;
     LivenessOracle public immutable liveness;
     MarketHealthOracle public immutable health;
@@ -258,23 +265,40 @@ contract EsseyMarkets is StaleFeedGuard {
     /// seizure; the ~1h gap is absorbed by the 20pp MIN_RISK_GAP_BPS buffer).
     function _desyncGuard(address token) internal view returns (bool) {
         // (a) scheduled action within the window (pre-flip / at-flip while newUIMultiplier still reports it)
-        try IScaledUI(multiplierSource[token]).newUIMultiplier() returns (uint256, uint256 effectiveAt) {
-            if (effectiveAt != 0) {
-                uint256 d = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
-                if (d <= MULTIPLIER_GUARD_WINDOW) return true;
-            }
-        } catch {}
+        uint256 effectiveAt = _scheduledEffectiveAt(multiplierSource[token]);
+        if (effectiveAt != 0) {
+            uint256 d = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
+            if (d <= MULTIPLIER_GUARD_WINDOW) return true;
+        }
         // (b) the live multiplier MOVED within the window (post-flip, observed via syncMultiplier)
         uint256 movedAt = multiplierMovedAt[token];
         return movedAt != 0 && block.timestamp - movedAt < MULTIPLIER_GUARD_WINDOW;
     }
 
+    /// `effectiveAt` of a scheduled corporate action, or 0 for "nothing scheduled that I can read".
+    ///
+    /// G-LEND CRIT-1: the deployed Stock Token answers `newUIMultiplier()` with ONE word, not the two
+    /// IScaledUI declares, and return-data decoding fails OUTSIDE a typed catch — so this used to
+    /// revert and take canBorrow and canLiquidate with it. Raw staticcall + exact length, the shape
+    /// EsseyPool._borrowAssetPaused already uses.
+    ///
+    /// An unreadable schedule reports "none", NOT "guarded": returning true would brick both gates as
+    /// thoroughly as the revert did. Branch (b) covers such a token, and needs nothing from it.
+    function _scheduledEffectiveAt(address source) internal view returns (uint256) {
+        (bool ok, bytes memory ret) = source.staticcall{gas: 50_000}(abi.encodeWithSignature("newUIMultiplier()"));
+        if (!ok || ret.length != 64) return 0;
+        (, uint256 effectiveAt) = abi.decode(ret, (uint256, uint256));
+        return effectiveAt;
+    }
+
+    /// Same defensive decode as _scheduledEffectiveAt, for the same reason: syncMultiplier sits at the
+    /// top of borrow, borrowMore, removeCollateral, liquidate and writeOff with no outer try, so a
+    /// short or absent return here would brick all five. 0 means "could not read" and syncMultiplier
+    /// records nothing.
     function _liveMultiplier(address source) internal view returns (uint256) {
-        try IScaledUI(source).uiMultiplier() returns (uint256 m) {
-            return m;
-        } catch {
-            return 0;
-        }
+        (bool ok, bytes memory ret) = source.staticcall{gas: 50_000}(abi.encodeWithSignature("uiMultiplier()"));
+        if (!ok || ret.length < 32) return 0;
+        return abi.decode(ret, (uint256));
     }
 
     /// Observe the market's live uiMultiplier (at its multiplierSource) and stamp the moment it moves.
@@ -297,8 +321,9 @@ contract EsseyMarkets is StaleFeedGuard {
     /// Deliberately NO `enabled` conjunct: a disabled market's existing positions must stay
     /// liquidatable (and write-off-able), or disableMarket would freeze risk exactly when it is
     /// being managed — with dust surviving, un-write-off-able until a 2-day re-commit (C-M2/B-L1).
-    /// A never-committed market declines FIRST — before _desyncGuard, whose try on a codeless
-    /// token reverts OUTSIDE the catch (the solc >=0.8.10 empty-returndata trap, see NoteArt).
+    /// A never-committed market declines FIRST, on `configured`, so the answer never depends on what
+    /// an unlisted address happens to return. _desyncGuard is revert-proof since CRIT-1, so the order
+    /// is now clarity rather than the load-bearing guard it used to be.
     function canLiquidate(address token) external view returns (bool) {
         if (!_feeds[token].configured) return false;
         if (!liveness.liquidationsAllowed()) return false;

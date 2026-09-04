@@ -11,11 +11,15 @@ import {Note} from "./Note.sol";
 
 /// Multiply — leveraged stock exposure as PURE PERIPHERY over the pool's public surface.
 ///
-/// The pool has no borrowMore(): borrow() is the only debt-opening call and it mints a fresh
-/// Note each time. So a levered position here is a LADDER of Notes built in one transaction —
-/// borrow against the stock, buy more stock with the proceeds, borrow against that, repeat —
-/// each rung a plain pool position at or under the market's own LTV. No pool or registry change,
-/// no new invariants: every rung is exactly what a user could have opened by hand.
+/// A levered position here is a LADDER of Notes built in one transaction — borrow against the
+/// stock, buy more stock with the proceeds, borrow against that, repeat — each rung a plain pool
+/// position at or under the market's own LTV. No pool or registry change, no new invariants: every
+/// rung is exactly what a user could have opened by hand.
+///
+/// The ladder used to be justified by "the pool has no borrowMore()", and that premise is now
+/// FALSE (EsseyPool.borrowMore). The ladder is kept anyway, on its own merits: each rung carries
+/// its own bearer Note, so a holder can sell, transfer or close ONE rung, and partial deleverage is
+/// just closing a subset. A single growing position would collapse all of that into one deed.
 ///
 /// Custody is atomic-only. Every Note minted here is transferred to the caller before the
 /// transaction ends, and the contract holds no balances between transactions — it is a stateless
@@ -107,6 +111,17 @@ contract EsseyMultiply is ReentrancyGuard {
 
     EsseyMarkets public immutable markets;
     mapping(address => MarketConfig) public config;
+    /// Pools this periphery has itself opened rungs in, taken at open time from `markets.activePool`
+    /// — the timelocked authority. `close()` accepts the current active pool or one of these, and
+    /// nothing else.
+    ///
+    /// LOW-2: the only binding used to be `pool.markets() == markets`, which any contract satisfies
+    /// by returning the right address — after which collateralToken(), asset(), note(), debtOf() and
+    /// repay() are all attacker-defined and the approval below lands on an address of their choosing.
+    /// No user funds were reachable, but "anything left here is lost to the next caller" had become
+    /// "lost to whoever pre-positioned the largest allowance". A superseded pool stays closable
+    /// because this map remembers it.
+    mapping(address => bool) public openedIn;
 
     constructor(EsseyMarkets markets_) {
         if (address(markets_) == address(0)) revert ZeroMarkets();
@@ -140,6 +155,7 @@ contract EsseyMultiply is ReentrancyGuard {
         OpenState memory s;
         s.pool = EsseyPool(markets.activePool(p.token));
         if (address(s.pool) == address(0)) revert NoActivePool(p.token);
+        openedIn[address(s.pool)] = true;
         s.asset = IERC20(s.pool.asset());
 
         IERC20(p.token).safeTransferFrom(msg.sender, address(this), p.collateralIn);
@@ -198,8 +214,8 @@ contract EsseyMultiply is ReentrancyGuard {
     /// otherwise. Caller must have approved this contract for the seed and for the Notes.
     ///
     /// `pool` is caller-supplied so rungs in a superseded (no-longer-active) pool stay closable.
-    /// The binding checks below catch honest mistakes; a hostile fake pool can only spend its
-    /// caller's own seed — this contract never holds anyone else's funds to lose.
+    /// It must nevertheless be a pool the REGISTRY named or this periphery itself opened — see
+    /// `openedIn`. A caller-supplied address that merely claims the right `markets()` is not one.
     function close(
         EsseyPool pool,
         uint256[] calldata ids,
@@ -210,6 +226,11 @@ contract EsseyMultiply is ReentrancyGuard {
     ) external nonReentrant returns (uint256 assetOut, uint256 collateralOut) {
         if (block.timestamp > deadline) revert Expired();
         if (pool.markets() != markets) revert WrongPool(address(pool));
+        // A fake pool can return whatever collateralToken() it likes; `activePool` is set only by the
+        // registry's timelocked commit, so it can never name one.
+        if (!openedIn[address(pool)] && markets.activePool(pool.collateralToken()) != address(pool)) {
+            revert WrongPool(address(pool));
+        }
         CloseState memory s;
         s.token = pool.collateralToken();
         s.adapter = config[s.token].adapter;
@@ -232,11 +253,15 @@ contract EsseyMultiply is ReentrancyGuard {
                 s.cash = owed;
             }
             s.note.transferFrom(msg.sender, address(this), ids[i]);
+            // EXACTLY `owed`, which repay pulls in full — so nothing survives the call and there is
+            // no zeroing to do afterwards. An over-approval here is what LOW-2 leaves behind, and
+            // the binding check above is what stops a caller-chosen address from receiving one.
             s.asset.forceApprove(address(pool), owed);
             uint256 collBefore = IERC20(s.token).balanceOf(address(this));
             pool.repay(ids[i], owed);
             uint256 received = IERC20(s.token).balanceOf(address(this)) - collBefore;
             s.cash -= owed;
+            _forwardEscrowedNote(pool, s.note, ids[i]);
             if (toCollateral) {
                 collateralOut += received;
             } else if (received != 0) {
@@ -250,6 +275,15 @@ contract EsseyMultiply is ReentrancyGuard {
         if (collateralOut != 0) IERC20(s.token).safeTransfer(msg.sender, collateralOut);
         if (assetOut != 0) s.asset.safeTransfer(msg.sender, assetOut);
         emit MultiplyClosed(msg.sender, address(pool), ids, s.seedUsed, assetOut, collateralOut);
+    }
+
+    /// A collateral-token pause makes the pool ESCROW the collateral instead of returning it
+    /// (EsseyPool.claimCollateral), and the Note then survives as the claim ticket. This periphery
+    /// holds nothing between transactions, so a surviving Note goes straight back to the caller —
+    /// otherwise their collateral claim would be lost to whoever called next.
+    function _forwardEscrowedNote(EsseyPool pool, Note note, uint256 id) internal {
+        (address stillOpen,,,,) = pool.positions(id);
+        if (stillOpen != address(0)) note.transferFrom(address(this), msg.sender, id);
     }
 
     /// Open-path swap: borrow asset -> stock, floored against the ORACLE price so a manipulated

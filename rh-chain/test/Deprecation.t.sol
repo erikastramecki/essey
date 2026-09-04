@@ -46,7 +46,7 @@ contract DeprecationLifecycleTest is Test {
         px = new MockFeed(200e8, 8); // $200/share
         tok = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, 15 minutes, GRACE, 10 minutes);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6);
         vm.prank(ADMIN);

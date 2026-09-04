@@ -23,6 +23,12 @@ pragma solidity ^0.8.28;
 ///
 /// This also covers keeper failure, sequencer failure, and RPC failure identically, because from
 /// this contract's point of view they are the same event: the heartbeat stopped.
+///
+/// ONE BOUND, NOT TWO (G-LEND HIGH-1). A separate `maxHeartbeatAge` for the view and a tighter
+/// `gapThreshold` for `heartbeat()` made the interval between them the very race the header above
+/// claims cannot exist: at the deployed 90,000 / 900 pair, any outage under 25 hours left
+/// `liquidationsAllowed()` TRUE in the first block back. Both sides now test the SAME predicate
+/// against the SAME threshold, so no interval is an outage to one and normal to the other.
 contract LivenessOracle {
     error NotKeeper();
     error NotGuardian();
@@ -40,16 +46,10 @@ contract LivenessOracle {
     /// Can rotate the keeper. Cold key.
     address public immutable guardian;
 
-    /// Heartbeat older than this means the chain (or the keeper) is not demonstrably live.
-    uint256 public immutable maxHeartbeatAge;
-    /// A gap LARGER THAN THIS between consecutive heartbeats counts as an outage and starts the
-    /// grace period.
-    ///
-    /// Deliberately TIGHTER than maxHeartbeatAge. Using the liveness bound for both meant an
-    /// outage shorter than maxHeartbeatAge was invisible: the heartbeat never went stale, no gap
-    /// was recorded, and liquidations resumed in the first block back — which is precisely the
-    /// restart-liquidation this contract exists to prevent, just at a smaller scale. Set to a
-    /// small multiple of the keeper's beat interval, so a couple of missed beats trips it.
+    /// THE bound, used in both directions. Silence longer than this is an outage: the view refuses
+    /// liquidations while it lasts, and the beat that ends it starts the grace period. Set to a
+    /// small multiple of the keeper's beat interval, so a couple of missed beats trips it — and no
+    /// larger, because it is also the longest a halted chain can stay liquidatable-into.
     uint256 public immutable gapThreshold;
     /// After a detected gap, liquidations stay disabled this long so borrowers can react.
     /// Mirrors Chainlink's own recommended sequencer grace period.
@@ -59,15 +59,9 @@ contract LivenessOracle {
     /// Timestamp until which liquidations remain disabled following a gap. 0 = none pending.
     uint256 public liquidationsResumeAt;
 
-    constructor(
-        address keeper_,
-        address guardian_,
-        uint256 maxHeartbeatAge_,
-        uint256 resumeGrace_,
-        uint256 gapThreshold_
-    ) {
+    constructor(address keeper_, address guardian_, uint256 gapThreshold_, uint256 resumeGrace_) {
         if (keeper_ == address(0) || guardian_ == address(0)) revert ZeroAddress();
-        if (gapThreshold_ == 0 || gapThreshold_ > maxHeartbeatAge_) revert BadGapThreshold();
+        if (gapThreshold_ == 0) revert BadGapThreshold();
         // The post-gap grace must not dwarf the gap that triggers it. A gap only just over the threshold
         // — e.g. routine keeper jitter — would otherwise suspend liquidations for many multiples of the
         // outage's own length, and repeated jitter re-arms it: a liquidation DoS. Bounding resumeGrace to
@@ -76,7 +70,6 @@ contract LivenessOracle {
         if (resumeGrace_ > 4 * gapThreshold_) revert BadResumeGrace();
         keeper = keeper_;
         guardian = guardian_;
-        maxHeartbeatAge = maxHeartbeatAge_;
         resumeGrace = resumeGrace_;
         gapThreshold = gapThreshold_;
         // Deliberately NOT seeded with block.timestamp. A fresh deployment has not proven liveness,
@@ -84,7 +77,10 @@ contract LivenessOracle {
         lastHeartbeat = 0;
     }
 
-    /// Called by the keeper on a schedule (recommended: maxHeartbeatAge / 3).
+    /// Called by the keeper on a schedule: gapThreshold / 3, so two consecutive misses still leave
+    /// margin. Beating SLOWER than gapThreshold makes every beat look like an outage and re-arms
+    /// resumeGrace indefinitely — the self-inconsistency the old `maxHeartbeatAge / 3` advice
+    /// produced against a tighter gapThreshold.
     ///
     /// A heartbeat that arrives after a gap does NOT immediately re-enable liquidations — it
     /// starts the grace period. This is the whole point: the chain being back is not the same as
@@ -111,7 +107,10 @@ contract LivenessOracle {
     /// would turn a liveness control into the cause of the liquidation it exists to prevent.
     function liquidationsAllowed() public view returns (bool) {
         if (lastHeartbeat == 0) return false; // never proven live
-        if (block.timestamp - lastHeartbeat > maxHeartbeatAge) return false; // not live now
+        // The SAME predicate heartbeat() uses to declare a gap. Testing it here is what closes the
+        // restart race: an outage in progress disables liquidations with no transaction, and the
+        // beat that ends it hands straight over to resumeGrace. No interval belongs to neither.
+        if (block.timestamp - lastHeartbeat > gapThreshold) return false;
         if (block.timestamp < liquidationsResumeAt) return false; // in post-gap grace
         return true;
     }

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IScaledUI} from "./interfaces/IScaledUI.sol";
 
 /// Collateral accounting for a token whose issuer can destroy or rescale it underneath you.
 ///
@@ -123,12 +122,15 @@ abstract contract CollateralReconciler {
 
     /// Is a corporate action scheduled but not yet effective? Lets the UI and keeper warn before
     /// a split silently rescales every position.
+    ///
+    /// Raw staticcall with an exact length check, not a typed `try`: the deployed Robinhood Stock
+    /// Token answers `newUIMultiplier()` with ONE word, and return-data decoding fails outside the
+    /// catch (G-LEND CRIT-1, EsseyMarkets._scheduledEffectiveAt). (0, 0) means "nothing readable
+    /// scheduled" — the same answer this already gave for a token without the surface.
     function pendingMultiplier(address token) external view returns (uint256 newMultiplier, uint256 effectiveAt) {
-        try IScaledUI(token).newUIMultiplier() returns (uint256 m, uint256 at) {
-            return (m, at);
-        } catch {
-            return (0, 0);
-        }
+        (bool ok, bytes memory ret) = token.staticcall{gas: 50_000}(abi.encodeWithSignature("newUIMultiplier()"));
+        if (!ok || ret.length != 64) return (0, 0);
+        return abi.decode(ret, (uint256, uint256));
     }
 
     /// Record a newly-posted position's collateral and return the index snapshot to store on it. Call

@@ -22,9 +22,10 @@ if (!ORACLE || !PK) {
   process.exit(1);
 }
 
-// Beat at 1/3 of maxHeartbeatAge, so two consecutive failures still leave margin.
-const MAX_AGE = Number(process.env.MAX_HEARTBEAT_AGE || 900);
-const INTERVAL = Math.floor((MAX_AGE / 3) * 1000);
+// Beat at 1/3 of gapThreshold, so two consecutive failures still leave margin. Beating SLOWER
+// than gapThreshold makes every beat look like an outage and re-arms resumeGrace indefinitely.
+const GAP_THRESHOLD = Number(process.env.GAP_THRESHOLD || 900);
+const INTERVAL = Math.floor((GAP_THRESHOLD / 3) * 1000);
 
 const rhChain = defineChain({
   id: 4663,
@@ -65,7 +66,7 @@ async function beat() {
     consecutiveFailures++;
     console.error(`${ts()}  WARN heartbeat failed (${consecutiveFailures}x): ${e.shortMessage || e.message}`);
     if (consecutiveFailures >= 2) {
-      console.error(`${ts()}  ALERT two consecutive failures — liquidations will disable in ~${MAX_AGE}s`);
+      console.error(`${ts()}  ALERT two consecutive failures — liquidations will disable in ~${GAP_THRESHOLD}s`);
     }
   }
 }

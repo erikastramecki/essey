@@ -33,7 +33,7 @@ contract BorrowFlowTest is Test {
         // Chainlink L2 sequencer uptime: 0 = up. A price feed here reads as "down".
         MockFeed seqFeed = new MockFeed(8, 0);
         usdg = new ScaledUIStockMock("Mock USDG", "USDG");
-        liveness = new LivenessOracle(address(this), address(this), 90_000, 1 hours, 900);
+        liveness = new LivenessOracle(address(this), address(this), 900, 1 hours);
         health = new MarketHealthOracle(address(this), address(this), address(this));
         markets = new EsseyMarkets(AggregatorV3Interface(address(seqFeed)), liveness, health, address(this), address(this), 18);
         health.wireMarkets(address(markets));
@@ -65,8 +65,7 @@ contract BorrowFlowTest is Test {
         // deliberately refused. Heartbeat, let the grace elapse, heartbeat again — which is exactly
         // what a keeper does after a sequencer restart.
         liveness.heartbeat();
-        vm.warp(block.timestamp + 1 hours + 1); // let the grace elapse; a SECOND heartbeat here
-                                                // would exceed gapThreshold and restart it.
+        _advanceLive(1 hours + 1); // serve out resumeGrace on a live cadence
         // The timelock outlives the feed's 25h staleness limit, so the keeper must re-stamp before
         // anyone can borrow. Skipping this is precisely how the live testnet sat unborrowable.
         aaplFeed.set(200e8, block.timestamp);
@@ -103,4 +102,21 @@ contract BorrowFlowTest is Test {
         markets.collateralValue(address(aapl), 100e18);
         assertFalse(markets.canBorrow(address(aapl)), "a stale price must not be usable");
     }
+
+    /// Advance `secs` the way a LIVE keeper does — beating every gapThreshold/3 throughout — so the
+    /// heartbeat never goes stale. Warping without beating models an OUTAGE, not the passage of time,
+    /// and since G-LEND HIGH-1 the oracle can tell the difference: `liquidationsAllowed()` now closes
+    /// on the same threshold `heartbeat()` calls a gap, so serving out resumeGrace requires the
+    /// keeper to keep posting through it.
+    function _advanceLive(uint256 secs) internal {
+        uint256 end = block.timestamp + secs;
+        uint256 step = liveness.gapThreshold() / 3;
+        while (block.timestamp + step < end) {
+            vm.warp(block.timestamp + step);
+            liveness.heartbeat();
+        }
+        vm.warp(end);
+        liveness.heartbeat();
+    }
+
 }

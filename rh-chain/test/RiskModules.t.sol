@@ -6,6 +6,7 @@ import {StaleFeedGuard} from "../src/StaleFeedGuard.sol";
 import {CollateralReconciler} from "../src/CollateralReconciler.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ScaledUIStockMock} from "../src/testnet/ScaledUIStockMock.sol";
 
 // ---------------------------------------------------------------- mocks
 
@@ -41,8 +42,48 @@ contract MockStock is ERC20 {
     function setMultiplier(uint256 m) external { uiMultiplier = m; }
     bool public paused;
     function setPaused(bool v) external { paused = v; }
-    function schedule(uint256 m, uint256 at) external { _newMult = m; _effectiveAt = at; }
-    function newUIMultiplier() external view returns (uint256, uint256) { return (_newMult, _effectiveAt); }
+    bool public transferReturnsFalse;
+    function setTransferReturnsFalse(bool v) external { transferReturnsFalse = v; }
+
+    /// A pause on the real token BLOCKS TRANSFERS — that is the entire hazard, and a `paused` that
+    /// was only a getter could not express it (G-LEND MED-1 lived behind exactly that gap).
+    function _update(address from, address to, uint256 amt) internal override {
+        require(!paused, "token paused");
+        super._update(from, to, amt);
+    }
+
+    /// The OTHER way an ERC-20 declines: return false and revert nothing. A caller that only
+    /// handles the revert treats this as delivery.
+    function transfer(address to, uint256 amt) public override returns (bool) {
+        if (transferReturnsFalse) return false;
+        return super.transfer(to, amt);
+    }
+
+    /// The RETURN SHAPE of newUIMultiplier(), because the deployed token's is not the shape
+    /// IScaledUI declares. Real AAPL (0xaF3D…93f9) answers with ONE word, so OneWord is the default
+    /// here: a fixture that could only speak the interface's own shape is exactly how G-LEND CRIT-1
+    /// survived 493 green tests.
+    enum Shape { OneWord, TwoWords, Garbage, Reverts }
+
+    Shape public shape = Shape.OneWord;
+
+    function setShape(Shape s) external { shape = s; }
+
+    /// Publishing a schedule implies the two-word shape: a token with no second word has no
+    /// effectiveAt to publish.
+    function schedule(uint256 m, uint256 at) external { _newMult = m; _effectiveAt = at; shape = Shape.TwoWords; }
+
+    function newUIMultiplier() external view returns (uint256, uint256) {
+        Shape s = shape;
+        if (s == Shape.TwoWords) return (_newMult, _effectiveAt);
+        if (s == Shape.Reverts) revert("no schedule surface");
+        uint256 word = uiMultiplier;
+        uint256 len = s == Shape.OneWord ? 32 : 5;
+        assembly ("memory-safe") {
+            mstore(0x00, word)
+            return(0x00, len)
+        }
+    }
     function balanceOfUI(address a) external view returns (uint256) { return balanceOf(a) * uiMultiplier / 1e18; }
     function totalSupplyUI() external view returns (uint256) { return totalSupply() * uiMultiplier / 1e18; }
 }
@@ -417,10 +458,67 @@ contract CollateralReconcilerTest is Test {
     }
 
     function test_pendingMultiplierIsVisibleBeforeItFires() public {
-        tok.schedule(4e18, block.timestamp + 7 days);
+        tok.schedule(4e18, block.timestamp + 7 days); // schedule() implies the two-word shape
         (uint256 m, uint256 at) = r.pendingMultiplier(address(tok));
         assertEq(m, 4e18);
         assertEq(at, block.timestamp + 7 days);
+    }
+
+    /// G-LEND CRIT-1, the reporting twin. The deployed Robinhood Stock Token answers
+    /// newUIMultiplier() with ONE word, and return-data decoding fails OUTSIDE a typed try/catch, so
+    /// this reverted for the UI and the keeper instead of returning (0, 0). Every shape the token
+    /// can present must ANSWER.
+    function test_pendingMultiplierAnswersForEveryReturnShape() public {
+        tok.schedule(4e18, block.timestamp + 7 days);
+        MockStock.Shape[3] memory unreadable =
+            [MockStock.Shape.OneWord, MockStock.Shape.Garbage, MockStock.Shape.Reverts];
+        for (uint256 i; i < unreadable.length; i++) {
+            tok.setShape(unreadable[i]);
+            (uint256 m, uint256 at) = r.pendingMultiplier(address(tok));
+            assertEq(m, 0, "an unreadable shape must report no schedule, not revert");
+            assertEq(at, 0, "an unreadable shape must report no schedule, not revert");
+        }
+        // and the readable shape is genuinely read, so the loop above is not passing on a stub
+        tok.setShape(MockStock.Shape.TwoWords);
+        (uint256 m2, uint256 at2) = r.pendingMultiplier(address(tok));
+        assertEq(m2, 4e18);
+        assertEq(at2, block.timestamp + 7 days);
+    }
+
+    /// The TESTNET fixture must present the same shapes as the token it stands in for, or a testnet
+    /// rehearsal proves something mainnet will not do — which is exactly what CRIT-1 was. Read
+    /// through the production code path, not through the fixture's own getter.
+    function test_theTestnetStockFixtureSpeaksEveryProductionShape() public {
+        ScaledUIStockMock t = new ScaledUIStockMock("Mock AAPL", "AAPL");
+        (uint256 m, uint256 at) = r.pendingMultiplier(address(t));
+        assertEq(m, 0, "ONE word is the default, matching real AAPL");
+        assertEq(at, 0);
+
+        t.scheduleUIMultiplier(4e18, 123); // implies the two-word shape
+        (m, at) = r.pendingMultiplier(address(t));
+        assertEq(m, 4e18, "two words are read when the token offers them");
+        assertEq(at, 123);
+
+        ScaledUIStockMock.Shape[3] memory unreadable = [
+            ScaledUIStockMock.Shape.Garbage, ScaledUIStockMock.Shape.Reverts, ScaledUIStockMock.Shape.OneWord
+        ];
+        for (uint256 i; i < unreadable.length; i++) {
+            t.setShape(unreadable[i]);
+            (m, at) = r.pendingMultiplier(address(t));
+            assertEq(m, 0, "and every other shape reports no schedule rather than reverting");
+            assertEq(at, 0);
+        }
+    }
+
+    /// A token with no ERC-8056 surface at all — and a plain EOA — must both read as "no schedule"
+    /// rather than reverting the caller.
+    function test_pendingMultiplierAnswersForASurfacelessAddress() public view {
+        (uint256 m, uint256 at) = r.pendingMultiplier(address(r));
+        assertEq(m, 0);
+        assertEq(at, 0);
+        (m, at) = r.pendingMultiplier(address(0xBEEF));
+        assertEq(m, 0);
+        assertEq(at, 0);
     }
 
     function test_debitBeyondRecordedReverts() public {

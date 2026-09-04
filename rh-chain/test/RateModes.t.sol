@@ -53,7 +53,7 @@ contract RateModesTest is Test {
         px = new MockFeed(200e8, 8);
         tok = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, ADMIN, 15 minutes, 30 minutes, 10 minutes);
+        liv = new LivenessOracle(KEEPER, ADMIN, 10 minutes, 30 minutes);
         hox = new MarketHealthOracle(KEEPER, ADMIN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, ADMIN, 6);
         vm.prank(ADMIN);

@@ -51,7 +51,7 @@ contract AdapterSeamTest is Test {
         wtok = new WrappedStock();
         cm = new ConstantMultiplier();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, makeAddr("guardian"), 15 minutes, 30 minutes, 10 minutes);
+        liv = new LivenessOracle(KEEPER, makeAddr("guardian"), 10 minutes, 30 minutes);
         hox = new MarketHealthOracle(KEEPER, makeAddr("hox-guardian"), ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, makeAddr("mk-guardian"), 6);
         vm.prank(ADMIN);

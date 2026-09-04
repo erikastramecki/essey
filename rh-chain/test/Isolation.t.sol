@@ -8,6 +8,7 @@ import {Test} from "forge-std/Test.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {EsseyMarkets} from "../src/EsseyMarkets.sol";
 import {EsseyPool} from "../src/EsseyPool.sol";
+import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {LivenessOracle} from "../src/LivenessOracle.sol";
 import {MockUSDG} from "./EsseyPool.t.sol";
 import {MockFeed, MockStock} from "./RiskModules.t.sol";
@@ -42,7 +43,6 @@ contract IsolationBase is Test {
     address BOB;
 
     uint256 constant MON_IN_SESSION = 1_753_110_000;
-    uint256 constant MAX_AGE = 15 minutes;
     uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes;
 
@@ -63,7 +63,7 @@ contract IsolationBase is Test {
         tokA = new MockStock();
         tokB = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, GAP);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6);
         vm.prank(ADMIN);
@@ -439,7 +439,10 @@ contract IsolationTest is IsolationBase {
         assertEq(usdg.balanceOf(address(poolA)), 0);
         assertEq(poolA.utilizationBps(), 10_000);
         vm.prank(LENDER);
-        vm.expectRevert(abi.encodeWithSelector(EsseyPool.InsufficientLiquidity.selector, 1e6, 0));
+        // LOW-1: the cash constraint is advertised in maxWithdraw now, so the 4626 max gate refuses
+        // before _withdraw's InsufficientLiquidity backstop is ever reached.
+        assertEq(poolA.maxWithdraw(LENDER), 0, "a fully-drawn pool must advertise nothing withdrawable");
+        vm.expectRevert(abi.encodeWithSelector(ERC4626.ERC4626ExceededMaxWithdraw.selector, LENDER, 1e6, 0));
         poolA.withdraw(1e6, LENDER, LENDER);
         _assertBUntouched();
 

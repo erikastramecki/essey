@@ -9,7 +9,10 @@ import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol
 import {MockFeed, MockStock, PoolStub} from "./RiskModules.t.sol";
 import {MarketHealthOracle} from "../src/MarketHealthOracle.sol";
 
-contract EsseyMarketsTest is Test {
+/// The shared registry fixture. Extracted so the shape tests below live in their OWN contract:
+/// solc's via_ir pipeline (FOUNDRY_PROFILE=script) hits an assembly tag limit on a single contract
+/// this large, and the script profile has to build the whole tree.
+abstract contract MarketsFixture is Test {
     EsseyMarkets mk;
     LivenessOracle liv;
     MarketHealthOracle hox;
@@ -24,7 +27,6 @@ contract EsseyMarketsTest is Test {
 
     // 2025-07-21 15:00 UTC — a Monday, 11:00 ET, inside the US equity session.
     uint256 constant MON_IN_SESSION = 1_753_110_000;
-    uint256 constant MAX_AGE = 15 minutes;
     uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence
 
@@ -46,7 +48,7 @@ contract EsseyMarketsTest is Test {
         seq.setStartedAt(block.timestamp - 2 days);
         px = new MockFeed(200e8, 8); // $200
         tok = new MockStock();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, MAX_AGE, GRACE, GAP);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6); // USDG is 6dp
         vm.prank(ADMIN);
@@ -99,7 +101,9 @@ contract EsseyMarketsTest is Test {
         _advanceLive(GRACE);
         assertTrue(liv.liquidationsAllowed());
     }
+}
 
+contract EsseyMarketsTest is MarketsFixture {
     // ---------------------------------------------------------------- risk math
 
     function test_collateralValueUsesTheLiveMultiplier() public {
@@ -176,7 +180,7 @@ contract EsseyMarketsTest is Test {
     /// keeper (sequencer-restart proxy), no new borrows even in session, on a fresh price.
     function test_borrowGatedOnChainLiveness() public {
         assertTrue(mk.canBorrow(address(tok)), "borrow open when live + in session");
-        vm.warp(block.timestamp + 2 hours); // keeper now stale (> maxHeartbeatAge), still in-session
+        vm.warp(block.timestamp + 2 hours); // keeper now stale (> gapThreshold), still in-session
         px.set(200e8, block.timestamp);
         assertFalse(mk.canBorrow(address(tok)), "no new borrow while chain liveness is unproven");
     }
@@ -866,5 +870,62 @@ contract EsseyMarketsTest is Test {
         assertEq(mk.MIN_RISK_GAP_BPS(), 2_000, "the lender-protecting risk gap");
         assertEq(mk.PARAM_TIMELOCK(), 2 days, "the parameter-change timelock");
         assertEq(mk.MAX_LIQ_THRESHOLD_BPS(), 9_000, "the liquidation-threshold ceiling");
+    }
+}
+
+/// G-LEND CRIT-1's own contract — see MarketsFixture for why it is not folded into
+/// EsseyMarketsTest.
+contract MultiplierShapeTest is MarketsFixture {
+    /// G-LEND CRIT-1. The DEPLOYED Robinhood Stock Token answers newUIMultiplier() with ONE word, not
+    /// the two IScaledUI declares, and return-data decoding fails OUTSIDE a typed try/catch — so the
+    /// old guard REVERTED, taking canBorrow and canLiquidate with it. Every Robinhood market was dead
+    /// on arrival, and had one been listed while the beacon still returned two words, a later beacon
+    /// upgrade would have left every open loan unliquidatable and un-write-off-able. Both gates must
+    /// ANSWER for every shape the token can present, including the shapes nobody designed for.
+    function test_bothGatesAnswerForEveryMultiplierReturnShape() public {
+        MockStock.Shape[4] memory shapes = [
+            MockStock.Shape.OneWord, MockStock.Shape.TwoWords, MockStock.Shape.Garbage, MockStock.Shape.Reverts
+        ];
+        for (uint256 i; i < shapes.length; i++) {
+            tok.setShape(shapes[i]);
+            assertTrue(mk.canBorrow(address(tok)), "canBorrow must answer for every return shape");
+            assertTrue(mk.canLiquidate(address(tok)), "canLiquidate must answer for every return shape");
+        }
+    }
+
+    /// And the readable shape must still be READ — a guard that ignored the schedule entirely would
+    /// pass the test above. This is the pair that separates "handles it" from "gave up on it".
+    function test_aReadableScheduleStillBlocksAndAnUnreadableOneDoesNot() public {
+        tok.schedule(2e18, block.timestamp + 20 minutes); // schedule() implies the two-word shape
+        assertFalse(mk.canBorrow(address(tok)), "a readable schedule inside the window blocks");
+        assertFalse(mk.canLiquidate(address(tok)), "and blocks liquidation");
+        tok.setShape(MockStock.Shape.OneWord);
+        assertTrue(mk.canBorrow(address(tok)), "the same schedule is unreadable one word wide");
+    }
+
+    /// What a one-word token costs is the PRE-flip warning, and nothing else: branch (b) — the
+    /// observed move — needs no cooperation from the token at all. Refusing to act on an unreadable
+    /// schedule instead would have bricked the market exactly as thoroughly as the revert did.
+    function test_oneWordTokenIsStillGuardedByTheObservedMove() public {
+        tok.schedule(2e18, block.timestamp + 20 minutes);
+        tok.setShape(MockStock.Shape.OneWord); // schedule() flipped the shape; put it back
+        assertTrue(mk.canBorrow(address(tok)), "no pre-flip warning is available");
+        tok.setMultiplier(2e18); // the split APPLIES
+        mk.syncMultiplier(address(tok)); // as the pool does on the borrow/liquidate paths
+        assertFalse(mk.canBorrow(address(tok)), "the observed move blocks borrow");
+        assertFalse(mk.canLiquidate(address(tok)), "and blocks liquidation");
+    }
+
+    /// The same trap one function over. syncMultiplier sits at the top of borrow, borrowMore,
+    /// removeCollateral, liquidate and writeOff with no outer try, so a uiMultiplier() whose return
+    /// shape moved under a beacon upgrade would brick all five.
+    function test_syncMultiplierSurvivesAnUnreadableLiveMultiplier() public {
+        uint256 seenBefore = mk.seenMultiplier(address(tok));
+        assertGt(seenBefore, 0, "the baseline must be seeded, or this proves nothing");
+        vm.mockCall(address(tok), abi.encodeWithSignature("uiMultiplier()"), hex"deadbeef");
+        mk.syncMultiplier(address(tok)); // must not revert
+        assertEq(mk.seenMultiplier(address(tok)), seenBefore, "an unreadable read records nothing");
+        assertEq(mk.multiplierMovedAt(address(tok)), 0, "and must not fabricate a corporate action");
+        vm.clearMockedCalls();
     }
 }

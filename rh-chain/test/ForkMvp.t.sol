@@ -49,7 +49,7 @@ contract ForkMvpTest is Test {
         uint8 feedDec = AggregatorV3Interface(AAPL_FEED).decimals();
 
         // Short grace: this test proves the MVP path, not the liveness timing (unit-tested).
-        liveness = new LivenessOracle(keeper, admin, 2 hours, 1 minutes, 30 minutes);
+        liveness = new LivenessOracle(keeper, admin, 30 minutes, 1 minutes);
         health = new MarketHealthOracle(keeper, admin, admin);
         // address(0): no L2 sequencer uptime feed exists on this chain — LivenessOracle stands in.
         // guardian == admin here: this fork test proves the MVP path, not the guardian split.
@@ -118,17 +118,49 @@ contract ForkMvpTest is Test {
             _beat();
             _postDepth(); // keep the depth reading inside MAX_READING_AGE across the session hunt
         }
-        _beat(); // one beat once we have arrived, to keep liveness fresh
+        _settleLiveness();
         _postDepth();
         require(markets.isUsMarketHours(block.timestamp), "could not reach a session");
-        // The real feed will be stale relative to the warped clock, so refresh its answer at the
-        // current time while keeping the REAL price. Only the timestamp is synthetic.
+        _refreshFeed();
+    }
+
+    /// Serve out resumeGrace on a live keeper cadence.
+    ///
+    /// G-LEND INFO-3: this is why `test_fullMvpPath_realTokenRealFeed` sat RED. Every 1-hour hop
+    /// above is longer than gapThreshold, so each one registers as an outage and re-arms the grace;
+    /// the fixture then asked for a borrow while the oracle was still inside it and got MarketClosed.
+    /// The cause was always here, in the helper — and a permanently-red fork test is worse than no
+    /// fork test, because it teaches everyone to ignore the one check that mocks cannot fool.
+    function _settleLiveness() internal {
+        _beat();
+        vm.warp(block.timestamp + liveness.resumeGrace()); // < gapThreshold, so it registers no gap
+        _beat();
+        require(liveness.liquidationsAllowed(), "liveness must be settled before acting");
+    }
+
+    /// The real feed goes stale against the warped clock, so restamp its answer at the current time
+    /// while keeping the REAL price. Only the timestamp is synthetic.
+    function _refreshFeed() internal {
         (, int256 answer,,,) = AggregatorV3Interface(AAPL_FEED).latestRoundData();
         vm.mockCall(
             AAPL_FEED,
             abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
             abi.encode(uint80(1), answer, block.timestamp, block.timestamp, uint80(1))
         );
+    }
+
+    /// Walk out of the session on the same live cadence, so liveness and depth stay up and the
+    /// session is the ONLY gate that closes.
+    function _outOfSession() internal {
+        uint256 guard = 0;
+        while (markets.isUsMarketHours(block.timestamp) && guard++ < 12) {
+            vm.warp(block.timestamp + 1 hours);
+            _beat();
+            _postDepth();
+        }
+        _settleLiveness();
+        _postDepth();
+        _refreshFeed();
     }
 
     function test_fullMvpPath_realTokenRealFeed() public {
@@ -206,15 +238,64 @@ contract ForkMvpTest is Test {
         );
     }
 
-    /// Off-hours borrowing must be refused against the real calendar, not a mocked one.
-    function test_realWeekendBlocksBorrowing() public {
+    /// Off-hours borrowing must be refused against the real calendar — and refused for the RIGHT
+    /// reason. Every other gate is held open here: the keeper is beating, depth is posted, the feed
+    /// is fresh. Liquidation gates on FRESHNESS rather than session (EsseyMarkets._liquidationPriceGate)
+    /// and stays open at the same instant; borrowing does not. Without that pair, `assertFalse(canBorrow)`
+    /// passes on any fixture that has simply gone stale, which is what it used to be doing.
+    function test_realOffHoursBlocksBorrowingButNotLiquidation() public {
         if (!forked) return;
         _intoSession();
-        // jump to Saturday midday
+        assertTrue(markets.canBorrow(AAPL), "control: borrowing IS open in session");
+        _outOfSession();
+        assertFalse(markets.isUsMarketHours(block.timestamp), "fixture must be off-hours");
+        assertTrue(markets.canLiquidate(AAPL), "liquidation gates on freshness, not the session");
+        assertFalse(markets.canBorrow(AAPL), "no borrowing off-session");
+
+        // and the calendar's own weekend, which is off-hours by day-of-week rather than by clock
         uint256 day = (block.timestamp / 86400) * 86400;
         uint256 dow = ((block.timestamp / 86400) + 3) % 7;
-        vm.warp(day + (5 - dow + 7) % 7 * 1 days + 16 hours);
-        assertFalse(markets.isUsMarketHours(block.timestamp), "fixture must be a weekend");
-        assertFalse(markets.canBorrow(AAPL), "no borrowing at the weekend");
+        uint256 saturdayMidday = day + ((5 - dow + 7) % 7) * 1 days + 16 hours;
+        assertFalse(markets.isUsMarketHours(saturdayMidday), "Saturday midday is not a session");
+    }
+
+    /// THE CHECK A MOCK CANNOT FOOL, made specific. G-LEND CRIT-1 was never a wrong VALUE — it was a
+    /// wrong SHAPE, and every fixture in the repo agreed with the interface instead of with the
+    /// chain. So assert the shape of every external surface the engine calls, at the deployed
+    /// address, and let a change in any of them turn this red.
+    function test_everyProductionReturnShape() public {
+        if (!forked) return;
+
+        (bool ok, bytes memory ret) = AAPL.staticcall(abi.encodeWithSignature("newUIMultiplier()"));
+        console.log("newUIMultiplier ok / len", ok, ret.length);
+        assertTrue(ok, "the CALL succeeds - it was always the decode that failed");
+        assertEq(ret.length, 32, "ONE word, not the two IScaledUI declares. If this becomes 64, re-read _desyncGuard");
+
+        (ok, ret) = AAPL.staticcall(abi.encodeWithSignature("uiMultiplier()"));
+        assertTrue(ok && ret.length >= 32, "uiMultiplier must be readable, or collateralValue reverts");
+        assertGt(abi.decode(ret, (uint256)), 0, "and nonzero, or every position prices at zero");
+
+        (ok, ret) = USDG.staticcall(abi.encodeWithSignature("paused()"));
+        console.log("USDG paused() ok / len", ok, ret.length);
+        assertTrue(
+            !ok || ret.length < 32 || abi.decode(ret, (uint256)) == 0,
+            "a paused borrow asset suspends the whole accrual clock"
+        );
+
+        assertEq(IERC20Metadata(USDG).decimals(), 6, "USDG decimals - the 1e12 over-valuation lesson");
+        assertEq(IERC20Metadata(AAPL).decimals(), 18, "Stock Token decimals");
+        assertEq(AggregatorV3Interface(AAPL_FEED).decimals(), 8, "Chainlink feed decimals");
+        (, int256 answer,, uint256 updatedAt,) = AggregatorV3Interface(AAPL_FEED).latestRoundData();
+        assertGt(answer, 0, "the feed must answer with a positive price");
+        assertGt(updatedAt, 0, "and a real timestamp");
+    }
+
+    /// The CRIT-1 regression itself, at the production address: both gates must ANSWER against the
+    /// real one-word token. They used to revert, and the pool calls them without a try.
+    function test_bothGatesAnswerAgainstTheRealToken() public {
+        if (!forked) return;
+        _intoSession();
+        assertTrue(markets.canBorrow(AAPL), "canBorrow must answer against the deployed token");
+        assertTrue(markets.canLiquidate(AAPL), "canLiquidate must answer against the deployed token");
     }
 }

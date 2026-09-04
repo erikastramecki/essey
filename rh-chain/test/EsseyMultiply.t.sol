@@ -55,6 +55,31 @@ contract MockSwapAdapter is ISwapAdapter {
     }
 }
 
+/// G-LEND LOW-2. `close()`'s only binding used to be `pool.markets() == markets`, and any contract
+/// can return the right address. Everything downstream — collateralToken(), asset(), note(),
+/// debtOf(), repay() — was then attacker-defined, and the close path left a standing allowance on
+/// the REAL borrow asset to an address of their choosing.
+contract SpoofPool {
+    address public immutable markets;
+    address public immutable collateralToken;
+    address public immutable asset;
+
+    constructor(address m, address t, address a) {
+        markets = m;
+        collateralToken = t;
+        asset = a;
+    }
+
+    function note() external view returns (address) { return address(this); }
+    function accrue() external {}
+    function debtOf(uint256) external pure returns (uint256) { return 1e6; }
+    function repay(uint256, uint256) external {}
+    function transferFrom(address, address, uint256) external {}
+    function positions(uint256) external pure returns (address, uint256, uint256, uint256, uint256) {
+        return (address(0), 0, 0, 0, 0);
+    }
+}
+
 contract EsseyMultiplyTest is Test {
     EsseyMarkets markets;
     EsseyPool pool;
@@ -80,7 +105,7 @@ contract EsseyMultiplyTest is Test {
         MockFeed seqFeed = new MockFeed(8, 0);
         usdg = new MockUSDG();
         nvda = new ScaledUIStockMock("Mock NVDA", "NVDA");
-        liveness = new LivenessOracle(address(this), address(this), 90_000, 1 hours, 900);
+        liveness = new LivenessOracle(address(this), address(this), 900, 1 hours);
         health = new MarketHealthOracle(address(this), address(this), address(this));
         markets = new EsseyMarkets(
             AggregatorV3Interface(address(seqFeed)), liveness, health, address(this), address(this), 6
@@ -114,7 +139,7 @@ contract EsseyMultiplyTest is Test {
 
         // now at 1787151600: Wednesday 15:00 UTC — inside the US session (the BorrowFlow pin)
         liveness.heartbeat();
-        vm.warp(block.timestamp + 1 hours + 1);
+        _advanceLive(1 hours + 1); // serve out resumeGrace on a live cadence
         nvdaFeed.set(175e8, block.timestamp);
         health.postDepth(address(nvda), uint128(DEPTH), uint64(block.number), "test-v1");
 
@@ -584,6 +609,56 @@ contract EsseyMultiplyTest is Test {
         multiply.close(other, ids, 0, false, 0, block.timestamp);
     }
 
+    /// A pool must be one the REGISTRY named or this periphery itself opened. Satisfying the old
+    /// `markets()` check is not enough, and the difference is a permanent attacker-controlled claim
+    /// on the real borrow asset sized by whatever the victim posted.
+    function test_close_spoofedPoolIsRefused() public {
+        uint256[] memory ids = _open18();
+        SpoofPool fake = new SpoofPool(address(markets), address(nvda), address(usdg));
+        assertEq(fake.markets(), address(markets), "the OLD binding is fully satisfied");
+        usdg.mint(user, 10_000e6);
+        vm.prank(user);
+        vm.expectPartialRevert(EsseyMultiply.WrongPool.selector);
+        multiply.close(EsseyPool(address(fake)), ids, 10_000e6, false, 0, block.timestamp);
+        assertEq(usdg.allowance(address(multiply), address(fake)), 0, "no standing allowance is created");
+    }
+
+    /// And the real pool gets no standing allowance either: the periphery is stateless between
+    /// transactions, which is only true if nothing survives the call.
+    function test_close_leavesNoStandingAllowance() public {
+        uint256[] memory ids = _open18();
+        usdg.mint(user, 14_000e6);
+        vm.prank(user);
+        multiply.close(pool, ids, 14_000e6, true, 180e18, block.timestamp);
+        assertEq(usdg.allowance(address(multiply), address(pool)), 0, "the approval is zeroed after repay");
+    }
+
+    /// A collateral-token pause makes the pool ESCROW rather than return (EsseyPool.claimCollateral),
+    /// and the Note survives as the claim ticket. This periphery holds nothing between transactions,
+    /// so a surviving Note must go back to the caller — its own header says anything left here is
+    /// lost to whoever calls next.
+    function test_close_underACollateralPauseHandsTheNoteBack() public {
+        uint256[] memory ids = _open18();
+        usdg.mint(user, 14_000e6);
+        nvda.setPaused(true);
+        vm.prank(user);
+        (uint256 assetOut, uint256 collOut) = multiply.close(pool, ids, 14_000e6, true, 0, block.timestamp);
+        assertEq(collOut, 0, "no stock could move");
+        assertEq(assetOut, 0);
+        for (uint256 i; i < ids.length; i++) {
+            assertEq(note.ownerOf(ids[i]), user, "every claim ticket comes back to the caller");
+            assertEq(pool.debtOf(ids[i]), 0, "and every debt is settled anyway");
+        }
+        _assertNoResidue();
+
+        nvda.setPaused(false);
+        for (uint256 i; i < ids.length; i++) {
+            vm.prank(user);
+            pool.claimCollateral(ids[i]);
+        }
+        assertEq(nvda.balanceOf(user), 180e18, "and the stock is collectable once the pause lifts");
+    }
+
     // ---------------------------------------------------------------- config
 
     function test_listMarket_gates() public {
@@ -620,8 +695,24 @@ contract EsseyMultiplyTest is Test {
         vm.warp(block.timestamp + 1); // Friday 16:00 UTC — still a weekday session slot
         markets.commitMarket(address(nvda));
         liveness.heartbeat();
-        vm.warp(block.timestamp + 1 hours + 1);
+        _advanceLive(1 hours + 1); // serve out resumeGrace on a live cadence
         nvdaFeed.set(175e8, block.timestamp);
         health.postDepth(address(nvda), uint128(DEPTH), uint64(block.number), "test-v1");
+    }
+
+    /// Advance `secs` the way a LIVE keeper does — beating every gapThreshold/3 throughout — so the
+    /// heartbeat never goes stale. Warping without beating models an OUTAGE, not the passage of time,
+    /// and since G-LEND HIGH-1 the oracle can tell the difference: `liquidationsAllowed()` now closes
+    /// on the same threshold `heartbeat()` calls a gap, so serving out resumeGrace requires the
+    /// keeper to keep posting through it.
+    function _advanceLive(uint256 secs) internal {
+        uint256 end = block.timestamp + secs;
+        uint256 step = liveness.gapThreshold() / 3;
+        while (block.timestamp + step < end) {
+            vm.warp(block.timestamp + step);
+            liveness.heartbeat();
+        }
+        vm.warp(end);
+        liveness.heartbeat();
     }
 }
