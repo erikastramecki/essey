@@ -291,7 +291,7 @@ Ordered by dependency. **⚠ = the risky/unknown steps.**
    `exactInputSingle`. If NOT (current state — UNVERIFIED), DEFER Multiply and ship base lending
    without it. Highest-unknown step; do not block base lending on it.
 6. **Risk-param calibration** (per-market, at `proposeMarket`). Current reference values
-   (`DeployMarkets.s.sol:274-282`, comment `:262`): LTV 50% (`ltvBps 5000`), liquidation 75%
+   (`DeployMarkets.s.sol:393-396`, comment `:377-379`): LTV 50% (`ltvBps 5000`), liquidation 75%
    (`liqThresholdBps 7500`), liquidator bonus 5% (`liqBonusBps 500`), cap 250k USDG
    (`cap 250_000 * 10**assetDecimals`), max 20% of cap per position (`maxPositionBps 2000`). Rate
    curve = Kink mode: base 10%, slope1 5%, slope2 60%, kink 80%, reserve 10%

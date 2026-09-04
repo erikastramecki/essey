@@ -55,7 +55,7 @@ export const MARKETS: MarketDef[] = [
   },
 ];
 
-/// The risk terms the deploy script PROPOSES for every market (DeployMarkets.s.sol:274-282). These are
+/// The risk terms the deploy script PROPOSES for every market (DeployMarkets.s.sol:393-396). These are
 /// a proposal, not a chain read: once the market is committed the UI reads `market(token)` instead and
 /// this constant is only used to say what the deploy will ask for.
 export const PROPOSED = {

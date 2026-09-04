@@ -1395,6 +1395,130 @@ per-commit loop, not a worktree grep — that is the check that missed it the fi
 
 ---
 
+## Update 2026-09-04 (18) — G-LEND rounds 5, 6, 7: the severity curve reaches zero
+
+**⚠️ This supersedes the G-LEND row in §17.8, which was three rounds stale.** Rounds 5, 6 and 7
+appeared nowhere in this register until now. At-a-glance matrix:
+[`PRODUCT-TRACKER.md`](PRODUCT-TRACKER.md) ⭐ 2026-09-04 block.
+
+### 18.1 The full seven-round trajectory, with receipts
+
+| Round | SHA | Verdict | Report | Receipt |
+|---|---|---|---|---|
+| 1 | `99a5735` | **1 CRIT**, 1 HIGH, 3 MED, 4 LOW | `glend-round-1.md:12` | `audit-glend-r1:4` |
+| 2 | `de67032` | **1 HIGH**, 2 MED, 4 LOW | `glend-round-2.md:9` | `audit-glend-r2:4` |
+| 3 | `0cf6831` | **1 CRIT**, 1 HIGH, 3 MED, 2 LOW | `glend-round-3.md:9` | `audit-glend-r3:2` |
+| 4 | `cb3e6aa` | **2 HIGH**, 3 MED, 6 LOW | `glend-round-4.md:16` | `audit-glend-r4:6` |
+| 5 | `2804b2e` | 0/0, **2 MED**, 3 LOW | `glend-round-5.md:16` | `audit-glend-r5:5` |
+| 6 | `c04a6ce` | 0/0, **1 MED**, 3 LOW | `glend-round-6.md:14` | `audit-glend-r6:14` |
+| **7** | `2309cb0` | **0 / 0 / 0**, 2 LOW, 3 INFO | `glend-round-7.md:17` | ✅ `audit-glend-r7` (5,161 B, 10:33) |
+
+### 18.2 Round 7 is clean and COUNTS. G-LEND is 1 of 3.
+
+Receipt **verified present**: `~/.claude/gate-receipts/audit-glend-r7`, 5,161 bytes, 2026-09-04 10:33,
+with an `audit-glend-r7-poc/` directory beside it. It records the frozen SHA `2309cb0`, a real 4663
+mainnet-fork substrate (`eth_chainId 0x1237`, block 54426499), an empty `git diff --stat 2309cb0`, and
+every sha256 re-taken identical at end of round.
+
+*An earlier check in this session ran before 10:33 and reported the receipt absent. That finding is
+**withdrawn**; the timing was mine, not the auditor's.*
+
+**What still stands:** `docs/audits/glend-round-7.md` is **untracked**. The gate ladder's
+published-report step is not met until it is committed — we retracted someone else's "audit-clean"
+claim on 2026-09-03 for a missing artifact (§17.1, `:1409-1415`), and the rule binds us symmetrically.
+**Next action (engineer): commit the report.** Rounds 8 and 9 remain.
+
+### 18.2b Citations decay — the `:274-282` post-mortem
+
+`DeployMarkets.s.sol:274-282` was repeated as the risk-params location across this register, the
+tracker, `MAINNET-LENDING-SCOPE.md` and `app/web/src/lending.ts`. It is `:393-396` today. **The
+auditor who first wrote it was correct** — at round 1's SHA `99a5735` that range was exactly the
+`Market` struct literal (`git show 99a5735:rh-chain/script/DeployMarkets.s.sol | sed -n '274,282p'`).
+Six rounds of fixes grew the file ~120 lines.
+
+**Rule adopted: line citations in status docs are SHA-relative and must be re-derived, never copied
+forward. Cite `symbol` + `file:line` so staleness is self-correcting.** Fixed in the three live docs
+and the frontend comment. **Audit reports are not rewritten** — they record what was true at a frozen
+SHA.
+
+### 18.2c ⚠️ PUSH BLOCKER — a false sentence is live on the anti-scam page
+
+**Confirmed, not inferred.** Two deployed contracts are named `essey` in our own frontend:
+
+- `app/web/src/reserve.ts:35` — `0x315790B5…071610`, **mainnet 4663**, canonical, live since 2026-08-29.
+- `app/web/src/live.ts:29` — `0x32a860B1…23d1F`, commented **`// $ESSEY v2 (8.888B supply)`**, inside
+  `ADDR` scoped to `NET = { chainId: 46630, "Robinhood Chain Testnet" }` (`live.ts:14-21`).
+
+`app/web/src/blog/posts/only-real-essey-contract.md:14` — **published to essey.xyz 2026-09-01** —
+states *"There is no second contract, no "v2", no bridge, no pre-sale address."* That is **false as
+written**, and the falsifying evidence is a comment in our own public repo.
+
+**The correction must be scoped to mainnet, and must NOT claim a second mainnet $ESSEY** — the other
+token is testnet play-money. Asserting a mainnet collision would be a false alarm on the anti-scam
+page, worse than the original imprecision. The post's substance is right; only its absolutism is
+wrong. Scoping it to chain 4663 makes it true *and* stronger anti-scam copy. Jester dispatched;
+full framing in [`PRODUCT-TRACKER.md`](PRODUCT-TRACKER.md) §"Decision #5, in full".
+
+**This gates the push (#8): the 27 commits include the post (`3bb9449`).**
+
+### 18.3 The churn is in the bolt-on — from round 3, not from the start
+
+Recorded because it is the difference between *"the lending engine is unsound"* and *"one bolt-on is
+young"*, and because the strong form is false:
+
+- Rounds 1–2 raised **five core-engine findings** — R1 MED-1 (collateral pause blocked repayment while
+  interest accrued, `glend-round-1.md:277`), R1 LOW-1/LOW-3/LOW-4 (`:393`, `:464`, `:488`), R2 LOW-1
+  (escrow applied to the borrower's side only, `glend-round-2.md:224`). All closed, none reopened.
+- **From round 3 onward every CRIT/HIGH/MED has been in the corporate-action breaker** or its
+  keeper/role scaffolding. No engine finding above LOW has ever been raised.
+- The engine was **positively verified on a real fork**, not merely unmentioned — seizure accounting,
+  `adminBurn` pro-rata sharing to 12 decimals, reentrancy on all five entry points, pool isolation,
+  write-off to the wei, the full rate curve (`glend-round-1.md:549-606`).
+
+**Correction to the program's own framing:** the breaker did **not** first exist at round 2. It dates
+to `9c1a99e` and `676c205`, both **2026-08-09**; round 1 found that August version broken against the
+real Stock Token (CRIT-1, `glend-round-1.md:100`). The named `_breaker` state machine is the round-2
+fix (`0cf6831`). This register had no entry for the August origin.
+
+### 18.4 The operational half now exists: the ex-date pause runbook
+
+[`RUNBOOK-EX-DATE-PAUSE.md`](RUNBOOK-EX-DATE-PAUSE.md). The founder asked whether a simpler
+operational approach could replace the machinery. **It covers the announced case entirely and the
+surprise case not at all** — an oracle misprint or an off-schedule issuer produces no announcement to
+watch for. The answer is both, and the runbook says so in its own §0 and §8 so it cannot be quoted as
+an argument for dropping the breaker.
+
+Five findings from writing it, none of which were in any doc:
+
+1. **`pauseLiquidation` alone is unsafe** — `canBorrow` (`EsseyMarkets.sol:324-346`) never reads
+   `liquidationPausedUntil`. Always `disableMarket` first; cost is the 2-day re-enable.
+2. **The pause duty cycle is exactly 50% at any length** (`:865-866`). Contiguous cover maxes at 30h,
+   then a 24h hole no lever closes.
+3. **A ≤20% action gets zero automatic cover** — `_deviates` is strictly `> 20%` (`:620-623`).
+4. **The weekend needs no pause** — past 25h staleness `canLiquidate` is already false (`:714-721`).
+   Dark window is ~55h worst-measured (`:508`), not the ~40h in circulation.
+5. **The guardian is `immutable`, no rotation** (`:126`, `:169`). **Founder decision before deploy.**
+
+**Build gap:** no corporate-action watcher exists in `rh-chain/keeper/`. Recommend queueing one to
+`essey-protocol-engineer` after G-LEND clears.
+
+### 18.5 Cap mechanics prepared; the number is the economist's
+
+Mechanics brief in [`PRODUCT-TRACKER.md`](PRODUCT-TRACKER.md) §CAP. Not immutable — 2-day timelock,
+zero bytes (`EsseyMarkets.sol:735`, `:753`, `:795`). Per-market caps are supported (`:133`). **At cap
+250k the static cap only binds while depth is under 750k USDG** (`capFractionBps = 3_333`,
+`MarketHealthOracle.sol:97`); above that the depth oracle governs, so bad-debt modelling must run
+against `min(static, effectiveCap)` (`EsseyMarkets.sol:220-227`), not the static cap alone.
+
+**Params citation corrected program-wide:** the risk params are at `DeployMarkets.s.sol:393-396`, not
+`:274-282` as recorded in §17 and the tracker.
+
+### 18.6 Unpushed count corrected
+
+**27**, not 17 (`git log --oneline origin/main..HEAD | wc -l`; HEAD `2309cb0`).
+
+---
+
 ## Update 2026-09-03 (17) — OVERNIGHT PROGRAM RECONCILE: lending is UNAUDITED, two HIGHs closed, G2 not clean
 
 Written by the PM at the start of the founder's ~12-hour overnight window. Every claim below was
@@ -1574,6 +1698,10 @@ clean tree at a named SHA when the fixture work lands. Until then, `1438/2` is t
 have and it is labelled.
 
 ### 17.8 GATE LADDER — state at the top of the overnight window
+
+> ⚠️ **The G-LEND row below is a 2026-09-03 SNAPSHOT and is three rounds stale. Superseded by
+> [Update 18.1](#update-2026-09-04-18--g-lend-rounds-5-6-7-the-severity-curve-reaches-zero).**
+> Rounds 5, 6 and 7 are recorded there. Do not quote this row as current state.
 
 | Gate | Product | State 2026-09-03 | What moves it |
 |---|---|---|---|

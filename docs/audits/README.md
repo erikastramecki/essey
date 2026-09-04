@@ -35,7 +35,10 @@ covered.
 | [Market layer 6](market-layer-round-6.md) | game-era: `SeatArt.sol` + `Seat.tokenURI` | 2 LOW + 5 hardenings | 3 rounds; **final round clean** (all 3 lenses) |
 | [$ESSEY launch hook — gate](esseyreservehook-gate-2026-08-31.md) | **protocol (base layer):** `EsseyReserveHook.sol` (three-bucket fee model; **rails 40/50/20**, **default split 45 reserve / 40 holders / 15 dons** — `DeployEsseyV4Pool.s.sol:47-49`) + `LaunchSeeder.sol` | 1 test-only at gate (code CORRECT); **+2 LOW (S-1, S-2) raised 2026-09-02 post-gate, OPEN** | **GATE MET** (3 consecutive clean rounds, all 3 lenses, byte-identical code; 92 tests) — **push BLOCKED 2026-09-02** pending a fresh 3-round clean |
 | [G-LEND 1–3](glend-round-3.md) | **protocol (lending):** `EsseyMarkets` · `EsseyPool` · `LivenessOracle` · `MarketHealthOracle`, on a real 4663 fork | R3: 1 CRIT, 1 HIGH, 3 MED, 2 LOW | all fixed; **counter reset to zero** |
-| [G-LEND 4](glend-round-4.md) | same surface, re-audited at `cb3e6aa` | 2 HIGH, 3 MED, 6 LOW, 1 INFO | all fixed in the working tree (uncommitted); **round 5 pending** — R3's CRIT-1 and MED-3 confirmed still closed |
+| [G-LEND 4](glend-round-4.md) | same surface, re-audited at `cb3e6aa` | 2 HIGH, 3 MED, 6 LOW, 1 INFO | all fixed; R3's CRIT-1 and MED-3 confirmed still closed |
+| [G-LEND 5](glend-round-5.md) | same surface at `2804b2e` | 0 CRIT, 0 HIGH, **2 MED**, 3 LOW, 6 INFO | fixed; INFO-1 also refuted our own stated cost of the liveness-key recovery path — see the decision list |
+| [G-LEND 6](glend-round-6.md) | same surface at `c04a6ce` | 0 CRIT, 0 HIGH, **1 MED**, 3 LOW, 4 INFO | fixed |
+| [G-LEND 7](glend-round-7.md) | same surface at `2309cb0` | **0 CRIT / 0 HIGH / 0 MED**, 2 LOW, 3 INFO | ✅ **CLEAN and countable** — receipt `audit-glend-r7` verified (5,161 B, 2026-09-04 10:33), real 4663 fork, sha256s identical start-to-end. **G-LEND: 1 of 3.** ⚠️ this report is still **untracked** — commit it to meet the published-report step |
 
 **Game-era vs protocol.** The **Market layer 1–6** rounds cover the D.O.N. **game / market layer**
 (Seats/Bell/Cases/Exchange/Notes/art) — the contract lineage of the gamification wing. The **$ESSEY

@@ -70,3 +70,6 @@ rh-chain/docs/
 # mutation/patch backups — never commit
 *.orig
 *.rej
+
+# measure-halt-baddebt.mjs caches the full feed walk; the RPC rate-limits a refetch
+rh-chain/keeper/.feedcache/
