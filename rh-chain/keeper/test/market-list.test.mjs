@@ -41,3 +41,32 @@ test("no committed markets yields an empty duty", () => {
   assert.deepEqual(r.tokens, []);
   assert.deepEqual(r.unknown, [AAPL]);
 });
+
+// THE R5 MED-2 CASE, and the one every case above shares a blind spot for: they all pass a COMPLETE
+// `discovered`. A short-but-successful scan is the failure mode nothing here could see, because the
+// supervisor derived its subject from the same query and passed `configured: []` besides.
+test("a SHORT scan is named, and the market it omitted is still inspected", () => {
+  const r = reconcileMarkets({ discovered: [AAPL], configured: [AAPL, NVDA] });
+  assert.deepEqual(r.tokens, [AAPL], "the keeper's chain-derived duty is still what the scan returned");
+  assert.deepEqual(r.unknown, [NVDA], "and the disagreement is named");
+  assert.deepEqual(r.inspect, [AAPL, NVDA], "but a supervisor inspects both");
+});
+
+test("inspect is the union in both directions, and never duplicates a market", () => {
+  const r = reconcileMarkets({ discovered: [AAPL, NVDA], configured: [AAPL, STRANGER] });
+  assert.deepEqual(r.inspect, [AAPL, NVDA, STRANGER]);
+  assert.deepEqual(r.missing, [NVDA], "committed, not declared");
+  assert.deepEqual(r.unknown, [STRANGER], "declared, not returned by the scan");
+});
+
+test("inspect folds the two spellings of one address into one market", () => {
+  const r = reconcileMarkets({ discovered: [AAPL], configured: [AAPL.toLowerCase(), NVDA] });
+  assert.deepEqual(r.inspect, [AAPL, NVDA], "not three entries");
+});
+
+test("with the scan complete and the list matching it, there is nothing extra to inspect", () => {
+  const r = reconcileMarkets({ discovered: [AAPL, NVDA], configured: [NVDA, AAPL] });
+  assert.deepEqual(r.inspect, [AAPL, NVDA]);
+  assert.deepEqual(r.missing, []);
+  assert.deepEqual(r.unknown, []);
+});

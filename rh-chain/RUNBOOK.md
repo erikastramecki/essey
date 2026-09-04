@@ -72,9 +72,17 @@ deployment has not proven liveness, and it has no price it has watched stand.
 Check it is working — per market, on chain, not by looking at the process:
 
 ```bash
-LIVENESS_ORACLE=<liveness> ESSEY_MARKETS=<markets> \
+LIVENESS_ORACLE=<liveness> ESSEY_MARKETS=<markets> MARKET_TOKENS=<stock>[,<stock>...] \
   RH_RPC=https://rpc.testnet.chain.robinhood.com/rpc node check-liveness-keeper.mjs
 ```
+
+`MARKET_TOKENS` is REQUIRED for the check (it stays optional for the keeper) and must list every
+committed market. It is this check's INDEPENDENT source of truth: G-LEND R5 MED-2 found the check
+deriving its list from the same `getLogs` the keeper does, so an RPC replica answering short —
+successfully, which is what neither the 10,000-log cap nor a 429 produces — covered 1 of 2 markets
+and exited 0. Every address named here is now read on chain whether or not the scan returned it, and
+any disagreement between the two lists exits non-zero. **Add a market to this variable in the same
+change that commits it.**
 
 After 2 days:
 

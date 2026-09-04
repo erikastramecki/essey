@@ -26,8 +26,6 @@ abstract contract GLendR4Base is Test {
     address constant USDG = 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168;
     address constant AAPL = 0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9;
     address constant AAPL_FEED = 0x6B22A786bAa607d76728168703a39Ea9C99f2cD0;
-    address constant AAPL_WHALE = 0x9f736F87E6293AC1Bd9142E257dbfAC8b7AcF1ae;
-    address constant USDG_WHALE = 0x2d4d2A025b10C09BDbd794B4FCe4F7ea8C7d7bB4;
 
     // The deployed pair, script/DeployMarkets.s.sol.
     uint256 constant GAP = 900;
@@ -100,13 +98,17 @@ abstract contract GLendR4Base is Test {
         markets.commitMarket(token);
     }
 
+    /// R5: this took its balances from two named mainnet holders at `latest`, and the AAPL holder
+    /// spent down mid-round — from 50+ AAPL to 0.51 — which broke `setUp` for every test in this
+    /// file and in GLendR5, and made three mutants read as KILLED on an ERC20InsufficientBalance
+    /// that no assertion produced. A fixture may not depend on a third party's live balance. Pinning
+    /// a block is not the alternative here: the RPC keeps ~5,000 blocks of state, so an older fork
+    /// answers "metadata is not found". The real transfer path is still exercised — every borrow,
+    /// repay and seizure below moves these tokens through the token's own transferFrom.
     function _fund() internal {
-        vm.prank(USDG_WHALE);
-        IERC20(USDG).transfer(lender, 200_000 * (10 ** assetDec));
-        vm.prank(USDG_WHALE);
-        IERC20(USDG).transfer(liquidator, 50_000 * (10 ** assetDec));
-        vm.prank(AAPL_WHALE);
-        IERC20(AAPL).transfer(borrower, 50 * (10 ** stockDec));
+        deal(USDG, lender, 200_000 * (10 ** assetDec));
+        deal(USDG, liquidator, 50_000 * (10 ** assetDec));
+        deal(AAPL, borrower, 50 * (10 ** stockDec));
 
         vm.startPrank(lender);
         IERC20(USDG).approve(address(pool), type(uint256).max);

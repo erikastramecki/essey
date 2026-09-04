@@ -73,11 +73,18 @@ contract LivenessOracle {
     /// guardian holds an immediate setKeeper and would re-brick the keeper in the block after every
     /// recovery, so a recovery path that cannot remove it is not one.
     ///
-    /// WHAT THIS COSTS, stated because it is a real trade and not a free win: after 2 days of
-    /// public notice this key can install a keeper of its own, and a keeper that beats through a
-    /// chain outage keeps liquidations open during one. That is the founder's call to accept or
-    /// refuse; it is bounded by the notice, by the event, and by the guardian's ability to rotate
-    /// the keeper straight back the moment a hostile rotation commits.
+    /// WHAT THIS COSTS, stated because it is a real trade and not a free win: after 2 days of public
+    /// notice this key can install a keeper of its own, which can hold liquidation open while the
+    /// chain is demonstrably HEALTHY. It cannot hold it open through an OUTAGE — this block claimed
+    /// that for a round and R5 INFO-1 refuted it: `heartbeat` derives the gap from `lastHeartbeat`,
+    /// never from its caller, so during a halt a hostile keeper is as frozen as the borrowers and
+    /// serves the full grace on restart — measured at 12 beats / 3,600s after a 4h halt.
+    ///
+    /// The bound is the notice, the RotationProposed event, and `EsseyMarkets.guardian` — a
+    /// DIFFERENT, immutable address this rotation does not touch, which DeployMarkets._checkRoles
+    /// forces to differ from both liveness roles, so `pauseLiquidation` and `disableMarket` stay
+    /// available before, during and after a hostile commit. NOT the incumbent liveness guardian,
+    /// which `commitRotation` replaces in the SAME transaction it replaces the keeper — R5 LOW-3.
     address public immutable rotationAdmin;
     /// Same 2 days as EsseyMarkets.PARAM_TIMELOCK: a privileged change that is atomic with its use
     /// is not a control at all.

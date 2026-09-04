@@ -90,8 +90,9 @@ RH_RPC=... KEEPER_PRIVKEY=0x... LIVENESS_ORACLE=0x... ESSEY_MARKETS=0x... \
 `ESSEY_MARKETS` is REQUIRED, and omitting it used to be the whole of G-LEND R4 HIGH-2: the same
 process is the only standalone caller of `syncMultiplier`, and a market it does not observe has no
 corroborated price and cannot be liquidated. It derives the market list from the registry's own
-`MarketCommitted` log — `MARKET_TOKENS` is now only an optional cross-check that raises an alarm
-when it disagrees.
+`MarketCommitted` log — `MARKET_TOKENS` is an optional cross-check here that raises an alarm when it
+disagrees, and it is REQUIRED by `check-liveness-keeper.mjs`, where it is the independent source of
+truth that makes a short log scan visible (G-LEND R5 MED-2).
 
 Run it under `keeper/xyz.essey.liveness-keeper.plist` and alert on the WARN/ALERT lines. A dead
 keeper degrades to "liquidations off" on BOTH halves — the stale heartbeat closes the liveness gate

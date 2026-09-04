@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adversarial mutation gate for the G-LEND round-4 fix.
+"""Adversarial mutation gate for the G-LEND round-4 fix, extended by round 5.
 
 Round 4's central finding was a test that PERFORMED the bypass it was named to prevent and asserted
 the result, and the sweep that caught it from the other direction was mutating PRICE_CONFIRM_DELAY to
@@ -10,6 +10,12 @@ on is mutated here in BOTH directions, along with every guard removed and invert
 
 Every mutant is applied to the real tree, the targeted suites are run, and the tree is restored.
 A mutant that leaves the suite GREEN is a SURVIVOR and is reported as a gap, not hidden.
+
+Round 5 added M25-M31. M25/M26 because the test NAMED for MULTIPLIER_READ_GAS passed with the budget
+cut to 5,000 — below what the deployed AAPL token needs, which would stop every borrow and every
+liquidation on every market. M27-M31 for the delay line's new clock, which now ages on wall time
+rather than on feed availability: never ageing, splitting the pair, outrunning the rate limit,
+seeding a zero pair, and never advancing are each mutated.
 """
 import subprocess, sys, pathlib
 
@@ -17,7 +23,7 @@ import subprocess, sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKETS = ROOT / "src/EsseyMarkets.sol"
 LIVENESS = ROOT / "src/LivenessOracle.sol"
-SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
+SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
 
 MUTANTS = [
     # --- the magnitude of the safety constant, in BOTH directions ---
@@ -99,6 +105,29 @@ MUTANTS = [
     ("M21 let the GUARDIAN cancel its own removal", LIVENESS,
      "    function cancelRotation() external {\n        if (msg.sender != rotationAdmin) revert NotRotationAdmin();",
      "    function cancelRotation() external {\n        if (msg.sender != rotationAdmin && msg.sender != guardian) revert NotRotationAdmin();"),
+    # --- R5 LOW-1: the read budget's MAGNITUDE, which the test named for it did not pin ---
+    ("M25 MULTIPLIER_READ_GAS 200,000 -> 5,000 (below what the deployed token needs)", MARKETS,
+     "    uint256 public constant MULTIPLIER_READ_GAS = 200_000;",
+     "    uint256 public constant MULTIPLIER_READ_GAS = 5_000;"),
+    ("M26 MULTIPLIER_READ_GAS 200,000 -> 16,000 (just above the read, no headroom)", MARKETS,
+     "    uint256 public constant MULTIPLIER_READ_GAS = 200_000;",
+     "    uint256 public constant MULTIPLIER_READ_GAS = 16_000;"),
+    # --- R5 MED-1: the delay line's clock ---
+    ("M27 the line stops ageing while the feed is unreadable (the R5 MED-1 bug)", MARKETS,
+     "        if (price == 0) {\n            _holdConfirmable(token);",
+     "        if (price == 0) {\n            if (false) _holdConfirmable(token);"),
+    ("M28 warm with the LIVE multiplier, splitting the pair (the R4 MED-1 shape)", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmable(token, head.price, _liveMultiplier(multiplierSource[token]));"),
+    ("M29 warm past the rate limit, collapsing the line to one step", MARKETS,
+     "        _confirmable(token, head.price, head.mult);",
+     "        _confirmRing[token][_confirmHead[token] = (_confirmHead[token] + 1) % CONFIRM_SLOTS] =\n            Observation(head.price, head.mult, block.timestamp);"),
+    ("M30 warm a never-observed market too, seeding a zero pair", MARKETS,
+     "        if (head.takenAt == 0) return;",
+     "        // seed guard removed"),
+    ("M31 warm from the READ slot instead of the head, so the line never advances", MARKETS,
+     "        Observation memory head = _confirmRing[token][_confirmHead[token]];",
+     "        Observation memory head = _confirmRing[token][(_confirmHead[token] + 1) % CONFIRM_SLOTS];"),
 ]
 
 

@@ -74,6 +74,12 @@ const wallet = createWalletClient({ account, chain: rhChain, transport: http(RPC
 
 const ts = () => new Date().toISOString();
 const envTokens = (process.env.MARKET_TOKENS || "").split(",").map((t) => t.trim()).filter(Boolean);
+// R5 MED-2: unset, the cross-check below is gated OFF and a short log scan is silent here too. It
+// stays optional — refusing to start would trade a real outage for a config lag — but it is said
+// once, loudly, at startup. `check-liveness-keeper.mjs` REQUIRES it and is what actually catches it.
+if (envTokens.length === 0) {
+  console.error(`${ts()}  ALERT MARKET_TOKENS unset — no cross-check on the log scan; a SHORT scan will be silent`);
+}
 
 let tokens = [];
 let beatFailures = 0;

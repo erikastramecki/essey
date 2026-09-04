@@ -1606,8 +1606,15 @@ Every round of both listed feeds on chain-id 4663 over 2026-06-22 → 2026-09-04
 8.47%/7.88% at 6h, 8.97%/9.22% at 12h, 10.23%/12.00% at 24h. The delay spends the 21.25% between the
 liquidation threshold and liquidator indifference at 5000/7500/500; nothing at any of those horizons
 came within a third of it. **NVDA is NOT materially more volatile than AAPL at these horizons** —
-per-round sigma 0.5585% against 0.5751% — which the round-4 report had assumed the other way. The
-derivation is recorded in the constant's own doc block, so the next reader inherits it.
+per-round sigma **0.5712% (n=554) against 0.5602% (n=980)**, log-return sample standard deviation —
+which the round-4 report had assumed the other way. **Corrected in R5 INFO-3:** the pair first
+recorded here (0.5585% / 0.5751%) had the ordering reversed and no stated estimator, and the shipped
+script computed no sigma at all, so it was not reproducible from anything in the repo. It now is —
+`perRoundSigmaPct` in `keeper/measure-feed-volatility.mjs`. Nothing depends on the number; the
+conclusion holds under both, and the binding figures are the worst-move table, which reproduces
+exactly. **And read that table at 72h, not 6h** (R5 MED-1): 12.61%/12.62%, 1.69x/1.68x inside the
+21.25% buffer. The derivation is recorded in the constant's own doc block, so the next reader
+inherits it.
 
 **Found while measuring, and worth its own ticket:** both feeds' first ~20 historical rounds
 (2026-06-22 → 2026-06-23T13:48 UTC) return answers scaled 1e18 rather than the 1e8 `decimals()`

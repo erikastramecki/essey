@@ -189,8 +189,10 @@ contract DeployMarkets is Script {
         // role from being that key, which is the separation the recovery rests on. The constructor
         // enforces it a second time, because this script binds one deployment and that binds every
         // one. WHAT IT COSTS, so the founder is ruling on the real trade: after two days of public
-        // notice the market admin can install a keeper of its own, and a keeper that beats through a
-        // chain outage keeps liquidation open during one.
+        // notice the market admin can install a keeper of its own, which can hold liquidation open
+        // while the chain is demonstrably HEALTHY — not through an outage, which this comment
+        // claimed for a round (R5 INFO-1: the grace is derived from stored state, so a hostile
+        // keeper serves it in full on restart, and EsseyMarkets.guardian is untouched throughout).
         require(
             testnet || r.guardian != r.livenessGuardian,
             "GUARDIAN must not be the liveness guardian - refusing to deploy"

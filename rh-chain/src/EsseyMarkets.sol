@@ -372,20 +372,31 @@ contract EsseyMarkets is StaleFeedGuard {
     /// what actually bounds it.
     uint256 public constant MAX_LIQUIDATION_PAUSE = 24 hours;
 
-    /// How long a price move must stand before it may justify a SEIZURE (R3 HIGH-1). Branch (b)'s
-    /// window, applied to the other leg ordering — the one nothing covered — and at every magnitude,
-    /// because a sub-bound move flips a seasoned position just as thoroughly as a large one.
-    /// Separation by TIME, not magnitude: a real move stands, a half-landed action is joined by its
-    /// other leg. IT DELAYS NOTHING ALREADY JUSTIFIED.
+    /// How OLD the second opinion a SEIZURE needs must be (R3 HIGH-1). Branch (b)'s window, applied
+    /// to the other leg ordering — the one nothing covered — and at every magnitude, because a
+    /// sub-bound move flips a seasoned position just as thoroughly as a large one.
+    ///
+    /// A TWO-POINT TEST, NOT A DURATION TEST — R5 LOW-2, because this block claimed the second one.
+    /// The predicate is "underwater at the live price AND at one observation this old", which two
+    /// one-block dips six hours apart satisfy with a full recovery between them. Two-point on
+    /// purpose: the threat is a HALF-LANDED action, a persistent STEP, so the older point reads full
+    /// value and refuses (GLendR4Corroboration, four offsets). A duration property needs all five
+    /// slots — a tighter mechanism. IT DELAYS NOTHING ALREADY JUSTIFIED.
     ///
     /// SIX HOURS, MEASURED, not inherited from MULTIPLIER_GUARD_WINDOW as it was. The delay spends
     /// the threshold-to-liquidator-indifference distance: 21.25% at 5000/7500/500. Every round of
     /// both listed feeds on 4663, 2026-06-22 -> 2026-09-04 (74.3d; AAPL 0x6B22…2cD0 555 rounds,
     /// NVDA 0x379E…9F15 981) gives a worst move of 6.80/7.06% at 1h, 8.47/7.88% at 6h, 8.97/9.22%
-    /// at 12h, 10.23/12.00% at 24h — nothing within a third of the buffer, and NVDA no more volatile
-    /// than AAPL. The binding constraint is HOW LATE AN ISSUER'S SECOND LEG LANDS, which is why
-    /// PRICE_DESYNC_HOLD is already 6h; equal, the sub-bound and above-bound cases get the same
+    /// at 12h, 10.23/12.00% at 24h — and 12.61/12.62% at 72h, which is 1.69x/1.68x, not the 2.51x
+    /// the 6h row implies. NVDA is no more volatile than AAPL (per-round log-return sample sd
+    /// 0.5712% vs 0.5602%). The binding constraint is HOW LATE AN ISSUER'S SECOND LEG LANDS, which is
+    /// why PRICE_DESYNC_HOLD is already 6h; equal, the sub-bound and above-bound cases get the same
     /// protection. 74 days holding one stress episode cannot BOUND a 21.25% tail, only miss it.
+    ///
+    /// 72h IS THE HORIZON THE DESIGN CARRIES (R5 MED-1): the feed goes dark ~25h after Friday's close
+    /// (measured max gap 79.7h AAPL / 76.1h NVDA) and a position healthy at that print waits six
+    /// hours of MONDAY observations. Warming the line removes only the 6h that used to be added ON
+    /// TOP of that; the dark window is the feed's.
     uint256 public constant PRICE_CONFIRM_DELAY = 6 hours;
 
     /// R4 HIGH-1: one promoted snapshot cannot deliver a delay however it is rate-limited, because
@@ -493,7 +504,10 @@ contract EsseyMarkets is StaleFeedGuard {
     /// unreadable ~55h EVERY weekend, which is exactly when a Monday ex-date is applied.
     function _syncPrice(address token, uint256 prevMult, uint256 curMult) internal returns (bool) {
         uint256 price = _readablePrice(token);
-        if (price == 0) return false; // unreadable price records nothing, exactly as a failed multiplier read does
+        if (price == 0) {
+            _holdConfirmable(token);
+            return false; // the pair is unchanged, so seenMultiplier must not advance either (R4 MED-1)
+        }
         uint256 prevPrice = seenPrice[token];
         uint256 prev = prevPrice * prevMult; // 0 when either half has no baseline yet
         uint256 baselineAge = block.timestamp - seenPriceAt[token];
@@ -503,6 +517,19 @@ contract EsseyMarkets is StaleFeedGuard {
         if (prev == 0) return true; // no baseline: `baselineAge` is meaningless here and goes unused
         _breaker(token, prev, price * curMult, baselineAge);
         return true;
+    }
+
+    /// THE LINE AGES ON WALL TIME, NOT ON FEED AVAILABILITY (R5 MED-1). Reachable only through a
+    /// readable price, `_confirmable` let the weekend outage RESTART the six-hour clock at the feed's
+    /// return — 21,900s to the first liquidation of a position 60% underwater, `writeOff` included.
+    /// So the last MATCHED pair keeps standing, both halves together (re-reading either alone is the
+    /// R4 MED-1 bug). It opens no gate: liquidate and writeOff also require underwater at the LIVE
+    /// price, which an unreadable feed refuses. R4 HIGH-2 survives — this ages the line only when
+    /// someone CALLS. The breaker's baseline is NOT warmed; it compares two real observations.
+    function _holdConfirmable(address token) internal {
+        Observation memory head = _confirmRing[token][_confirmHead[token]];
+        if (head.takenAt == 0) return; // never observed: seeding a zero pair would only add noise
+        _confirmable(token, head.price, head.mult);
     }
 
     /// Push this observation onto the delay line, no faster than one slot per CONFIRM_STEP.
@@ -597,10 +624,14 @@ contract EsseyMarkets is StaleFeedGuard {
     /// thoroughly as the revert did. Branch (b) covers such a token, and needs nothing from it.
     /// The budget for BOTH reads of an untrusted collateral token, valuation included. It exists to
     /// stop a griefing token bricking five entry points, and that goal is met here as well as at the
-    /// 50,000 it used to be — `uiMultiplier()` on the deployed AAPL token costs 15,719 gas
-    /// (test/GLendR4.t.sol), so 50,000 was 3.18x headroom on a contract this protocol does not own
-    /// and cannot pin.
-    uint256 internal constant MULTIPLIER_READ_GAS = 200_000;
+    /// 50,000 it used to be — `uiMultiplier()` on the deployed AAPL token costs ~15.7k gas
+    /// (test/GLendR5.t.sol measures it), so 50,000 was 3.18x headroom on a contract this protocol
+    /// does not own and cannot pin.
+    ///
+    /// PUBLIC so a test can pin its MAGNITUDE against that measured cost: the test named for this
+    /// budget passed with it cut to 5,000, below what the deployed token needs, which would stop
+    /// every borrow and every liquidation on every market (R5 LOW-1). It asserted the revert BRANCH.
+    uint256 public constant MULTIPLIER_READ_GAS = 200_000;
 
     function _scheduledEffectiveAt(address source) internal view returns (uint256) {
         (bool ok, bytes memory ret) = source.staticcall{gas: MULTIPLIER_READ_GAS}(abi.encodeWithSignature("newUIMultiplier()"));

@@ -69,6 +69,17 @@ function normalise(rounds) {
   return rounds.map((r) => ({ t: r.t, p: r.p > 10_000 ? r.p / 1e8 : r.p }));
 }
 
+/// Per-round dispersion, stated with its ESTIMATOR because the register carried this pair for a
+/// round with no method attached and it was not reproducible from anything here (R5 INFO-3). Sample
+/// standard deviation of log returns between consecutive rounds, in percent.
+function perRoundSigmaPct(rounds) {
+  const r = [];
+  for (let i = 1; i < rounds.length; i++) r.push(Math.log(rounds[i].p / rounds[i - 1].p));
+  const mean = r.reduce((a, b) => a + b, 0) / r.length;
+  const varr = r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length - 1);
+  return { sigmaPct: Math.sqrt(varr) * 100, n: r.length };
+}
+
 function worstMove(rounds, windowSec) {
   let worst = 0, at = 0;
   for (let i = 0; i < rounds.length; i++) {
@@ -99,7 +110,12 @@ for (const [name, [addr, latest]] of Object.entries(feeds)) {
   console.log(`median gap s ${gaps[Math.floor(gaps.length / 2)]}  max gap h ${(gaps.at(-1) / 3600).toFixed(2)}`);
   // 21.25% is what the delay spends at 5000/7500/500: liquidation threshold (debt / 0.75) down to
   // liquidator indifference (1.05 x debt). Anything approaching it at the chosen horizon is bad debt.
-  for (const h of [1, 2, 4, 6, 8, 12, 24]) {
+  const { sigmaPct, n } = perRoundSigmaPct(rounds);
+  console.log(`per-round sigma (log-return sample sd) ${sigmaPct.toFixed(4)}%  n ${n}`);
+  // 72h is the horizon the design actually carries, not 6h: the feed goes dark ~25h after Friday's
+  // close and a position healthy at that last print cannot be seized until PRICE_CONFIRM_DELAY of
+  // Monday observations have aged in — Friday 20:00 UTC to Monday ~19:30 UTC (R5 MED-1).
+  for (const h of [1, 2, 4, 6, 8, 12, 24, 48, 72]) {
     const { worst, at } = worstMove(rounds, h * 3600);
     const headroom = (0.2125 / worst).toFixed(2);
     console.log(

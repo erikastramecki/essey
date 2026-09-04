@@ -71,8 +71,15 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   `proposeRotation` / `commitRotation` of BOTH liveness roles, cancellable only by the recovery key
   (a guardian that could veto its own removal restores the same dead end). **FOUNDER RULING NEEDED:**
   the price of that recovery is that, after two days of public notice, the market admin can install a
-  keeper of its own — and a keeper that beats through a chain outage keeps liquidation open during
-  one. The alternative is accepting the unrecoverable key explicitly instead.
+  keeper of its own, which can hold liquidation open while the chain is demonstrably **healthy**.
+  It **cannot** hold it open through an outage — this document said it could for a round, and G-LEND
+  R5 INFO-1 refuted it: `heartbeat()` derives the gap from stored state, so a hostile keeper is as
+  frozen as everyone else during a halt and serves the full `resumeGrace` on restart (measured: 12
+  beats / 3,600s after a 4h halt). Nor does it reach `EsseyMarkets.guardian`, a different immutable
+  address `_checkRoles` forces to differ from both liveness roles, so `pauseLiquidation` and
+  `disableMarket` stay available throughout. The alternative is accepting the unrecoverable key
+  explicitly instead — a one-transaction, no-notice, permanent halt of borrowing AND liquidation on
+  every market, with no exit short of redeploying the registry and every pool.
 - **Corporate-action breaker:** `MAX_PRICE_DEVIATION_BPS = 2000`, `PRICE_DESYNC_HOLD = 6h`,
   `MULTIPLIER_GUARD_WINDOW = 1h`, `MAX_BASELINE_AGE = 1h`, `MAX_LIQUIDATION_PAUSE = 24h`
   (`EsseyMarkets`). A move of `price x uiMultiplier` past the bound, measured **between two
@@ -88,6 +95,13 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   observation at least `PRICE_CONFIRM_DELAY` old. A position already past the bar is seized with no
   delay, and a COMPLETED corporate action costs nothing — only a position that the latest,
   uncorroborated move has just flipped waits.
+  **That now holds across a feed outage too** (R5 MED-1). The delay line ages on WALL TIME: the last
+  matched pair keeps standing at the same `CONFIRM_STEP` cadence while the price is unreadable, so
+  the ~40h the 24/5 feed is dark every weekend no longer RESTARTS the six-hour clock at the feed's
+  return. It used to, and a position 60% underwater measured **21,900s** from Monday's first print to
+  its first liquidation, `writeOff` included, every Monday and every market holiday, with no operator
+  override. A market **nobody observes** still fails closed — the line ages only when someone calls
+  `syncMultiplier`, so a dead feed is not a dead keeper.
   **R4 HIGH-1 rebuilt the mechanism and set the number.** The old rule rate-limited the PROMOTION
   clock, not the age of the observation being promoted, and `syncMultiplier` is permissionless — so
   the delivered delay was whatever was left of an interval the attacker positioned, measured at ONE
@@ -100,7 +114,14 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   at 1h, 8.47%/7.88% at 6h, 8.97%/9.22% at 12h, 10.23%/12.00% at 24h. The delay spends the 21.25%
   from the liquidation threshold to liquidator indifference at 5000/7500/500 — no window at any of
   those horizons came within a third of it, and NVDA is NOT materially more volatile than AAPL at
-  these horizons, which the round-4 report had assumed it would be.
+  these horizons (per-round log-return sample sd 0.5712% n=554 vs 0.5602% n=980), which the round-4
+  report had assumed it would be.
+  **Read the derivation at 72h, not 6h.** The window a position is genuinely unliquidatable for is
+  the feed's dark weekend plus the delay Monday's observations owe: Friday's close to ~19:30 UTC
+  Monday, ~71h. At 72h the worst move is **12.61% AAPL / 12.62% NVDA — 1.69x / 1.68x** inside the
+  21.25% buffer, not the 2.51x / 2.70x the 6h row shows. Solvency is not broken on the measured
+  distribution, but the margin is materially thinner than the 6h figure implies and the founder
+  should read the risk against 1.68x. Reproduce with `node keeper/measure-feed-volatility.mjs`.
 - **Liquidation pause:** capped at `MAX_LIQUIDATION_PAUSE` per call AND followed by a cooldown as
   long as the pause itself (R3 MED-3), so chained calls cannot become a permanent freeze.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.
@@ -129,6 +150,23 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
 - **24h feed heartbeat** — a price can be up to 24h stale and still "fresh"; the session/holiday gating +
   the 20pp gap absorb this, but it's the accepted overnight/weekend blindness.
 - **adminBurn / multiplier EOA** — unmitigated on-chain (Robinhood's key); priced into LTV + disclosed.
+
+### Settled, so nobody re-opens them each audit round
+
+- **`uiMultiplier` does NOT drift — REFUTED, stop carrying it as a risk.** The hypothesis was that a
+  rolling multiplier would block borrowing on a rolling basis. Run against the tokens' real deployed
+  bytecode in a forked EVM under warps of +1h / +30d / +1y and +10,000,000 blocks, AAPL answers
+  `1000566080061092436` unchanged every time; NVDA answers `1e18`. It is a stored value the issuer
+  writes, not an accrual, and the 5.66bps offset from par is one past adjustment. There is no rolling
+  availability defect (R5 INFO-2a).
+- **Whether Robinhood expresses DIVIDENDS through `uiMultiplier` is UNVERIFIED, and is not answerable
+  from this chain today.** The public RPC keeps ~5,000 blocks of state (~7 minutes at this block
+  rate) and there is no archive endpoint, so no historical `uiMultiplier` read is possible. **What
+  would settle it, cheapest first:** (1) watch `uiMultiplier()` across a known AAPL ex-dividend date
+  on 4663 — a scheduled, publicly-known date; (2) get an archive endpoint and read either side of
+  one; (3) index transactions from `MULTIPLIER_UPDATER_ROLE` `0x9290…8143` and correlate with
+  ex-dates. Nothing in the design assumes either answer and nothing may start to. Five rounds have
+  re-opened this; it is recorded here so the sixth does not.
 
 ## Mainnet-config audit round — findings + disposition
 
