@@ -57,12 +57,24 @@ do everything else.
 
 ```bash
 cd rh-chain/keeper && npm install
-LIVENESS_ORACLE=<liveness> KEEPER_PRIVKEY=$PK \
+LIVENESS_ORACLE=<liveness> ESSEY_MARKETS=<markets> KEEPER_PRIVKEY=$PK \
   RH_RPC=https://rpc.testnet.chain.robinhood.com/rpc node liveness-keeper.mjs
 ```
 
-Liquidations stay disabled until the keeper has been beating for the grace period. That is
-deliberate: a fresh deployment has not proven liveness.
+`ESSEY_MARKETS` is not optional. This command used to omit it, which meant following this runbook
+literally left every market unobserved — G-LEND R4 HIGH-2. The keeper reads the market list from the
+registry itself, so nothing has to be re-typed when a market is listed.
+
+Liquidations stay disabled until the keeper has been beating for the grace period, AND until the
+observation delay line has filled (`PRICE_CONFIRM_DELAY`, 6 hours). Both are deliberate: a fresh
+deployment has not proven liveness, and it has no price it has watched stand.
+
+Check it is working — per market, on chain, not by looking at the process:
+
+```bash
+LIVENESS_ORACLE=<liveness> ESSEY_MARKETS=<markets> \
+  RH_RPC=https://rpc.testnet.chain.robinhood.com/rpc node check-liveness-keeper.mjs
+```
 
 After 2 days:
 

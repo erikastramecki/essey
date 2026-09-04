@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Supervisor for the liveness keeper. G-LEND R4 HIGH-2: this had been "before mainnet" in
+     docs/OUTSTANDING.md for three rounds while the process it supervises became load-bearing for
+     the SEIZURE path, not just for uptime. KeepAlive restarts it; check-liveness-keeper.mjs is what
+     actually tells you it is working, because a process can be up and observing nothing.
+
+     Install (mainnet operator box):
+       cp keeper/xyz.essey.liveness-keeper.plist ~/Library/LaunchAgents/
+       launchctl load -w ~/Library/LaunchAgents/xyz.essey.liveness-keeper.plist
+     On Linux use the same three env vars under a systemd unit with Restart=always. -->
+<!-- Template. __REPO__ is a placeholder, not a path: launchd does not expand variables, and an
+     absolute home path here leaks the machine's layout into a public repo (the pre-commit gate blocks it).
+     Install with:  sed "s|__REPO__|$(git rev-parse --show-toplevel)|g" xyz.essey.liveness-keeper.plist \
+                      > ~/Library/LaunchAgents/xyz.essey.liveness-keeper.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>xyz.essey.liveness-keeper</string>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__/rh-chain</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>node</string>
+    <string>keeper/liveness-keeper.mjs</string>
+  </array>
+
+  <!-- launchd starts with a minimal PATH and node is not on it; without this the unit flaps and
+       the keeper looks configured while never running (the game-keeper plist's lesson). The keys
+       live in the operator's environment file, never here — this file is in a public repo. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>__REPO__/rh-chain/.keeper-state/liveness-keeper.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO__/rh-chain/.keeper-state/liveness-keeper.err</string>
+</dict>
+</plist>

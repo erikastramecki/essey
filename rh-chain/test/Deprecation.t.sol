@@ -46,7 +46,7 @@ contract DeprecationLifecycleTest is Test {
         px = new MockFeed(200e8, 8); // $200/share
         tok = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, GRACE);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, makeAddr("livenessRotator"), 10 minutes, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6);
         vm.prank(ADMIN);
@@ -94,13 +94,21 @@ contract DeprecationLifecycleTest is Test {
 
     function _beat() internal { vm.prank(KEEPER); liv.heartbeat(); }
 
+    /// Beats on the keeper's tick and OBSERVES every sixth one — R4 LOW-5: it used to beat only,
+    /// so a fixture seasoning a price left the breaker's baseline stale and its deviation check
+    /// silently skipped.
     function _advanceLive(uint256 secs) internal {
         uint256 end = block.timestamp + secs;
         while (block.timestamp + 5 minutes < end) {
-            vm.warp(block.timestamp + 5 minutes); px.set(200e8, block.timestamp); _beat(); _postD();
+            vm.warp(block.timestamp + 5 minutes); px.set(200e8, block.timestamp); _beat(); _postD(); if (++_tick % 6 == 0) _observe();
         }
-        vm.warp(end); px.set(200e8, block.timestamp); _beat(); _postD();
+        vm.warp(end); px.set(200e8, block.timestamp); _beat(); _postD(); _observe();
     }
+
+    uint256 private _tick;
+
+    function _observe() internal { mk.syncMultiplier(address(tok)); }
+
 
     function _postD() internal {
         vm.prank(KEEPER); hox.postDepth(address(tok), 4_000_000e6, uint64(block.number), "fork-swap-v1");
@@ -108,8 +116,16 @@ contract DeprecationLifecycleTest is Test {
 
     function _seedOracle() internal {
         _postD();
-        for (uint256 i = 0; i < 42; i++) { vm.warp(block.timestamp + 12 hours); _postD(); } // ride the full ramp
+        for (uint256 i = 0; i < 41; i++) { vm.warp(block.timestamp + 12 hours); _postD(); } // ride the full ramp
         _beat(); _advanceLive(GRACE);
+        _fillDelayLine(12 hours - GRACE);
+    }
+    /// R4 HIGH-1: a market has no corroborated price until the delay line has been observed for
+    /// PRICE_CONFIRM_DELAY, so the fixture serves one out the way the deployed keeper would — as
+    /// the 42nd step of the ramp above, keeping the elapsed time and the day-of-week it always had.
+    function _fillDelayLine(uint256 secs) internal {
+        require(secs >= mk.PRICE_CONFIRM_DELAY() + 2 * mk.CONFIRM_STEP(), "fixture: too short to fill");
+        _advanceLive(secs);
     }
 
     function _advanceToSession() internal {

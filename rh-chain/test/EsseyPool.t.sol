@@ -58,7 +58,7 @@ contract EsseyPoolTest is Test {
         px = new MockFeed(200e8, 8); // $200/share
         tok = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, makeAddr("livenessRotator"), GAP, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6); // USDG is 6dp
         vm.prank(ADMIN);
@@ -99,7 +99,32 @@ contract EsseyPoolTest is Test {
     }
 
     function _beat() internal { vm.prank(KEEPER); liv.heartbeat(); }
+
+    /// The deployed keeper BEATS AND OBSERVES on the same 300s tick (keeper/liveness-keeper.mjs).
+    /// R4 LOW-5: this used to beat only, so every `_corroborate()` step landed at baselineAge one
+    /// second past MAX_BASELINE_AGE and took the early return in `_breaker` — 140 tests set their
+    /// scenario up with the deviation check switched off, and any future test folding a >2,000bps
+    /// move into `_walkPriceAndSettle` would silently not arm and look correct.
+    function _observe() internal virtual { mk.syncMultiplier(address(tok)); }
+
+    /// Beats on the keeper's 5-minute tick and OBSERVES every sixth one. The deployed keeper does
+    /// both on the same tick; simulating that over the 30-day advances this fixture also runs costs
+    /// more gas than a test may spend, and half an hour is well inside both MAX_BASELINE_AGE and
+    /// CONFIRM_STEP, so the states under test are the same ones.
     function _advanceLive(uint256 secs) internal {
+        uint256 end = block.timestamp + secs;
+        uint256 tick;
+        while (block.timestamp + 5 minutes < end) {
+            vm.warp(block.timestamp + 5 minutes); px.set(px.answer(), block.timestamp); _beat(); _postD();
+            if (++tick % 6 == 0) _observe();
+        }
+        vm.warp(end); px.set(px.answer(), block.timestamp); _beat(); _postD(); _observe();
+    }
+
+    /// The keeper beating but NOT observing — R4 HIGH-2's world, and the one every stale-baseline
+    /// test is actually about. It has to be asked for by name now: `_advanceLive` models the
+    /// deployed keeper, which does both.
+    function _advanceQuiet(uint256 secs) internal {
         uint256 end = block.timestamp + secs;
         while (block.timestamp + 5 minutes < end) {
             vm.warp(block.timestamp + 5 minutes); px.set(px.answer(), block.timestamp); _beat(); _postD();
@@ -118,15 +143,37 @@ contract EsseyPoolTest is Test {
     /// Market.cap, so the 1_333_200e6 target needs ~15.4 days; 21 keeps the day-of-week.
     function _seedOracle() internal {
         _postD();
-        for (uint256 i = 0; i < 42; i++) { vm.warp(block.timestamp + 12 hours); _postD(); }
+        for (uint256 i = 0; i < 41; i++) { vm.warp(block.timestamp + 12 hours); _postD(); }
         _beat(); _advanceLive(GRACE);
+        // The 42nd step of the ramp, but LIVE: the same 12 hours, spent beating and observing, so
+        // the delay line is full and the fixture still lands on the day and hour it always did.
+        _fillDelayLine(12 hours - GRACE);
         while (!mk.isUsMarketHours(block.timestamp)) _advanceLive(30 minutes);
+    }
+
+    /// R4 HIGH-1: a market has no corroborated price until the delay line has been observed for
+    /// PRICE_CONFIRM_DELAY, so nothing can be liquidated or written off in its first six hours. That
+    /// is the fail-closed direction and it is deliberate, but every fixture that seizes has to serve
+    /// it out the way the deployed keeper would.
+    /// Ride the keeper's cadence to the next open US session. Needed since R4 HIGH-1 made the
+    /// settle nine hours rather than one: two settles in a row now cross the close.
+    function _intoSession() internal {
+        while (!mk.isUsMarketHours(block.timestamp)) _advanceLive(30 minutes);
+    }
+
+    function _fillDelayLine(uint256 secs) internal {
+        require(secs >= mk.PRICE_CONFIRM_DELAY() + 2 * mk.CONFIRM_STEP(), "fixture: too short to fill");
+        _advanceLive(secs);
     }
 
     /// Warp through the 2-day timelock on a live keeper cadence — a silent warp past
     /// MAX_READING_AGE resets the depth ramp.
     function _warpTimelock() internal {
-        for (uint256 i = 0; i < 4; i++) { vm.warp(block.timestamp + 12 hours); _postD(); }
+        for (uint256 i = 0; i < 3; i++) { vm.warp(block.timestamp + 12 hours); _postD(); }
+        // The last 12 hours OBSERVED, so a pipeline that has to be re-filled after the change (an
+        // _activate, a resolver install) is filled by the time the caller acts, and the elapsed
+        // time is the 48 hours PARAM_TIMELOCK needs either way.
+        _beat(); _fillDelayLine(12 hours);
     }
 
     /// Make `p` the token's active pool through the real timelocked pipeline (F1: only the
@@ -142,6 +189,7 @@ contract EsseyPoolTest is Test {
         px.set(px.answer(), block.timestamp);
         mk.commitMarket(address(tok));
         _beat(); _advanceLive(GRACE);
+        _fillDelayLine(12 hours - GRACE);
         while (!mk.isUsMarketHours(block.timestamp)) _advanceLive(30 minutes);
     }
 
@@ -165,16 +213,17 @@ contract EsseyPoolTest is Test {
         px.set(target, block.timestamp); // re-stamp even when already there: some callers want freshness
     }
 
-    /// G-LEND R3 HIGH-1. A seizure needs the move CORROBORATED: EsseyMarkets promotes an EARLIER
-    /// observation to `confirmedPrice`, and only once PRICE_CONFIRM_DELAY has passed, so a price
-    /// that has just moved cannot justify a liquidation until it has stood for that long. That is
-    /// the separation the desync bound could not make — a real move stands, a corporate action's
-    /// feed leg is joined by its other leg — and it is why a 16.67% split leg can no longer harvest
-    /// a seasoned position. Tests that move the price and then seize say so HERE, in the open,
-    /// rather than depending on the same-block behaviour that made the harvest free.
+    /// G-LEND R3 HIGH-1, rebuilt for R4 HIGH-1. A seizure needs the move CORROBORATED: EsseyMarkets
+    /// values it against the OLDEST slot of a delay line, which is at least PRICE_CONFIRM_DELAY old
+    /// however the caller times the observations. That is the separation the desync bound could not
+    /// make — a real move stands, a corporate action's feed leg is joined by its other leg.
+    ///
+    /// It warps PRICE_CONFIRM_DELAY + 2 x CONFIRM_STEP, not the delay itself: the whole ring has to
+    /// have been observed AT the new level before the oldest slot holds it. The old one-second
+    /// margin was enough only because the old rule promoted whatever the previous observation was.
     function _corroborate() internal {
-        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 1);
-        mk.syncMultiplier(address(tok));
+        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 2 * mk.CONFIRM_STEP());
+        _observe();
     }
 
     /// Walk the market to a new level and let that level stand long enough to justify a seizure.
@@ -995,7 +1044,7 @@ contract EsseyPoolTest is Test {
     /// off-session, market disabled, caller a stranger — the top-up must still land.
     function test_addCollateralWorksUngatedByAnyone() public {
         uint256 id = _borrow(700e6);
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         uint256 night = (block.timestamp / 86400) * 86400 + 1 days + 3 hours;
         vm.warp(night); // hours past the last heartbeat, off-session
@@ -1414,7 +1463,7 @@ contract EsseyPoolTest is Test {
     function test_liquidateSucceedsOnADisabledMarket() public {
         uint256 id = _borrow(700e6);
         _walkPriceAndSettle(125e8); // underwater: $1250 backing, threshold $687.50 < $700
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
@@ -1425,7 +1474,7 @@ contract EsseyPoolTest is Test {
         address R = _installResolver();
         uint256 id = _borrow(700e6);
         _walkPriceAndSettle(60e8); // $600 backing $700: beyond recovery
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         vm.prank(R);
         pool.writeOff(id, 600e6);
@@ -1434,7 +1483,7 @@ contract EsseyPoolTest is Test {
 
     function test_repayStillWorksOnADisabledMarket() public {
         uint256 id = _borrow(700e6);
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         vm.prank(ALICE);
         pool.repay(id, 700e6);

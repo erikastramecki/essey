@@ -87,16 +87,20 @@ the ported lending code.
 | medium — pause forgives interest pool-wide | ✅ `656dc1c` narrowed to a **borrow-asset** pause only |
 | medium — half-day early close | ⚠️ **ACCEPTED for MVP** — GAP-absorbed (`MIN_RISK_GAP_BPS`); if ever fixed, use a fail-CLOSED keeper session flag, not an on-chain early-close table |
 | medium — EDT holiday liquidation outage | ✅ `7af8cce` holiday threshold = earliest open (13:30 UTC) |
-| medium — `resumeGrace` jitter DoS | ✅ `fb6cd37` constructor guard `resumeGrace ≤ 4× gapThreshold` |
+| medium — `resumeGrace` jitter DoS | ✅ `fb6cd37`, then SUPERSEDED — the ratio guard was replaced by absolute ceilings (`MAX_GAP_THRESHOLD` 1h / `MAX_RESUME_GRACE` 6h, `LivenessOracle.sol`). No `4×` guard exists; R4 LOW-4 found this line still claiming one |
 | medium — mutation survivors | ✅ `cef0046` pinned the timelock/gap boundaries + constant values |
 
 ---
 
 ## Operational — before mainnet
 
-- **Deploy the `LivenessOracle` keeper** under a supervisor with alerting. It exists, is tested, and is
-  deployed on testnet, but no supervised keeper is beating it on a mainnet target. A silently dead keeper
-  degrades to "liquidations off" — safe, but an outage.
+- **Deploy the `LivenessOracle` keeper** under `keeper/xyz.essey.liveness-keeper.plist` with alerting. It
+  exists, is tested, and is deployed on testnet, but no supervised keeper is beating it on a mainnet
+  target. It now carries a SECOND duty: it is the only standalone caller of `syncMultiplier`, so a market
+  it does not observe has no corroborated price and cannot be liquidated (R4 HIGH-2). Both halves fail
+  closed — a stale heartbeat closes the liveness gate within `gapThreshold`, an un-refreshed observation
+  ages past `MAX_CONFIRM_AGE` — so a dead keeper is an outage on both, never a fail-open. Verify with
+  `keeper/check-liveness-keeper.mjs`, which asks the chain per market rather than asking `ps`.
 - **Split the keys.** On testnet, admin/treasury/seeder/bankroll are all one throwaway deployer, and the
   keeper's hot key must not be the cold guardian key. Mainnet moves control to the operator multisig;
   that separation is unbuilt.

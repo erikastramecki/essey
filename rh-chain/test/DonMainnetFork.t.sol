@@ -105,12 +105,24 @@ contract DonMainnetForkTest is Test {
         } else {
             vm.createSelectFork(vm.rpcUrl("rh_mainnet"), PIN_BLOCK);
         }
-        deployer = makeAddr("deployer");
-        guardian = makeAddr("guardian");
+        deployer = _asEoa(makeAddr("deployer"));
+        guardian = _asEoa(makeAddr("guardian"));
         _deployAndSeed();
     }
 
     // ============================================================ DEPLOY (mirrors DeployDons.deployAll)
+
+    /// R4 LOW-6. `makeAddr` returns a VANITY address, and a fork at LATEST carries whatever a
+    /// stranger has since deployed or DELEGATED there. makeAddr("deployer") resolves to
+    /// 0xaE0bDc4eEAC5E950B67C6819B118761CaAF61946, which now holds an EIP-7702 delegation
+    /// designator on mainnet 4663 (`cast code` -> 0xef0100…), so it has code, `_safeMint`'s receiver
+    /// check calls into it, and every mint in this fixture reverts ERC721InvalidReceiver — on every
+    /// machine, until someone clears it, which nobody here can. Normalise the account to the plain
+    /// EOA the fixture means, and say why.
+    function _asEoa(address a) internal returns (address) {
+        if (a.code.length != 0) vm.etch(a, "");
+        return a;
+    }
 
     function _deployAndSeed() internal {
         (uint256[] memory fees, uint256[] memory weights) = _ladder();
@@ -226,7 +238,14 @@ contract DonMainnetForkTest is Test {
 
         // AAPL: pausable + uiMultiplier + 18-dec
         assertEq(IStockToken(AAPL).decimals(), 18, "AAPL 18-dec");
-        assertEq(IStockToken(AAPL).uiMultiplier(), 1e18, "AAPL uiMultiplier");
+        // NOT 1e18 any more, and this suite could not tell anyone because its setUp had been
+        // reverting (R4 LOW-6). Measured 2026-09-04 at latest: 1_000_566_080_061_092_436, a 5.66bps
+        // drift. The property that matters is that it is READABLE and at least par — a multiplier
+        // below par would value collateral under the raw balance, which no corporate action does.
+        uint256 aaplMult = IStockToken(AAPL).uiMultiplier();
+        assertGe(aaplMult, 1e18, "AAPL uiMultiplier at or above par");
+        console.log("AAPL uiMultiplier:", aaplMult);
+        console.log("NVDA uiMultiplier:", IStockToken(NVDA).uiMultiplier());
         assertFalse(IStockToken(AAPL).paused(), "AAPL not paused at fork");
         assertEq(IStockToken(NVDA).decimals(), 18, "NVDA 18-dec");
 

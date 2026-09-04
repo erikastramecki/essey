@@ -196,7 +196,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
 
     function test_guardianPauseStopsLiquidationAndExpiresOnItsOwn() public {
         uint256 id = _borrow(700e6);
-        _walkPrice(60e8);
+        _walkPriceAndSettle(60e8); // the move has to be corroborated before the pause is the reason
         vm.prank(GUARDIAN);
         mk.pauseLiquidation(address(tok), block.timestamp + 4 hours);
         assertFalse(mk.canLiquidate(address(tok)));
@@ -233,11 +233,21 @@ contract DesyncBreakerTest is EsseyPoolTest {
         assertTrue(mk.canLiquidate(address(tok)));
     }
 
-    function test_onlyAdminOrGuardianCanPause() public {
+    /// R4 MED-3: THE GUARDIAN ALONE. `admin` — which is the DEPLOY key, immutable and unrotatable —
+    /// used to hold both of the guardian's immediate levers while the contract's own doc block
+    /// attributed them to the guardian, and while DeployMarkets._roleKey refused every named role
+    /// that WAS the deploy key. Admin keeps the timelocked route to the same outcome.
+    function test_onlyTheGuardianCanPause() public {
         vm.prank(LIQUIDATOR);
         vm.expectRevert(EsseyMarkets.NotAdmin.selector);
         mk.pauseLiquidation(address(tok), block.timestamp + 1 hours);
         vm.prank(ADMIN);
+        vm.expectRevert(EsseyMarkets.NotAdmin.selector);
+        mk.pauseLiquidation(address(tok), block.timestamp + 1 hours);
+        vm.prank(ADMIN);
+        vm.expectRevert(EsseyMarkets.NotAdmin.selector);
+        mk.disableMarket(address(tok));
+        vm.prank(GUARDIAN);
         mk.pauseLiquidation(address(tok), block.timestamp + 1 hours);
         assertFalse(mk.canLiquidate(address(tok)));
     }
@@ -357,6 +367,7 @@ contract DesyncBreakerTest is EsseyPoolTest {
         tok.setPaused(false);
 
         _walkPriceAndSettle(200e8); // back to a borrowable price
+        _intoSession(); // two settles is eighteen hours: the session closed under us
         address BOB = makeAddr("bob");
         tok.mint(BOB, 10e18);
         usdg.mint(BOB, 10_000e6);

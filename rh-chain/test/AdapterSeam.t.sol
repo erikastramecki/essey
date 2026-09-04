@@ -51,7 +51,7 @@ contract AdapterSeamTest is Test {
         wtok = new WrappedStock();
         cm = new ConstantMultiplier();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, makeAddr("guardian"), 10 minutes, 30 minutes);
+        liv = new LivenessOracle(KEEPER, makeAddr("guardian"), makeAddr("livenessRotator"), 10 minutes, 30 minutes);
         hox = new MarketHealthOracle(KEEPER, makeAddr("hox-guardian"), ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, makeAddr("mk-guardian"), 6);
         vm.prank(ADMIN);
@@ -97,13 +97,21 @@ contract AdapterSeamTest is Test {
 
     function _beat() internal { vm.prank(KEEPER); liv.heartbeat(); }
 
+    /// Beats on the keeper's tick and OBSERVES every sixth one — R4 LOW-5: it used to beat only,
+    /// so a fixture seasoning a price left the breaker's baseline stale and its deviation check
+    /// silently skipped.
     function _advanceLive(uint256 secs) internal {
         uint256 end = block.timestamp + secs;
         while (block.timestamp + 5 minutes < end) {
-            vm.warp(block.timestamp + 5 minutes); px.set(px.answer(), block.timestamp); _beat(); _postD();
+            vm.warp(block.timestamp + 5 minutes); px.set(px.answer(), block.timestamp); _beat(); _postD(); if (++_tick % 6 == 0) _observe();
         }
-        vm.warp(end); px.set(px.answer(), block.timestamp); _beat(); _postD();
+        vm.warp(end); px.set(px.answer(), block.timestamp); _beat(); _postD(); _observe();
     }
+
+    uint256 private _tick;
+
+    function _observe() internal { mk.syncMultiplier(address(wtok)); }
+
 
     function _postD() internal {
         vm.prank(KEEPER); hox.postDepth(address(wtok), 4_000_000e6, uint64(block.number), "fork-swap-v1");
@@ -125,9 +133,17 @@ contract AdapterSeamTest is Test {
 
     function _seedOracle() internal {
         _postD();
-        for (uint256 i = 0; i < 42; i++) { vm.warp(block.timestamp + 12 hours); _postD(); } // ride the full ramp
+        for (uint256 i = 0; i < 41; i++) { vm.warp(block.timestamp + 12 hours); _postD(); } // ride the full ramp
         _beat(); _advanceLive(30 minutes);
+        _fillDelayLine(12 hours - 30 minutes);
         while (!mk.isUsMarketHours(block.timestamp)) _advanceLive(30 minutes);
+    }
+    /// R4 HIGH-1: a market has no corroborated price until the delay line has been observed for
+    /// PRICE_CONFIRM_DELAY, so the fixture serves one out the way the deployed keeper would — as
+    /// the 42nd step of the ramp above, keeping the elapsed time and the day-of-week it always had.
+    function _fillDelayLine(uint256 secs) internal {
+        require(secs >= mk.PRICE_CONFIRM_DELAY() + 2 * mk.CONFIRM_STEP(), "fixture: too short to fill");
+        _advanceLive(secs);
     }
 
     /// The market a bare wrapper used to brick works end to end through the adapter:
@@ -261,7 +277,9 @@ contract AdapterSeamTest is Test {
     /// that has just moved cannot justify a liquidation until it has stood for that long.
     function _walkPriceAndSettle(int256 target) internal {
         _walkPrice(target);
-        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 1);
+        // R4 HIGH-1: the whole delay line has to have been observed AT the new level before the
+        // oldest slot holds it, so this is the delay plus two steps, not the delay plus a second.
+        _advanceLive(mk.PRICE_CONFIRM_DELAY() + 2 * mk.CONFIRM_STEP());
         mk.syncMultiplier(address(wtok));
     }
 

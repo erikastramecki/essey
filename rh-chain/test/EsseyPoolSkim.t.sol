@@ -118,7 +118,7 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
         // PARAM_TIMELOCK has elapsed (i >= 4), then keep riding the from-zero depth ramp.
         bool committed = false;
         _postAll();
-        for (uint256 i = 0; i < 42; i++) {
+        for (uint256 i = 0; i < 41; i++) {
             vm.warp(block.timestamp + 12 hours);
             _refreshFeeds();
             _postAll();
@@ -134,8 +134,21 @@ contract EsseyPoolSkimTest is EsseyPoolTest, IERC721Receiver {
         }
         _beat();
         _advanceLive(GRACE);
+        // The 42nd step, spent live: the ramp's silent 21 days age every delay line — the parent's
+        // `tok` included — past MAX_CONFIRM_AGE, so the fixture has to serve one out before any
+        // inherited test can seize. Same total elapsed, so the day-of-week note above still holds.
+        _fillDelayLine(12 hours - GRACE);
         while (!mk.isUsMarketHours(block.timestamp)) _advanceLive(30 minutes);
         _refreshFeeds();
+    }
+
+    /// Every market this fixture lists, on the keeper's cadence — not just the parent's `tok`.
+    function _observe() internal override {
+        super._observe();
+        mk.syncMultiplier(address(ctR));
+        mk.syncMultiplier(address(ctP2));
+        mk.syncMultiplier(address(ctAB));
+        mk.syncMultiplier(address(ctNB));
     }
 
     function _propose(MockStock ct, MockFeed f, EsseyPool p) internal {

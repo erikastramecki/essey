@@ -36,7 +36,7 @@ contract BorrowFlowTest is Test {
         // internally consistent at 18. It therefore cannot catch a 6-decimal normalisation defect —
         // EsseyPool.t.sol's MockUSDG (6 decimals, and its five inheriting suites) is where that lives.
         usdg = new ScaledUIStockMock("Mock USDG", "USDG", 18);
-        liveness = new LivenessOracle(address(this), address(this), 900, 1 hours);
+        liveness = new LivenessOracle(address(this), address(this), makeAddr("livenessRotator"), 900, 1 hours);
         health = new MarketHealthOracle(address(this), address(this), address(this));
         markets = new EsseyMarkets(AggregatorV3Interface(address(seqFeed)), liveness, health, address(this), address(this), 18);
         health.wireMarkets(address(markets));

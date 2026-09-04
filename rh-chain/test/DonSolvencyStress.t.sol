@@ -100,9 +100,21 @@ abstract contract DonStackBase is Test {
         (fees[4], weights[4]) = (1_666_666e18, 333);
     }
 
+    /// R4 LOW-6. `makeAddr` returns a VANITY address, and a fork at LATEST carries whatever a
+    /// stranger has since deployed or DELEGATED there. makeAddr("deployer") resolves to
+    /// 0xaE0bDc4eEAC5E950B67C6819B118761CaAF61946, which now holds an EIP-7702 delegation
+    /// designator on mainnet 4663 (`cast code` -> 0xef0100…), so it has code, `_safeMint`'s receiver
+    /// check calls into it, and every mint in this fixture reverts ERC721InvalidReceiver — on every
+    /// machine, until someone clears it, which nobody here can. Normalise the account to the plain
+    /// EOA the fixture means, and say why.
+    function _asEoa(address a) internal returns (address) {
+        if (a.code.length != 0) vm.etch(a, "");
+        return a;
+    }
+
     function _deployStack(Params memory p) internal returns (Stack memory s) {
-        s.deployer = makeAddr("deployer");
-        s.guardian = makeAddr("guardian");
+        s.deployer = _asEoa(makeAddr("deployer"));
+        s.guardian = _asEoa(makeAddr("guardian"));
         (uint256[] memory fees, uint256[] memory weights) = _ladder();
 
         vm.startPrank(s.deployer);

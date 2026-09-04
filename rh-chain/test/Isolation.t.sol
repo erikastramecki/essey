@@ -63,7 +63,7 @@ contract IsolationBase is Test {
         tokA = new MockStock();
         tokB = new MockStock();
         usdg = new MockUSDG();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, makeAddr("livenessRotator"), GAP, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6);
         vm.prank(ADMIN);
@@ -453,10 +453,10 @@ contract IsolationTest is IsolationBase {
     }
 
     function test_sharedRegistryOpsDoNotMoveB() public {
-        vm.startPrank(ADMIN);
+        vm.prank(ADMIN);
         mk.proposeResolver(makeAddr("resolver2"));
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tokA));
-        vm.stopPrank();
         assertFalse(mk.canBorrow(address(tokA)));
         assertTrue(mk.canBorrow(address(tokB)), "B's market must not be caught in A's shutdown");
         assertTrue(mk.canLiquidate(address(tokB)));

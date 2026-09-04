@@ -83,11 +83,21 @@ Keeper failure, RPC failure and chain failure are all the same event here — th
 and all fail closed.
 
 ```
-RH_RPC=... KEEPER_PRIVKEY=0x... LIVENESS_ORACLE=0x... node keeper/liveness-keeper.mjs
+RH_RPC=... KEEPER_PRIVKEY=0x... LIVENESS_ORACLE=0x... ESSEY_MARKETS=0x... \
+  node keeper/liveness-keeper.mjs
 ```
 
-Run under a supervisor and alert on the WARN/ALERT lines: a silently dead keeper degrades to
-"liquidations off", which is safe but is an outage of its own.
+`ESSEY_MARKETS` is REQUIRED, and omitting it used to be the whole of G-LEND R4 HIGH-2: the same
+process is the only standalone caller of `syncMultiplier`, and a market it does not observe has no
+corroborated price and cannot be liquidated. It derives the market list from the registry's own
+`MarketCommitted` log — `MARKET_TOKENS` is now only an optional cross-check that raises an alarm
+when it disagrees.
+
+Run it under `keeper/xyz.essey.liveness-keeper.plist` and alert on the WARN/ALERT lines. A dead
+keeper degrades to "liquidations off" on BOTH halves — the stale heartbeat closes the liveness gate
+within `gapThreshold`, and the un-refreshed observation ages past `MAX_CONFIRM_AGE` — so it is safe
+and it is an outage. `keeper/check-liveness-keeper.mjs` is the check that answers whether it is
+actually working, per market, rather than whether the process is up.
 
 ## Modules
 

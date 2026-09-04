@@ -4,6 +4,8 @@ pragma solidity ^0.8.28;
 import {EsseyPoolTest} from "./EsseyPool.t.sol";
 import {EsseyMarkets} from "../src/EsseyMarkets.sol";
 import {EsseyPool} from "../src/EsseyPool.sol";
+import {MockFeed, MockStock} from "./RiskModules.t.sol";
+import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 
 /// G-LEND R3. DesyncBreaker.t.sol runs ONE event on a fresh market and every test in it passes for
 /// the single-event case. The breaker's second state — armed, hold served out, reference never
@@ -29,9 +31,11 @@ contract DesyncStateMachineTest is EsseyPoolTest {
     }
 
     /// Serve out the hold WITHOUT observing — the keeper beats and the feed re-stamps at the same
-    /// price, which is exactly what happens on a market nobody is trading.
+    /// price, and nothing calls syncMultiplier. Since R4 LOW-5 the fixture's `_advanceLive` observes
+    /// on the keeper's own cadence, so this state has to be asked for explicitly; it is the one
+    /// R4 HIGH-2 is about, not the default.
     function _serveOutTheHold() internal {
-        _advanceLive(mk.PRICE_DESYNC_HOLD() + 1 hours);
+        _advanceQuiet(mk.PRICE_DESYNC_HOLD() + 1 hours);
     }
 
     /// Serve it out WITH the keeper observing throughout, which is what the deployed keeper now
@@ -178,7 +182,7 @@ contract DesyncStateMachineTest is EsseyPoolTest {
 
         px.set(140e8, block.timestamp);
         mk.syncMultiplier(T);
-        _advanceLive(mk.PRICE_DESYNC_HOLD() + 1 hours);
+        _advanceQuiet(mk.PRICE_DESYNC_HOLD() + 1 hours);
         px.set(98e8, block.timestamp); // event 2, arriving on a market still holding a stale pair
         mk.syncMultiplier(T);
         assertEq(mk.priceDesyncAt(T), 0, "the baseline was stale, so this one correctly does not arm");
@@ -249,7 +253,7 @@ contract DesyncStateMachineTest is EsseyPoolTest {
     /// drift, and arming on it is a false positive that costs a real liquidation window.
     function test_aStaleBaselineIsNoEvidenceOfADislocation() public {
         _borrow(700e6);
-        _advanceLive(2 hours); // the keeper beats and the feed re-stamps; NOBODY observes
+        _advanceQuiet(2 hours); // the keeper beats and the feed re-stamps; NOBODY observes
         px.set(140e8, block.timestamp); // -30% of accumulated drift, seen all at once
         mk.syncMultiplier(T);
 
@@ -274,7 +278,7 @@ contract DesyncStateMachineTest is EsseyPoolTest {
     /// "a while", and a `>=` here would silently discard a keeper beat that is merely on time.
     function test_theBaselineAgeBoundaryIsExact() public {
         _borrow(700e6);
-        _advanceLive(mk.MAX_BASELINE_AGE());
+        _advanceQuiet(mk.MAX_BASELINE_AGE());
         px.set(140e8, block.timestamp);
         mk.syncMultiplier(T);
         assertGt(mk.priceDesyncAt(T), 0, "exactly at MAX_BASELINE_AGE still arms");
@@ -283,27 +287,125 @@ contract DesyncStateMachineTest is EsseyPoolTest {
     /// The other side of it, one second later.
     function test_oneSecondPastTheBaselineAgeStopsArming() public {
         _borrow(700e6);
-        _advanceLive(mk.MAX_BASELINE_AGE() + 1);
+        _advanceQuiet(mk.MAX_BASELINE_AGE() + 1);
         px.set(140e8, block.timestamp);
         mk.syncMultiplier(T);
         assertEq(mk.priceDesyncAt(T), 0, "one second past it does not");
     }
 
-    /// EXACT BOUNDARY on the corroboration rate limit, in both directions.
-    function test_theCorroborationDelayBoundaryIsExact() public {
+    /// R4 HIGH-1, AND THE TEST THAT USED TO ASSERT ITS OPPOSITE. This was
+    /// `test_theCorroborationDelayBoundaryIsExact`: it moved the price at `DELAY - 1`, advanced one
+    /// second, observed, and asserted the new price was promoted — the bypass, performed and
+    /// blessed, under a name that reads like the property. The rule it pinned was real; the
+    /// SECURITY property it was named for was never tested, because the rate limit ran on the
+    /// promotion clock and a permissionless caller positions that clock.
+    ///
+    /// The property, stated so it can fail: the corroborated observation is never younger than
+    /// PRICE_CONFIRM_DELAY, WHEREVER in the cadence the move lands. Mutating the constant to one
+    /// second must break this; nothing in the old suite did.
+    function test_theCorroboratedObservationIsNeverYoungerThanTheDelay() public {
         _borrow(700e6);
-        mk.syncMultiplier(T); // promotes the $200 baseline; confirmedAt = now
-        uint256 blessed = mk.confirmedPrice(T);
+        uint256 delay = mk.PRICE_CONFIRM_DELAY();
+        uint256[5] memory offsets = [uint256(5 minutes), 30 minutes, delay / 2, delay - 30 minutes, delay - 5 minutes];
 
-        _advanceLive(mk.PRICE_CONFIRM_DELAY() - 1);
-        px.set(190e8, block.timestamp);
-        mk.syncMultiplier(T);
-        assertEq(mk.confirmedPrice(T), blessed, "one second short of the delay promotes nothing");
+        for (uint256 i = 0; i < offsets.length; i++) {
+            uint256 before = mk.confirmedObservedAt(T);
+            _advanceLive(offsets[i]);
+            px.set(px.answer() - 1e8, block.timestamp);
+            mk.syncMultiplier(T);
+            uint256 at = mk.confirmedObservedAt(T);
+            assertGe(block.timestamp - at, delay, "the corroborated observation is at least a full delay old");
+            assertLe(block.timestamp - at, mk.MAX_CONFIRM_AGE(), "and never older than the ceiling");
+            assertGe(at, before, "the line only ever moves forward");
+        }
+    }
 
-        _advanceLive(1);
-        px.set(190e8, block.timestamp);
-        mk.syncMultiplier(T);
-        assertEq(mk.confirmedPrice(T), 190e8, "and on the second itself it promotes");
+    /// The same property priced as an attack, which is the form R4 HIGH-1 was found in: a healthy
+    /// seasoned position, a sub-bound feed leg, and an attacker choosing the moment inside the
+    /// cadence. Every offset must refuse. Against the promotion-clock rule the last of these
+    /// succeeded one second after the leg landed.
+    function test_aSubBoundLegCannotBeSeizedAtAnyOffsetInsideTheDelay() public {
+        uint256 delay = mk.PRICE_CONFIRM_DELAY();
+        uint256[4] memory offsets = [uint256(1), 5 minutes, delay / 2, delay - 5 minutes];
+
+        for (uint256 i = 0; i < offsets.length; i++) {
+            uint256 snap = vm.snapshotState();
+            uint256 id = _borrow(700e6);
+            _walkPriceAndSettle(130e8); // seasoned to ~2% of cushion, healthy, nothing armed
+            assertFalse(mk.isUnderwater(T, 10e18, pool.debtOf(id)), "healthy before the leg");
+
+            _advanceQuiet(offsets[i]); // the attacker positions the clock; nobody observes
+            px.set(117e8, block.timestamp); // the feed leg: -1,000bps, under MAX_PRICE_DEVIATION_BPS
+            mk.syncMultiplier(T);
+            assertEq(mk.priceDesyncAt(T), 0, "sub-bound: the breaker never arms");
+            assertTrue(mk.isUnderwater(T, 10e18, pool.debtOf(id)), "the LIVE read says underwater");
+
+            vm.warp(block.timestamp + 1); // one second later, the moment the old rule handed over
+            px.set(117e8, block.timestamp);
+            _beat();
+            vm.prank(LIQUIDATOR);
+            vm.expectRevert(abi.encodeWithSelector(EsseyPool.PriceNotCorroborated.selector, T));
+            pool.liquidate(id);
+            vm.revertToState(snap);
+        }
+    }
+
+    /// The FLOOR, reachable and therefore pinnable: a market's first observation seeds the whole
+    /// delay line, so from the moment it is listed the only thing between it and a seizure is the
+    /// age test. Deleting that test — which the ring's spacing would otherwise make redundant, and
+    /// unfalsifiable with it — hands a seizure the price of the block it was listed in.
+    function test_aFreshMarketCannotBeSeizedUntilTheDelayHasRun() public {
+        EsseyPool p2 = new EsseyPool(usdg, address(tok), mk, 0, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
+
+        // A market observed for the first time RIGHT NOW: seeded, so nothing is empty, and refused
+        // purely on age.
+        MockStock fresh = new MockStock();
+        MockFeed freshPx = new MockFeed(200e8, 8);
+        EsseyPool p3 = new EsseyPool(usdg, address(fresh), mk, 0, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        EsseyMarkets.Market memory m = EsseyMarkets.Market({
+            enabled: true, ltvBps: 3_500, liqThresholdBps: 5_500, liqBonusBps: 800,
+            collateralDecimals: 18, cap: 1_000_000e6, maxPositionBps: 10_000
+        });
+        vm.prank(ADMIN);
+        mk.proposeMarket(address(fresh), AggregatorV3Interface(address(freshPx)), 86_400, 90_000, 8, address(fresh), address(p3), m);
+        _warpTimelock();
+        freshPx.set(200e8, block.timestamp);
+        mk.commitMarket(address(fresh));
+
+        (, bool availableAtZero) = mk.corroboratedValue(address(fresh), 10e18);
+        assertFalse(availableAtZero, "never observed: nothing to vouch for");
+        mk.syncMultiplier(address(fresh)); // the first observation seeds every slot
+        assertEq(
+            mk.confirmedObservedAt(address(fresh)),
+            block.timestamp,
+            "the read slot holds THIS observation, not a hole - which is what leaves the age test alone to refuse"
+        );
+        (, bool availableJustObserved) = mk.corroboratedValue(address(fresh), 10e18);
+        assertFalse(availableJustObserved, "seeded, and refused on AGE - not on an empty slot");
+
+        for (uint256 i = 0; i < 12; i++) {
+            vm.warp(block.timestamp + 30 minutes);
+            freshPx.set(200e8, block.timestamp);
+            _beat();
+            mk.syncMultiplier(address(fresh));
+        }
+        (, bool availableAfter) = mk.corroboratedValue(address(fresh), 10e18);
+        assertTrue(availableAfter, "and available once a full delay of observation has run");
+    }
+
+    /// The ceiling, which is what makes an observation outage fail CLOSED (R4 HIGH-2). A market the
+    /// keeper stops observing stops having a corroborated price at all, rather than vouching
+    /// forever for the last one anybody looked at.
+    function test_anUnobservedMarketLosesItsCorroboratedPrice() public {
+        _borrow(700e6);
+        (, bool available) = mk.corroboratedValue(T, 10e18);
+        assertTrue(available, "corroborated while the keeper observes");
+
+        _advanceQuiet(mk.MAX_CONFIRM_AGE() + 1); // beating, so liveness is fine; observing nothing
+        assertTrue(mk.canLiquidate(T), "the market gate is open: this is not the liveness bound");
+        (, available) = mk.corroboratedValue(T, 10e18);
+        assertFalse(available, "but there is no observation this registry will vouch for");
     }
 
     // ------------------------------------------------- HIGH-1: corroboration, not magnitude
@@ -499,13 +601,28 @@ contract DesyncStateMachineTest is EsseyPoolTest {
     /// default is only as good as the reason it is unreachable. THE REASON, pinned: `borrow` observes
     /// before it opens a position, and the seizing transaction observes again above its own gate, so
     /// a position that can be liquidated always has a corroborated price behind it.
+    /// R4 HIGH-1 changed the REASON, and the reason is the whole point of pinning it: two
+    /// observations no longer suffice — the delay line has to be observed for PRICE_CONFIRM_DELAY
+    /// before anything is corroborated. So a market can be borrowed against before it can be
+    /// liquidated, and that window is fail-closed by construction rather than by argument.
     function test_aPositionAlwaysHasACorroboratedPriceBehindIt() public {
-        (, bool availableBefore) = mk.corroboratedValue(T, 10e18);
-        assertFalse(availableBefore, "nothing observed yet on a market with no positions");
+        EsseyPool p2 = new EsseyPool(usdg, address(tok), mk, 0, 0, 0, 0, address(0), address(0x7EA), 0, EsseyPool.Identity("Essey Pool Share", "aUSDG", "Essey Note", "eNOTE"));
+        vm.startPrank(LENDER); usdg.approve(address(p2), type(uint256).max); p2.deposit(100_000e6, LENDER); vm.stopPrank();
+        _activate(p2);
 
-        _borrow(700e6); // observation one, inside borrow
-        mk.syncMultiplier(T); // observation two: any pool path or keeper call
         (, bool available) = mk.corroboratedValue(T, 10e18);
-        assertTrue(available, "two observations is all it takes, and borrow is the first");
+        assertTrue(available, "the fixture serves the line out before it lends, as the keeper does");
+
+        vm.startPrank(ALICE);
+        tok.approve(address(p2), type(uint256).max);
+        usdg.approve(address(p2), type(uint256).max);
+        uint256 id = p2.borrow(10e18, 700e6);
+        vm.stopPrank();
+        vm.prank(LIQUIDATOR);
+        usdg.approve(address(p2), type(uint256).max);
+        _walkPriceAndSettle(125e8);
+        vm.prank(LIQUIDATOR);
+        p2.liquidate(id);
+        assertEq(p2.debtOf(id), 0, "and a seizure always has a corroborated price behind it");
     }
 }

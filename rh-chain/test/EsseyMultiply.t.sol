@@ -105,7 +105,7 @@ contract EsseyMultiplyTest is Test {
         MockFeed seqFeed = new MockFeed(8, 0);
         usdg = new MockUSDG();
         nvda = new ScaledUIStockMock("Mock NVDA", "NVDA", 18);
-        liveness = new LivenessOracle(address(this), address(this), 900, 1 hours);
+        liveness = new LivenessOracle(address(this), address(this), makeAddr("livenessRotator"), 900, 1 hours);
         health = new MarketHealthOracle(address(this), address(this), address(this));
         markets = new EsseyMarkets(
             AggregatorV3Interface(address(seqFeed)), liveness, health, address(this), address(this), 6
@@ -556,10 +556,11 @@ contract EsseyMultiplyTest is Test {
         uint256[] memory alive = new uint256[](2);
         (alive[0], alive[1]) = (ids[2], ids[0]);
         pool.accrue();
-        // The one figure the corroboration delay moves (R3 HIGH-1): an hour of interest on the two
-        // surviving rungs, over their 9_625e6 of principal. Measured, so the literals below stay the
-        // interest-free arithmetic they were written to pin.
-        uint256 accrued = pool.totalBorrows() - 9_625e6;
+        // The one figure the corroboration delay moves (R3 HIGH-1, six hours since R4 HIGH-1):
+        // interest on the two surviving rungs, over their 9_625e6 of principal. Summed PER RUNG,
+        // which is what `close` actually repays — the pool aggregate rounds differently and put a
+        // single wei between the two once the delay was long enough for the gap to open.
+        uint256 accrued = pool.debtOf(alive[0]) + pool.debtOf(alive[1]) - 9_625e6;
         vm.prank(user);
         (uint256 assetOut,) = multiply.close(pool, alive, 10_000e6, false, 0, block.timestamp);
         assertEq(assetOut, 11_550e6, "the surviving rungs' proceeds, at the crashed price");
@@ -719,11 +720,23 @@ contract EsseyMultiplyTest is Test {
     function _advanceLive(uint256 secs) internal {
         uint256 end = block.timestamp + secs;
         uint256 step = liveness.gapThreshold() / 3;
+        uint256 tick;
         while (block.timestamp + step < end) {
             vm.warp(block.timestamp + step);
-            liveness.heartbeat();
+            _stampAndBeat();
+            if (++tick % 6 == 0) markets.syncMultiplier(address(nvda));
         }
         vm.warp(end);
+        _stampAndBeat();
+        markets.syncMultiplier(address(nvda));
+    }
+
+    /// R4 LOW-5: the deployed keeper re-stamps nothing but it DOES observe, and the feed here has
+    /// to stay readable across the six hours the corroboration delay now costs or the observation
+    /// records nothing at all.
+    function _stampAndBeat() internal {
+        (, int256 cur,,,) = nvdaFeed.latestRoundData();
+        nvdaFeed.set(cur, block.timestamp);
         liveness.heartbeat();
     }
 
@@ -735,7 +748,8 @@ contract EsseyMultiplyTest is Test {
     /// that has just moved cannot justify a liquidation until it has stood for that long.
     function _walkPriceAndSettle(int256 target) internal {
         _walkPrice(target);
-        _advanceLive(markets.PRICE_CONFIRM_DELAY() + 1);
+        // R4 HIGH-1: the whole delay line has to have been observed at the new level.
+        _advanceLive(markets.PRICE_CONFIRM_DELAY() + 2 * markets.CONFIRM_STEP());
         markets.syncMultiplier(address(nvda));
     }
 

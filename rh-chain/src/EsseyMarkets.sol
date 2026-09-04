@@ -196,7 +196,12 @@ contract EsseyMarkets is StaleFeedGuard {
         uint256 price;
         uint8 feedDec;
         (price, feedDec, inSession) = priceOf(token);
-        value = _valueAt(rawAmount, price, IScaledUI(multiplierSource[token]).uiMultiplier(), collDec, feedDec);
+        // R4 LOW-1: the SAME capped read the observer uses. Uncapped here and capped there, a token
+        // upgraded past the observer's budget (Stock Tokens are beacon-upgradeable) kept being valued
+        // and borrowed against while its breaker and delay line silently recorded nothing.
+        uint256 mult = _liveMultiplier(multiplierSource[token]);
+        if (mult == 0) revert BadMultiplierSource(token, multiplierSource[token]);
+        value = _valueAt(rawAmount, price, mult, collDec, feedDec);
     }
 
     /// The one place the three scales are reconciled, shared with corroboratedValue so the live and
@@ -268,14 +273,44 @@ contract EsseyMarkets is StaleFeedGuard {
         return available && value < debt;
     }
 
+    /// The observation the corroborated read uses: the OLDEST slot of the delay line. Nothing else
+    /// may be read for corroboration — the fresher slots exist only to age into this one.
+    function confirmedObservation(address token) public view returns (Observation memory) {
+        return _confirmRing[token][(_confirmHead[token] + 1) % CONFIRM_SLOTS];
+    }
+
+    function confirmedPrice(address token) external view returns (uint256) {
+        return confirmedObservation(token).price;
+    }
+
+    function confirmedMultiplier(address token) external view returns (uint256) {
+        return confirmedObservation(token).mult;
+    }
+
+    /// When that observation was TAKEN. Deliberately not named `confirmedAt`: the old field held
+    /// the moment of PROMOTION, and reading one as the other is exactly how R4 HIGH-1 survived.
+    function confirmedObservedAt(address token) external view returns (uint256) {
+        return confirmedObservation(token).takenAt;
+    }
+
     /// Value of `rawAmount` at the corroborated observation, and whether there IS one. `available ==
-    /// false` means the registry cannot vouch for any price yet, NOT that the collateral is worthless
-    /// — unreachable while a position exists, since `borrow` observes before opening one.
+    /// false` means the registry cannot vouch for a price, NOT that the collateral is worthless.
+    ///
+    /// THE AGE TEST IS THE SECURITY PROPERTY, so it lives here rather than being inferred from the
+    /// push rule. Too YOUNG (R4 HIGH-1) and a move that has not stood for PRICE_CONFIRM_DELAY could
+    /// justify a seizure; too OLD (R4 HIGH-2) and a market nobody has observed since keeps vouching
+    /// for a price, which is how an unsupervised keeper turned into a fail-OPEN. Both directions
+    /// refuse, and refusing costs a liquidation window, never a wrongful seizure.
     function corroboratedValue(address token, uint256 rawAmount) public view returns (uint256 value, bool available) {
-        uint256 price = confirmedPrice[token];
-        if (price == 0) return (0, false);
+        Observation memory o = confirmedObservation(token);
+        if (o.price == 0) return (0, false);
+        // No `takenAt == 0` conjunct: a never-observed market reads as older than any ceiling and is
+        // refused by the age test below, which is the test that is pinned. A second reason to refuse
+        // would make that one unfalsifiable — the shape the old promotion rule hid behind.
+        uint256 age = block.timestamp - o.takenAt;
+        if (age < PRICE_CONFIRM_DELAY || age > MAX_CONFIRM_AGE) return (0, false);
         Market memory m = _configuredMarket(token);
-        value = _valueAt(rawAmount, price, confirmedMultiplier[token], m.collateralDecimals, _feeds[token].decimals);
+        value = _valueAt(rawAmount, o.price, o.mult, m.collateralDecimals, _feeds[token].decimals);
         available = true;
     }
 
@@ -341,9 +376,29 @@ contract EsseyMarkets is StaleFeedGuard {
     /// window, applied to the other leg ordering — the one nothing covered — and at every magnitude,
     /// because a sub-bound move flips a seasoned position just as thoroughly as a large one.
     /// Separation by TIME, not magnitude: a real move stands, a half-landed action is joined by its
-    /// other leg. IT DELAYS NOTHING ALREADY JUSTIFIED, and its cost sits inside the 20pp
-    /// MIN_RISK_GAP_BPS the file header already sizes against a ~65h weekend gap.
-    uint256 public constant PRICE_CONFIRM_DELAY = MULTIPLIER_GUARD_WINDOW;
+    /// other leg. IT DELAYS NOTHING ALREADY JUSTIFIED.
+    ///
+    /// SIX HOURS, MEASURED, not inherited from MULTIPLIER_GUARD_WINDOW as it was. The delay spends
+    /// the threshold-to-liquidator-indifference distance: 21.25% at 5000/7500/500. Every round of
+    /// both listed feeds on 4663, 2026-06-22 -> 2026-09-04 (74.3d; AAPL 0x6B22…2cD0 555 rounds,
+    /// NVDA 0x379E…9F15 981) gives a worst move of 6.80/7.06% at 1h, 8.47/7.88% at 6h, 8.97/9.22%
+    /// at 12h, 10.23/12.00% at 24h — nothing within a third of the buffer, and NVDA no more volatile
+    /// than AAPL. The binding constraint is HOW LATE AN ISSUER'S SECOND LEG LANDS, which is why
+    /// PRICE_DESYNC_HOLD is already 6h; equal, the sub-bound and above-bound cases get the same
+    /// protection. 74 days holding one stress episode cannot BOUND a 21.25% tail, only miss it.
+    uint256 public constant PRICE_CONFIRM_DELAY = 6 hours;
+
+    /// R4 HIGH-1: one promoted snapshot cannot deliver a delay however it is rate-limited, because
+    /// the limit measures the PROMOTION clock and `syncMultiplier` is permissionless — a move landing
+    /// late in an interval was blessed one second later, for 2,592bps against a healthy borrower.
+    /// A DELAY LINE instead: pushed no faster than CONFIRM_STEP apart, read (CONFIRM_SLOTS - 1) slots
+    /// back, and the age re-tested in the view so the property survives a wrong cadence.
+    uint256 internal constant CONFIRM_SLOTS = 5;
+    uint256 public constant CONFIRM_STEP = PRICE_CONFIRM_DELAY / (CONFIRM_SLOTS - 1);
+    /// And a CEILING, which is what makes an observation outage fail CLOSED (R4 HIGH-2): without it
+    /// a market the keeper stopped observing vouches forever for a price nobody has checked. One
+    /// CONFIRM_STEP above the steady-state maximum, so a live keeper never trips it.
+    uint256 public constant MAX_CONFIRM_AGE = PRICE_CONFIRM_DELAY + 2 * CONFIRM_STEP;
 
     /// The last uiMultiplier this registry observed for a token, and when it last MOVED. `syncMultiplier`
     /// (called on the borrow AND liquidate paths) records a move the instant a corporate action applies —
@@ -364,14 +419,19 @@ contract EsseyMarkets is StaleFeedGuard {
     mapping(address => uint256) public desyncRefProduct;
     mapping(address => uint256) public priceDesyncAt;
 
-    /// Promoted from an EARLIER observation, never the current one, and at most once per
-    /// PRICE_CONFIRM_DELAY — together, a step change cannot reach it until a full delay after the
-    /// observation that first saw it, which is the property isUnderwaterCorroborated rests on.
-    /// Both legs rather than their product, so `_valueAt` is the same arithmetic that values the
-    /// live price; a second formula for the same number rounds differently at the threshold.
-    mapping(address => uint256) public confirmedPrice;
-    mapping(address => uint256) public confirmedMultiplier;
-    mapping(address => uint256) public confirmedAt;
+    /// Both legs rather than their product, so `_valueAt` is the arithmetic that values the live
+    /// price too. `takenAt` is when the pair was READ; the old `confirmedAt` held when it was
+    /// PROMOTED, and that distinction is the whole of R4 HIGH-1.
+    struct Observation {
+        uint256 price;
+        uint256 mult;
+        uint256 takenAt;
+    }
+
+    /// The delay line. `_confirmHead` indexes the most recent push; the oldest — the one the
+    /// corroborated read uses — is always the slot after it.
+    mapping(address => Observation[CONFIRM_SLOTS]) internal _confirmRing;
+    mapping(address => uint256) internal _confirmHead;
 
     /// Guardian's bounded corporate-action lever. Liquidation only.
     mapping(address => uint256) public liquidationPausedUntil;
@@ -426,28 +486,49 @@ contract EsseyMarkets is StaleFeedGuard {
     /// from a real crash of the same size — both read as "the feed moved and the multiplier did
     /// not" — so holding both is the only honest response to identical evidence, not a shortcoming
     /// of the rule.
-    function _syncPrice(address token, uint256 prevMult, uint256 curMult) internal {
+    /// Returns whether the observation was RECORDED. R4 MED-1: the two halves of the pair were
+    /// coming apart — `seenMultiplier` was written unconditionally while this returned without
+    /// writing `seenPrice`, so a multiplier leg landing while the feed was unreadable left the next
+    /// observation treating Friday's price and Monday's multiplier as matched. The AAPL feed is
+    /// unreadable ~55h EVERY weekend, which is exactly when a Monday ex-date is applied.
+    function _syncPrice(address token, uint256 prevMult, uint256 curMult) internal returns (bool) {
         uint256 price = _readablePrice(token);
-        if (price == 0) return; // unreadable price records nothing, exactly as a failed multiplier read does
+        if (price == 0) return false; // unreadable price records nothing, exactly as a failed multiplier read does
         uint256 prevPrice = seenPrice[token];
         uint256 prev = prevPrice * prevMult; // 0 when either half has no baseline yet
         uint256 baselineAge = block.timestamp - seenPriceAt[token];
         seenPrice[token] = price;
         seenPriceAt[token] = block.timestamp;
-        if (prev == 0) return; // no baseline: `baselineAge` is meaningless here and goes unused
-        _corroborate(token, prevPrice, prevMult);
+        _confirmable(token, price, curMult);
+        if (prev == 0) return true; // no baseline: `baselineAge` is meaningless here and goes unused
         _breaker(token, prev, price * curMult, baselineAge);
+        return true;
     }
 
-    /// Promote an EARLIER observation, never the current one — that would let the transaction which
-    /// first sees a dislocation also bless it. Rate-limited to one promotion per PRICE_CONFIRM_DELAY,
-    /// so packing observations into a block cannot walk it forward either.
-    function _corroborate(address token, uint256 prevPrice, uint256 prevMult) internal {
-        uint256 at = confirmedAt[token];
-        if (at != 0 && block.timestamp - at < PRICE_CONFIRM_DELAY) return;
-        confirmedPrice[token] = prevPrice;
-        confirmedMultiplier[token] = prevMult;
-        confirmedAt[token] = block.timestamp;
+    /// Push this observation onto the delay line, no faster than one slot per CONFIRM_STEP.
+    ///
+    /// The CURRENT pair, not an earlier one: "an earlier observation" was the old rule's attempt at
+    /// the same property and it bought one observation, not one delay. What stops the transaction
+    /// that first sees a dislocation blessing it is that this slot cannot be READ for
+    /// PRICE_CONFIRM_DELAY, which holds however the caller times it.
+    ///
+    /// A market's FIRST observation fills every slot with itself. An empty slot would give the read a
+    /// second reason to refuse — "none yet" as well as "too young" — and a defence that can only fail
+    /// for the other's reason is unpinnable, which is how the old rule survived three rounds.
+    function _confirmable(address token, uint256 price, uint256 mult) internal {
+        uint256 head = _confirmHead[token];
+        uint256 last = _confirmRing[token][head].takenAt;
+        if (last == 0) return _seedConfirmRing(token, price, mult);
+        if (block.timestamp - last < CONFIRM_STEP) return;
+        head = (head + 1) % CONFIRM_SLOTS;
+        _confirmRing[token][head] = Observation(price, mult, block.timestamp);
+        _confirmHead[token] = head;
+    }
+
+    function _seedConfirmRing(address token, uint256 price, uint256 mult) internal {
+        for (uint256 i = 0; i < CONFIRM_SLOTS; i++) {
+            _confirmRing[token][i] = Observation(price, mult, block.timestamp);
+        }
     }
 
     function _breaker(address token, uint256 prev, uint256 observed, uint256 baselineAge) internal {
@@ -465,7 +546,9 @@ contract EsseyMarkets is StaleFeedGuard {
         }
         // R3 MED-1: a baseline this old measures drift, not a discontinuity, and arming on it costs a
         // real liquidation window on the thin markets least able to afford one. Safe to decline
-        // because it is not what protects a position — _corroborate, just above, is.
+        // because it is not what protects a position — the delay line is, and R4 HIGH-2 is why that
+        // claim needed the delay line to be real: a market unobserved for one hour discarded a
+        // 5,000bps split leg here as drift and was harvested an hour later for 10,988bps.
         if (baselineAge > MAX_BASELINE_AGE) return;
         if (!_deviates(prev, observed)) return;
         // Stamped ONCE: a further gap while armed does not extend the hold, so a dislocation costs a
@@ -512,8 +595,15 @@ contract EsseyMarkets is StaleFeedGuard {
     ///
     /// An unreadable schedule reports "none", NOT "guarded": returning true would brick both gates as
     /// thoroughly as the revert did. Branch (b) covers such a token, and needs nothing from it.
+    /// The budget for BOTH reads of an untrusted collateral token, valuation included. It exists to
+    /// stop a griefing token bricking five entry points, and that goal is met here as well as at the
+    /// 50,000 it used to be — `uiMultiplier()` on the deployed AAPL token costs 15,719 gas
+    /// (test/GLendR4.t.sol), so 50,000 was 3.18x headroom on a contract this protocol does not own
+    /// and cannot pin.
+    uint256 internal constant MULTIPLIER_READ_GAS = 200_000;
+
     function _scheduledEffectiveAt(address source) internal view returns (uint256) {
-        (bool ok, bytes memory ret) = source.staticcall{gas: 50_000}(abi.encodeWithSignature("newUIMultiplier()"));
+        (bool ok, bytes memory ret) = source.staticcall{gas: MULTIPLIER_READ_GAS}(abi.encodeWithSignature("newUIMultiplier()"));
         if (!ok || ret.length != 64) return 0;
         (, uint256 effectiveAt) = abi.decode(ret, (uint256, uint256));
         return effectiveAt;
@@ -524,7 +614,7 @@ contract EsseyMarkets is StaleFeedGuard {
     /// short or absent return here would brick all five. 0 means "could not read" and syncMultiplier
     /// records nothing.
     function _liveMultiplier(address source) internal view returns (uint256) {
-        (bool ok, bytes memory ret) = source.staticcall{gas: 50_000}(abi.encodeWithSignature("uiMultiplier()"));
+        (bool ok, bytes memory ret) = source.staticcall{gas: MULTIPLIER_READ_GAS}(abi.encodeWithSignature("uiMultiplier()"));
         if (!ok || ret.length < 32) return 0;
         return abi.decode(ret, (uint256));
     }
@@ -540,8 +630,10 @@ contract EsseyMarkets is StaleFeedGuard {
         if (cur == 0) return; // transient read failure — nothing to record
         uint256 prev = seenMultiplier[token];
         if (prev != 0 && cur != prev) multiplierMovedAt[token] = block.timestamp;
-        _syncPrice(token, prev, cur);
-        seenMultiplier[token] = cur;
+        // R4 MED-1: the multiplier half advances only when the price half did, so the pair stays as
+        // it was last read TOGETHER. `multiplierMovedAt` above is stamped either way and re-stamps
+        // until the price returns, which only ever REFUSES.
+        if (_syncPrice(token, prev, cur)) seenMultiplier[token] = cur;
     }
 
     /// Liquidation additionally requires demonstrated chain liveness — see LivenessOracle. A
@@ -686,8 +778,13 @@ contract EsseyMarkets is StaleFeedGuard {
     /// The pending proposal is cleared too: every committable proposal carries enabled=true, so
     /// a ripe one left in place would let the next commitMarket silently reverse an emergency
     /// disable with no fresh notice. Re-enabling always pays the full timelock.
+    ///
+    /// R4 MED-3: GUARDIAN ONLY. `admin` held this too, which made `_roleKey`'s "no role may be the
+    /// deploy key" rule narrower than it reads — the deploy key already had the emergency key's
+    /// powers, and `admin` is immutable with no setter, so that could never be rotated out of.
+    /// Admin keeps the timelocked route to the same outcome (propose ltvBps 0, commit after 2 days).
     function disableMarket(address token) external {
-        if (msg.sender != admin && msg.sender != guardian) revert NotAdmin();
+        if (msg.sender != guardian) revert NotAdmin();
         _markets[token].enabled = false;
         delete _pending[token];
         emit MarketDisabled(token);
@@ -706,8 +803,11 @@ contract EsseyMarkets is StaleFeedGuard {
     /// make impossible. The cooldown is the actual bound: a new pause may not start until the last
     /// one has been over for as long as it lasted, so liquidation is open at least half of any span
     /// and always for a contiguous window at least as long as the pause before it.
+    ///
+    /// R4 MED-3: GUARDIAN ONLY, for disableMarket's reason. The doc block at `guardian` called this
+    /// the guardian's hot emergency key while `admin` silently held it as well.
     function pauseLiquidation(address token, uint256 until) external {
-        if (msg.sender != admin && msg.sender != guardian) revert NotAdmin();
+        if (msg.sender != guardian) revert NotAdmin();
         uint256 ceiling = block.timestamp + MAX_LIQUIDATION_PAUSE;
         if (until > ceiling) revert PauseTooLong(until, ceiling);
         // Standing a pause DOWN only ever reopens liquidation, so it is never rate-limited.

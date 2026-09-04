@@ -94,7 +94,9 @@ export const marketsAbi = parseAbi([
   "function activePool(address) view returns (address)",
   "function multiplierSource(address) view returns (address)",
   "function multiplierMovedAt(address) view returns (uint256)",
+  "function priceDesyncAt(address) view returns (uint256)",
   "function MULTIPLIER_GUARD_WINDOW() view returns (uint256)",
+  "function PRICE_DESYNC_HOLD() view returns (uint256)",
   "function liveness() view returns (address)",
   "function health() view returns (address)",
   "function assetDecimals() view returns (uint8)",
@@ -242,12 +244,14 @@ export const reads = {
   /// Everything the page needs once EsseyMarkets exists. Per market: the pool, its rates, the risk
   /// parameters, and — when borrowing is closed — WHICH gate closed it.
   async markets(addr: Address | null): Promise<MarketState[]> {
-    const [liveness, health, assetDecimals, guardWindow] = await Promise.all([
-      read<Address>(LENDING.markets, marketsAbi, "liveness"),
-      read<Address>(LENDING.markets, marketsAbi, "health"),
-      read<number>(LENDING.markets, marketsAbi, "assetDecimals"),
-      read<bigint>(LENDING.markets, marketsAbi, "MULTIPLIER_GUARD_WINDOW"),
-    ]);
+    const [liveness, health, assetDecimals, guardWindow, desyncHold] =
+      await Promise.all([
+        read<Address>(LENDING.markets, marketsAbi, "liveness"),
+        read<Address>(LENDING.markets, marketsAbi, "health"),
+        read<number>(LENDING.markets, marketsAbi, "assetDecimals"),
+        read<bigint>(LENDING.markets, marketsAbi, "MULTIPLIER_GUARD_WINDOW"),
+        read<bigint>(LENDING.markets, marketsAbi, "PRICE_DESYNC_HOLD"),
+      ]);
     const now = await chainNow(pub);
     return Promise.all(
       MARKETS.map((def) =>
@@ -256,6 +260,7 @@ export const reads = {
           health,
           assetDecimals: Number(assetDecimals),
           guardWindow,
+          desyncHold,
           now,
         }),
       ),
@@ -273,11 +278,19 @@ export type GateCode =
   | "chain-liveness"
   | "depth-cap"
   | "corporate-action"
+  | "price-desync"
   | "feed-unreadable"
   | "closed"
   | "unknown";
 
 export type BorrowGate = { code: GateCode; detail: string };
+
+/// R4 LOW-2: durations in gate copy come from the CONTRACT. The one literal said "an hour" for a
+/// six-hour hold.
+const hours = (seconds: bigint): string => {
+  const h = Number(seconds) / 3600;
+  return h === 1 ? "an hour" : `${h} hours`;
+};
 
 export type LoanRow = {
   id: bigint;
@@ -333,6 +346,7 @@ type Ctx = {
   health: Address;
   assetDecimals: number;
   guardWindow: bigint;
+  desyncHold: bigint;
   now: number;
 };
 
@@ -444,7 +458,7 @@ async function borrowGate(
         "This market is being retired: its max LTV is zero, so nothing new can be drawn. Existing loans can still be repaid.",
     };
 
-  const [live, effCap, movedAt] = await Promise.all([
+  const [live, effCap, movedAt, desyncAt] = await Promise.all([
     read<boolean>(ctx.liveness, livenessAbi, "liquidationsAllowed").catch(
       () => false,
     ),
@@ -452,6 +466,9 @@ async function borrowGate(
       () => 0n,
     ),
     read<bigint>(LENDING.markets, marketsAbi, "multiplierMovedAt", [
+      def.token,
+    ]).catch(() => 0n),
+    read<bigint>(LENDING.markets, marketsAbi, "priceDesyncAt", [
       def.token,
     ]).catch(() => 0n),
   ]);
@@ -470,8 +487,14 @@ async function borrowGate(
   if (movedAt !== 0n && BigInt(ctx.now) - movedAt < ctx.guardWindow)
     return {
       code: "corporate-action",
-      detail:
-        "A corporate action just moved this token's UI multiplier. Borrowing is closed for an hour while the multiplier and the price feed reconcile.",
+      detail: `A corporate action just moved this token's UI multiplier. Borrowing is closed for ${hours(ctx.guardWindow)} while the multiplier and the price feed reconcile.`,
+    };
+  // Branch (c): the FEED moved without the multiplier. An armed breaker used to fall through to
+  // "closed" or the "unknown" fallback, so the page could not name the closure it was showing.
+  if (desyncAt !== 0n && BigInt(ctx.now) - desyncAt < ctx.desyncHold)
+    return {
+      code: "price-desync",
+      detail: `This token's price feed and its UI multiplier disagree by more than the registry allows — the shape of a half-applied corporate action. Borrowing and liquidation are both closed for ${hours(ctx.desyncHold)} from when it was detected, or until the two agree again.`,
     };
 
   try {

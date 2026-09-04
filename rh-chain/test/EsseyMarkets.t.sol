@@ -48,7 +48,7 @@ abstract contract MarketsFixture is Test {
         seq.setStartedAt(block.timestamp - 2 days);
         px = new MockFeed(200e8, 8); // $200
         tok = new MockStock();
-        liv = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
+        liv = new LivenessOracle(KEEPER, GUARDIAN, makeAddr("livenessRotator"), GAP, GRACE);
         hox = new MarketHealthOracle(KEEPER, GUARDIAN, ADMIN);
         mk = new EsseyMarkets(AggregatorV3Interface(address(seq)), liv, hox, ADMIN, GUARDIAN, 6); // USDG is 6dp
         vm.prank(ADMIN);
@@ -307,7 +307,7 @@ contract EsseyMarketsTest is MarketsFixture {
     /// C-M2/B-L1: disable stops NEW borrows only. Liquidation-side reads keep working, or a
     /// disabled market's existing positions would be frozen until a 2-day re-commit.
     function test_disabledMarketBlocksBorrowNotLiquidation() public {
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         assertFalse(mk.canBorrow(address(tok)), "no new borrows");
         vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.MarketNotEnabled.selector, address(tok)));
@@ -323,7 +323,10 @@ contract EsseyMarketsTest is MarketsFixture {
         mk.proposeMarket(address(tok), AggregatorV3Interface(address(px)), 86_400, 90_000, 8, address(tok), address(stub), _conservative());
         vm.warp(block.timestamp + mk.PARAM_TIMELOCK());
         px.set(200e8, block.timestamp);
+        vm.stopPrank();
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
+        vm.startPrank(ADMIN);
         vm.expectRevert(abi.encodeWithSelector(EsseyMarkets.NoPendingChange.selector, address(tok)));
         mk.commitMarket(address(tok));
         assertFalse(mk.market(address(tok)).enabled, "disable held through the ripe proposal");
@@ -390,7 +393,7 @@ contract EsseyMarketsTest is MarketsFixture {
     /// C-M2: valuation keys on `configured`, not `enabled` — liquidation and write-off of a
     /// disabled market's existing positions still need a price.
     function test_collateralValueSurvivesADisabledMarket() public {
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         (uint256 v,) = mk.collateralValue(address(tok), 10e18);
         assertEq(v, 2000e6, "disabled market still prices for the liquidation path");
@@ -683,7 +686,7 @@ contract EsseyMarketsTest is MarketsFixture {
     /// Disabling is immediate BY DESIGN: it only stops new borrows, and delaying a shutdown would
     /// be the dangerous choice.
     function test_disableNeedsNoTimelock() public {
-        vm.prank(ADMIN);
+        vm.prank(GUARDIAN);
         mk.disableMarket(address(tok));
         assertFalse(mk.market(address(tok)).enabled);
     }

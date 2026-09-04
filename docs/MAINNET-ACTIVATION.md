@@ -1577,7 +1577,51 @@ have and it is labelled.
 
 | Gate | Product | State 2026-09-03 | What moves it |
 |---|---|---|---|
-| **G-LEND** | Lending: `EsseyPool`, `EsseyMarkets`, `CollateralReconciler`, `StaleFeedGuard`, `MarketHealthOracle`, `Note`/`NoteArt` | ❌ **ZERO — round 3 returned NOT CLEAN (1 CRIT, 1 HIGH, 3 MED, 2 LOW), counter reset** (`docs/audits/glend-round-3.md`). All 7 findings fixed in the working tree, **uncommitted and re-audit pending** — see Update 17.2 below | Round-4 re-audit from zero → **3 consecutive clean rounds, all lenses, on a real 4663 fork** → **report published to `docs/audits/`** → harness → founder deploy |
+| **G-LEND** | Lending: `EsseyPool`, `EsseyMarkets`, `LivenessOracle`, `CollateralReconciler`, `StaleFeedGuard`, `MarketHealthOracle`, `Note`/`NoteArt` | ❌ **ZERO — round 4 returned NOT CLEAN (2 HIGH, 3 MED, 6 LOW), counter reset again** (`docs/audits/glend-round-4.md`). All findings fixed in the working tree, **uncommitted and re-audit pending** — see Update 17.9 below. Round 3's CRIT-1 and MED-3 were confirmed genuinely closed and stay closed under the new code | Round-5 re-audit from zero → **3 consecutive clean rounds, all lenses, on a real 4663 fork** → **report published to `docs/audits/`** → harness → founder deploy |
+
+### Update 17.9 — G-LEND round-4 findings fixed (2026-09-04, working tree, NOT committed)
+
+Round 4 (`docs/audits/glend-round-4.md`, frozen SHA `cb3e6aa`) returned **NOT CLEAN**. Its central
+finding is the one worth carrying forward: `test_theCorroborationDelayBoundaryIsExact` **performed the
+bypass it was named to prevent and asserted the result** — a test that pinned the promotion RULE while
+the security PROPERTY went untested, through three green rounds.
+
+| Finding | Fix | Where |
+|---|---|---|
+| **HIGH-1** `PRICE_CONFIRM_DELAY` was not a delay: the rate limit ran on the PROMOTION clock, which any permissionless caller positions, so the delivered wait was one second on real AAPL for 2,592bps | a DELAY LINE: observations pushed no faster than `CONFIRM_STEP` apart, and the read is always the oldest of `CONFIRM_SLOTS`; `corroboratedValue` re-tests that age in both directions, so the property does not rest on the push cadence being right | `EsseyMarkets._confirmable` / `confirmedObservation` / `corroboratedValue` |
+| **HIGH-2** the breaker was load-bearing on an unsupervised keeper with a hand-typed market list, and failed OPEN | `MAX_CONFIRM_AGE` makes an unobserved market lose its corroborated price entirely (fail CLOSED); the keeper DERIVES its market list from `MarketCommitted` logs and alerts on any disagreement; `observe()` escalates like `beat()` does; a supervisor unit and an on-chain symptom check ship with it; **the runbook and README, which omitted `ESSEY_MARKETS` and so instructed the operator into the vulnerable state, are corrected** | `EsseyMarkets.MAX_CONFIRM_AGE`; `keeper/liveness-keeper.mjs`, `keeper/market-list.mjs`, `keeper/check-liveness-keeper.mjs`, `keeper/xyz.essey.liveness-keeper.plist`, `rh-chain/README.md`, `rh-chain/RUNBOOK.md` |
+| **MED-1** an unreadable price split the observation pair — Friday's price with Monday's multiplier, on a feed unreadable ~55h every weekend | `_syncPrice` returns whether it RECORDED, and `seenMultiplier` advances only when it did: a partial observation records nothing at all | `EsseyMarkets._syncPrice` / `syncMultiplier` |
+| **MED-2** `LIVENESS_GUARDIAN` alone was a permanent, UNRECOVERABLE kill switch for liquidation and borrowing | a 2-day timelocked `proposeRotation` / `commitRotation` of BOTH liveness roles, held by the market admin, cancellable only by it — a guardian that could veto its own removal restores the same dead end. **FOUNDER RULING NEEDED on the trade**, see MAINNET-CONFIG.md | `src/LivenessOracle.sol`; `script/DeployMarkets.s.sol` |
+| **MED-3** the deploy key held `pauseLiquidation` and `disableMarket`, which the doc block attributed to the guardian and `_roleKey`'s own rule exists to prevent | both are GUARDIAN-ONLY; admin keeps the timelocked route to the same outcome | `EsseyMarkets.pauseLiquidation` / `disableMarket` |
+| **LOW-1** a 50k gas cap on the observation read against an uncapped valuation read | one budget for both, raised to 200k; a token this registry cannot read stops being VALUED instead of silently losing its breaker | `EsseyMarkets.collateralValue` / `MULTIPLIER_READ_GAS` |
+| **LOW-2** the UI said "closed for an hour" for a six-hour hold and never read `priceDesyncAt` | branch (c) has its own explainer, and both durations are read from the contract | `app/web/src/lending.ts` |
+| **LOW-3** the keeper's `setInterval` overlapped itself at ≥4 markets and could drop the heartbeat | self-scheduling `setTimeout` after the tick completes | `keeper/liveness-keeper.mjs` |
+| **LOW-4** three shipped statements no longer matched the code | corrected, including the `4× gapThreshold` guard that no longer exists | `docs/OUTSTANDING.md`, `rh-chain/README.md`, `keeper/liveness-keeper.mjs` |
+| **LOW-5** the seasoning idiom every corroboration test used silently switched the breaker off in 140 tests | `_advanceLive` now OBSERVES on the keeper's cadence; a test that wants the unobserved market asks for `_advanceQuiet` by name | `test/EsseyPool.t.sol` and the four sibling fixtures |
+| **LOW-6** two Don-layer fork suites failed on a `makeAddr` vanity address that now carries an EIP-7702 delegation on mainnet | the fixture normalises its own EOAs and says why; **and with those suites running again they immediately caught that the deployed AAPL `uiMultiplier` is no longer 1e18** | `test/DonSolvencyStress.t.sol`, `test/DonMainnetFork.t.sol` |
+
+**THE PARAMETER, now set from data.** `PRICE_CONFIRM_DELAY = 6 hours`, equal to `PRICE_DESYNC_HOLD`.
+Every round of both listed feeds on chain-id 4663 over 2026-06-22 → 2026-09-04 (74.3 days; AAPL
+`0x6B22…2cD0` 555 rounds, NVDA `0x379E…9F15` 981) gives a worst move of 6.80%/7.06% at 1h,
+8.47%/7.88% at 6h, 8.97%/9.22% at 12h, 10.23%/12.00% at 24h. The delay spends the 21.25% between the
+liquidation threshold and liquidator indifference at 5000/7500/500; nothing at any of those horizons
+came within a third of it. **NVDA is NOT materially more volatile than AAPL at these horizons** —
+per-round sigma 0.5585% against 0.5751% — which the round-4 report had assumed the other way. The
+derivation is recorded in the constant's own doc block, so the next reader inherits it.
+
+**Found while measuring, and worth its own ticket:** both feeds' first ~20 historical rounds
+(2026-06-22 → 2026-06-23T13:48 UTC) return answers scaled 1e18 rather than the 1e8 `decimals()`
+reports, then switch. Anything reading feed HISTORY on 4663 mis-prices by 1e10 across that boundary.
+Nothing in the lending stack reads history — `priceOf` uses `latestRoundData` — so this is not a live
+exposure, but it is a trap for any future TWAP or backtest.
+
+**Also found, and NOT a lending finding:** the deployed AAPL Stock Token's `uiMultiplier()` is
+`1_000_566_080_061_092_436`, not `1e18` (`cast call 0xaF3D…93f9 "uiMultiplier()(uint256)"`, 2026-09-04);
+NVDA is exactly `1e18`. A multiplier that MOVES stamps `multiplierMovedAt` and holds both gates for
+`MULTIPLIER_GUARD_WINDOW`, so if Robinhood expresses accruals through it continuously rather than in
+discrete corporate actions, borrowing would be blocked on a rolling basis. **Whether it drifts
+continuously is UNVERIFIED** — the 4663 RPC is not an archive node, so the token's own history is not
+readable from here. What would settle it: an archive node, or watching `uiMultiplier()` daily.
 
 ### Update 17.2 — G-LEND round-3 findings fixed (2026-09-04, working tree, NOT committed)
 

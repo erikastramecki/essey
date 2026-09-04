@@ -57,13 +57,22 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
     `maxPositionBps` 2000 (`_propose`). The 25pp gap clears the 20pp `MIN_RISK_GAP_BPS`.
     `collateralDecimals` and `feedDecimals` are READ from the contracts, and `commitMarket` re-asserts
     them against the chain.
-- **LivenessOracle:** `(keeper, guardian, gapThreshold=900, resumeGrace=1h)` — FOUR args.
+- **LivenessOracle:** `(keeper, guardian, rotationAdmin, gapThreshold=900, resumeGrace=1h)` — FIVE args.
   `maxHeartbeatAge` no longer exists: one bound serves the view and the beat (G-LEND HIGH-1). The
   grace GRANTED is the observed gap, capped at `resumeGrace` (G-LEND R2 MED-1), so a 901s gap costs
   ~1,802s of outage, not 4,501s. Keeper hot key ≠ guardian cold key, and `_checkRoles` additionally
   requires GUARDIAN ≠ LIVENESS_KEEPER, GUARDIAN ≠ LIVENESS_GUARDIAN (R3 MED-2: `setKeeper` is
   guardian-only and un-timelocked, so that pair reaches the same union in one transaction) and
   RESERVE_TREASURY ≠ every operational key.
+  **`rotationAdmin` is the broadcaster (`msg.sender`), i.e. the same key as `EsseyMarkets.admin`.**
+  R4 MED-2: LIVENESS_GUARDIAN alone was a permanent and UNRECOVERABLE kill switch for liquidation
+  AND borrowing — `setKeeper` to an address that never beats, in one un-timelocked transaction, with
+  both the guardian slot and `EsseyMarkets.liveness` immutable. It now carries a 2-day timelocked
+  `proposeRotation` / `commitRotation` of BOTH liveness roles, cancellable only by the recovery key
+  (a guardian that could veto its own removal restores the same dead end). **FOUNDER RULING NEEDED:**
+  the price of that recovery is that, after two days of public notice, the market admin can install a
+  keeper of its own — and a keeper that beats through a chain outage keeps liquidation open during
+  one. The alternative is accepting the unrecoverable key explicitly instead.
 - **Corporate-action breaker:** `MAX_PRICE_DEVIATION_BPS = 2000`, `PRICE_DESYNC_HOLD = 6h`,
   `MULTIPLIER_GUARD_WINDOW = 1h`, `MAX_BASELINE_AGE = 1h`, `MAX_LIQUIDATION_PAUSE = 24h`
   (`EsseyMarkets`). A move of `price x uiMultiplier` past the bound, measured **between two
@@ -72,12 +81,26 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
   so the market can arm again on the next event (R3 CRIT-1). Across a longer gap the comparison is
   drift rather than a discontinuity and does not arm (R3 MED-1); `keeper/liveness-keeper.mjs` calls
   `syncMultiplier` for every market on its heartbeat, which is what keeps observations that dense.
-- **Seizure corroboration:** `PRICE_CONFIRM_DELAY = 1h` (`EsseyMarkets`). The bound above is a
-  DISLOCATION detector and protects a position only at origination; a seasoned loan's cushion is
-  smaller than any bound (R3 HIGH-1). So `liquidate` and `writeOff` additionally require the position
-  to be underwater / insolvent at an observation at least `PRICE_CONFIRM_DELAY` old. A position
-  already past the bar is seized with no delay, and a COMPLETED corporate action costs nothing —
-  only a position that the latest, uncorroborated move has just flipped waits.
+- **Seizure corroboration:** `PRICE_CONFIRM_DELAY = 6h`, `CONFIRM_STEP = 90m`,
+  `MAX_CONFIRM_AGE = 9h` (`EsseyMarkets`). The bound above is a DISLOCATION detector and protects a
+  position only at origination; a seasoned loan's cushion is smaller than any bound (R3 HIGH-1). So
+  `liquidate` and `writeOff` additionally require the position to be underwater / insolvent at an
+  observation at least `PRICE_CONFIRM_DELAY` old. A position already past the bar is seized with no
+  delay, and a COMPLETED corporate action costs nothing — only a position that the latest,
+  uncorroborated move has just flipped waits.
+  **R4 HIGH-1 rebuilt the mechanism and set the number.** The old rule rate-limited the PROMOTION
+  clock, not the age of the observation being promoted, and `syncMultiplier` is permissionless — so
+  the delivered delay was whatever was left of an interval the attacker positioned, measured at ONE
+  SECOND on the deployed AAPL feed for 2,592bps against a healthy borrower. It is now a DELAY LINE:
+  observations pushed no faster than `CONFIRM_STEP` apart, and the read is always the oldest of five,
+  whose age the view re-tests in both directions. The floor is HIGH-1; the ceiling is HIGH-2, and is
+  what makes an unobserved market fail CLOSED rather than vouch forever for a price nobody checked.
+  **Six hours is measured, not chosen:** every round of both listed feeds on chain-id 4663 over
+  2026-06-22 → 2026-09-04 (74.3 days; AAPL 555 rounds, NVDA 981) gives a worst move of 6.80%/7.06%
+  at 1h, 8.47%/7.88% at 6h, 8.97%/9.22% at 12h, 10.23%/12.00% at 24h. The delay spends the 21.25%
+  from the liquidation threshold to liquidator indifference at 5000/7500/500 — no window at any of
+  those horizons came within a third of it, and NVDA is NOT materially more volatile than AAPL at
+  these horizons, which the round-4 report had assumed it would be.
 - **Liquidation pause:** capped at `MAX_LIQUIDATION_PAUSE` per call AND followed by a cooldown as
   long as the pause itself (R3 MED-3), so chained calls cannot become a permanent freeze.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.
@@ -90,6 +113,11 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
 4. LivenessOracle · EsseyMarkets · EsseyPool (new layout). proposeMarket(AAPL/NVDA) → commit after 2 days.
 5. Seed: Seat inventory + $ESSEY reserve, converter stock reserves, bankroll, pool USDG liquidity.
 6. Assign all admin/treasury/seeder/bankroll roles to the **multisig**; verify no EOA retains control.
+   For `EsseyMarkets` and `MarketHealthOracle` this is impossible after the fact — `admin` is
+   `immutable` with no setter — so **the multisig must be the broadcaster**, and `_roleKey` then
+   forbids it from also being GUARDIAN, so the emergency key is a separate, non-multisig address.
+   The same broadcaster becomes `LivenessOracle.rotationAdmin` (R4 MED-2), which is deliberate: the
+   recovery path is the multisig's, behind the same 2-day notice.
 7. Smoke-test every path with tiny real amounts (see `MAINNET-GO-LIVE.md` Phase 6).
 
 ## Config-level risks (for the audit + disclosure)

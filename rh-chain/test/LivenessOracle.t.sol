@@ -8,6 +8,7 @@ contract LivenessOracleTest is Test {
     LivenessOracle o;
     address KEEPER;
     address GUARDIAN;
+    address ROTATOR;
 
     uint256 constant GRACE = 30 minutes;
     uint256 constant GAP = 10 minutes; // ~2 missed beats at a 5-minute cadence, and THE bound
@@ -15,8 +16,9 @@ contract LivenessOracleTest is Test {
     function setUp() public {
         KEEPER = makeAddr("keeper");
         GUARDIAN = makeAddr("guardian");
+        ROTATOR = makeAddr("rotationAdmin");
         vm.warp(1_753_110_000);
-        o = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
+        o = new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, GAP, GRACE);
     }
 
     function _beat() internal {
@@ -35,7 +37,7 @@ contract LivenessOracleTest is Test {
     /// minus a zero lastHeartbeat is small — so without the explicit zero check the oracle would
     /// read as OPEN on a fresh chain. Found by mutation: deleting that check passed every other test.
     function test_neverBeatIsClosedEvenAtLowTimestamps() public {
-        LivenessOracle fresh = new LivenessOracle(KEEPER, GUARDIAN, GAP, GRACE);
+        LivenessOracle fresh = new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, GAP, GRACE);
         vm.warp(60); // 60s after genesis: younger than gapThreshold
         assertEq(fresh.lastHeartbeat(), 0);
         assertFalse(fresh.liquidationsAllowed(), "must be closed because it has NEVER beat");
@@ -159,7 +161,7 @@ contract LivenessOracleTest is Test {
 
     function test_gapThresholdMustBeNonZero() public {
         vm.expectRevert(LivenessOracle.BadGapThreshold.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 0, GRACE);
+        new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, 0, GRACE);
     }
 
     /// G-LEND R2 MED-1. The old rule bounded the RATIO (resumeGrace <= 4x gapThreshold), which forced a
@@ -167,16 +169,16 @@ contract LivenessOracleTest is Test {
     /// bound is now absolute on each side, because the amplification is handled by the mechanism.
     function test_theBoundsAreAbsoluteNotARatio() public {
         // 6x, un-deployable under the old rule, is fine now: the grace granted is the gap observed.
-        LivenessOracle wide = new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 1 hours);
+        LivenessOracle wide = new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, 10 minutes, 1 hours);
         assertEq(wide.resumeGrace(), 1 hours);
 
         vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 6 hours + 1);
+        new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, 10 minutes, 6 hours + 1);
         vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 0); // a zero grace hands back the restart race
+        new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, 10 minutes, 0); // a zero grace hands back the restart race
         vm.expectRevert(LivenessOracle.BadGapThreshold.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 1 hours + 1, GRACE); // round-1 HIGH-1, pinned in the ctor
-        new LivenessOracle(KEEPER, GUARDIAN, 1 hours, 6 hours); // both exactly at the ceiling
+        new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, 1 hours + 1, GRACE); // round-1 HIGH-1, pinned in the ctor
+        new LivenessOracle(KEEPER, GUARDIAN, ROTATOR, 1 hours, 6 hours); // both exactly at the ceiling
     }
 
     /// THE FINDING. 901 seconds of keeper silence used to cost 4,501 seconds of total outage, because
@@ -258,10 +260,74 @@ contract LivenessOracleTest is Test {
         assertEq(o.secondsUntilLiquidationsAllowed(), GRACE - 20 minutes);
     }
 
+    // ------------------------------------------------- R4 MED-2: the recovery path
+
+    /// THE HOLE THE MUTATION SWEEP FOUND. `cancelRotation` is deliberately NOT available to the
+    /// guardian, and the reason is the whole finding: a guardian that can veto its own removal
+    /// restores exactly the permanent, unrecoverable kill switch the rotation exists to end. That
+    /// was a comment asserting a mechanism, with nothing testing it — letting the guardian cancel
+    /// left the entire suite green.
+    function test_theGuardianCannotVetoItsOwnRemoval() public {
+        address newKeeper = makeAddr("newKeeper");
+        address newGuardian = makeAddr("newGuardian");
+        vm.prank(ROTATOR);
+        o.proposeRotation(newKeeper, newGuardian);
+
+        vm.prank(GUARDIAN);
+        vm.expectRevert(LivenessOracle.NotRotationAdmin.selector);
+        o.cancelRotation();
+        vm.prank(KEEPER);
+        vm.expectRevert(LivenessOracle.NotRotationAdmin.selector);
+        o.cancelRotation();
+
+        vm.warp(block.timestamp + o.ROTATION_TIMELOCK());
+        o.commitRotation();
+        assertEq(o.guardian(), newGuardian, "the removal stands");
+    }
+
+    /// The recovery key may still change its mind, and a cancelled rotation is not a committable one.
+    function test_theRecoveryKeyCanCancelItsOwnProposal() public {
+        vm.prank(ROTATOR);
+        o.proposeRotation(makeAddr("k"), makeAddr("g"));
+        vm.prank(ROTATOR);
+        o.cancelRotation();
+        assertEq(o.pendingRotationEffectiveAt(), 0, "cleared");
+
+        vm.warp(block.timestamp + o.ROTATION_TIMELOCK() + 1);
+        vm.expectRevert(LivenessOracle.NoPendingRotation.selector);
+        o.commitRotation();
+        assertEq(o.guardian(), GUARDIAN, "and nothing rotated");
+    }
+
+    /// The notice is the control, so it is EXACT in both directions.
+    function test_theRotationTimelockBoundaryIsExact() public {
+        vm.prank(ROTATOR);
+        o.proposeRotation(makeAddr("k"), makeAddr("g"));
+        uint256 ripe = o.pendingRotationEffectiveAt();
+        assertEq(ripe, block.timestamp + 2 days, "two days, the same notice every risk parameter pays");
+
+        vm.warp(ripe - 1);
+        vm.expectRevert(abi.encodeWithSelector(LivenessOracle.RotationNotElapsed.selector, uint256(1)));
+        o.commitRotation();
+        vm.warp(ripe);
+        o.commitRotation();
+        assertEq(o.keeper(), makeAddr("k"), "and on the second itself it commits");
+    }
+
+    /// The guardian keeps its immediate lever — that is its job — but it may not hand the keeper
+    /// role to the recovery key and collapse the two-of into one.
+    function test_theGuardianMayNotMakeTheRecoveryKeyItsKeeper() public {
+        vm.prank(GUARDIAN);
+        vm.expectRevert(LivenessOracle.RolesMustDiffer.selector);
+        o.setKeeper(ROTATOR);
+        vm.prank(GUARDIAN);
+        o.setKeeper(makeAddr("someoneElse")); // any other address is fine
+    }
+
     function test_zeroAddressRejected() public {
         vm.expectRevert(LivenessOracle.ZeroAddress.selector);
-        new LivenessOracle(address(0), GUARDIAN, GAP, GRACE);
+        new LivenessOracle(address(0), GUARDIAN, ROTATOR, GAP, GRACE);
         vm.expectRevert(LivenessOracle.ZeroAddress.selector);
-        new LivenessOracle(KEEPER, address(0), GAP, GRACE);
+        new LivenessOracle(KEEPER, address(0), ROTATOR, GAP, GRACE);
     }
 }

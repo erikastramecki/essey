@@ -181,6 +181,16 @@ contract DeployMarkets is Script {
         // guardian-only, immediate and un-timelocked, so GUARDIAN == LIVENESS_GUARDIAN reaches the
         // same union in ONE transaction with no notice — and EsseyMarkets.guardian is immutable, so
         // the posture cannot be rotated out of afterwards.
+        //
+        // R4 MED-2 found the other half of it: LIVENESS_GUARDIAN **alone** already reached "halt
+        // everything, indefinitely", and unlike the union it had no exit at all. LivenessOracle now
+        // carries a 2-day timelocked rotation of BOTH liveness roles, held by `msg.sender` — the
+        // same key that is EsseyMarkets.admin — and _roleKey above already forbids either liveness
+        // role from being that key, which is the separation the recovery rests on. The constructor
+        // enforces it a second time, because this script binds one deployment and that binds every
+        // one. WHAT IT COSTS, so the founder is ruling on the real trade: after two days of public
+        // notice the market admin can install a keeper of its own, and a keeper that beats through a
+        // chain outage keeps liquidation open during one.
         require(
             testnet || r.guardian != r.livenessGuardian,
             "GUARDIAN must not be the liveness guardian - refusing to deploy"
@@ -263,10 +273,11 @@ contract DeployMarkets is Script {
         // gapThreshold 900s is BOTH the outage bound and the liveness bound (G-LEND HIGH-1: two
         // bounds meant a 25-hour window in which a halted chain was still liquidatable-into). It
         // implies a 5-minute keeper cadence — gapThreshold / 3 — which is what keeper/liveness-keeper.mjs
-        // already runs. resumeGrace 1h is Chainlink's recommended sequencer grace, and sits under
+        // already runs, on which it also OBSERVES every listed market (R4 HIGH-2: an unobserved
+        // market has no corroborated price and cannot be liquidated at all). resumeGrace 1h is Chainlink's recommended sequencer grace, and sits under
         // LivenessOracle's MAX_RESUME_GRACE of 6h (LivenessOracle.sol:68). R3 INFO-1: the `4x
         // gapThreshold` ratio this used to cite was replaced by absolute ceilings and no longer exists.
-        LivenessOracle liveness = new LivenessOracle(roles.livenessKeeper, roles.livenessGuardian, 900, 1 hours);
+        LivenessOracle liveness = new LivenessOracle(roles.livenessKeeper, roles.livenessGuardian, msg.sender, 900, 1 hours);
         // AD-2: markets sit at borrowCap 0 until the depth keeper posts and the raise matures.
         MarketHealthOracle health = new MarketHealthOracle(roles.depthKeeper, roles.guardian, msg.sender);
         EsseyMarkets markets = new EsseyMarkets(

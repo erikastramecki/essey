@@ -140,7 +140,7 @@ contract Deploy is Script {
         vm.startBroadcast();
 
         // 30-minute liveness bound / 15-minute gap / 30-minute post-outage grace (grace <= 4x gap guard).
-        LivenessOracle liveness = new LivenessOracle(keeper, guardian, 15 minutes, 30 minutes);
+        LivenessOracle liveness = new LivenessOracle(keeper, guardian, admin, 15 minutes, 30 minutes);
         // Health oracle admin is the deployer so this broadcast can wireMarkets in the same run (matching
         // DeployMarkets); its keeper posts depth, its guardian is the cold key.
         MarketHealthOracle health = new MarketHealthOracle(keeper, guardian, msg.sender);

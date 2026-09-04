@@ -49,7 +49,7 @@ contract ForkMvpTest is Test {
         uint8 feedDec = AggregatorV3Interface(AAPL_FEED).decimals();
 
         // Short grace: this test proves the MVP path, not the liveness timing (unit-tested).
-        liveness = new LivenessOracle(keeper, admin, 30 minutes, 1 minutes);
+        liveness = new LivenessOracle(keeper, admin, makeAddr("livenessRotator"), 30 minutes, 1 minutes);
         health = new MarketHealthOracle(keeper, admin, admin);
         // address(0): no L2 sequencer uptime feed exists on this chain — LivenessOracle stands in.
         // guardian == admin here: this fork test proves the MVP path, not the guardian split.
