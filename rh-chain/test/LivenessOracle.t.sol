@@ -162,17 +162,65 @@ contract LivenessOracleTest is Test {
         new LivenessOracle(KEEPER, GUARDIAN, 0, GRACE);
     }
 
-    /// Borrow-path fix #8: the post-gap grace must not dwarf the gap that triggers it. A gap barely over
-    /// the threshold — routine keeper jitter — would otherwise suspend liquidations for many multiples of
-    /// the outage's own length, and re-arm on each blip: a liquidation DoS. resumeGrace > 4x gapThreshold
-    /// is un-deployable; the previously-shipped 1h grace over a 10m gap (6x) now fails at construction.
-    function test_resumeGraceCannotDwarfTheGapThreshold() public {
+    /// G-LEND R2 MED-1. The old rule bounded the RATIO (resumeGrace <= 4x gapThreshold), which forced a
+    /// tight detection threshold to buy a tight grace and left the deploy sitting on the ceiling. The
+    /// bound is now absolute on each side, because the amplification is handled by the mechanism.
+    function test_theBoundsAreAbsoluteNotARatio() public {
+        // 6x, un-deployable under the old rule, is fine now: the grace granted is the gap observed.
+        LivenessOracle wide = new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 1 hours);
+        assertEq(wide.resumeGrace(), 1 hours);
+
         vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 1 hours); // the old shipped 6x config
-        // exactly 4x is allowed; strictly more is not
-        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 40 minutes); // 4x -> ok
+        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 6 hours + 1);
         vm.expectRevert(LivenessOracle.BadResumeGrace.selector);
-        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 40 minutes + 1); // just over 4x
+        new LivenessOracle(KEEPER, GUARDIAN, 10 minutes, 0); // a zero grace hands back the restart race
+        vm.expectRevert(LivenessOracle.BadGapThreshold.selector);
+        new LivenessOracle(KEEPER, GUARDIAN, 1 hours + 1, GRACE); // round-1 HIGH-1, pinned in the ctor
+        new LivenessOracle(KEEPER, GUARDIAN, 1 hours, 6 hours); // both exactly at the ceiling
+    }
+
+    /// THE FINDING. 901 seconds of keeper silence used to cost 4,501 seconds of total outage, because
+    /// the beat that ended a 901s gap armed the FULL hour of grace. The grace is now the gap.
+    function test_aShortGapCostsAtMostTwiceItself() public {
+        _bringOnline();
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + GAP + 1);
+        assertFalse(o.liquidationsAllowed());
+        _beat();
+        assertEq(o.liquidationsResumeAt(), block.timestamp + GAP + 1, "the grace equals the gap");
+
+        uint256 reopened;
+        for (uint256 i = 0; i < 40; i++) {
+            vm.warp(block.timestamp + GAP / 3);
+            _beat();
+            if (o.liquidationsAllowed()) {
+                reopened = block.timestamp;
+                break;
+            }
+        }
+        assertGt(reopened, 0, "must reopen");
+        assertLe(reopened - t0, 2 * (GAP + 1) + GAP / 3, "amplification is bounded at 2x, plus one beat");
+    }
+
+    /// And a real outage still earns the FULL window — the cap binds from above, not the gap.
+    function test_aLongOutageStillEarnsTheFullGrace() public {
+        _bringOnline();
+        vm.warp(block.timestamp + 4 hours);
+        _beat();
+        assertEq(o.liquidationsResumeAt(), block.timestamp + GRACE, "capped at resumeGrace");
+    }
+
+    /// A short gap arriving inside a long outage's grace must not SHORTEN it. Without the monotonic
+    /// guard in heartbeat() the second, smaller grace would move the deadline nearer and cut the
+    /// reaction time the long outage already earned.
+    function test_aLaterShortGapCannotShortenAnEarnedGrace() public {
+        _bringOnline();
+        vm.warp(block.timestamp + 4 hours);
+        _beat();
+        uint256 earned = o.liquidationsResumeAt();
+        vm.warp(block.timestamp + GAP + 1); // a short gap while still inside the grace
+        _beat();
+        assertEq(o.liquidationsResumeAt(), earned, "the earned deadline stands");
     }
 
     function test_onlyKeeperCanBeat() public {

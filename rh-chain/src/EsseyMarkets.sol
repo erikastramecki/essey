@@ -42,6 +42,7 @@ contract EsseyMarkets is StaleFeedGuard {
     error ZeroGuardian();
     error DeprecationOrderViolated(address token);
     error BadActivePool(address token, address pool);
+    error PauseTooLong(uint256 until, uint256 ceiling);
 
     /// The FULL pending payload, not a digest: commit is permissionless, so the log must be enough
     /// for any watcher to decode exactly what a ripe proposal will install (WS2 #3).
@@ -61,6 +62,11 @@ contract EsseyMarkets is StaleFeedGuard {
     event MarketDisabled(address indexed token);
     event ResolverProposed(address indexed resolver, uint256 effectiveAt);
     event ResolverCommitted(address indexed resolver);
+    event LiquidationPaused(address indexed token, uint256 until);
+    /// The feed and the multiplier disagree by more than MAX_PRICE_DEVIATION_BPS. Emitted from the
+    /// permissionless observer, so a corporate action is visible to a watcher the block it is seen.
+    event PriceDesyncDetected(address indexed token, uint256 refProduct, uint256 observedProduct);
+    event PriceDesyncCleared(address indexed token, uint256 observedProduct);
 
     struct Market {
         bool enabled;
@@ -101,15 +107,18 @@ contract EsseyMarkets is StaleFeedGuard {
     uint256 public constant PARAM_TIMELOCK = 2 days;
 
     address public immutable admin;
-    /// Hot emergency key, safe-direction only: disableMarket and nothing else, so its compromise
-    /// cost is stopping new borrows — never funds, never liquidation.
+    /// Hot emergency key. It can STOP things, never move funds and never seize: `disableMarket` and
+    /// `pauseLiquidation`. THE SECOND ONE IS A LIQUIDATION KILL SWITCH while it holds, and repeated
+    /// calls extend it — so this key's compromise now also means "liquidations halt while interest
+    /// compounds". DeployMarkets._checkRoles requires it to differ from LIVENESS_KEEPER, the other
+    /// address that can produce that outcome.
     ///
-    /// G-LEND MED-3: that claim used to be extended to "the LivenessOracle.keeper trust shape" and it
-    /// was FALSE. The health keeper does share it (effectiveCap is read only at canBorrow and
-    /// EsseyPool._gateNewDebt — zero liquidation authority). The LIVENESS keeper does not: it need not
-    /// be compromised at all, only SILENT, and liquidations then close protocol-wide while interest
-    /// compounds. Inherent to a fail-closed gate, and bounded only OPERATIONALLY: two independent
-    /// keepers, and page on lastHeartbeat ageing past gapThreshold / 2.
+    /// MED-3: the health keeper shares the safe-direction shape (effectiveCap is read only at
+    /// canBorrow and EsseyPool._gateNewDebt). The LIVENESS keeper does not — it need only go SILENT.
+    /// R2 LOW-4: the bound on that is NOT "two independent keepers", which `heartbeat()` cannot
+    /// express (LivenessOracle.sol:88-89 gates one address). It is one keeper, one cold rotation key,
+    /// and paging on lastHeartbeat past gapThreshold / 2. A 1-of-N relay keeper would restore the
+    /// stronger claim; nothing here builds one.
     address public immutable guardian;
     LivenessOracle public immutable liveness;
     MarketHealthOracle public immutable health;
@@ -252,6 +261,22 @@ contract EsseyMarkets is StaleFeedGuard {
 
     uint256 public constant MULTIPLIER_GUARD_WINDOW = 1 hours;
 
+    /// DERIVED, NOT PICKED. The harm is a price under-read big enough to flip a position opened at
+    /// max LTV to underwater, which needs `1 - ltvBps / liqThresholdBps`. The most fragile market
+    /// _validate can admit is liqThreshold 9,000 over ltv 7,000 (MAX_LIQ_THRESHOLD_BPS less
+    /// MIN_RISK_GAP_BPS) = 2,223bps, so 2,000 sits below it for EVERY listable market. Constant, not
+    /// a per-market parameter: it is a function of constants already here, and a settable copy could
+    /// only drift out of agreement with them.
+    uint16 public constant MAX_PRICE_DEVIATION_BPS = 2_000;
+    /// Ceiling on an UNRESOLVED disagreement — it clears the instant the product comes back. Sized
+    /// against the unliquidatable window this design already carries: the 24/5 feed ages out ~25h
+    /// after Friday's close, so a weekend is ~65h that the 20pp MIN_RISK_GAP_BPS absorbs by
+    /// construction (file header). One US session is well inside that.
+    uint256 public constant PRICE_DESYNC_HOLD = 6 hours;
+    /// Long enough to sit out an ex-date, short enough that a forgotten pause is not the permanent
+    /// freeze the missing `enabled` conjunct on canLiquidate exists to prevent.
+    uint256 public constant MAX_LIQUIDATION_PAUSE = 24 hours;
+
     /// The last uiMultiplier this registry observed for a token, and when it last MOVED. `syncMultiplier`
     /// (called on the borrow AND liquidate paths) records a move the instant a corporate action applies —
     /// this is what covers the POST-flip desync window robustly, without depending on whether the token
@@ -259,12 +284,25 @@ contract EsseyMarkets is StaleFeedGuard {
     mapping(address => uint256) public seenMultiplier;
     mapping(address => uint256) public multiplierMovedAt;
 
+    /// The price half of the same observation. `desyncRefProduct` is the product from BEFORE the
+    /// jump, held so the gates re-open on agreement rather than only on a timer.
+    mapping(address => uint256) public seenPrice;
+    mapping(address => uint256) public desyncRefProduct;
+    mapping(address => uint256) public priceDesyncAt;
+
+    /// Guardian's bounded corporate-action lever. Liquidation only.
+    mapping(address => uint256) public liquidationPausedUntil;
+
     /// True while a scheduled or just-applied uiMultiplier change makes the token's multiplier and its
     /// Chainlink feed inconsistent — the ~2x mis-valuation window. Both canBorrow AND canLiquidate refuse to
     /// act while this holds (declining on an unverifiable price beats a mispriced borrow OR a wrongful
     /// seizure; the ~1h gap is absorbed by the 20pp MIN_RISK_GAP_BPS buffer).
     function _desyncGuard(address token) internal view returns (bool) {
-        // (a) scheduled action within the window (pre-flip / at-flip while newUIMultiplier still reports it)
+        // (a) scheduled action within the window (pre-flip, while newUIMultiplier still reports it).
+        // INERT AGAINST EVERY SOURCE THIS REPO LISTS: the Stock Token answers with ONE word so
+        // _scheduledEffectiveAt returns 0 forever, and ConstantMultiplier answers (0, 0)
+        // (adapters/ConstantMultiplier.sol:12-14). Forward coverage only — nothing may be argued from
+        // its presence about the tokens that ship. Branch (c) covers those.
         uint256 effectiveAt = _scheduledEffectiveAt(multiplierSource[token]);
         if (effectiveAt != 0) {
             uint256 d = block.timestamp > effectiveAt ? block.timestamp - effectiveAt : effectiveAt - block.timestamp;
@@ -272,7 +310,77 @@ contract EsseyMarkets is StaleFeedGuard {
         }
         // (b) the live multiplier MOVED within the window (post-flip, observed via syncMultiplier)
         uint256 movedAt = multiplierMovedAt[token];
-        return movedAt != 0 && block.timestamp - movedAt < MULTIPLIER_GUARD_WINDOW;
+        if (movedAt != 0 && block.timestamp - movedAt < MULTIPLIER_GUARD_WINDOW) return true;
+        // (c) the FEED moved without the multiplier — the half (a) and (b) cannot see. See _syncPrice.
+        uint256 desyncAt = priceDesyncAt[token];
+        return desyncAt != 0 && block.timestamp - desyncAt < PRICE_DESYNC_HOLD;
+    }
+
+    /// THE PRODUCT IS THE INVARIANT. A corporate action rescales both legs in opposite directions —
+    /// a 2:1 split halves the feed and doubles the multiplier — so `price x uiMultiplier` is
+    /// continuous across a COMPLETED action and dislocated while only one leg has landed. Branch (b)
+    /// sees the multiplier leg; nothing saw the FEED leg, the one that reads collateral low and let a
+    /// healthy 45%-LTV position be liquidated for ~110% of the debt in free profit.
+    ///
+    /// Arming, not detection, is what makes it work: syncMultiplier runs at the top of borrow,
+    /// borrowMore, removeCollateral, liquidate and writeOff, above their gates (EsseyPool.sol:695-696),
+    /// so the first transaction to reach the dislocated price arms the breaker and is refused by it.
+    /// That transaction REVERTS, taking the arming write with it — which is why nobody can
+    /// arm-and-bypass in one transaction, and why an honest liquidator's sequence after a real >20%
+    /// gap is a standalone permissionless syncMultiplier, then the hold, then liquidate. NOTHING IN
+    /// keeper/ CALLS IT TODAY: an operational gap, not a covered one.
+    ///
+    /// WHAT IT CANNOT COVER: legs more than PRICE_DESYNC_HOLD apart (hence `pauseLiquidation` for a
+    /// date known in advance), and any single-leg move under the bound. And at the instant it happens
+    /// a split is INDISTINGUISHABLE on-chain from a real crash of the same size — both read as "the
+    /// feed moved and the multiplier did not" — so holding both is the only honest response to
+    /// identical evidence, not a shortcoming of the rule.
+    function _syncPrice(address token, uint256 prevMult, uint256 curMult) internal {
+        uint256 price = _readablePrice(token);
+        if (price == 0) return; // unreadable price records nothing, exactly as a failed multiplier read does
+        uint256 prev = seenPrice[token] * prevMult; // 0 when either half has no baseline yet
+        seenPrice[token] = price;
+        if (prev == 0) return;
+        _breaker(token, prev, price * curMult);
+    }
+
+    function _breaker(address token, uint256 prev, uint256 observed) internal {
+        uint256 ref = desyncRefProduct[token];
+        // ARMED: the only question is whether the product came BACK. Judging against the previous
+        // observation instead re-arms on the issuer's second leg — which deviates from the dislocated
+        // price by exactly as much as the first leg did — i.e. on the event that RESOLVES the desync.
+        if (ref != 0) {
+            if (_deviates(ref, observed)) return; // still apart; the hold runs from the first sighting
+            delete desyncRefProduct[token];
+            delete priceDesyncAt[token];
+            emit PriceDesyncCleared(token, observed);
+            return;
+        }
+        if (!_deviates(prev, observed)) return;
+        // Stamped ONCE: a further gap while armed does not extend the hold, so a dislocation costs a
+        // bounded PRICE_DESYNC_HOLD rather than a blackout a falling market could keep renewing.
+        desyncRefProduct[token] = prev;
+        priceDesyncAt[token] = block.timestamp;
+        emit PriceDesyncDetected(token, prev, observed);
+    }
+
+    /// No zero guard on `ref`: _syncPrice returns before this when there is no baseline, and the
+    /// armed branch only reaches here with a nonzero reference. A zero guard here made THAT guard
+    /// unpinnable — two defences each hiding the other's absence — so this one goes and the safe
+    /// direction is kept: a zero reference would arm, not wave through.
+    function _deviates(uint256 ref, uint256 observed) internal pure returns (bool) {
+        uint256 diff = observed > ref ? observed - ref : ref - observed;
+        return diff * 10_000 > ref * MAX_PRICE_DEVIATION_BPS;
+    }
+
+    /// 0 when the price cannot be read. Never reverts: syncMultiplier sits above five entry points
+    /// with no outer try, and priceOf reverts on stale, silent, sequencer-down and unconfigured.
+    function _readablePrice(address token) internal view returns (uint256) {
+        try this.priceOf(token) returns (uint256 p, uint8, bool) {
+            return p;
+        } catch {
+            return 0;
+        }
     }
 
     /// `effectiveAt` of a scheduled corporate action, or 0 for "nothing scheduled that I can read".
@@ -312,6 +420,7 @@ contract EsseyMarkets is StaleFeedGuard {
         if (cur == 0) return; // transient read failure — nothing to record
         uint256 prev = seenMultiplier[token];
         if (prev != 0 && cur != prev) multiplierMovedAt[token] = block.timestamp;
+        _syncPrice(token, prev, cur);
         seenMultiplier[token] = cur;
     }
 
@@ -327,6 +436,8 @@ contract EsseyMarkets is StaleFeedGuard {
     function canLiquidate(address token) external view returns (bool) {
         if (!_feeds[token].configured) return false;
         if (!liveness.liquidationsAllowed()) return false;
+        // NOT an `enabled` conjunct: see above. A permanent freeze must stay impossible; this expires.
+        if (block.timestamp < liquidationPausedUntil[token]) return false;
         // Same corporate-action desync guard as canBorrow — SYMMETRY IS THE POINT: during the ~2x
         // mis-valuation window `collateralValue` reads ~half, which would flip healthy positions to
         // "underwater" and let a liquidator seize (near-)full collateral for half the debt. Declining to
@@ -460,6 +571,20 @@ contract EsseyMarkets is StaleFeedGuard {
         _markets[token].enabled = false;
         delete _pending[token];
         emit MarketDisabled(token);
+    }
+
+    /// The lever a known corporate action needs and the protocol did not have. _syncPrice covers the
+    /// un-manned case; this covers the one a human sees coming, since an ex-date is public months
+    /// ahead and an issuer later than PRICE_DESYNC_HOLD is outside what any automatic rule can infer.
+    ///
+    /// Immediate and un-timelocked for disableMarket's reason — it only STOPS something. Capped per
+    /// call so a forgotten pause expires; `until` in the past stands it down without waiting.
+    function pauseLiquidation(address token, uint256 until) external {
+        if (msg.sender != admin && msg.sender != guardian) revert NotAdmin();
+        uint256 ceiling = block.timestamp + MAX_LIQUIDATION_PAUSE;
+        if (until > ceiling) revert PauseTooLong(until, ceiling);
+        liquidationPausedUntil[token] = until;
+        emit LiquidationPaused(token, until);
     }
 
     /// The non-emergency sibling of disableMarket: immediate because it only REMOVES a pending

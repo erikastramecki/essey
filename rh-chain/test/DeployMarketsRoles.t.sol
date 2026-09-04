@@ -86,6 +86,49 @@ contract DeployMarketsRolesTest is Test {
         h.check(false, _withRole(2, address(0xA1))); // livenessGuardian == livenessKeeper
     }
 
+    /// G-LEND R2 MED-2. Differing from the DEPLOY key was the whole rule, so this exact payload was
+    /// ACCEPTED: one hot key holding four of the five, able to halt every market, zero every cap, stop
+    /// liquidation by going silent, and take all protocol revenue — with two of those bindings
+    /// immutable. The PoC is the test.
+    function test_oneHotKeyMayNotHoldFourOfTheFiveRoles() public {
+        address hot = address(0xB0B);
+        vm.expectRevert(bytes("RESERVE_TREASURY must not be an operational key - refusing to deploy"));
+        h.check(
+            false,
+            DeployMarkets.Roles({
+                guardian: hot,
+                livenessKeeper: hot,
+                livenessGuardian: address(0xC01D),
+                depthKeeper: hot,
+                reserveTreasury: hot
+            })
+        );
+    }
+
+    /// RESERVE_TREASURY is immutable in EsseyPool and receives every skimmed reserve, so it must be
+    /// cold — separated from ALL FOUR operational keys, indexed rather than checked once.
+    function test_theReserveTreasuryMayNotBeAnyOperationalKey() public {
+        address[4] memory ops = [address(0xA0), address(0xA1), address(0xA2), address(0xA3)];
+        for (uint256 i; i < ops.length; i++) {
+            vm.expectRevert(bytes("RESERVE_TREASURY must not be an operational key - refusing to deploy"));
+            h.check(false, _withRole(4, ops[i]));
+        }
+    }
+
+    /// GUARDIAN (pauseLiquidation) and LIVENESS_KEEPER (silence) are the two addresses that can each
+    /// stop liquidation. Their union is "halt everything, indefinitely".
+    function test_theGuardianMayNotBeTheLivenessKeeper() public {
+        vm.expectRevert(bytes("GUARDIAN must not be the liveness keeper - refusing to deploy"));
+        h.check(false, _withRole(0, address(0xA1)));
+    }
+
+    /// And the pair that stays allowed, deliberately: both are borrow-side only, and the guardian
+    /// already rotates the depth keeper — separating them buys nothing.
+    function test_theGuardianMayStillBeTheDepthKeeper() public view {
+        DeployMarkets.Roles memory r = h.check(false, _withRole(3, address(0xA0)));
+        assertEq(r.depthKeeper, r.guardian);
+    }
+
     /// Testnet keeps working single-key: the friction is bought for mainnet, not for a throwaway.
     function test_testnetFallsBackToTheDeployKey() public view {
         DeployMarkets.Roles memory empty;

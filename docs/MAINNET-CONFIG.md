@@ -44,13 +44,29 @@ Collateral can be burned / rescaled / paused at any moment — this is the hazar
     100% revenue-share to the Bell; all $ESSEY sinks land in the multisig. No token is ever stranded.
 - **Payout choice:** deploy the converter with a **USDG passthrough** (`isSupported(USDG)=true`, identity) +
   `Bell.defaultPayout = BUNDLE` (stock default, USDG opt-out) — the decided per-Seat payout choice.
-- **Lending:** `EsseyMarkets(sequencerFeed=<disabled/keeper>, liveness, admin=multisig, assetDecimals=6)`;
-  `EsseyPool(usdg, markets, base=1000, s1=0, s2=0, reserve=2000, bellSink=bell, reserveTreasury=multisig,
-  bellShareBps=5000)`. Markets: LTV **35%** / liqThreshold **55%** / bonus **8%** / **20pp gap**
-  (`MIN_RISK_GAP_BPS`), cap per market, `collateralDecimals=18`, `feedDecimals=8` (cross-checked at
-  propose+commit against the real token/feed — fix #3). **New pool layout** (the #2/#5 fixes).
-- **LivenessOracle:** `(keeper, guardian, maxHeartbeatAge=30m, resumeGrace=30m, gapThreshold=15m)` — the
-  #8-guarded config. Keeper hot key ≠ guardian cold key.
+- **Lending** — every figure below is what `script/DeployMarkets.s.sol` actually constructs. G-LEND R2
+  LOW-2: this section previously contradicted the script on the constructor arity, the risk parameters
+  and the Bell wiring, and it is the document a reader sizes exposure from.
+  - `EsseyMarkets(seqFeed, liveness, health, admin, guardian, assetDecimals=6)` — six args, and the
+    MarketHealthOracle is one of them (`:235-237`).
+  - `EsseyPool(usdg, token, markets, base, slope1, slope2, reserveBps=**1000**, bellSink=**address(0)**,
+    reserveTreasury, bellShareBps=**0**, identity)` (`_listMarket`). The mainnet lending script wires
+    **no Bell sink**: all reserves go to `RESERVE_TREASURY`. Curve from `RateModes.Mode.Kink` =
+    base 1000 / slope1 500 / slope2 6000.
+  - Markets: LTV **50%** / liqThreshold **75%** / bonus **5%** / cap **250,000** borrow-asset units /
+    `maxPositionBps` 2000 (`_propose`). The 25pp gap clears the 20pp `MIN_RISK_GAP_BPS`.
+    `collateralDecimals` and `feedDecimals` are READ from the contracts, and `commitMarket` re-asserts
+    them against the chain.
+- **LivenessOracle:** `(keeper, guardian, gapThreshold=900, resumeGrace=1h)` — FOUR args.
+  `maxHeartbeatAge` no longer exists: one bound serves the view and the beat (G-LEND HIGH-1). The
+  grace GRANTED is the observed gap, capped at `resumeGrace` (G-LEND R2 MED-1), so a 901s gap costs
+  ~1,802s of outage, not 4,501s. Keeper hot key ≠ guardian cold key, and `_checkRoles` additionally
+  requires GUARDIAN ≠ LIVENESS_KEEPER and RESERVE_TREASURY ≠ every operational key.
+- **Corporate-action breaker:** `MAX_PRICE_DEVIATION_BPS = 2000`, `PRICE_DESYNC_HOLD = 6h`,
+  `MULTIPLIER_GUARD_WINDOW = 1h`, `MAX_LIQUIDATION_PAUSE = 24h` (`EsseyMarkets`). A one-step move of
+  `price x uiMultiplier` past the bound holds both gates until the two legs agree again, or for the
+  hold. Operational note: after such a move a standalone permissionless `markets.syncMultiplier(token)`
+  is what starts the hold — **no keeper calls it today**.
 - **Timelock:** `PARAM_TIMELOCK = 2 days` (constant) — market activation waits 2 days after propose.
 
 ## Deploy sequence (greenfield)

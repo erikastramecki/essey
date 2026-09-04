@@ -29,6 +29,12 @@ pragma solidity ^0.8.28;
 /// claims cannot exist: at the deployed 90,000 / 900 pair, any outage under 25 hours left
 /// `liquidationsAllowed()` TRUE in the first block back. Both sides now test the SAME predicate
 /// against the SAME threshold, so no interval is an outage to one and normal to the other.
+///
+/// THE GRACE IS SIZED TO THE OUTAGE (G-LEND R2 MED-1). A flat grace bounded at 4x `gapThreshold` made
+/// 901 seconds of keeper silence cost 4,501 seconds of total outage, borrowing included. Bounding a
+/// RATIO was the error: a borrower who could not act for `gap` seconds is owed `gap` seconds to act,
+/// so that is what the beat grants, capped at `resumeGrace`. Amplification is at most 2x for every
+/// parameter pair — a property of the mechanism, not of the numbers chosen.
 contract LivenessOracle {
     error NotKeeper();
     error NotGuardian();
@@ -51,9 +57,16 @@ contract LivenessOracle {
     /// small multiple of the keeper's beat interval, so a couple of missed beats trips it — and no
     /// larger, because it is also the longest a halted chain can stay liquidatable-into.
     uint256 public immutable gapThreshold;
-    /// After a detected gap, liquidations stay disabled this long so borrowers can react.
-    /// Mirrors Chainlink's own recommended sequencer grace period.
+    /// CEILING on the post-gap grace; the grace GRANTED is the observed gap, capped here. Mirrors
+    /// Chainlink's recommended sequencer grace at its cap.
     uint256 public immutable resumeGrace;
+
+    /// Absolute ceilings, replacing `resumeGrace <= 4 * gapThreshold`. That ratio forced a tight
+    /// detection threshold to buy a tight grace, which is backwards, and the DoS it guarded is gone.
+    /// MAX_GAP_THRESHOLD is also the longest a halted chain stays liquidatable-into on restart — the
+    /// whole of round-1 HIGH-1 — pinned here rather than left to the deploy script.
+    uint256 public constant MAX_GAP_THRESHOLD = 1 hours;
+    uint256 public constant MAX_RESUME_GRACE = 6 hours;
 
     uint256 public lastHeartbeat;
     /// Timestamp until which liquidations remain disabled following a gap. 0 = none pending.
@@ -61,13 +74,10 @@ contract LivenessOracle {
 
     constructor(address keeper_, address guardian_, uint256 gapThreshold_, uint256 resumeGrace_) {
         if (keeper_ == address(0) || guardian_ == address(0)) revert ZeroAddress();
-        if (gapThreshold_ == 0) revert BadGapThreshold();
-        // The post-gap grace must not dwarf the gap that triggers it. A gap only just over the threshold
-        // — e.g. routine keeper jitter — would otherwise suspend liquidations for many multiples of the
-        // outage's own length, and repeated jitter re-arms it: a liquidation DoS. Bounding resumeGrace to
-        // <= 4x gapThreshold makes that impossible-by-construction; the previously-shipped 1h grace over a
-        // 10m gap (6x) is now un-deployable.
-        if (resumeGrace_ > 4 * gapThreshold_) revert BadResumeGrace();
+        if (gapThreshold_ == 0 || gapThreshold_ > MAX_GAP_THRESHOLD) revert BadGapThreshold();
+        // A zero grace hands the restart race straight back: the beat that ends an outage would
+        // re-open liquidations in the same block, which is the thing this contract exists to stop.
+        if (resumeGrace_ == 0 || resumeGrace_ > MAX_RESUME_GRACE) revert BadResumeGrace();
         keeper = keeper_;
         guardian = guardian_;
         resumeGrace = resumeGrace_;
@@ -94,10 +104,13 @@ contract LivenessOracle {
         // prev == 0 is the first-ever heartbeat: treat it as a gap so a fresh deployment also
         // serves out the grace period rather than opening instantly.
         uint256 gap = prev == 0 ? type(uint256).max : block.timestamp - prev;
-        if (gap > gapThreshold) {
-            liquidationsResumeAt = block.timestamp + resumeGrace;
-            emit GapDetected(gap == type(uint256).max ? 0 : gap, liquidationsResumeAt);
-        }
+        if (gap <= gapThreshold) return;
+
+        uint256 resumeAt = block.timestamp + (gap < resumeGrace ? gap : resumeGrace);
+        // Never SHORTEN a grace already earned: a short gap arriving inside a long outage's window
+        // would otherwise move the deadline nearer and cut reaction time a borrower was already owed.
+        if (resumeAt > liquidationsResumeAt) liquidationsResumeAt = resumeAt;
+        emit GapDetected(gap == type(uint256).max ? 0 : gap, liquidationsResumeAt);
     }
 
     /// Is the chain demonstrably live AND past any post-gap grace period?

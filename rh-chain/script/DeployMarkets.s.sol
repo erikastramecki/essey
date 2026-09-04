@@ -154,6 +154,29 @@ contract DeployMarkets is Script {
             testnet || r.livenessKeeper != r.livenessGuardian,
             "LIVENESS_KEEPER must not be its own guardian - refusing to deploy"
         );
+        // G-LEND R2 MED-2. Differing from the DEPLOY key was the only rule, so one hot key could still
+        // hold four of the five: halt every market, zero every cap, stop liquidation by going silent,
+        // and take all protocol revenue. Two of those bindings — EsseyMarkets.guardian and
+        // EsseyPool.reserveTreasury — are IMMUTABLE, so that posture shipped once is shipped forever.
+        //
+        // RESERVE_TREASURY is the one that must be cold: it receives every skimmed reserve and can
+        // never be rotated. Separated from all four operational keys, not just the dangerous pair.
+        require(
+            testnet
+                || (
+                    r.reserveTreasury != r.guardian && r.reserveTreasury != r.livenessKeeper
+                        && r.reserveTreasury != r.livenessGuardian && r.reserveTreasury != r.depthKeeper
+                ),
+            "RESERVE_TREASURY must not be an operational key - refusing to deploy"
+        );
+        // GUARDIAN and LIVENESS_KEEPER are the two addresses that can each stop liquidation —
+        // pauseLiquidation and silence respectively (EsseyMarkets.sol, `guardian`). Their union is
+        // "halt everything, indefinitely", so they may not be one key. GUARDIAN == DEPTH_KEEPER stays
+        // allowed: both are borrow-side only, and the guardian already rotates the depth keeper.
+        require(
+            testnet || r.guardian != r.livenessKeeper,
+            "GUARDIAN must not be the liveness keeper - refusing to deploy"
+        );
         return r;
     }
 
@@ -220,7 +243,12 @@ contract DeployMarkets is Script {
         if (testnet) {
             // Chainlink L2 sequencer uptime shape: 0 = up. A price feed here reads as "down".
             if (seqFeed == address(0)) seqFeed = address(new MockFeed(FEED_DECIMALS, 0));
-            usdg = address(new ScaledUIStockMock("Mock USDG", "USDG"));
+            // G-LEND R2 LOW-3: this used to inherit ERC20's 18 while profileFor(46_630).usdgDecimals
+            // says 6, and the decimals() assertion above runs only on !testnet — so a testnet
+            // rehearsal, the pre-mainnet gate, never once exercised the 6-decimal borrow asset that
+            // ships. That is CRIT-1's shape exactly: a fixture that agrees with the design instead of
+            // with the chain.
+            usdg = address(new ScaledUIStockMock("Mock USDG", "USDG", prof.usdgDecimals));
         }
         uint8 assetDecimals = IERC20Metadata(usdg).decimals();
 
@@ -295,7 +323,7 @@ contract DeployMarkets is Script {
         address token;
         address feed = cfg.feed;
         if (prof.testnet) {
-            token = address(new ScaledUIStockMock(string.concat("Mock ", cfg.symbol), cfg.symbol));
+            token = address(new ScaledUIStockMock(string.concat("Mock ", cfg.symbol), cfg.symbol, 18));
             feed = address(new MockFeed(FEED_DECIMALS, cfg.mockPrice));
         } else {
             token = vm.envAddress(cfg.tokenEnv);

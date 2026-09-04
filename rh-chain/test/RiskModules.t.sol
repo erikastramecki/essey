@@ -489,7 +489,7 @@ contract CollateralReconcilerTest is Test {
     /// rehearsal proves something mainnet will not do — which is exactly what CRIT-1 was. Read
     /// through the production code path, not through the fixture's own getter.
     function test_theTestnetStockFixtureSpeaksEveryProductionShape() public {
-        ScaledUIStockMock t = new ScaledUIStockMock("Mock AAPL", "AAPL");
+        ScaledUIStockMock t = new ScaledUIStockMock("Mock AAPL", "AAPL", 18);
         (uint256 m, uint256 at) = r.pendingMultiplier(address(t));
         assertEq(m, 0, "ONE word is the default, matching real AAPL");
         assertEq(at, 0);

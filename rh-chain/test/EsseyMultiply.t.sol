@@ -104,7 +104,7 @@ contract EsseyMultiplyTest is Test {
     function setUp() public {
         MockFeed seqFeed = new MockFeed(8, 0);
         usdg = new MockUSDG();
-        nvda = new ScaledUIStockMock("Mock NVDA", "NVDA");
+        nvda = new ScaledUIStockMock("Mock NVDA", "NVDA", 18);
         liveness = new LivenessOracle(address(this), address(this), 900, 1 hours);
         health = new MarketHealthOracle(address(this), address(this), address(this));
         markets = new EsseyMarkets(
@@ -527,7 +527,7 @@ contract EsseyMultiplyTest is Test {
         uint256[] memory ids = _open18();
         // $175 -> $110: rung 2 (50 NVDA / 4_375 debt) and rung 1 go underwater; rung 3 stays
         // healthy. A third party liquidates rung 2; the surplus lands with the USER (bearer Note).
-        nvdaFeed.set(110e8, block.timestamp);
+        _walkPrice(110e8);
         usdg.mint(liquidator, 10_000e6);
         vm.startPrank(liquidator);
         usdg.approve(address(pool), type(uint256).max);
@@ -715,4 +715,21 @@ contract EsseyMultiplyTest is Test {
         vm.warp(end);
         liveness.heartbeat();
     }
+
+    /// Walk the feed to `target` in observed steps inside EsseyMarkets.MAX_PRICE_DEVIATION_BPS. A
+    /// market MOVES; a corporate action GAPS, and since G-LEND R2 HIGH-1 a single step past the bound
+    /// arms the desync breaker and holds both gates. See EsseyPool.t.sol:_walkPrice.
+    function _walkPrice(int256 target) internal {
+        (, int256 cur,,,) = nvdaFeed.latestRoundData();
+        while (cur != target) {
+            int256 next = target < cur ? (cur * 85) / 100 : (cur * 115) / 100;
+            if (target < cur ? next < target : next > target) next = target;
+            if (next == cur) next = target;
+            cur = next;
+            nvdaFeed.set(cur, block.timestamp);
+            markets.syncMultiplier(address(nvda));
+        }
+        nvdaFeed.set(target, block.timestamp);
+    }
+
 }

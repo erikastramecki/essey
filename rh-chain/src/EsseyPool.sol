@@ -381,6 +381,17 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         return Math.mulDiv(shares, _accruedAssets() + 1, totalSupply() + 10 ** _decimalsOffset(), Math.Rounding.Floor);
     }
 
+    /// Floor, and the Ceil form is BEHAVIOURALLY equivalent here — but only because of the offset, so
+    /// the condition is written down rather than left to be rediscovered (G-LEND R2 ruling 2).
+    ///
+    /// Ceil returns one more share whenever the division is inexact, and that share buys one more
+    /// asset unit, landing maxRedeem's preview EXACTLY on `cash` instead of one short (measured:
+    /// 144078231300 vs 144078231299). It never lands PAST it, so `_withdraw`'s cash constraint holds
+    /// and no call reverts. That is true while one share is worth at most one asset unit —
+    /// `_accruedAssets() + 1 <= totalSupply() + 10 ** _decimalsOffset()` — which the offset of 6
+    /// gives 1e6x of headroom on. AT OFFSET 0 THE EQUIVALENCE FAILS: Ceil overshoots `cash` and
+    /// `_withdraw` reverts, reintroducing the un-redeemable maxRedeem the max* rewrite removed.
+    /// Change `_decimalsOffset` and this stops being a free choice.
     function _accruedConvertToShares(uint256 assets_) internal view returns (uint256) {
         return Math.mulDiv(assets_, totalSupply() + 10 ** _decimalsOffset(), _accruedAssets() + 1, Math.Rounding.Floor);
     }
@@ -722,9 +733,35 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         // Read the holder BEFORE the close path burns the Note — the surplus belongs to whoever
         // holds the position deed at liquidation time (F3, carried over to bearer semantics).
         address holder = note.ownerOf(id);
+
+        // MED-1's escrow, applied to the lender's side (G-LEND R2 LOW-1). repay stopped reverting
+        // under a frozen collateral token; liquidate did not, so the one path that manages risk died
+        // exactly when the issuer froze the asset, while interest kept compounding.
+        //
+        // ONLY WHEN THE SEIZURE TAKES EVERYTHING, because an escrow has exactly one claimant and the
+        // deed is the ticket. refund > 0 means two claimants, and rather than invent a second deed
+        // the pool declines. That residual is precisely the not-at-risk band: refund > 0 requires
+        // collateral worth more than 1.05x the debt, so the position is still over-collateralised and
+        // waiting costs lenders nothing. Below it, seize == available and there is one claimant.
+        if (refund == 0) {
+            if (_tryReturnCollateral(p.token, msg.sender, seize)) {
+                _closePositionTail(id, p);
+                emit Liquidated(id, msg.sender, owed, seize, 0);
+                return;
+            }
+            positions[id].principal = 0;
+            // Re-issue the deed to the liquidator: they paid `owed` and the position is fully seized,
+            // so the borrower has no residual claim. burn+mint rather than a new privileged transfer
+            // on Note — both are already pool-only, and mint is callback-free (Note.sol:38-40).
+            note.burn(id);
+            note.mint(msg.sender, id);
+            emit Liquidated(id, msg.sender, owed, 0, 0);
+            emit CollateralEscrowed(id, msg.sender, seize);
+            return;
+        }
         _closePositionTail(id, p);
         IERC20(p.token).safeTransfer(msg.sender, seize);
-        if (refund > 0) IERC20(p.token).safeTransfer(holder, refund);
+        IERC20(p.token).safeTransfer(holder, refund);
         emit Liquidated(id, msg.sender, owed, seize, refund);
     }
 
@@ -771,8 +808,19 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
         uint256 residual = owed - recovered;
         uint256 fromReserves = totalReserves < residual ? totalReserves : residual;
         totalReserves -= fromReserves;
+        // The escrow again (G-LEND R2 LOW-1), and it matters more here than at liquidate: write-off is
+        // how a loss is RECOGNISED, and a frozen token used to block even a position whose collateral
+        // was already burned to nothing — `effective == 0` still ended in a transfer the pause
+        // reverted. One claimant by construction, so the deed carries the claim cleanly.
+        if (!_tryReturnCollateral(p.token, resolver_, effective)) {
+            positions[id].principal = 0;
+            note.burn(id);
+            note.mint(resolver_, id);
+            emit WrittenOff(id, owed, recovered, fromReserves, residual - fromReserves, 0);
+            emit CollateralEscrowed(id, resolver_, effective);
+            return;
+        }
         _closePositionTail(id, p);
-        IERC20(p.token).safeTransfer(resolver_, effective);
         emit WrittenOff(id, owed, recovered, fromReserves, residual - fromReserves, effective);
     }
 

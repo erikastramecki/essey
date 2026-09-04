@@ -51,7 +51,6 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         assertEq(hox.capFractionBps(), 3_333);
         assertEq(hox.hysteresisBps(), 1_000);
         assertEq(hox.maxRaisePerDayBps(), 1_000);
-        assertEq(hox.v4DiscountBps(), 5_000);
         assertEq(hox.raiseDelay(), 2 days);
         assertEq(hox.MAX_READING_AGE(), 24 hours);
     }
@@ -125,12 +124,12 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         pool.repay(idRepay, 700e6);
         vm.stopPrank();
 
-        px.set(30e8, block.timestamp); // $300 collateral vs $700 debt
+        _walkPrice(30e8); // $300 collateral vs $700 debt
         assertTrue(mk.canLiquidate(address(tok)), "liquidation never consults depth");
         vm.prank(LIQUIDATOR);
         pool.liquidate(idLiq);
 
-        px.set(5e8, block.timestamp); // $50 collateral vs $700 debt: beyond recovery
+        _walkPrice(5e8); // $50 collateral vs $700 debt: beyond recovery
         vm.prank(makeAddr("resolver"));
         pool.writeOff(idWoff, 60e6);
         assertEq(pool.debtOf(idWoff), 0, "written off at cap 0");
@@ -150,7 +149,7 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         pool.addCollateral(id, add);
         vm.stopPrank();
 
-        px.set(5e8, block.timestamp);
+        _walkPrice(5e8);
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
         assertEq(pool.debtOf(id), 0);
@@ -508,11 +507,11 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         pool.repay(idRepay, 700e6);
         vm.stopPrank();
 
-        px.set(30e8, block.timestamp);
+        _walkPrice(30e8);
         vm.prank(LIQUIDATOR);
         pool.liquidate(idLiq);
 
-        px.set(5e8, block.timestamp);
+        _walkPrice(5e8);
         vm.prank(R);
         pool.writeOff(idWoff, 60e6);
         assertEq(pool.marketBorrows(address(tok)), 0, "full lifecycle closed out at cap 0");
@@ -610,7 +609,7 @@ contract MarketHealthOracleTest is EsseyPoolTest {
     function _validParams() internal pure returns (MarketHealthOracle.Params memory) {
         return MarketHealthOracle.Params({
             capFractionBps: 3_333, hysteresisBps: 1_000, maxRaisePerDayBps: 1_000,
-            v4DiscountBps: 5_000, raiseDelay: 2 days
+            raiseDelay: 2 days
         });
     }
 
@@ -640,11 +639,10 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         vm.prank(ADMIN);
         hox.proposeParams(MarketHealthOracle.Params({
             capFractionBps: 3_333, hysteresisBps: 2_000, maxRaisePerDayBps: 2_000,
-            v4DiscountBps: 4_000, raiseDelay: 5 days
+            raiseDelay: 5 days
         }));
         for (uint256 i = 0; i < 4; i++) { vm.warp(block.timestamp + 12 hours); _postD(); }
         hox.commitParams();
-        assertEq(hox.v4DiscountBps(), 4_000, "the keeper-side V4 haircut is live too");
 
         // HYSTERESIS, now 20% of 1_333_200e6 = 266_640e6.
         _post(3_200_000e6); // target 1_066_560e6: exactly one band below
@@ -737,9 +735,6 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         p = _validParams(); p.maxRaisePerDayBps = 10_001;
         vm.expectRevert(abi.encodeWithSelector(MarketHealthOracle.InvalidParams.selector, "raise slew"));
         hox.proposeParams(p);
-        p = _validParams(); p.v4DiscountBps = 10_001;
-        vm.expectRevert(abi.encodeWithSelector(MarketHealthOracle.InvalidParams.selector, "v4 discount"));
-        hox.proposeParams(p);
         p = _validParams(); p.raiseDelay = 1 days - 1;
         vm.expectRevert(abi.encodeWithSelector(MarketHealthOracle.InvalidParams.selector, "raise delay"));
         hox.proposeParams(p);
@@ -750,10 +745,10 @@ contract MarketHealthOracleTest is EsseyPoolTest {
         // the exact boundary values are all legal
         p = _validParams();
         p.capFractionBps = 5_000; p.hysteresisBps = 5_000; p.maxRaisePerDayBps = 10_000;
-        p.v4DiscountBps = 10_000; p.raiseDelay = 30 days;
+        p.raiseDelay = 30 days;
         hox.proposeParams(p);
         p.capFractionBps = 1; p.hysteresisBps = 0; p.maxRaisePerDayBps = 1;
-        p.v4DiscountBps = 0; p.raiseDelay = 1 days;
+        p.raiseDelay = 1 days;
         hox.proposeParams(p);
         hox.cancelParamsProposal();
         vm.stopPrank();

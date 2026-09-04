@@ -30,7 +30,19 @@ contract ScaledUIStockMock is ERC20 {
 
     event UIMultiplierSet(uint256 multiplier);
 
-    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+    /// Decimals are a CONSTRUCTOR ARGUMENT, never a default (G-LEND R2 LOW-3). This mock stands in
+    /// for two different things — an 18-decimal Stock Token and a 6-decimal USDG — and inheriting
+    /// ERC20's 18 for both is how a testnet rehearsal came to never exercise the borrow asset that
+    /// ships. Every call site states the number it means.
+    uint8 private immutable _decimals;
+
+    constructor(string memory name_, string memory symbol_, uint8 decimals_) ERC20(name_, symbol_) {
+        _decimals = decimals_;
+    }
+
+    function decimals() public view override returns (uint8) {
+        return _decimals;
+    }
 
     function mint(address to, uint256 amount) external {
         _mint(to, amount);

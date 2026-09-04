@@ -202,7 +202,7 @@ contract SuccessionTest is Test {
         pool1.repay(id1, 700e6);
         vm.stopPrank();
 
-        px.set(80e8, block.timestamp); // $800 backing $600 at a 55% threshold: id3 is underwater
+        _walkPrice(80e8); // $800 backing $600 at a 55% threshold: id3 is underwater
         vm.prank(LIQUIDATOR);
         pool1.liquidate(id3);
         assertEq(pool1.debtOf(id3), 0, "liquidate survives succession");
@@ -335,4 +335,21 @@ contract SuccessionTest is Test {
         _succeed(pool2); // a fresh proposal at full timelock price completes the succession
         assertEq(mk.activePool(address(tok)), address(pool2), "succession resumed, not resurrected");
     }
+
+    /// Walk the feed to `target` in observed steps inside EsseyMarkets.MAX_PRICE_DEVIATION_BPS. A
+    /// market MOVES; a corporate action GAPS, and since G-LEND R2 HIGH-1 a single step past the bound
+    /// arms the desync breaker and holds both gates. See EsseyPool.t.sol:_walkPrice.
+    function _walkPrice(int256 target) internal {
+        int256 cur = px.answer();
+        while (cur != target) {
+            int256 next = target < cur ? (cur * 85) / 100 : (cur * 115) / 100;
+            if (target < cur ? next < target : next > target) next = target;
+            if (next == cur) next = target;
+            cur = next;
+            px.set(cur, block.timestamp);
+            mk.syncMultiplier(address(tok));
+        }
+        px.set(target, block.timestamp);
+    }
+
 }

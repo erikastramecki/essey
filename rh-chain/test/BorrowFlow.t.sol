@@ -32,12 +32,15 @@ contract BorrowFlowTest is Test {
         MockFeed usdgFeed = new MockFeed(8, 1e8);
         // Chainlink L2 sequencer uptime: 0 = up. A price feed here reads as "down".
         MockFeed seqFeed = new MockFeed(8, 0);
-        usdg = new ScaledUIStockMock("Mock USDG", "USDG");
+        // 18, matching the assetDecimals below: this suite is the demo PATH, and its stack is
+        // internally consistent at 18. It therefore cannot catch a 6-decimal normalisation defect —
+        // EsseyPool.t.sol's MockUSDG (6 decimals, and its five inheriting suites) is where that lives.
+        usdg = new ScaledUIStockMock("Mock USDG", "USDG", 18);
         liveness = new LivenessOracle(address(this), address(this), 900, 1 hours);
         health = new MarketHealthOracle(address(this), address(this), address(this));
         markets = new EsseyMarkets(AggregatorV3Interface(address(seqFeed)), liveness, health, address(this), address(this), 18);
         health.wireMarkets(address(markets));
-        aapl = new ScaledUIStockMock("Mock AAPL", "AAPL");
+        aapl = new ScaledUIStockMock("Mock AAPL", "AAPL", 18);
         pool = new EsseyPool(
             IERC20(address(usdg)), address(aapl), markets, 1000, 500, 6000, 1000, address(0),
             address(this), 0, EsseyPool.Identity("Essey AAPL Pool Share", "aAAPL", "Essey AAPL Note", "nAAPL")

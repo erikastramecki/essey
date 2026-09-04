@@ -50,7 +50,7 @@ contract BorrowMoreRemoveCollateralTest is EsseyPoolTest {
     /// borrowMore on an unhealthy position is impossible — the LTV gate blocks it.
     function test_borrowMoreOnUnderwaterPositionReverts() public {
         uint256 id = _borrow(700e6);
-        px.set(125e8, block.timestamp); // 10 @ $125 = $1250; LTV max = $437.5 << $700 owed
+        _walkPrice(125e8); // 10 @ $125 = $1250; LTV max = $437.5 << $700 owed
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(EsseyPool.Undercollateralised.selector, 700e6 + 1e6, 437.5e6));
         pool.borrowMore(id, 1e6);
@@ -257,7 +257,7 @@ contract BorrowMoreRemoveCollateralTest is EsseyPoolTest {
         uint256 id = _borrow(350e6);
         vm.prank(ALICE);
         pool.removeCollateral(id, 5e18); // remaining 5e18
-        px.set(120e8, block.timestamp); // 5 @ $120 = $600; 55% = $330 < $350 owed => liquidatable
+        _walkPrice(120e8); // 5 @ $120 = $600; 55% = $330 < $350 owed => liquidatable
         vm.prank(LIQUIDATOR);
         pool.liquidate(id);
         assertEq(pool.debtOf(id), 0, "closed via liquidation on the reduced collateral");

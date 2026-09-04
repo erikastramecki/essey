@@ -60,7 +60,6 @@ contract MarketHealthOracle {
         uint16 capFractionBps;
         uint16 hysteresisBps;
         uint16 maxRaisePerDayBps;
-        uint16 v4DiscountBps;
         uint256 raiseDelay;
     }
 
@@ -82,7 +81,6 @@ contract MarketHealthOracle {
     uint16 public capFractionBps;
     uint16 public hysteresisBps;
     uint16 public maxRaisePerDayBps;
-    uint16 public v4DiscountBps; // keeper-side V4 haircut, held here so changing it is timelocked
     uint256 public raiseDelay;
 
     Params public pendingParams;
@@ -99,7 +97,6 @@ contract MarketHealthOracle {
         capFractionBps = 3_333;
         hysteresisBps = 1_000;
         maxRaisePerDayBps = 1_000;
-        v4DiscountBps = 5_000;
         raiseDelay = 2 days;
     }
 
@@ -235,7 +232,6 @@ contract MarketHealthOracle {
         capFractionBps = p.capFractionBps;
         hysteresisBps = p.hysteresisBps;
         maxRaisePerDayBps = p.maxRaisePerDayBps;
-        v4DiscountBps = p.v4DiscountBps;
         raiseDelay = p.raiseDelay;
         delete pendingParams;
         delete pendingParamsEffectiveAt;
@@ -246,7 +242,6 @@ contract MarketHealthOracle {
         if (p.capFractionBps == 0 || p.capFractionBps > 5_000) revert InvalidParams("cap fraction");
         if (p.hysteresisBps > 5_000) revert InvalidParams("hysteresis");
         if (p.maxRaisePerDayBps == 0 || p.maxRaisePerDayBps > BPS) revert InvalidParams("raise slew");
-        if (p.v4DiscountBps > BPS) revert InvalidParams("v4 discount");
         if (p.raiseDelay < 1 days || p.raiseDelay > 30 days) revert InvalidParams("raise delay");
     }
 }
