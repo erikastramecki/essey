@@ -18,6 +18,8 @@ import {
   mainnetPub,
   reads as reserveReads,
   RESERVE,
+  tokenLabel,
+  UNREADABLE,
   usd,
   type TreasuryState,
 } from "./reserve";
@@ -59,6 +61,9 @@ const CSS = `
 .txp .kv .k{color:var(--tx-faint);font-size:10px;letter-spacing:.08em}
 .txp .kv .v{color:var(--tx)}
 .txp table{width:100%;border-collapse:collapse;font-size:11px}
+/* Shared .hw-scroll gives every wide table its own scroller; the terminal draws its own hairlines, so
+   the wrapper's card chrome is dropped rather than a second box being invented for this page. */
+.txp .hw-scroll{border:0;border-radius:0;margin:0}
 .txp th{text-align:left;color:var(--tx-faint);font-weight:400;border-bottom:1px solid var(--line-2);padding:4px 8px 4px 0;letter-spacing:.06em}
 .txp td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line);white-space:nowrap}
 .txp td.r,.txp th.r{text-align:right}
@@ -83,7 +88,6 @@ const CSS = `
 @media (prefers-reduced-motion:reduce){.txp .wrow.fresh{animation:none}}
 @media(max-width:820px){
   .txp .grid{grid-template-columns:1fr}
-  .txp table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
   /* ≥16px so iOS Safari doesn't auto-zoom when the search field is focused */
   .txp .search input{font-size:16px}
   .txp .wrow{flex-wrap:wrap}
@@ -115,8 +119,11 @@ const LEDGER_FILTERS: [string, string, (r: MainnetTapeRow) => boolean][] = [
 /// The backing bar. The figure is a MARK, not the claim, and a holding we cannot price is left OUT of
 /// the total rather than summed in as zero. The MARK column carries each line's price source per row,
 /// so the footer states the caveat once and sends the method to /treasury rather than restating it.
+/// A line whose BALANCE would not read is kept, named, and excluded the same way, and it downgrades
+/// the headline to "at least" — a total that silently shrank is the lie this page exists to prevent.
 function TreasuryBar({ st }: { st: TreasuryState | null }) {
-  const held = st?.tokens.filter((t) => t.reserve > 0n) ?? [];
+  const held =
+    st?.tokens.filter((t) => t.reserve === null || t.reserve > 0n) ?? [];
   return (
     <div className="panel" style={{ marginBottom: 10 }}>
       <div className="ph">
@@ -125,14 +132,20 @@ function TreasuryBar({ st }: { st: TreasuryState | null }) {
           RH MAINNET {RH.chainId} · INDICATIVE · DISPLAY ONLY
         </span>
       </div>
-      <div className="big">{st ? usd(st.pricedUsd8) : "—"}</div>
+      <div className="big">
+        {st ? `${st.incomplete ? "at least " : ""}${usd(st.pricedUsd8)}` : "—"}
+      </div>
+      {st?.incomplete && (
+        <div className="muted" style={{ marginTop: 4 }}>
+          INCOMPLETE · {st.unreadableSymbols.join(" ")} would not read — those
+          lines are left out of every figure here, not counted as zero
+        </div>
+      )}
       <div className="kv">
         <div>
           <span className="k">COVERS</span>
           <span className="v">
-            {st
-              ? `${st.pricedHeld} of ${st.pricedHeld + st.unpricedHeld} funded lines`
-              : "—"}
+            {st ? `${st.pricedHeld} of ${st.heldCount} funded lines` : "—"}
           </span>
         </div>
         <div>
@@ -162,53 +175,66 @@ function TreasuryBar({ st }: { st: TreasuryState | null }) {
           </span>
         </div>
       </div>
-      <table style={{ marginTop: 8 }}>
-        <thead>
-          <tr>
-            <th>HOLDING</th>
-            <th className="r">UNITS</th>
-            <th className="r">VALUE · USD</th>
-            <th>MARK</th>
-          </tr>
-        </thead>
-        <tbody>
-          {held.length === 0 && (
+      <div className="hw-scroll" style={{ marginTop: 8 }}>
+        <table>
+          <thead>
             <tr>
-              <td colSpan={4} className="empty">
-                {st ? "the reserve holds nothing yet" : "reading the reserve…"}
-              </td>
+              <th>HOLDING</th>
+              <th className="r">UNITS</th>
+              <th className="r">VALUE · USD</th>
+              <th>MARK</th>
             </tr>
-          )}
-          {held.map((t) => (
-            <tr key={t.address}>
-              <td>
-                {t.symbol}{" "}
-                {t.kind === "crypto" && (
-                  <span className="pill muted">UPSIDE</span>
-                )}
-              </td>
-              <td className="r">{fmtUnits(t.reserve, t.decimals, 4)}</td>
-              <td className="r">
-                {t.valueUsd8 === null ? (
-                  <span className="muted">{unpricedReason(t.price)}</span>
-                ) : (
-                  usd(t.valueUsd8)
-                )}
-              </td>
-              <td className="muted">
-                {t.price.ok
-                  ? t.price.src === "pool"
-                    ? "thin-pool median"
-                    : "chainlink"
-                  : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {held.length === 0 && (
+              <tr>
+                <td colSpan={4} className="empty">
+                  {st
+                    ? "the reserve holds nothing yet"
+                    : "reading the reserve…"}
+                </td>
+              </tr>
+            )}
+            {held.map((t) => (
+              <tr key={t.address}>
+                <td>
+                  {tokenLabel(t)}{" "}
+                  {t.kind === "crypto" && (
+                    <span className="pill muted">UPSIDE</span>
+                  )}
+                </td>
+                <td className="r">
+                  {t.reserve === null ? (
+                    <span className="muted">{UNREADABLE}</span>
+                  ) : (
+                    fmtUnits(t.reserve, t.decimals, 4)
+                  )}
+                </td>
+                <td className="r">
+                  {t.reserve === null ? (
+                    <span className="muted">{UNREADABLE}</span>
+                  ) : t.valueUsd8 === null ? (
+                    <span className="muted">{unpricedReason(t.price)}</span>
+                  ) : (
+                    usd(t.valueUsd8)
+                  )}
+                </td>
+                <td className="muted">
+                  {t.price.ok
+                    ? t.price.src === "pool"
+                      ? "thin-pool median"
+                      : "chainlink"
+                    : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="muted" style={{ marginTop: 6, fontSize: 10 }}>
-        indicative · redemption pays UNITS, not dollars · unpriced lines
-        excluded, not zeroed · <Link to="/treasury">how this is marked ↗</Link>
+        indicative · redemption pays UNITS, not dollars · unpriced and
+        unreadable lines excluded, not zeroed ·{" "}
+        <Link to="/treasury">how this is marked ↗</Link>
       </div>
     </div>
   );
@@ -307,7 +333,7 @@ export function ExplorerPage() {
   );
 
   const deposits = rows.filter((r) => r.kind === "deposit").length;
-  const holdings = st ? st.pricedHeld + st.unpricedHeld : null;
+  const holdings = st ? st.heldCount : null;
 
   if (!deployed())
     return (
@@ -420,40 +446,42 @@ export function ExplorerPage() {
             <span className="t">THE CONTRACTS</span>
             <span className="s">no owner · no withdraw · no pause</span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>CONTRACT</th>
-                <th>ADDRESS</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="good">EsseyReserve</td>
-                <td>
-                  <a
-                    href={addrUrl(RESERVE.reserve)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {short(RESERVE.reserve)} ↗
-                  </a>
-                </td>
-              </tr>
-              <tr>
-                <td className="good">$ESSEY</td>
-                <td>
-                  <a
-                    href={addrUrl(RESERVE.essey)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {short(RESERVE.essey)} ↗
-                  </a>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="hw-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>CONTRACT</th>
+                  <th>ADDRESS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="good">EsseyReserve</td>
+                  <td>
+                    <a
+                      href={addrUrl(RESERVE.reserve)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {short(RESERVE.reserve)} ↗
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="good">$ESSEY</td>
+                  <td>
+                    <a
+                      href={addrUrl(RESERVE.essey)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {short(RESERVE.essey)} ↗
+                    </a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <div className="empty" style={{ fontSize: 10 }}>
             both are adminless: EsseyReserve.sol:21 declares no owner, no
             registrar, no roles, no setters, no withdraw, no upgrade, no pause ·

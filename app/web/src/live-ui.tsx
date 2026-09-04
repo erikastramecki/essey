@@ -418,8 +418,7 @@ export function LiveExchange() {
             (!ready ? (
               <div className="amm-empty">
                 <div className="live-note" style={{ marginBottom: 10 }}>
-                  Connect your wallet to see your Dons and sell
-                  one back.
+                  Connect your wallet to see your Dons and sell one back.
                 </div>
                 <ConnectButton />
               </div>
@@ -674,7 +673,8 @@ export function LiveBell() {
               Three steps: <b>1.</b> stake your Don to join the payout ·{" "}
               <b>2.</b> when the pot fills, anyone rings the Bell and it splits
               across staked Dons · <b>3.</b> claim your share, and it lands in
-              your Don's Vault as real stock.
+              your Don's Vault. The game settles in play-money Scrip — nothing
+              you win here is real stock.
             </p>
           </div>
           <span className="preview-chip live">preview</span>
@@ -879,8 +879,9 @@ export function LiveBell() {
                         Mix…
                       </button>
                       <span className="live-note pp-note">
-                        the AAPL+NVDA basket by default · lands as real stock in
-                        your Vault · USDG if the market's closed
+                        the AAPL+NVDA basket by default · lands in your Vault as
+                        the game's testnet AAPL/NVDA, not real stock · USDG if
+                        the market's closed
                       </span>
                     </div>
                   )}

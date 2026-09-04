@@ -67,17 +67,26 @@ const EIP1967_BEACON_SLOT =
 
 export type TokenKind = "equity" | "crypto";
 
+/// Canonical CREATE2 Multicall3, verified live on 4663 (getBlockNumber answers, aggregate3 returns
+/// per-call success). Without it viem's batching silently does nothing.
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as Address;
+
 export const mainnetChain = defineChain({
   id: MAINNET.chainId,
   name: MAINNET.name,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [MAINNET.rpc] } },
   blockExplorers: { default: { name: "Explorer", url: MAINNET.explorer } },
+  contracts: { multicall3: { address: MULTICALL3 } },
 });
 
 export const mainnetPub = createPublicClient({
   chain: mainnetChain,
-  transport: http(MAINNET.rpc),
+  // Two layers because they cover different calls: aggregate3 folds the per-token eth_calls, and
+  // JSON-RPC array batching folds what it cannot reach (13 eth_getStorageAt). 142 POSTs → 7 per load,
+  // and the burst — not the chain — is why reads were dropping.
+  transport: http(MAINNET.rpc, { batch: true }),
+  batch: { multicall: true },
 });
 
 const erc20 = parseAbi([
@@ -126,17 +135,30 @@ export const readError = (e: unknown): string => {
 
 export type TokenRow = {
   address: Address;
-  symbol: string;
+  /// null when symbol() could not be read — a "?" fallback leaked into the excluded-tickers list and
+  /// read there as a ticker.
+  symbol: string | null;
   /// The issuer's own on-chain name(), never a hand-kept map — so the display cannot drift from the
   /// token it is describing.
   name: string;
+  /// Only meaningful while `reserve` is non-null: a token whose decimals() we could not read has no
+  /// scale, so its balance is reported unreadable rather than printed at a guessed magnitude.
   decimals: number;
-  reserve: bigint; // units of the token the reserve holds right now
-  floor: bigint; // units of the token backing 1e18 $ESSEY — only ratchets up
+  /// THE RULE prices.ts:88 states for marks, applied to balances: null is "we could not read this",
+  /// 0n is "the reserve holds none". Coercing the first to the second is how /explorer once rendered
+  /// $10.66 against a true $645 with a live badge and no error.
+  reserve: bigint | null; // units of the token the reserve holds right now
+  floor: bigint | null; // units of the token backing 1e18 $ESSEY — only ratchets up
   kind: TokenKind;
   price: Price;
   valueUsd8: bigint | null; // display-only mark of `reserve` at `price`, 1e8 USD; null when unpriced
 };
+
+/// A row without a symbol still has an address, which is the thing a reader can check anyway.
+export const tokenLabel = (t: TokenRow): string =>
+  t.symbol ?? `${t.address.slice(0, 6)}…${t.address.slice(-4)}`;
+
+export const UNREADABLE = "unreadable";
 
 export type TreasuryState = {
   esseyTotal: bigint;
@@ -151,59 +173,110 @@ export type TreasuryState = {
   /// token says something very different from one dominated by equities.
   equityUsd8: bigint;
   upsideUsd8: bigint;
+  /// Funded lines, including the ones whose balance would not read — an unreadable line is still a line.
+  heldCount: number;
   pricedHeld: number;
   unpricedHeld: number;
   /// Named, not just counted: "excluded" is only honest if a reader can see WHICH holdings it means.
   unpricedSymbols: string[];
+  /// Balances that would not read after the retries. While this is non-empty the dollar totals above are
+  /// a LOWER BOUND, not the balance, and every surface printing one has to say so.
+  unreadableSymbols: string[];
+  incomplete: boolean;
   /// True while any marked line comes from a thin AMM pool rather than a Chainlink feed.
   poolMarked: boolean;
   priceAsOf: number;
 };
 
-const read = <T>(functionName: string, args?: unknown[]): Promise<T> =>
-  mainnetPub.readContract({
-    address: RESERVE.reserve,
-    abi: reserveAbi,
-    functionName,
-    args,
-  } as never) as Promise<T>;
+const RETRIES = 2;
+const RETRY_MS = 200;
 
+/// A single transient drop must not blank a row, so every chain read gets two short retries before it
+/// counts as a failure. Backoff is linear and tiny: this runs on a 20s poll, not a hot loop.
+async function retry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= RETRIES) throw e;
+      await new Promise((r) => setTimeout(r, RETRY_MS * (i + 1)));
+    }
+  }
+}
+
+/// Retried, then null — never a fallback value. A `?? 0n` here is the whole bug: it makes a read that
+/// failed indistinguishable from a reserve that holds nothing, and the total quietly shrinks.
+const soft = <T>(fn: () => Promise<T>): Promise<T | null> =>
+  retry(fn).catch(() => null);
+
+const read = <T>(functionName: string, args?: unknown[]): Promise<T> =>
+  retry(
+    () =>
+      mainnetPub.readContract({
+        address: RESERVE.reserve,
+        abi: reserveAbi,
+        functionName,
+        args,
+      } as never) as Promise<T>,
+  );
+
+/// KNOWN-OPEN: a beacon slot that will not read after the retries still falls back to "not a stock",
+/// which moves a real equity into the upside bucket rather than saying it could not be checked. Left
+/// as-is here because it needs a third `kind` state and a home for a row that belongs to neither table.
 async function isRhStock(token: Address): Promise<boolean> {
-  const slot = await mainnetPub
-    .getStorageAt({ address: token, slot: EIP1967_BEACON_SLOT })
-    .catch(() => null);
+  const slot = await soft(() =>
+    mainnetPub.getStorageAt({ address: token, slot: EIP1967_BEACON_SLOT }),
+  );
   return !!slot && slot.toLowerCase().endsWith(RH_STOCK_BEACON);
 }
 
 async function tokenRow(token: Address, now: number): Promise<TokenRow> {
-  const [symbol, name, decimals, reserve, floor, stock, price] =
-    await Promise.all([
-      mainnetPub
-        .readContract({ address: token, abi: erc20, functionName: "symbol" })
-        .catch(() => "?") as Promise<string>,
-      mainnetPub
-        .readContract({ address: token, abi: erc20, functionName: "name" })
-        .catch(() => "") as Promise<string>,
-      mainnetPub
-        .readContract({ address: token, abi: erc20, functionName: "decimals" })
-        .catch(() => 18) as Promise<number>,
-      read<bigint>("reserveOf", [token]).catch(() => 0n),
-      read<bigint>("floorOf", [token]).catch(() => 0n),
+  const [symbol, name, decimals, held, floor, stock, price] = await Promise.all(
+    [
+      soft(
+        () =>
+          mainnetPub.readContract({
+            address: token,
+            abi: erc20,
+            functionName: "symbol",
+          }) as Promise<string>,
+      ),
+      soft(
+        () =>
+          mainnetPub.readContract({
+            address: token,
+            abi: erc20,
+            functionName: "name",
+          }) as Promise<string>,
+      ),
+      soft(
+        () =>
+          mainnetPub.readContract({
+            address: token,
+            abi: erc20,
+            functionName: "decimals",
+          }) as Promise<number>,
+      ),
+      soft(() => read<bigint>("reserveOf", [token])),
+      soft(() => read<bigint>("floorOf", [token])),
       isRhStock(token),
       // A price outage must not take the backing ledger down with it: the units are the truth here.
       priceOf(mainnetPub as PublicClient, token, now).catch(() => NO_FEED),
-    ]);
-  const dec = Number(decimals);
+    ],
+  );
+  // Without decimals() a balance has no scale, so it is unreadable rather than printed at a guess.
+  const dec = decimals === null ? null : Number(decimals);
+  const reserve = dec === null ? null : held;
   return {
     address: token,
     symbol,
-    name,
-    decimals: dec,
+    name: name ?? "",
+    decimals: dec ?? 18,
     reserve,
-    floor,
+    floor: dec === null ? null : floor,
     kind: stock ? "equity" : "crypto",
     price,
-    valueUsd8: valueOf(reserve, dec, price),
+    valueUsd8: reserve === null ? null : valueOf(reserve, dec as number, price),
   };
 }
 
@@ -217,19 +290,27 @@ export const reads = {
         read<Address>("essey"),
         chainNow(mainnetPub as PublicClient),
       ]);
-    const esseyTotal = (await mainnetPub.readContract({
-      address: esseyAddr,
-      abi: erc20,
-      functionName: "totalSupply",
-    })) as bigint;
+    const esseyTotal = (await retry(
+      () =>
+        mainnetPub.readContract({
+          address: esseyAddr,
+          abi: erc20,
+          functionName: "totalSupply",
+        }) as Promise<bigint>,
+    )) as bigint;
     // Reliable equities first, then upside — a stable render order regardless of RPC ordering.
     const tokens = (
       await Promise.all(BASKET.map((t) => tokenRow(t, priceAsOf)))
     ).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "equity" ? -1 : 1));
-    const held = tokens.filter((t) => t.reserve > 0n);
+    // An unreadable balance stays in `held`: it is a line we cannot rule out, so it keeps its row and
+    // its name in the caveat instead of silently leaving the page as though the reserve held none.
+    const held = tokens.filter((t) => t.reserve === null || t.reserve > 0n);
     const sum = (rows: TokenRow[]): bigint =>
       rows.reduce((s, t) => s + (t.valueUsd8 ?? 0n), 0n);
-    const unpriced = held.filter((t) => t.valueUsd8 === null);
+    const unreadable = held.filter((t) => t.reserve === null);
+    const unpriced = held.filter(
+      (t) => t.reserve !== null && t.valueUsd8 === null,
+    );
     return {
       esseyTotal,
       circulating,
@@ -239,9 +320,12 @@ export const reads = {
       pricedUsd8: sum(held),
       equityUsd8: sum(held.filter((t) => t.kind === "equity")),
       upsideUsd8: sum(held.filter((t) => t.kind === "crypto")),
-      pricedHeld: held.length - unpriced.length,
+      heldCount: held.length,
+      pricedHeld: held.length - unpriced.length - unreadable.length,
       unpricedHeld: unpriced.length,
-      unpricedSymbols: unpriced.map((t) => t.symbol),
+      unpricedSymbols: unpriced.map(tokenLabel),
+      unreadableSymbols: unreadable.map(tokenLabel),
+      incomplete: unreadable.length > 0,
       poolMarked: held.some((t) => t.price.ok && t.price.src === "pool"),
       priceAsOf,
     };

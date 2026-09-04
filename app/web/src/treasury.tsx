@@ -7,6 +7,8 @@ import {
   readError,
   reads,
   RESERVE,
+  tokenLabel,
+  UNREADABLE,
   usd,
   type TokenRow,
   type TreasuryState,
@@ -80,8 +82,15 @@ export function TreasuryPage() {
 
   const equities = st?.tokens.filter((t) => t.kind === "equity") ?? [];
   const crypto = st?.tokens.filter((t) => t.kind === "crypto") ?? [];
-  const equitiesFunded = equities.filter((t) => t.reserve > 0n).length;
-  const anyBacking = st ? st.tokens.some((t) => t.reserve > 0n) : false;
+  const funded = (rows: TokenRow[]) =>
+    rows.filter((t) => t.reserve !== null && t.reserve > 0n);
+  const equitiesFunded = funded(equities).length;
+  // A count that excludes an unreadable line is a floor on that count, and says so — the same "at
+  // least" the balance card puts on the dollar figure.
+  const more = st?.incomplete ? "+" : "";
+  // Only a line we actually READ as empty counts against "not yet funded" — an unreadable one is not
+  // evidence of an empty reserve, and `incomplete` says so on the balance card instead.
+  const anyBacking = st ? funded(st.tokens).length > 0 || st.incomplete : false;
 
   return (
     <section className="band">
@@ -101,15 +110,11 @@ export function TreasuryPage() {
           />
           <Stat
             label="Backing funded"
-            value={
-              st
-                ? `${st.tokens.filter((t) => t.reserve > 0n).length} tokens`
-                : "…"
-            }
+            value={st ? `${funded(st.tokens).length}${more} tokens` : "…"}
           />
           <Stat
             label="Equities funded"
-            value={st ? `${equitiesFunded} / ${equities.length}` : "…"}
+            value={st ? `${equitiesFunded}${more} / ${equities.length}` : "…"}
           />
           <Stat label="Exit fee" value={st ? pct(st.exitFeeBps) : "…"} />
         </div>
@@ -278,6 +283,8 @@ function OfficialContract() {
 /// The one figure on this page that is NOT a claim: a dollar mark sitting next to a redeemable claim is
 /// exactly what a reader will misread. The stat labels carry the mark source, the excluded tickers are
 /// NAMED rather than summed as zero, and the method sits one click away instead of three paragraphs up.
+/// When a BALANCE would not read, the headline says "at least" — a total that quietly shrank while
+/// still presenting itself as the total is worse than no total.
 function Balance({ st }: { st: TreasuryState | null }) {
   const excluded = st?.unpricedSymbols ?? [];
   return (
@@ -286,12 +293,26 @@ function Balance({ st }: { st: TreasuryState | null }) {
         Treasury balance · indicative, display only
       </div>
       <div className="hw-card-big">
-        {st ? usd(st.pricedUsd8) : "…"}{" "}
+        {st ? `${st.incomplete ? "at least " : ""}${usd(st.pricedUsd8)}` : "…"}{" "}
         <i>
-          {st ? st.pricedHeld : "…"} of{" "}
-          {st ? st.pricedHeld + st.unpricedHeld : "…"} holdings priced
+          {st ? st.pricedHeld : "…"} of {st ? st.heldCount : "…"} holdings
+          priced
         </i>
       </div>
+      {st?.incomplete && (
+        <div className="hw-warn" style={{ margin: "10px 0" }}>
+          <div className="hw-warn-h">
+            Incomplete read — this is a lower bound
+          </div>
+          <div>
+            The reserve&apos;s balance of {st.unreadableSymbols.join(", ")}{" "}
+            would not read from the chain just now. Those lines are left out of
+            every figure on this page rather than counted as zero, so the total
+            above is at least what it says and possibly more. Reload to read
+            again.
+          </div>
+        </div>
+      )}
       <p style={{ margin: 0 }}>
         <b>Indicative only — redemption pays units, not dollars.</b>
       </p>
@@ -338,8 +359,9 @@ function MarkMethod() {
             not traded in an hour.
           </p>
           <p style={{ margin: 0 }}>
-            <b>Excluded</b> — a holding with no price source is left out of the
-            total, never counted as zero. No figure here touches the floor,
+            <b>Excluded</b> — a holding with no price source, or one whose
+            balance would not read from the chain, is left out of the total and
+            named, never counted as zero. No figure here touches the floor,
             redemption, borrowing, or bonds.
           </p>
         </div>
@@ -383,9 +405,9 @@ function BasketTable({
                   title={t.address}
                   style={{ display: "flex", gap: 9, alignItems: "center" }}
                 >
-                  <Coin symbol={t.symbol} />
+                  <Coin symbol={t.symbol ?? ""} />
                   <span>
-                    {t.symbol} ↗
+                    {tokenLabel(t)} ↗
                     <span
                       style={{
                         display: "block",
@@ -400,10 +422,16 @@ function BasketTable({
                 </a>
               </td>
               <td className="n">
-                {fmt(t.reserve, t.decimals, 4)} {t.symbol}
+                {t.reserve === null ? (
+                  <span style={{ color: "var(--tx-faint)" }}>{UNREADABLE}</span>
+                ) : (
+                  `${fmt(t.reserve, t.decimals, 4)} ${tokenLabel(t)}`
+                )}
               </td>
               <td className="n">
-                {t.valueUsd8 === null ? (
+                {t.reserve === null ? (
+                  <span style={{ color: "var(--tx-faint)" }}>{UNREADABLE}</span>
+                ) : t.valueUsd8 === null ? (
                   <span style={{ color: "var(--tx-faint)" }}>
                     {unpricedReason(t.price)}
                   </span>
@@ -425,9 +453,13 @@ function BasketTable({
                 )}
               </td>
               <td className="n">
-                {empty
-                  ? "—"
-                  : `${fmt(t.floor * FLOOR_BASIS, t.decimals, 6)} ${t.symbol}`}
+                {t.floor === null ? (
+                  <span style={{ color: "var(--tx-faint)" }}>{UNREADABLE}</span>
+                ) : empty ? (
+                  "—"
+                ) : (
+                  `${fmt(t.floor * FLOOR_BASIS, t.decimals, 6)} ${tokenLabel(t)}`
+                )}
               </td>
             </tr>
           ))}

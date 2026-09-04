@@ -141,6 +141,11 @@ const LEARN_ITEMS: NavLeaf[] = [
   },
   { to: "/tape", label: "The Tape", desc: "Every event, with its receipt" },
   { to: "/provable", label: "Provable", desc: "Fair rolls, solvent books" },
+  {
+    to: "/engine",
+    label: "The engine",
+    desc: "The lending rails under the game",
+  },
 ];
 // The Dons wing — the entire game behind one door. A holder never lands here unless they open it.
 const DONS_ITEMS: NavLeaf[] = [
@@ -176,6 +181,7 @@ const NAV: NavItem[] = [
   ...(HOLDER_ON ? [{ to: "/holder", label: "Holder Hub" } as NavItem] : []),
   ...(REDEEM_ON ? [{ to: "/redeem", label: "Redeem" } as NavItem] : []),
   ...(PRIVATE_ON ? [{ to: "/private", label: "Private" } as NavItem] : []),
+  { to: "/explorer", label: "Explorer" },
   { label: "Learn", items: LEARN_ITEMS },
   ...(GAME_ON ? [{ label: "Dons", items: DONS_ITEMS } as NavItem] : []),
 ];
@@ -1008,6 +1014,7 @@ function Footer() {
                 ["/lend", "Borrow"],
                 ["/earn", "Earn"],
                 ["/holder", "Holder Hub"],
+                ["/redeem", "Redeem"],
                 ["/private", "Private"],
                 ["/explorer", "Explorer"],
               ],
@@ -1044,6 +1051,7 @@ function Footer() {
               {links
                 .filter(([to]) => EARN_ON || to !== "/earn")
                 .filter(([to]) => HOLDER_ON || to !== "/holder")
+                .filter(([to]) => REDEEM_ON || to !== "/redeem")
                 .filter(([to]) => PRIVATE_ON || to !== "/private")
                 .map(([to, label]) => (
                   <Link key={to} to={to}>
