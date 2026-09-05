@@ -36,7 +36,7 @@ fi
 # ---- web ----
 if [ "$do_web" = 1 ]; then
   echo "── web: gen-docs + build + deploy ──"
-  ( cd "$WEB" && node gen-docs.mjs >/dev/null && npx vite build >/dev/null 2>&1 ) || fail "web build failed"
+  ( cd "$WEB" && npm run build >/dev/null ) || fail "web build failed (gates run here — see stderr above)"
   # dist/ is the deploy root, so it needs its OWN vercel.json — app/web/vercel.json is not part
   # of the upload, and without this the SPA rewrites and every security header are silently
   # dropped. Derived from the real config so the two cannot drift; build settings are stripped

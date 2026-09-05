@@ -62,6 +62,10 @@ for (const f of roster) {
     problems.push(
       `${name}: charter is missing THE HARD RULE (never cite a gate you have not watched fail).`,
     );
+  if (!text.includes(`cat ~/.claude/agents/${name}.md`))
+    problems.push(
+      `${name}: charter does not tell it to re-read its own charter FROM DISK first.`,
+    );
   if (!text.includes(`tools/lessons.py --role ${name}`))
     problems.push(
       `${name}: charter does not tell it to read ITS OWN lessons slice.`,
