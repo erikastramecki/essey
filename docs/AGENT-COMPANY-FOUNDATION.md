@@ -298,3 +298,45 @@ impossible. That is worth a great deal, and it is less than it sounds like.
 *Built at Essey. The failures are real, the quotes are the founder's, and the mechanisms are running.
 If you build this and find where it breaks, that is the next lesson — write it down where the next
 person reads it.*
+
+
+
+---
+
+## Keeping this document true
+
+A blueprint that drifts from the thing it describes is worse than none, because people trust it. So
+this file is **gated, not maintained by discipline.**
+
+`check-agent-wiring.mjs` computes a fingerprint over the live structure — the agent roster, every
+lesson ID with its routing tags, and the mechanism files that must exist — and compares it to the
+stamp at the bottom of this file. **Any organisational, leadership, or lesson change fails the build
+until this document is reconciled.**
+
+```bash
+node app/web/check-agent-wiring.mjs           # fails if this doc is stale, naming the drift
+node app/web/check-agent-wiring.mjs --stamp   # re-stamp AFTER you have updated the prose
+```
+
+Two deliberate choices:
+
+- **It never auto-updates.** Silently regenerating the stamp is the obvious convenience and it
+  defeats the purpose: the hash would track reality while the prose rotted, and the gate would stay
+  green over a lie. Drift must cost a human read.
+- **It fails the build, not a linter.** Nothing ships while the blueprint describes a structure that
+  no longer exists.
+
+**On agents saving their memory.** The failure to design against is *"the agent didn't save, so the
+master doc is out of date."* Three things make that unavailable as an excuse:
+
+1. **Charters require the continuity write BEFORE the report**, not after — saving last is saving
+   skipped, and it is skipped hardest on the longest, most eventful runs.
+2. **Long jobs checkpoint mid-run**, after each significant finding.
+3. **The gate prints every agent that has never written to its continuity file.** An empty file after
+   real work is visible rather than assumed.
+
+The honest limit remains: the write is enforced by instruction, not by a lock. The *visibility* of a
+missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
+its continuity file did not change" as unfinished work and send it back.
+
+<!-- STRUCTURE-FINGERPRINT: 6d54b969727e2d4d -->

@@ -110,3 +110,16 @@ their shoes. Then close the loop the other way: **ask your peers what you could 
 seam**, and record their answer in your continuity file. Constantly seeking that feedback is what
 raises the bar for everyone, and it is a requirement of the role, not a courtesy.
 **The founder's summary of it:** it matters more HOW you do it than WHAT you do.
+
+### L-010 — Write your continuity BEFORE you report, and checkpoint long work
+**Applies to:** all
+**Origin:** 2026-09-05 · founder
+**The trap:** "The agent didn't save its memory, so the master document is out of date." Saving last
+means saving is the step that gets skipped — by a crash, a context limit, a session that ends, or
+simply finishing and exiting. The lesson is then lost precisely on the runs that were most eventful,
+because those are the ones that ran long.
+**Apply:** Your continuity write is not the last thing you do, it is the second-to-last. Write it,
+then report. On any long job, checkpoint mid-run — after each significant finding, not at the end.
+If you learned nothing worth recording, write that line explicitly so the file shows you considered
+it. An empty continuity file after real work is a defect, and it is visible: the wiring gate prints
+which agents have never written to theirs.
