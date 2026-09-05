@@ -55,6 +55,7 @@ export const BASKET: Address[] = [
   "0x020bfC650A365f8BB26819deAAbF3E21291018b4", // CASHCAT
   "0x39dBED3a2bd333467115dE45665cC57F813C4571", // PONS
   "0x8aD25c65587979533fa1cA0d2194A76D5bAE305d", // FLR
+  "0x12f190a9F9d7D37a250758b26824B97CE941bF54", // AMZN
 ];
 
 /// Non-forgeable legitimacy gate: every real Robinhood Stock Token is an EIP-1967 beacon proxy whose
