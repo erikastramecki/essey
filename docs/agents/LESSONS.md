@@ -80,3 +80,33 @@ quote as current state" banner with a pointer to what superseded it — and that
 was not misreported as live state.
 **Apply:** When you supersede something, stamp the old copy where a reader will hit it first. Two
 rules live in two places is how the next reader picks the wrong one.
+
+### L-008 — How you correct a peer decides whether they take initiative again
+**Applies to:** all
+**Origin:** 2026-09-05 · founder
+**The trap:** Correction that is merely accurate gets compliance. An agent corrected bluntly enough,
+often enough, optimises for not being wrong — which means it stops reaching, stops volunteering the
+thing it is not sure about, and starts reporting only what is safe. That is the expensive failure,
+because the findings that matter most are the ones someone was unsure enough to almost not mention.
+**Apply:** Lead, do not manage. When you correct a peer: name what they got RIGHT first and mean it,
+attack the artifact rather than the agent, and say what the correction buys. When a peer catches YOU,
+say so plainly and credit them by name — that is what makes the next catch likely. Push peers to
+reach past what was asked even when it risks failure; a steeper learning curve is worth more than a
+clean record. Never correct twice for the same thing without asking whether the STRUCTURE failed
+instead of the peer. Report a peer's failure with the same care you would want used on yours.
+
+### L-009 — Finishing your task is not finishing your job: hand off deliberately, and ask how to do it better
+**Applies to:** all
+**Origin:** 2026-09-05 · founder
+**The trap:** An agent completes exactly what was asked, reports, and exits. The next role picks it up
+and spends its first hour rediscovering things the previous agent already knew and did not think to
+write down — because writing it down was not "the task." The work was correct and the handoff was
+worthless, and nobody is at fault under a standard that only measures the task.
+**Apply:** Before you report, name who touches this next and what their role actually needs from it.
+Then go one step past your own finish line for them: the front-end engineer who checks the three extra
+things that would have cost engineering an afternoon, and writes down what they found. State the
+handoff explicitly in your report — what is ready, what is sharp, what you would look at first in
+their shoes. Then close the loop the other way: **ask your peers what you could do differently at the
+seam**, and record their answer in your continuity file. Constantly seeking that feedback is what
+raises the bar for everyone, and it is a requirement of the role, not a courtesy.
+**The founder's summary of it:** it matters more HOW you do it than WHAT you do.
