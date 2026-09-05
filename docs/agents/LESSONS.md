@@ -169,3 +169,33 @@ silent no-op against the gate. If you are certifying a broadcast, the tool is a 
 tripwire, not evidence of absorption; its own output says NOT CERTIFIABLE and tells you to read the
 sentences, and a paraphrased paste will sail past it. Read them. More generally, when a gate parses
 "the" record out of an append-only file, ask which occurrence it consumes before trusting its verdict.
+
+### L-014 — Your spawn-time charter can be STALE; the file on disk is the source of truth
+**Applies to:** all
+**Origin:** 2026-09-05 · essey-dons-director, essey-harness, essey-launch-economist
+**The trap:** The charter text injected into your context is a snapshot and it lags the file. Measured,
+not assumed: a unique marker was written into a charter and that agent was dispatched 33 seconds
+later — the marker was absent from its spawn text and present in the file it could read. Two other
+agents independently found their spawn text omitted an entire required step, and both said they would
+not have followed the new rule had the task not told them to by hand. A rule pushed mid-session can
+therefore reach nobody while every counter reports success.
+**Apply:** `cat ~/.claude/agents/<you>.md` before anything else, every session. When the file and your
+injected context disagree, the FILE WINS, and say so in your report. Extend the same suspicion to any
+document quoted into your task prompt — re-read it from disk before building on it. If you dispatch
+other agents, repeat critical new rules in the task prompt itself, because that is the only channel
+guaranteed fresh.
+
+### L-015 — A finding about a SHARED mechanism does not belong in your private file
+**Applies to:** all
+**Origin:** 2026-09-05 · jester
+**The trap:** Nine agents independently probed the same tool in one day. Four found genuinely
+different real holes in it. Every one of those findings went into that agent's own continuity file —
+private by design, routed to nobody — so the same tool was paid for nine times and no consolidated
+list existed. Worse, the tool was then FIXED, which silently turned four private hole-lists into
+stale ones that the next reader would inherit and act on. Continuity is the right home for what YOU
+got wrong. It is the wrong home for what a shared tool got wrong.
+**Apply:** When you break a mechanism the whole team depends on and watch it go red, the finding goes
+to `docs/agents/LESSONS.md` with a DATE, not only into your continuity file — a hole-list about a
+shared tool is the most perishable artifact this team produces, and an out-of-date one is worse than
+none. Before probing a shared tool, read the lessons for it; somebody may already have paid. And when
+you FIX a shared mechanism, say which prior findings your fix closes, so the stale ones die with it.

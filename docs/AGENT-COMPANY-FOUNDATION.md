@@ -254,12 +254,24 @@ And its honest limit, which belongs in the tool's own output: it is a duplicate-
 evidence of comprehension. A paraphrased paste sails through. **Certification is a human reading the
 sentences**, which is why the tool prints them.
 
-**The unresolved one, and it is the sharpest.** Agents reported that the charter text injected at
-spawn predated the file on disk, omitting a step added minutes earlier. If your platform snapshots
-agent definitions per session rather than reading them per dispatch, a mid-session rule reaches
-nobody and every mechanism above is measuring the wrong thing. Mitigation: charters instruct each
-agent to `cat` its own charter file from disk first, and the dispatching orchestrator repeats that
-instruction in the task itself — the one channel it controls.
+**The sharpest one, now measured rather than suspected.** Agents reported that the charter text
+injected at spawn predated the file on disk. We tested it directly: planted a unique marker in a
+charter at a known time, dispatched that agent 33 seconds later, and asked whether the marker was in
+its spawn text. **It was not** — while `grep` found it in the file the agent could read. Edits made
+earlier in the same session *had* propagated, so the spawn copy is a snapshot with lag, not simply
+frozen. The same agent then watched its charter change on disk again mid-session.
+
+**The consequence is structural: a rule pushed mid-session may reach nobody, and every mechanism
+above would still report success.** You cannot fix this from inside the charter, because a stale
+charter cannot carry the instruction that would fix it.
+
+Two mitigations, and you need both:
+- Every charter instructs the agent to `cat` its own charter file from disk *first*, and to treat the
+  FILE as authoritative when the two disagree. This helps on the next dispatch, not this one.
+- **The dispatching orchestrator repeats that instruction in the task prompt itself.** The task is
+  the only channel guaranteed fresh, so it is where a new rule actually lands today.
+
+If you build this, run the marker probe on your own platform before trusting any broadcast count.
 
 ### 5. A wiring gate in the build
 
@@ -394,4 +406,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: b6764b1d9486db5d -->
+<!-- STRUCTURE-FINGERPRINT: f5d0600ab689eb3d -->
