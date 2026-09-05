@@ -47,6 +47,7 @@ import re, signal, subprocess, sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKETS = ROOT / "src/EsseyMarkets.sol"
 LIVENESS = ROOT / "src/LivenessOracle.sol"
+POOL = ROOT / "src/EsseyPool.sol"
 SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|GLendR6|GLendR7|LivenessOracleTest|EsseyPoolTest|EsseyMarketsTest"
 # Measured on the clean tree with the exact invocation in suite_verdict. Re-measure and update it
 # whenever a test is added to the selected suites, or every mutant reports RUN-INCOMPLETE. It moves
@@ -54,7 +55,7 @@ SELECT = "DesyncStateMachine|DesyncBreaker|GLendR4|GLendR5|GLendR6|GLendR7|Liven
 # subclass. THREE contracts in SELECT carry it (EsseyPoolTest, DesyncBreakerTest,
 # DesyncStateMachineTest); R8's net +4 accrual tests therefore moved this 400 -> 412, while the
 # whole tree moved 1808 -> 1840 across eight. GLendR4Base descends from Test, not from the pool.
-EXPECTED_TESTS = 412
+EXPECTED_TESTS = 418
 
 MUTANTS = [
     # --- the magnitude of the safety constant, in BOTH directions ---
@@ -200,6 +201,69 @@ MUTANTS = [
     ("M42 breaker baseline is the old price against the NEW multiplier (R8 LOW-2)", MARKETS,
      "        uint256 prev = prevPrice * prevMult; // 0 when either half has no baseline yet",
      "        uint256 prev = prevPrice * curMult; // 0 when either half has no baseline yet"),
+    # --- R9 LOW-1: the bound on how much interval one witnessed pause buys. The MED-1 fix's own
+    # script mutated the guard's SHAPE and the stamp's SHAPE and got 14/14, because every mutant
+    # asked "does the code implement the chosen rule?" and none asked "is the rule's evidence enough
+    # for what it forgives?". These are folded in here rather than kept beside it, so they inherit
+    # is_evidence and the completion check instead of the classifier that failed open (R9 INFO-8).
+    ("M43 the bound removed entirely — the R9 LOW-1 defect restored", POOL,
+     """        if (paused && pauseObserved) {
+            if (dt <= MAX_FORGIVEN_GAP) return (denom, denom, paused); // suspended: both endpoints paused
+            dt -= MAX_FORGIVEN_GAP; // the endpoints vouch for a bounded window; the rest is charged
+        }""",
+     "        if (paused && pauseObserved) return (denom, denom, paused);"),
+    ("M44 past the bound, forgive the whole gap anyway (the subtraction neutered)", POOL,
+     "            dt -= MAX_FORGIVEN_GAP; // the endpoints vouch for a bounded window; the rest is charged",
+     "            dt = 0;"),
+    ("M45 the subtraction reversed — charge for time nobody was billed for", POOL,
+     "            dt -= MAX_FORGIVEN_GAP; // the endpoints vouch for a bounded window; the rest is charged",
+     "            dt += MAX_FORGIVEN_GAP;"),
+    ("M46 the subtraction against a DIFFERENT constant, not merely deleted", POOL,
+     "            dt -= MAX_FORGIVEN_GAP; // the endpoints vouch for a bounded window; the rest is charged",
+     "            dt -= dt < SECONDS_PER_YEAR ? dt : SECONDS_PER_YEAR;"),
+    # `<= -> <` is NOT here, and deliberately: it is provably EQUIVALENT. At dt == MAX_FORGIVEN_GAP
+    # the `<` variant falls through to `dt -= MAX_FORGIVEN_GAP`, which makes dt zero, and the very
+    # next line returns the identical (denom, denom, paused) on `dt == 0`. Both spellings forgive the
+    # same set. Shifting the boundary by a second is the mutation that actually moves behaviour.
+    ("M47 the bound one second wider (boundary genuinely shifted)", POOL,
+     "            if (dt <= MAX_FORGIVEN_GAP) return (denom, denom, paused); // suspended: both endpoints paused",
+     "            if (dt <= MAX_FORGIVEN_GAP + 1) return (denom, denom, paused); // suspended: both endpoints paused"),
+    ("M48 bound comparison inverted", POOL,
+     "            if (dt <= MAX_FORGIVEN_GAP) return (denom, denom, paused); // suspended: both endpoints paused",
+     "            if (dt >= MAX_FORGIVEN_GAP) return (denom, denom, paused); // suspended: both endpoints paused"),
+    # The magnitude in BOTH directions, and to a value long enough to close nothing — the shape R4
+    # found by cutting PRICE_CONFIRM_DELAY to a second and finding 1,748 of 1,751 still green.
+    ("M49 MAX_FORGIVEN_GAP 1h -> 0 (forgives nothing; a witnessed pause is billed)", POOL,
+     "    uint256 public constant MAX_FORGIVEN_GAP = 1 hours;",
+     "    uint256 public constant MAX_FORGIVEN_GAP = 0;"),
+    ("M50 MAX_FORGIVEN_GAP 1h -> 1 second", POOL,
+     "    uint256 public constant MAX_FORGIVEN_GAP = 1 hours;",
+     "    uint256 public constant MAX_FORGIVEN_GAP = 1 seconds;"),
+    ("M51 MAX_FORGIVEN_GAP 1h -> 24 hours (the other direction)", POOL,
+     "    uint256 public constant MAX_FORGIVEN_GAP = 1 hours;",
+     "    uint256 public constant MAX_FORGIVEN_GAP = 24 hours;"),
+    ("M52 MAX_FORGIVEN_GAP 1h -> 365 days (a bound that closes nothing — the R9 LOW-1 defect, dressed)", POOL,
+     "    uint256 public constant MAX_FORGIVEN_GAP = 1 hours;",
+     "    uint256 public constant MAX_FORGIVEN_GAP = 365 days;"),
+    # --- the R8 MED-1 guard itself, re-mutated HERE so the pair is scored by one classifier ---
+    ("M53 forgive on the closing read alone (R8 MED-1 direction A restored)", POOL,
+     "        if (paused && pauseObserved) {",
+     "        if (paused) {"),
+    ("M54 forgive on the OPENING read alone", POOL,
+     "        if (paused && pauseObserved) {",
+     "        if (pauseObserved) {"),
+    ("M55 the guard widened to OR", POOL,
+     "        if (paused && pauseObserved) {",
+     "        if (paused || pauseObserved) {"),
+    ("M56 the guard hardcoded TRUE", POOL,
+     "        if (paused && pauseObserved) {",
+     "        if (true) {"),
+    ("M57 the guard hardcoded FALSE (forgiveness deleted)", POOL,
+     "        if (paused && pauseObserved) {",
+     "        if (false) {"),
+    ("M58 the opening endpoint never recorded", POOL,
+     "        pauseObserved = paused;",
+     "        pauseObserved = pauseObserved;"),
 ]
 
 
@@ -303,6 +367,11 @@ def run(mut):
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+    import runlock
+
+    # Two runs on one tree void BOTH results and can strand a mutant live in the source (2026-09-05).
+    runlock.guard("glend-mutation-gate", "glend-r4.py", f"{len(MUTANTS)} mutants against {ROOT}")
     signal.signal(signal.SIGTERM, restore_all)
     signal.signal(signal.SIGINT, restore_all)
     results = []
