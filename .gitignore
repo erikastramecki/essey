@@ -73,3 +73,6 @@ rh-chain/docs/
 
 # measure-halt-baddebt.mjs caches the full feed walk; the RPC rate-limits a refetch
 rh-chain/keeper/.feedcache/
+
+# ephemeral run-lock registry (tools/runlock.py)
+.runs/

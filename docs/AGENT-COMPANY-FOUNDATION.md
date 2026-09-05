@@ -107,7 +107,7 @@ is missing. We have a standing rule about this, learned the hard way:
 The shape matters less than that it exists and that seams are explicit. Ours:
 
 ```
-                         PROGRAM MANAGER  (owns sequence, gates, the gap list)
+      PROGRAM MANAGER  ·  PRODUCT MANAGER          (peers: WHEN it ships · WHAT ships and why)
    ┌────────────────┬──────────────────┬────────────────────┬──────────────┐
    BUILD & QUALITY   PRODUCT            ECONOMY & DESIGN      COMMUNICATION
    engineer          brand designer     economist             writer
@@ -126,6 +126,10 @@ Three properties worth copying:
    blocked on whom. It does not overrule the specialist inside the specialist's domain.
 3. **Two program owners as peers** (protocol and game) rather than one over the other, because they
    have genuinely different clocks.
+4. **Program and product are split.** One owns *when* a thing ships and which gate it is behind; the
+   other owns *what* is worth building and what "done" means for a person rather than for a gate.
+   Collapsing them is the default and it hides the second question entirely — the founder holds it
+   personally until somebody is named, which works exactly as long as the founder scales.
 
 ### The two knowledge surfaces, and why they are separate
 
@@ -339,4 +343,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: d9f77024657386d4 -->
+<!-- STRUCTURE-FINGERPRINT: e415ba0e186f64b2 -->
