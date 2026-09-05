@@ -87,6 +87,7 @@ const MECHANISMS = [
   "app/web/check-agent-wiring.mjs",
   "docs/agents/LESSONS.md",
   "docs/agents/BROADCASTS.md",
+  "docs/AGENT-HIERARCHY.md",
 ];
 
 const fingerprint = () => {

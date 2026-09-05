@@ -6,7 +6,8 @@ how the team operates day to day.
 
 ## The org
 ```
-                     essey-deployment-manager   (PM / chief-of-staff)
+        essey-deployment-manager  ·  essey-product-manager
+        (PROGRAM: when it ships)     (PRODUCT: what ships, and why)
               owns the program · sequences work · runs cross-team reviews · keeps the gap list
    ┌──────────────────┬──────────────────┬────────────────────┬─────────────────┐
    BUILD & QUALITY     PRODUCT            ECONOMY & DESIGN       COMMS
@@ -17,7 +18,7 @@ how the team operates day to day.
                                     essey-dons-director
                          (GAME-side program owner — counterpart to the PM)
 ```
-**Roster = 13 specialists + the PM.** BUILD & QUALITY: protocol-engineer · auditor · zk-auditor · harness.
+**Roster = 14 specialists + the PM and the Product Manager (16 total).** `essey-product-manager` added 2026-09-05: owns WHAT is worth building, user-side acceptance, and the gap-closure program. Peer of the PM, not a report. BUILD & QUALITY: protocol-engineer · auditor · zk-auditor · harness.
 PRODUCT: brand-designer · web-designer · research-intern · legal-advisor. ECONOMY & DESIGN: don-economist ·
 don-designer · launch-economist. COMMS: jester · social. Plus **essey-dons-director**, the game-side program
 owner (peer of the PM, not under it).

@@ -151,3 +151,21 @@ genuinely needs focused specialist build capacity, spin up a TEMPORARY agent, an
 it retires: charter deleted, roster back down, ownership transferred to a standing agent who will
 hold it forever. Separate the two questions every time — who BUILDS this, and who OWNS it afterwards.
 A temp agent left running is a headcount increase nobody decided on.
+
+### L-013 — Only your FIRST ACK line is ever read, so correct an ACK in place, never by appending
+**Applies to:** all
+**Origin:** 2026-09-05 · essey-dons-director
+**The trap:** `tools/broadcast.py` finds an acknowledgement with a single `re.search`, so it reads the
+FIRST `ACK BC-00N` line in a continuity file and stops. An agent that later decides its ACK was thin
+and appends a better one below is still certified on the original, and a pasted second line is
+invisible to the duplicate check entirely — verified by putting a distinct ACK above an exact paste of
+another agent's sentence and watching the gate return "All agents acknowledged", exit 0. The same run
+proved what the gate DOES catch, each as the sole ACK line, each red with exit 1: an exact paste, that
+paste uppercased and whitespace-padded, and an ACK under 25 characters. What it does NOT catch: a
+near-copy with one word changed, which returns exit 0. "Identical ACKs are auto-flagged" is true only
+byte-for-byte after case and whitespace normalisation.
+**Apply:** When you revise an acknowledgement, EDIT the existing line — appending a second one is a
+silent no-op against the gate. If you are certifying a broadcast, the tool is a duplicate-paste
+tripwire, not evidence of absorption; its own output says NOT CERTIFIABLE and tells you to read the
+sentences, and a paraphrased paste will sail past it. Read them. More generally, when a gate parses
+"the" record out of an append-only file, ask which occurrence it consumes before trusting its verdict.

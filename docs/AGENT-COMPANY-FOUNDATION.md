@@ -232,7 +232,36 @@ python3 tools/runlock.py --list     # what is in flight, right now
 shipped a gate that printed `BLOCKED` and exited `0`, because it ran inside a pipeline and the
 subshell swallowed the failure flag. A gate is not a gate until you have watched it stop something.
 
-### 4. A wiring gate in the build
+### 4. Broadcasts — proving a team-wide rule was absorbed, not merely published
+
+Writing a rule into every charter feels like done. It is not: agents spawn stateless, so a rule in a
+charter nobody has been dispatched with has reached nobody. We measured this — at the moment a rule
+was declared pushed to sixteen charters, **zero agents had read it.**
+
+So a team-wide rule gets an id in `docs/agents/BROADCASTS.md`, and each agent acknowledges it in its
+own continuity file **in its own words about its own role**. `tools/broadcast.py` prints the
+sentences rather than counting them and exits non-zero while anyone is pending.
+
+Three things that make it more than a checkbox, each of which we got wrong first:
+
+- **Parse every acknowledgement line, not the first.** Reading only the first made a corrected ACK a
+  silent no-op and let a pasted second line hide from duplicate detection entirely.
+- **Derive the roster from the CHARTERS, not from who has a continuity file.** Otherwise a new agent
+  is *absent* rather than *pending*, and the tool reports complete while agents have never seen it.
+- **Flag identical and near-empty ACKs.** One sentence pasted into every file otherwise scores 100%.
+
+And its honest limit, which belongs in the tool's own output: it is a duplicate-paste tripwire, not
+evidence of comprehension. A paraphrased paste sails through. **Certification is a human reading the
+sentences**, which is why the tool prints them.
+
+**The unresolved one, and it is the sharpest.** Agents reported that the charter text injected at
+spawn predated the file on disk, omitting a step added minutes earlier. If your platform snapshots
+agent definitions per session rather than reading them per dispatch, a mid-session rule reaches
+nobody and every mechanism above is measuring the wrong thing. Mitigation: charters instruct each
+agent to `cat` its own charter file from disk first, and the dispatching orchestrator repeats that
+instruction in the task itself — the one channel it controls.
+
+### 5. A wiring gate in the build
 
 Fails the build on: a lesson with no `Applies to:` line, a charter missing the knowledge-base block, a
 charter that does not read its own slice, or a missing continuity file.
@@ -365,4 +394,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: 0aea7545873518e5 -->
+<!-- STRUCTURE-FINGERPRINT: b6764b1d9486db5d -->

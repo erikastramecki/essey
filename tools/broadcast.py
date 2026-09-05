@@ -30,26 +30,29 @@ for bc in ids:
         cf = CONT / f"{a}.md"
         if not cf.exists():
             continue
-        m = re.search(
+        found = re.findall(
             rf"^ACK {bc}\s*[—-]\s*(.+?)(?=\n\s*\n|\n\s*ACK BC-|\Z)",
             cf.read_text(),
             re.M | re.S,
         )
-        if m:
-            acked[a] = " ".join(m.group(1).split())
+        if found:
+            acked[a] = [" ".join(f.split()) for f in found]
     print(f"\n{bc}: {len(acked)}/{len(agents)} acknowledged")
     for a in agents:
         if a in acked:
-            print(f"  ACK  {a}\n         {acked[a]}")
+            print(f"  ACK  {a}\n         " + "\n         ".join(acked[a]))
     # An ACK is meant to prove the agent read the rule. A blank one, or the same sentence pasted into
     # several files, proves the opposite and would otherwise count toward a clean 16/16.
     seen = {}
-    for a, sent in acked.items():
-        key = " ".join(sent.lower().split())
-        if len(key) < 25:
-            incomplete = True
-            print(f"  SUSPECT {a}: ACK is empty or too short to be its own words")
-        seen.setdefault(key, []).append(a)
+    for a, sents in acked.items():
+        for sent in sents:
+            key = " ".join(sent.lower().split())
+            if len(key) < 25:
+                incomplete = True
+                print(f"  SUSPECT {a}: an ACK line is empty or too short to be its own words")
+            seen.setdefault(key, []).append(a)
+        if len(sents) > 1:
+            print(f"  note: {a} has {len(sents)} ACK lines for {bc}; all are checked")
     for key, who in seen.items():
         if len(who) > 1:
             incomplete = True
