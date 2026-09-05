@@ -36,7 +36,7 @@ baseline*, so every result would have been scored against a reference with the f
 or rebuild from `git archive HEAD`; never clear a file by inspecting the lines you were thinking about.
 
 ### L-003 — Two runs on one working tree void BOTH results
-**Applies to:** essey-protocol-engineer, essey-auditor, essey-harness, essey-deployment-manager
+**Applies to:** all
 **Origin:** 2026-09-05 · coordinator
 **The trap:** Two mutation-gate runs overlapped ~46 minutes on the same tree. Each run's restore
 reverted the other's mutant mid-flight, producing false SURVIVED and false KILLED, and stranding a

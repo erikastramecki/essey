@@ -79,8 +79,10 @@ const FOUNDATION = join(REPO, "docs", "AGENT-COMPANY-FOUNDATION.md");
 const MECHANISMS = [
   "tools/lessons.py",
   "tools/runlock.py",
+  "tools/broadcast.py",
   "app/web/check-agent-wiring.mjs",
   "docs/agents/LESSONS.md",
+  "docs/agents/BROADCASTS.md",
 ];
 
 const fingerprint = () => {
