@@ -53,6 +53,15 @@ for (const f of roster) {
     problems.push(
       `${name}: charter is not wired to the knowledge base (missing the read/write block).`,
     );
+  // Hardcoded per charter, not left to the routed lessons an agent must remember to read.
+  if (
+    !text.includes(
+      "THE HARD RULE — never cite a gate you have not watched fail",
+    )
+  )
+    problems.push(
+      `${name}: charter is missing THE HARD RULE (never cite a gate you have not watched fail).`,
+    );
   if (!text.includes(`tools/lessons.py --role ${name}`))
     problems.push(
       `${name}: charter does not tell it to read ITS OWN lessons slice.`,

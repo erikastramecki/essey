@@ -131,6 +131,28 @@ Three properties worth copying:
    Collapsing them is the default and it hides the second question entirely — the founder holds it
    personally until somebody is named, which works exactly as long as the founder scales.
 
+### Growing the org: absorb by default, and let temporary agents retire
+
+The tempting move when a gap appears is to create an agent for it. Do that five times and you have a
+roster nobody can hold in their head, where every job is somebody's and no department is coherent.
+
+Treat permanent headcount as a cost that has to be earned. The argument for a new standing agent is
+that the work needs a **fundamentally different mode of reasoning** from anything an existing
+department holds — not that it is a lot of work. Otherwise the gap is absorbed by whichever
+department already owns the nearest thing.
+
+Where a fix genuinely needs focused specialist capacity, the pattern that works is a **temporary
+agent that retires**:
+
+1. Spin it up to scope and build the fix.
+2. When the work lands, ownership transfers to a **standing** agent — normally an existing one — who
+   will hold it forever.
+3. The temporary charter is deleted and the roster shrinks back.
+
+So every gap answers two separate questions, and they often have different answers: **who builds
+this**, and **who owns it afterwards**. A temporary agent left running is a headcount increase nobody
+decided on.
+
 ### The two knowledge surfaces, and why they are separate
 
 | | **Continuity** (private) | **Lessons** (shared) |
@@ -343,4 +365,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: e415ba0e186f64b2 -->
+<!-- STRUCTURE-FINGERPRINT: 77c25094cc1d122b -->

@@ -136,3 +136,18 @@ driver-against-driver, which is the only case that occurs in production.
 and prefer an API where the misuse is unreachable rather than merely documented. More generally: test
 a gate in the configuration it actually runs in. Proving it blocks a hand-built test holder proves
 nothing about whether it blocks the real caller.
+
+### L-012 — Headcount is a cost: absorb by default, and retire a temporary agent when its work lands
+**Applies to:** essey-deployment-manager, essey-product-manager, essey-dons-director
+**Origin:** 2026-09-05 · founder
+**The trap:** A gap appears and the obvious move is to create an agent for it. Do that five times and
+you have a roster nobody can hold in their head, where every job is somebody's and no department is
+coherent. The founder caught this being started: "I didn't necessarily want sixteen individual agents
+to have to be operating full time to make sure these jobs are being done."
+**Apply:** A new PERMANENT agent must earn itself — the argument is that the work needs a
+fundamentally different mode of reasoning from anything an existing department holds, not that it is
+a lot of work. Otherwise the gap gets ABSORBED by the existing department closest to it. Where a fix
+genuinely needs focused specialist build capacity, spin up a TEMPORARY agent, and when the work lands
+it retires: charter deleted, roster back down, ownership transferred to a standing agent who will
+hold it forever. Separate the two questions every time — who BUILDS this, and who OWNS it afterwards.
+A temp agent left running is a headcount increase nobody decided on.
