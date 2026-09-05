@@ -123,3 +123,16 @@ then report. On any long job, checkpoint mid-run — after each significant find
 If you learned nothing worth recording, write that line explicitly so the file shows you considered
 it. An empty continuity file after real work is a defect, and it is visible: the wiring gate prints
 which agents have never written to theirs.
+
+### L-011 — A lock lives on an open file handle; discard it and the gate holds nothing
+**Applies to:** essey-protocol-engineer, essey-auditor, essey-harness, essey-deployment-manager
+**Origin:** 2026-09-05 · jester
+**The trap:** `runlock.guard()` returned the lock object, and the only call site discarded it. The
+returned object owned the sole open file descriptor, so it was garbage-collected, the file closed,
+and the `flock` released instantly. The gate read as installed and held nothing. It survived review
+because acquisition was only ever tested against a holder that DID bind its handle — never
+driver-against-driver, which is the only case that occurs in production.
+**Apply:** When a resource is held by an object, hold the reference for the whole critical section,
+and prefer an API where the misuse is unreachable rather than merely documented. More generally: test
+a gate in the configuration it actually runs in. Proving it blocks a hand-built test holder proves
+nothing about whether it blocks the real caller.

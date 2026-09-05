@@ -90,9 +90,16 @@ const fingerprint = () => {
         })
         .sort()
     : [];
+  // Bodies too: an id-and-tags fingerprint let a rewritten lesson through.
+  const bodies = existsSync(LESSONS)
+    ? createHash("sha256")
+        .update(readFileSync(LESSONS, "utf8").replace(/\s+/g, " ").trim())
+        .digest("hex")
+        .slice(0, 12)
+    : "none";
   const mech = MECHANISMS.filter((f) => existsSync(join(REPO, f))).sort();
   const names = roster.map((f) => f.replace(/\.md$/, "")).sort();
-  return `roster=${names.join(",")};lessons=${lessons.join(",")};mech=${mech.join(",")}`;
+  return `roster=${names.join(",")};lessons=${lessons.join(",")};bodies=${bodies};mech=${mech.join(",")}`;
 };
 
 const hash = createHash("sha256")

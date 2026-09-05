@@ -91,10 +91,18 @@ def inflight():
     return live
 
 
+# A flock lives on an open file descriptor, so a caller that discards guard()'s return value gets it
+# collected, the file closed, and the lock released — installed-looking and holding nothing. That
+# shipped. Holding the reference here makes the misuse unreachable.
+_HELD = []
+
+
 def guard(resource, owner, detail=""):
     """Entry point for a script: acquire or exit 2 naming the holder and how to stop it."""
     try:
-        return RunLock(resource, owner, detail).__enter__()
+        lock = RunLock(resource, owner, detail).__enter__()
+        _HELD.append(lock)
+        return lock
     except Held as h:
         print(
             f"BLOCKED: '{resource}' is already running.\n"
