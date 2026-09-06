@@ -126,7 +126,7 @@ already has an adminBurn haircut; shielded USDG does not.
 ## Update 2026-08-30 (4) — two gates RESOLVED on-chain + lending SHIPPED; viability review in
 See [MAINNET-VIABILITY-REVIEW.md] for the full ranked review.
 
-- **#3 Lending — BUILT + AUDITED + PUSHED (public).** Ported to rh-chain, StaleFeedGuard reconciled
+- **#3 Lending — BUILT + PUSHED (public), NOT AUDITED (gate 0 of 3).** Ported to rh-chain, StaleFeedGuard reconciled
   (behavior-preserving), 1254→1267 tests, THREE consecutive clean 3-agent rounds (economics /
   access-oracle / mutation). Committed 75f90b0 + pushed to public essey (127f985). REMAINING: the
   founder's mainnet DEPLOY (funded deployer + admin/guardian roles), + optional beacon assert, +
@@ -1395,6 +1395,214 @@ per-commit loop, not a worktree grep — that is the check that missed it the fi
 
 ---
 
+## Update 2026-09-04 (19) — THE GATE RULE CHANGED. G-LEND reconciled across all nine rounds.
+
+**⚠️ This supersedes §18.1 and §18.2.** Written in answer to the founder's direct question — *where are
+the lending audits* — and reconciled from the artifacts, not carried forward. At-a-glance matrix:
+[`PRODUCT-TRACKER.md`](PRODUCT-TRACKER.md) ⭐ 2026-09-04 (19) block.
+
+### 19.1 THE RULE — founder ruling 2026-09-04, and it is the most important entry in this register
+
+> *"Redefine the gate as three consecutive rounds with no CRITICAL, HIGH, or MEDIUM. LOWs get logged,
+> triaged, and fixed on their own schedule rather than blocking."*
+
+**This replaces "any finding resets the counter,"** which was unreachable in practice: a competent
+adversarial auditor will essentially always find something at LOW, so the counter could never close —
+not because the code was unsound, but because the bar was perfection. G-LEND ran **nine rounds** under
+the old rule and never closed while severity collapsed from CRITICAL to nothing-above-LOW.
+
+Saved as memory `essey-audit-gate-definition`; the enforced wording is in
+`~/.claude/bin/guard-git.py:221-223` (**VERIFIED** — read this pass).
+
+**The operative consequence, ruled explicitly by the founder and enforced from here on:**
+
+1. **Three CONSECUTIVE rounds return 0 CRITICAL / 0 HIGH / 0 MEDIUM.** LOWs and INFOs do not block.
+2. **Any change to the audited surface resets the counter to zero.** Three rounds against three
+   different versions of the code prove nothing — the point is **three independent looks at the same
+   bytes.** Each round records the frozen SHA and an empty `git status --porcelain`.
+3. **Therefore LOWs are NOT fixed mid-gate.** They are logged with `file:line` and a severity
+   rationale and scheduled *after* the gate closes. Fixing a LOW changes the code, resets the
+   counter, and the gate never closes for exactly the reason the old rule failed.
+4. **A round only counts if it ran against the real substrate** — the receipt must name RPC, chain-id
+   and block. A mock-only round does not count.
+5. **Severity is the auditor's call, not the engineer's,** and a promotion or demotion carries its
+   reasoning. An auditor that promotes a LOW to justify a round is as broken as one that misses a HIGH.
+
+### 19.2 All nine rounds, with report and receipt, re-verified this pass
+
+Every row below was re-read from the report's own verdict line and the receipt's own frozen-SHA line.
+
+| Round | Frozen SHA | Verdict | Report | Receipt |
+|---|---|---|---|---|
+| 1 | `99a5735` | **1 CRIT**, 1 HIGH, 3 MED, 4 LOW | `glend-round-1.md:12` | `audit-glend-r1` |
+| 2 | `de67032` | **1 HIGH**, 2 MED, 4 LOW | `glend-round-2.md:9` | `audit-glend-r2` |
+| 3 | `0cf6831` | **1 CRIT**, 1 HIGH, 3 MED, 2 LOW | `glend-round-3.md:9` | `audit-glend-r3` |
+| 4 | `cb3e6aa` | **2 HIGH**, 3 MED, 6 LOW | `glend-round-4.md:15` | `audit-glend-r4` |
+| 5 | `2804b2e` | 0/0, **2 MED**, 3 LOW | `glend-round-5.md:15` | `audit-glend-r5` + `-r5-fix` |
+| 6 | `c04a6ce` | 0/0, **1 MED**, 3 LOW | `glend-round-6.md:14` | `audit-glend-r6` |
+| **7** | `2309cb0` | **0 / 0 / 0**, 2 LOW, 3 INFO | `glend-round-7.md:27` | `audit-glend-r7` + `-r7-poc/` |
+| 8 | `959b70a` | 0/0, **1 MED**, 4 LOW, 9 INFO | `glend-round-8.md:28` | `audit-glend-r8` + `-r8-fix` + `-r8-poc/` |
+| **9** | `1bc9ec7` | **0 / 0 / 0**, 2 LOW, 8 INFO | `glend-round-9.md:49` | `audit-glend-r9` + `-r9-poc/` |
+
+**All nine reports are tracked in git** (`git ls-files docs/audits/ | grep glend` → 9 files) — the
+gate ladder's published-report step is met for every round. The round-7 untracked-report blocker
+recorded in §18.2 is **closed** (committed in `efe34aa`).
+
+### 19.3 THE COUNT, stated plainly — and it is better than it sounds
+
+| Round | Under the new rule |
+|---|---|
+| 7 — 0/0/0 | ✅ **qualifies** |
+| 8 — 1 MEDIUM | ❌ **resets** |
+| 9 — 0/0/0 | ✅ **qualifies → count = 1** |
+| *round 9's fixes changed the code* | ❌ **resets to 0** |
+
+> **G-LEND: 0 of 3, on the frozen result of the current engineer pass.** Not 1 of 3, and not because
+> a round failed — because rule 2 applies to our own remediation as strictly as to anything else.
+
+**This is verified, not assumed.** `git status --porcelain` this pass shows the audited surface dirty:
+
+```
+ M docs/MAINNET-ACTIVATION.md
+ M rh-chain/script/DeployMarkets.s.sol
+ M rh-chain/src/EsseyPool.sol          <- the audited surface
+ M rh-chain/test/EsseyPool.t.sol
+ M rh-chain/test/mutants/glend-r4.py
+```
+
+The `EsseyPool.sol` change introduces `MAX_FORGIVEN_GAP = 1 hours` and bounds the R9 LOW-1 straddle
+(`git diff rh-chain/src/EsseyPool.sol`, read this pass). **Round 9 audited `1bc9ec7`; this is not
+`1bc9ec7`.** Rounds 10, 11 and 12 must run on the committed, frozen result of this pass.
+
+**Note the tension, and rule 3 resolves it:** this pass is itself a mid-gate LOW fix, which is what
+rule 3 forbids. It was in flight when the ruling landed, so it finishes and is committed — and it is
+the **last** LOW fixed before the gate. From the next round on, a LOW is logged and scheduled, never
+patched mid-gate.
+
+### 19.4 Round 9 STRUCK two carried-forward items — both were phantom debt
+
+Recorded because both had propagated into the round-8 handoff as standing third-round coverage debt
+that **does not exist**, and because the shape is instructive.
+
+- **X-P is not a survivor. REFUTED outright** (`glend-round-9.md:102-157`). The round-8 probe ran it
+  against **one test**; "survives" in this gate is defined over the whole `SELECT` suite
+  (`test/mutants/glend-r4.py`, `suite_verdict()`). Re-run against the real suite it produces **18
+  distinct assertion kills** — the most heavily-killed mutant in the engagement. The algebra is in
+  the report: `_deviates` (`src/EsseyMarkets.sol:640-643`) is homogeneous of degree 1, so under X-P
+  the common `price` factor cancels and the breaker goes blind to price entirely.
+- **`EsseyMarkets.sol:525` points at comment lines** (`glend-round-9.md:161-203`). At `1bc9ec7`,
+  `:525` and `:556` are `///` comment text; the real `_confirmable` call sites are `:540` and `:571`.
+  Not a coverage gap — the seven candidate mutants at the warm push were all KILLED. Downgraded to
+  INFO-3/INFO-4 (the raw push's coverage is incidental rather than targeted).
+
+**The lesson, and it is the sixth instance of a standing shape:** an instrument that runs one mutant
+against one test and reports "SURVIVES" carries a claim the measurement cannot support. The five
+prior instances produced false GREENs; this one produced a false GAP and cost a round's attention.
+
+### 19.5 Round 8's MEDIUM was pre-existing — it is not a regression of this engagement
+
+`glend-round-8.md:28` returns 0 CRIT / 0 HIGH / **1 MED** / 4 LOW / 9 INFO. The MEDIUM is in
+`EsseyPool.accrue()` — an instantaneous borrow-asset pause discarded the **whole** elapsed accrual
+interval (`rh-chain/src/EsseyPool.sol:220-223`, `:254-259` at that SHA), destroying ≈$89.86/day of
+lender interest at the deployed parameters with nothing bounding `dt`.
+
+**It is not in the corporate-action machinery this engagement built.** The report says so in its own
+verdict: *"the finding is not in the delay line… the 41-mutant gate is genuinely 41/41 and I could
+not break it"* (`glend-round-8.md:30-35`). **`EsseyPool.sol` predates the engagement** — first
+committed in `2c8abc9` (`git log --diff-filter=A`), and the accrual block's blame runs back through
+`656dc1c` (*"close borrow-path #5 — narrow interest suspension to borrow asset"*), long before
+G-LEND round 1. Seven rounds passed over it. It is a real MEDIUM and it correctly reset the counter;
+it is **not** evidence that the hardened surface is churning.
+
+**This does not soften the reset.** Round 8 reset the count, full stop. The provenance matters for
+reading the trajectory, not for the arithmetic.
+
+### 19.6 The current engineer pass is NOT clean by its own account
+
+**Engineer-reported, not re-run by the PM: 54/58 mutants killed, four not killed.** The four are the
+**magnitude and boundary of the constant the pass itself introduced** — `MAX_FORGIVEN_GAP`.
+
+**The mechanism is VERIFIED from the diff**, which is what makes the report credible rather than
+merely accepted: the new tests warp by `p2.MAX_FORGIVEN_GAP()`
+(`git diff rh-chain/test/EsseyPool.t.sol` — four call sites), so **a mutation of the constant moves
+the test's own warp with it** and the test cannot see the change. That is the fifth-plus instance of
+the standing false-green shape — *a test that reads the constant it exists to pin* — and it is the
+same defect R4 LOW-1, R5 LOW-1, R6 LOW-3 and R7 LOW-2 each found in a different dress.
+
+**Grounded on disk:** the mutant script carries **58 mutants** (`grep -c '^    ("M'` → 58, last is
+`M58`), up from 42, with M43–M58 added for the new constant, its boundary, and the R8 MED-1 guard
+re-mutated so one classifier scores the pair. The engineer is correcting the four now.
+
+> **PM position: this pass does not go to the auditor until its own mutation gate is 58/58.** Handing
+> a round a surface whose new constant is unpinned spends a round discovering what we already know.
+
+### 19.7 What lending still needs BEYOND the gate — four things, and two are the founder's
+
+The gate is not the last step. Even at 3 of 3, `/lend` does not go live until:
+
+| # | Requirement | Owner | State |
+|---|---|---|---|
+| 1 | **Three clean rounds on frozen bytes** (rounds 10–12) | `essey-auditor` | **0 of 3** — §19.3 |
+| 2 | **Adversarial harness against a REAL deploy** — real wallets, real 4663, real assets | `essey-harness` | **Not started.** Cannot start: nothing is deployed (`rh-chain/broadcast/DeployMarkets.s.sol/` does not exist — VERIFIED this pass). This is a post-deploy gate, so it sits *after* the founder's deploy, not before it |
+| 3 | **The guardian-key decision** — single EOA or multisig | **FOUNDER** | Open. §19.8 |
+| 4 | **The cap** — per-market number and `maxPositionBps` | **FOUNDER** | **Now answered by the economist** — §19.9 |
+| 5 | **Deploy authorisation** — per-instance, founder-only | **FOUNDER** | Not available yet; gated on 1–4 |
+
+**Also still standing, unchanged from §18.2c:** the push of the (now) **31 commits** is blocked on
+decision #5, the live anti-scam-page falsehood. `origin/main` is at `6903bc6`;
+`git rev-list --count origin/main..HEAD` → **31** (VERIFIED). **Nothing is pushed and nothing is
+deployed.**
+
+### 19.8 The guardian key — why it is a decision BEFORE deploy, not after
+
+`address public immutable guardian;` — `rh-chain/src/EsseyMarkets.sol:126`, set once at `:169`
+(**VERIFIED this pass**). **There is no rotation. Ever.** A lost or unavailable guardian key
+permanently removes the only corporate-action lever, and the remedy is a full registry redeploy plus
+market migration.
+
+Note the asymmetry that has confused this decision before: **`LivenessOracle` has a *different*
+guardian, and that one CAN be rotated** (`proposeRotation`/`commitRotation`, `LivenessOracle.sol:203`,
+`:220`, 2-day timelock). The rotation that exists is not the one that matters here. The
+`EsseyMarkets` guardian is immutable and the choice is made at deploy or never.
+
+- **Multisig:** survives a lost or unavailable holder; costs signing latency against a 24h window —
+  survivable, since ex-dates are known weeks ahead (`RUNBOOK-EX-DATE-PAUSE.md` §4).
+- **Single EOA:** one lost key ends the lever permanently.
+
+### 19.9 The cap is ANSWERED — it is a tolerance decision, not a design one
+
+**Economist-reported (`don-economist`), UNVERIFIED by the PM — no cap-analysis doc exists on disk;
+`grep -rn '62_500\|74 days' docs/` returns only an unrelated round-8 caveat. What would settle it: the
+economist's model output committed to `docs/`.**
+
+- **Bad debt measured at $0 across every cap from $25k to $1M, over 74 days of both live feeds.**
+- Therefore the cap **does not trade off against bad debt.** It trades off against **tolerance** —
+  how much exposure the founder is willing to have open at once.
+- **Option A:** `$62,500`/market with `maxPositionBps` raised to **4,000** → **$25k tolerance**.
+- **Option B:** keep the current `$250,000` with `maxPositionBps` at 2,000 → **$100k tolerance**.
+- **The residual that dominates is wrongful seizure, not bad debt** — which is precisely what rounds
+  3–7 were spent closing (R3 HIGH-1's 2,592 bps harvest, R4 HIGH-1/HIGH-2's $381.84 and $1,618.18 on
+  a $1,472.67 position, `glend-round-4.md:606-607`).
+
+**Currently in the deploy script** (VERIFIED, `rh-chain/script/DeployMarkets.s.sol:395-396`):
+`cap: uint128(250_000 * 10 ** assetDecimals)` and `maxPositionBps: 2_000`. **Option B is what ships
+if unruled.**
+
+⚠️ **Editing `:395-396` pre-deploy edits the G-LEND audited surface** — the deploy script is in scope
+(R1 MED-2 and R2 LOW-3 were both `DeployMarkets` findings). Under rule 2 that **resets the counter**.
+**Rule the cap BEFORE rounds 10–12 start, or accept 250k/2000 and change it after deploy through the
+2-day timelock** (`EsseyMarkets.sol:735`, `:753`, `:795` — zero bytes to change it later).
+
+### 19.10 Decision list refreshed
+
+Ordered, with what changes on each branch, in
+[`PRODUCT-TRACKER.md`](PRODUCT-TRACKER.md) §DECISION LIST. Changes this pass: **#3 (cap) moves from
+*awaiting the economist* to *awaiting the founder*, with a deadline — before round 10 starts**;
+**#8 corrected 27 → 31 commits**; **#4 (guardian) re-grounded** and its ordering constraint restated
+(#4 gates #9; the deploy script refuses without `GUARDIAN`).
+
+---
+
 ## Update 2026-09-04 (18) — G-LEND rounds 5, 6, 7: the severity curve reaches zero
 
 **⚠️ This supersedes the G-LEND row in §17.8, which was three rounds stale.** Rounds 5, 6 and 7
@@ -1753,7 +1961,7 @@ the security PROPERTY went untested, through three green rounds.
 | Finding | Fix | Where |
 |---|---|---|
 | **HIGH-1** `PRICE_CONFIRM_DELAY` was not a delay: the rate limit ran on the PROMOTION clock, which any permissionless caller positions, so the delivered wait was one second on real AAPL for 2,592bps | a DELAY LINE: observations pushed no faster than `CONFIRM_STEP` apart, and the read is always the oldest of `CONFIRM_SLOTS`; `corroboratedValue` re-tests that age in both directions, so the property does not rest on the push cadence being right | `EsseyMarkets._confirmable` / `confirmedObservation` / `corroboratedValue` |
-| **HIGH-2** the breaker was load-bearing on an unsupervised keeper with a hand-typed market list, and failed OPEN | `MAX_CONFIRM_AGE` makes an unobserved market lose its corroborated price entirely (fail CLOSED); the keeper DERIVES its market list from `MarketCommitted` logs and alerts on any disagreement; `observe()` escalates like `beat()` does; **the on-chain symptom check now actually RUNS** — R8 LOW-1 found that the only launchd unit supervised the keeper process, while `check-liveness-keeper.mjs`, the sole thing that detects a keeper that is up and observing nothing, was scheduled nowhere and appeared only as a manual runbook command; a second unit runs it every 900s and pages on any non-zero exit; **the runbook and README, which omitted `ESSEY_MARKETS` and so instructed the operator into the vulnerable state, are corrected** | `EsseyMarkets.MAX_CONFIRM_AGE`; `keeper/liveness-keeper.mjs`, `keeper/market-list.mjs`, `keeper/check-liveness-keeper.mjs`, `keeper/xyz.essey.liveness-keeper.plist`, `keeper/xyz.essey.liveness-pager.plist`, `keeper/page-liveness-keeper.sh`, `rh-chain/README.md`, `rh-chain/RUNBOOK.md` |
+| **HIGH-2** the breaker was load-bearing on an unsupervised keeper with a hand-typed market list, and failed OPEN | `MAX_CONFIRM_AGE` makes an unobserved market lose its corroborated price entirely (fail CLOSED); the keeper DERIVES its market list from `MarketCommitted` logs and alerts on any disagreement; `observe()` escalates like `beat()` does; **a unit for the on-chain symptom check is BUILT AND DOCUMENTED — NOT INSTALLED** (R9 LOW-2: this row previously read "now actually RUNS", which was false on the operator machine) — R8 LOW-1 found that the only launchd unit supervised the keeper process, while `check-liveness-keeper.mjs`, the sole thing that detects a keeper that is up and observing nothing, was scheduled nowhere and appeared only as a manual runbook command; the second unit is written to run it every 900s and page on any non-zero exit, but its plist is a `__REPO__` TEMPLATE the operator must `sed` and load per `RUNBOOK.md:119-151`, and `launchctl list | grep liveness` returns nothing today. **Move this to installed only when `launchctl list | grep liveness-pager` returns a line and `.keeper-state/liveness-pager.log` shows one run that is not `NO PAGE SENT`**; **the runbook and README, which omitted `ESSEY_MARKETS` and so instructed the operator into the vulnerable state, are corrected** | `EsseyMarkets.MAX_CONFIRM_AGE`; `keeper/liveness-keeper.mjs`, `keeper/market-list.mjs`, `keeper/check-liveness-keeper.mjs`, `keeper/xyz.essey.liveness-keeper.plist`, `keeper/xyz.essey.liveness-pager.plist`, `keeper/page-liveness-keeper.sh`, `rh-chain/README.md`, `rh-chain/RUNBOOK.md` |
 | **MED-1** an unreadable price split the observation pair — Friday's price with Monday's multiplier, on a feed unreadable ~55h every weekend | `_syncPrice` returns whether it RECORDED, and `seenMultiplier` advances only when it did: a partial observation records nothing at all | `EsseyMarkets._syncPrice` / `syncMultiplier` |
 | **MED-2** `LIVENESS_GUARDIAN` alone was a permanent, UNRECOVERABLE kill switch for liquidation and borrowing | a 2-day timelocked `proposeRotation` / `commitRotation` of BOTH liveness roles, held by the market admin, cancellable only by it — a guardian that could veto its own removal restores the same dead end. **FOUNDER RULING NEEDED on the trade**, see MAINNET-CONFIG.md | `src/LivenessOracle.sol`; `script/DeployMarkets.s.sol` |
 | **MED-3** the deploy key held `pauseLiquidation` and `disableMarket`, which the doc block attributed to the guardian and `_roleKey`'s own rule exists to prevent | both are GUARDIAN-ONLY; admin keeps the timelocked route to the same outcome | `EsseyMarkets.pauseLiquidation` / `disableMarket` |
