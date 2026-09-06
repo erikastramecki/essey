@@ -11,6 +11,7 @@
 //   WARN  anything else — an airdrop or a meme token. Needs a human ruling, never an automatic listing.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getAddress } from "viem";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,32 @@ const decodeString = (hex) => {
     .toString("utf8")
     .trim();
 };
+
+const raw = readFileSync(join(HERE, "src", "reserve.ts"), "utf8");
+const listed = [
+  ...(
+    raw.match(/BASKET:\s*Address\[\]\s*=\s*\[([\s\S]*?)\]/)?.[1] || ""
+  ).matchAll(/"(0x[a-fA-F0-9]{40})"/g),
+].map((m) => m[1]);
+const miscased = listed.filter((a) => {
+  try {
+    return getAddress(a) !== a;
+  } catch {
+    return true;
+  }
+});
+
+if (miscased.length) {
+  console.error(
+    `\nreserve-basket: FAIL — ${miscased.length} BASKET address(es) fail viem's checksum.`,
+  );
+  for (const a of miscased)
+    console.error(`  ${a}  should be  ${getAddress(a.toLowerCase())}`);
+  console.error(
+    "  viem throws at encode time, so the page cannot read this token at all.\n",
+  );
+  process.exit(1);
+}
 
 const known = basket();
 const logs = await rpc("eth_getLogs", [
