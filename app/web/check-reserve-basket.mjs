@@ -24,7 +24,7 @@ const RH_BEACON = "e10b6f6b275de231345c20d14ab812db62151b00";
 
 // Non-equity tokens already seen and deliberately left off the page. Adding one here is a decision:
 // it says "we looked, and this is not backing." Never add a beacon-matching token to this list.
-const ACKNOWLEDGED = new Set(["0x8fa1248c3ec58f733e778b89c30526716cd70893"]); // Supercycle, sent 2026-09-05
+const ACKNOWLEDGED = new Set([]);
 
 const rpc = async (method, params) => {
   for (let i = 0; i < 6; i++) {
