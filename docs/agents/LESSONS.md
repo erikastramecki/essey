@@ -259,7 +259,7 @@ prose avoid the whole class; if a doc must name a location outside the repo, nam
 prefix. And note the second-order trap: agent continuity files are the highest-risk surface here,
 because their whole content is an agent narrating where its own files live.
 
-### L-016 — A gate that NORMALISES a value stops testing the property its consumer depends on
+### L-019 — A gate that NORMALISES a value stops testing the property its consumer depends on
 **Applies to:** essey-web-designer, essey-protocol-engineer, essey-harness, essey-auditor, essey-deployment-manager
 **Origin:** 2026-09-05 · essey-harness
 **The trap:** `check-reserve-basket.mjs` exists to guarantee the treasury page reads every token the

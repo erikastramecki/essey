@@ -25,8 +25,15 @@ if (!existsSync(LESSONS))
   );
 else {
   const blocks = readFileSync(LESSONS, "utf8").split("\n### ").slice(1);
+  const ids = [];
   for (const b of blocks) {
     const title = b.split("\n")[0].trim();
+    const id = title.split(/[\s\u2014]/)[0].trim();
+    if (ids.includes(id))
+      problems.push(
+        `LESSONS.md has TWO entries numbered ${id} — concurrent writers collided.`,
+      );
+    ids.push(id);
     if (!/^\*\*Applies to:\*\*\s*\S/m.test(b))
       problems.push(
         `LESSONS.md "${title}" has no **Applies to:** line — it routes to nobody and nobody will read it.`,

@@ -156,3 +156,43 @@ four build gates are exit 0 again. Uncommitted after my run:
 `docs/AGENT-COMPANY-FOUNDATION.md`, `docs/agents/LESSONS.md`,
 `docs/agents/continuity/essey-auditor.md`. The lending files and two peers' continuity files in the
 tree are not mine.
+
+### The parallel sweep paid for itself — and the lesson is about how I USED it
+I dispatched a doc-consistency sweep and it came back with 6 HIGH + 15 MED that my own targeted
+passes (paths, secrets, competitor names, on-chain claims) would never have found, because they were
+CROSS-DOCUMENT contradictions — doc A vs doc B, never wrong on its own page. I inherited none of it
+as truth. Every load-bearing claim I re-derived myself, and re-deriving CHANGED two of them:
+
+- Its **MEDIUM-G** flagged an open pre-push history-scrub blocker (`MAINNET-ACTIVATION.md:1388-1394`,
+  commit `04e763d` allegedly still carrying another private repo's name) and labelled it SUSPECTED,
+  unresolvable from a file snapshot. It IS resolvable, from git. `git branch -r --contains 04e763d`
+  → nothing, and pickaxe over all 336 public commits
+  (`git log -S'essey-ceremony' --oneline origin/main`) returns exactly ONE commit: `52667c3`, which
+  is in this push. **So the old scrub DID run; what is public is the NEW leak I found, not a
+  residual.** Same for `assay-design`. That converts a scary unknown into a precise, bounded fix and
+  it strengthens my M-1 rather than duplicating it.
+- Its **HIGH-1** (a pager described as running every 900s) I did not take from the three docs it
+  quoted. `launchctl list | grep -ci liveness` → **0**, `ls ~/Library/LaunchAgents | grep -ci
+  liveness` → **0**. Ground truth, from the machine, not from a doc agreeing with another doc.
+
+**Technique to keep:** a subagent is excellent at the fan-out that is expensive for me (24 docs,
+pairwise) and I am the one who must close each finding against the SYSTEM — git, the chain, launchctl.
+Split it that way deliberately next time instead of treating delegation as all-or-nothing. And when a
+sweep says "cannot be verified from this snapshot," that is usually a statement about the snapshot,
+not about the world: ask what OTHER instrument answers it.
+
+**What I would have shipped without it:** a NOT-CLEAN verdict missing the fact that `BASE-LAYER.md:142`
+calls lending "audited" on a doc `gen-docs.mjs:39` renders to essey.xyz as "if you read one protocol
+doc, read this," against a standing retraction at `MAINNET-ACTIVATION.md:1582`. That is the worst
+finding of the round and it is not in a contract.
+
+### The disclosure class I under-weighted and will lead with next time
+`docs/agents/continuity/essey-launch-economist.md:39-50` publishes, on a public repo, the anti-snipe
+economics of an UNLAUNCHED token: the rejected design's front-run profit (+$6,611) vs the shipped
+surcharge (-$302), that `snipeSeconds` is **immutable at deploy**, and that raising it is an OPEN
+founder ask. Read by the adversary it defends against, on a chain whose mempool is public, that says:
+the parameter is at a value the team itself suspects is too low, and it can never be changed.
+**Continuity files are a disclosure surface, not scratch paper.** Their whole content is an agent
+narrating internal state — open decisions, gaps, where the guards are not. I audited them for PATHS
+and did not, at first, audit them for STRATEGY. Next pre-push: read every continuity file as if the
+adversary is the reader, before any grep.
