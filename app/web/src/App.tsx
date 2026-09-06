@@ -1071,8 +1071,9 @@ function Footer() {
             been seeded against it. "Payout," never "dividend": protocol fee
             distributions are mechanically LP-style fee-shares, not dividends,
             not yield promises, and no payout is guaranteed, ever. The contracts
-            are adversarially audited, with the rounds published in the
-            technical docs. The D.O.N. game is <b>not open here</b>: it runs
+            that are deployed have been through adversarial audit rounds
+            published in the technical docs; lending is built-not-audited and
+            not deployed. The D.O.N. game is <b>not open here</b>: it runs
             separately in play-money Scrip with no real value, and nothing in it
             is real stock.{" "}
             <button

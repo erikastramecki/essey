@@ -166,3 +166,50 @@ silently degrades rather than 500ing. But `api/` is typechecked by NOTHING that 
   Check the deployment list BEFORE theorising about what a build will do.
 - `vercel ls <project> --prod` + `vercel inspect https://<alias>` tells you whether the thing you are
   "gating" has already shipped. Run it FIRST next time.
+
+## 2026-09-06 (Sunday) — frozen round, member 2 of 3: live-site verification of yesterday's fixes
+
+Subject pinned `d7e471696033`, tree `61382dfcc1b47c1c`. Opened INTACT, closed **VOID** — see below.
+
+### My own prior findings: which held
+- **Supercycle checksum (I filed it HIGH): FIXED, verified on the LIVE page, not the repo.** Served
+  bundle `https://essey.xyz/assets/index-DPnMhTNW.js` (sha256 `678c7799…2959a`) carries
+  `0x8FA1248C3ec58F733e778B89c30526716Cd70893`; I pulled all 15 BASKET addresses out of the SERVED
+  bytes and ran each through `getAddress()` — 0 miscased. Rebuilt the page's exact client
+  (`http(RPC,{batch:true})` + `batch:{multicall:true}`) and read all 15: 0 failures, Supercycle
+  balance 13,730,613.213042. Live DOM: `INCOMPLETE READ` absent, 0 "unreadable", Supercycle renders
+  a real floor of 1.544693 per 1,000 $ESSEY. Console clean.
+- **The gate that missed it: genuinely fixed, and I watched it go red.** Mutation planted in an
+  isolated `git archive HEAD` tree, driven through the REAL caller (`app/deploy.sh:39`'s
+  `( cd "$WEB" && npm run build )`), not by hand: `reserve-basket: FAIL — 1 BASKET address(es) fail
+  viem's checksum`, names both the bad and the correct string, **exit 1**. Restored byte-exact
+  (sha `61703c6a…2170`) → **exit 0**. Attribution clean.
+- **Better than asked: the checksum assertion is fail-CLOSED offline.** It sits ahead of the first
+  `rpc()` call, so it is NOT inside the L-017 SKIP hole. Proved by pointing RPC at dead port 9 while
+  the bad address was planted: still FAIL, still exit 1. That closes half of L-017 for this gate;
+  the eth_getLogs reconciliation half still SKIPs to 0 on an unreachable RPC.
+
+### The near-miss I have to write down, because I nearly shipped it as a HIGH
+I mutated `**Applies to:**` in LESSONS.md with `str.replace(..., 1)` and watched real-HOME exit 1 /
+empty-HOME exit 0, and drafted a finding that `e032187`'s "repo checks still enforced" was a lie. It
+is not. My anchor hit the FIRST occurrence, which lives in the file's preamble, not inside any
+`### L-0xx` block — so the Applies-to check never fired and real-HOME failed for an unrelated reason
+(FOUNDATION fingerprint drift, which IS charter-derived and legitimately cannot run without charters).
+Re-run with the anchor placed inside the L-019 block: empty HOME **exit 1**, names L-019. The gate is
+honest. **What saved me was reading the control run's MESSAGE, not just its exit code** — the two runs
+failed for different reasons and only the text showed it. CLAUDE.md's "verify the diagnostic" rule and
+my own 2026-09-05 hex-conversion false alarm are the same lesson twice; I get it now: an alarm about a
+peer's fix is the single highest-cost thing I can get wrong. My own charter's corollary says check the
+exit code not the message — the complete rule is check BOTH, because the exit code alone cannot tell
+you WHICH property failed.
+
+### Technique worth repeating
+`grep -oE` with nested quantifiers against the 4.5MB minified bundle hung for 120s and then errored.
+Fixed-string `grep -F` is the right tool against a served bundle, and it is what actually established
+the doc-claim result. See L-021 — the shell `grep` here is ugrep and it EXITS 0 on that error.
+
+### Seam feedback I owe essey-web-designer
+The five doc corrections held, but the sweep was scoped to `docs/*.md` and the same claim survives in
+three React copy sites (`lend-ui.tsx:179`, `App.tsx:1074`, `market.tsx:417`). When I hand a copy
+finding forward I will name BOTH surfaces explicitly — rendered markdown AND `app/web/src` JSX — because
+"the docs say X" and "the site says X" are different greps and only one of them was run.

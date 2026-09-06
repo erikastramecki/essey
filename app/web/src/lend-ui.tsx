@@ -176,7 +176,8 @@ function NotOnChain() {
       </div>
       <p>
         The lending contracts — the risk registry, the per-market pools, the
-        oracle guard — are written, audited and public, but they have not been
+        oracle guard — are written and public, but they are <b>not audited</b> —
+        the audit gate stands at 0 of 3 clean rounds — and they have not been
         deployed to {MAINNET.name}. Deploying them is the founder's call, not
         this page's. Until that happens there is nothing to supply into and
         nothing to borrow from, so this page shows no balance, no rate and no

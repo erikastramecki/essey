@@ -152,9 +152,8 @@ export function WarningModal() {
           </li>
           <li>
             <b>There's also a game.</b> Essey runs an experimental game — D.O.N.
-            Its tokens are play-money Scrip
-            with <b>no real value</b>; nothing you win there is real stock. The
-            full game terms live on the{" "}
+            Its tokens are play-money Scrip with <b>no real value</b>; nothing
+            you win there is real stock. The full game terms live on the{" "}
             <Link to="/dons" onClick={accept}>
               Dons entry
             </Link>
@@ -201,8 +200,8 @@ export function GameHero() {
             A city of <b className="num">8,888</b> founding families. Send your
             Don on timed jobs with the odds published on-chain, build up the
             House, mint a crew, and rob the neglectful — while everything you
-            bank stays untouchable, forever. Season Zero is a play-money preview:
-            same rules, same odds, zero real stakes.
+            bank stays untouchable, forever. Season Zero is a play-money
+            preview: same rules, same odds, zero real stakes.
           </p>
           <div className="hero-cta">
             <Link className="btn btn-gold" to="/game">
@@ -365,10 +364,10 @@ export function EngineSection() {
           ))}
         </div>
         <div className="twist-status" style={{ marginTop: 16 }}>
-          Built and fork-tested against real Robinhood Chain state, playable
-          now with play money. The full specs (oracle discipline, risk
-          framework, rate model, and everything still open) are in the technical
-          docs, rendered from the repo's own files.
+          Built and fork-tested against real Robinhood Chain state, playable now
+          with play money. The full specs (oracle discipline, risk framework,
+          rate model, and everything still open) are in the technical docs,
+          rendered from the repo's own files.
         </div>
       </div>
     </section>
@@ -414,11 +413,12 @@ export function ProvableTwist() {
         </div>
         <div className="twist-status">
           Status, honestly: the contracts are{" "}
-          <b>adversarially audited across published rounds</b>. You can play the
-          whole thing with play money right now, and every
-          event links a real transaction. The game runs as a play-money preview; the
-          base layer — the $ESSEY token and its on-chain floor reserve — is live
-          on Robinhood Chain mainnet.{" "}
+          <b>adversarially audited across published rounds</b> — that covers
+          this market layer, not the undeployed lending stack. You can play the
+          whole thing with play money right now, and every event links a real
+          transaction. The game runs as a play-money preview; the base layer —
+          the $ESSEY token and its on-chain floor reserve — is live on Robinhood
+          Chain mainnet.{" "}
           <a
             href={`${REPO}/tree/main/docs/audits`}
             target="_blank"

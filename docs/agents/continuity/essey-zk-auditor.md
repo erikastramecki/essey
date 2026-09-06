@@ -122,7 +122,7 @@ BLIND SPOTS I measured (each exit 0, i.e. NOT caught):
 ceremony checkout" leaked via absolute paths, and history had to be REWRITTEN. The same class of
 leak recurred through the tilde blind spot. Same shape, different quoting.
 Also public via the same blind spot: `~/Developer/essey-markets` and `~/Developer/assay-design`.
-Absolute `/Users/erikastramecki/...` paths exist in 6 files but were NOT new in this push
+Absolute `~/...` paths exist in 6 files but were NOT new in this push
 (pre-existing on origin/main) — real exposure, not caused by this round.
 
 ### Circuits: nothing to gate this round
@@ -157,7 +157,7 @@ I did NOT run the adversarial suite (needs circom + a ptau); per BC-001 I do not
   does disclose that one ordinary EOA key controls 100% of supply, and
   `only-real-essey-contract.md:18` names it — an honestly-disclosed accepted risk, and the address
   is trivially derivable from the single genesis Transfer event, so the marginal disclosure is low.
-- Pre-existing, NOT caused by this push and already public: absolute `/Users/erikastramecki/...`
+- Pre-existing, NOT caused by this push and already public: absolute `~/...`
   paths in `rh-chain/xyz.essey.game-keeper.plist`, `pfp/extract_leaves.py`,
   `pfp/extract_structure.py`, `app/web/_private_haircut_smoke.mjs` and two RESUME docs. The hook
   only scans NEWLY STAGED files, so it will never catch these — a content gate that only runs on
@@ -171,3 +171,161 @@ I did NOT run the adversarial suite (needs circom + a ptau); per BC-001 I do not
    `git ls-remote` is the only authoritative answer and it costs one second.
 3. When a gate is named in my task, test the SKIP path first, not the happy path. Both fake gates I
    found this round were fine on the happy path and empty on the skip path.
+
+## 2026-09-06 — frozen audit round (member 3 of 3), pinned d7e471696033 / tree 61382dfcc1b47c1c
+
+Charter on disk was BYTE-IDENTICAL to my spawn copy this session (diffed by reading both) — the
+L-014 drift case did not apply, but I checked rather than assumed.
+
+### CHECKPOINT 1 — HIGH: the HIGH-1 paren fix is INCOMPLETE, and I watched it fail
+
+The fix is `re.sub(r"^[(){}\s]+", "", segment)` in BOTH `all_segments()` and `git_segments()`
+(guard-git.py ~:88 and ~:127). It strips the OPENING delimiter and nothing else. RULE 1's branch
+test (guard-git.py:150) is
+`re.search(r"(?:^|\s)(?:main|master|HEAD:main|origin\s+main)(?:\s|$)", segment)` and requires
+whitespace-or-end AFTER `main`. The trailing `)` survives the strip, so `main)` never matches and
+RULE 1 `continue`s.
+
+Watched in the REAL PreToolUse hook (not a harness), nonexistent remote + no push possible:
+  BLOCKED (RULE 1)  `GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main`
+  REACHED GIT       `(GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main)`  EXIT=128
+  REACHED GIT       `( (GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main) )` EXIT=128
+  BLOCKED (RULE 1)  `( GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main )`   <- space saves it
+  BLOCKED (RULE 1)  `{ GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main; }`  <- `;` split saves it
+  REACHED GIT       `sh -c "git push nosuchremote-probe main"` EXIT=128, NO hatches needed at all
+The single-variable control is the pair 1/2: identical bytes, one adds `( )`, and RULE 1 flips from
+BLOCK to PASS. Without hatches the paren form still hits RULE 2b, so the message text is the tell —
+`(git push … main)` printed "0 of 3 clean audit rounds", never "push to main/production", which is
+how I know RULE 1 missed rather than something else catching it.
+MY OWN ERROR TO NOT REPEAT: I nearly reported "paren form blocked" from that RULE 2b message. The
+rule that fires is not the rule you tested; read WHICH message came back.
+
+`sh -c` is the wider hole and was named in L-016's Apply line ("inspect sh -c/bash -c payloads") —
+the fix took the paren half only. Anything not starting with git still yields no segments and
+guard-git.py:141-142 `if not segments: sys.exit(0)`.
+
+Reads unaffected: `git log --oneline -1`, `git status --porcelain`, `git diff --stat` all EXIT=0.
+The RULE 2 false positive I reported last round is UNFIXED and unchanged:
+`git show HEAD:.githooks/pre-commit` is still BLOCKED for a missing style receipt because RULE 2
+greps `\bcommit\b` over the whole segment. Fails closed, so LOW; use the Read tool for such paths.
+
+### CHECKPOINT 2 — tools/audit-round.py, read as an attacker
+
+Attacked in an ISOLATED repo built in scratchpad (never `open`/`close` in the real repo mid-round —
+that destroys the live pin). Built it with `git init` + `git add` and NO commit, because the tool only
+needs the index; that also sidestepped guard-git RULE 2 without evading it.
+
+WHAT HOLDS (I tried to break these and failed):
+- Tracked TEXT edit mid-round -> ROUND VOID, exit 1. Core claim is real.
+- BINARY edit while the file was ALREADY dirty -> VOID. My hypothesis was that `git diff` prints only
+  "Binary files ... differ" with no content hash, so a second edit to an already-dirty .zkey/.ptau
+  would be invisible. REFUTED: the diff carries `index <old>..<new>` and the new blob sha moves the
+  hash. Good news for ceremony artefacts; I record it because I nearly reported it as a hole.
+
+WHAT FAILS OPEN (each watched, exit 0 where it should have been 1):
+- UNTRACKED FILES ARE NOT IN THE SUBJECT. `subject()` collects `dirty` from `git status --porcelain`
+  but `moved = [k for k in ("head","tree","work")]` never compares it. Dropped `Backdoor.sol` into the
+  repo mid-round: status showed `?? Backdoor.sol`, check printed INTACT, exit 0. Same L-017 shape —
+  the value is collected and then discarded. Untracked `.sol` files are a NORMAL state in this repo
+  (the session-start git-status snapshot in my prompt listed seven), and forge compiles from the
+  directory, so this is not hypothetical.
+- `open` SILENTLY RE-PINS an already-open round. No refusal, no warning. Ran `open` on a round that
+  was currently VOID; the next `check` printed INTACT. Any agent that runs `open` for its own purposes
+  re-blesses everyone else's round.
+- THE PIN IS UNSIGNED AND `check` PRINTS THE PIN, NOT REALITY. `.runs/` is gitignored
+  (.gitignore:78), the pin is plain JSON. I hand-rewrote only the `work` field after smuggling a line
+  into a tracked file; check went VOID -> INTACT and printed
+  `round INTACT on HEAD (tree 9d2baca3c9d81560)` — BYTE-IDENTICAL to the honest line, because the
+  success path prints `pinned['head']` and `pinned['tree']`, values read from the file being
+  validated, and NEVER prints `work`. So the out-of-band sha in the task prompt does NOT detect this
+  forgery: the forger keeps head/tree and moves only the field that is never displayed.
+- `git()` ignores returncode and stderr. In a repo with no commits it pinned the literal string
+  "HEAD" as the head and printed `round OPEN on HEAD`. Nothing validates that head is 40 hex chars.
+- The docstring says `open` will "refuse if the tree is dirty". It does not — it prints a note and
+  pins anyway. A false claim about a gate, in the gate's own docstring.
+
+THE STRUCTURAL ONE, and it hit this very round TWICE:
+Continuity files are TRACKED, so writing one moves `work` and VOIDS the round. Every charter orders
+"write your continuity BEFORE you report". I wrote mine, watched check go VOID, saved the text to
+scratchpad and `git checkout --`'d the file to restore INTACT. Then, unprompted, essey-auditor's
+continuity file appeared in the diff and grew live (diff 33028 -> 35764 bytes between two of my
+commands) — and then vanished again. A peer independently hit the same wall and made the same
+revert. Two of three auditors, same round. A gate that its own users must routinely revert to satisfy
+is a gate everyone will learn to ignore.
+
+RECOMMENDED FIXES (cheap, in priority order):
+1. Exclude auditor-owned paths (`docs/agents/continuity/`, `docs/agents/LESSONS.md`) from `subject()`
+   via `:(exclude)` pathspecs. Without this the tool is unsatisfiable by its own process.
+2. Store PER-PATH hashes in the pin and have VOID NAME THE FILE. `check` currently says only "work
+   moved" — attributing one VOID cost me most of this round.
+3. `check` must print OBSERVED values (and `work`) on the success path, not the pinned ones.
+4. `open` exits 1 if a pin already exists, unless `--force`.
+5. Fold untracked-but-not-ignored files into the subject
+   (`git ls-files --others --exclude-standard` + their content hashes).
+6. Assert `head` matches `^[0-9a-f]{40}$`; make `git()` raise on non-zero returncode.
+
+### CHECKPOINT 3 — MY OWN DECODE ERRORS THIS ROUND (both caught by me, both nearly shipped)
+1. `stat -f '%Sm' -t '%H:%M:%S'` prints TIME WITH NO DATE. I compared 10:03 against 20:08 and
+   concluded an audited contract had been edited mid-round. Two of those timestamps were from
+   2026-09-04. Always `-t '%Y-%m-%d %H:%M:%S'`.
+2. Reconstructing the tool's `work` hash, I used `subprocess...stdout` while audit-round.py's `git()`
+   returns `stdout.strip()`. My hashes were never comparable to the pinned value, and that mismatch is
+   what sent me down the false trail in (1). WHEN RE-DERIVING A TOOL'S HASH, COPY ITS HELPER VERBATIM.
+   Corrected reconstruction proved the four audited files NEVER moved. I nearly reported "an audited
+   contract changed during the round" — a false alarm about a contract, which is exactly the class of
+   claim that must be re-derived a second way before it is spoken.
+
+### CHECKPOINT 4 — L-018 / MEDIUM-1 is MINE, and I watched the hook miss it
+Isolated repo, real staged blobs, hook invoked with the repo as cwd exactly as git execs it:
+  benign doc                                    -> EXIT 0
+  `~/Developer/essey-ceremony/...` -> EXIT 1 (the rule at .githooks/pre-commit:67)
+  `~/Developer/essey-ceremony/...`                     -> EXIT 0   <-- the actual leak, unseen
+Both leaked directories EXIST on disk (`ls -d` returned them), so the names are real private repos.
+The hook is diff-scoped (`git diff --cached --name-only --diff-filter=ACM`, line 13): I unstaged
+everything, left the leak on disk, and it exited 0. It can only prevent RECURRENCE — it can never
+clean the ~20 lines already in the tree.
+
+I CORRECTED THE PEER'S BOUNDED-REWRITE PREMISE. essey-auditor was right about the mechanism and right
+that `~` is a different string — that finding is theirs and it is a good one. But "the names appear in
+exactly one commit out of 336" does not reproduce at the pinned sha: `git log -S` over HEAD's own
+ancestry gives essey-ceremony 2 commits, assay-design 2, essey-markets 5, and scanning every commit
+for ADDED lines matching `~/Developer/` gives SEVEN (401c0a4, 196fc92, 04a3a81, 58523e1, 52667c3,
+129efc4, e032187). Total commits is 355, not 336. The earliest, 401c0a4, sits 160 commits back, and
+rewriting it rewrites every descendant sha. So the rewrite is NOT bounded, and I recommend against it.
+
+MY RECOMMENDATION: fix forward, do not rewrite. The repo is public and already pushed
+(`git ls-remote` = 9e45758, which is d7e4716's parent — only the round-tool commit is unpushed), a
+rewrite does not remove objects from forks, clones or GitHub's sha-addressable cache, and it destroys
+the deliberate public audit trail. Replace the ~20 lines with repo-relative paths or placeholders in
+ONE commit, and add a TREE-WIDE (not diff-scoped) scan, because a diff-scoped hook structurally
+cannot clean what is already committed — that was my finding last round and it is still true.
+
+HOOK PATCH — PROPOSED, AND I WATCHED IT GO RED FIRST (baseline above: tilde form exited 0):
+Insert before the api-key rule in .githooks/pre-commit:
+  printf '%s' "$blob" | grep -qE '(^|[^A-Za-z0-9._/-])(~|\$HOME|\$\{HOME\})/(Developer|Documents|Desktop)/' \
+    && say "BLOCKED: $f — home-relative path naming a private directory."
+Matrix, all watched: BLOCK `~/Developer/`, `$HOME/Developer/`, `${HOME}/Documents/`, `~/Desktop/`;
+absolute form still blocks (no regression); PASS `~/.claude/agents/...`, a repo-relative path, and
+the prose "~5 Developer/hours". `~/.claude/` is deliberately excluded — every charter quotes it and
+check-agent-wiring.mjs REQUIRES the literal `cat ~/.claude/agents/<name>.md` in each charter, so
+matching it would make the hook cry wolf and get bypassed with COMMIT_SECRET_OK=1.
+
+### CHECKPOINT 5 — the two fixes I was asked to break
+MEDIUM-2 (check-agent-wiring discarding repo findings) is GENUINELY FIXED. Isolated `git archive HEAD`
+tree, HOME pointed at an empty temp dir (the Vercel configuration): clean repo EXIT 0; one unrouted
+lesson EXIT 1 naming it; duplicate L-016 EXIT 1 in BOTH the empty-HOME and the real-HOME
+configuration. Credit where due — this closes the hole I reported last round.
+One residual, LOW: `--stamp` exits 0 while discarding `problems` it already collected, so an operator
+stamping a LESSONS.md that has a duplicate id gets a success message. The next non-stamp run still
+catches it, so nothing is laundered permanently.
+LOW, new: guard-git's `target_cwd()` resolves `cd "$R"` by `os.path.isdir()` on the UNEXPANDED token,
+so a `cd` to a shell VARIABLE fails to resolve and the style receipt is computed against the WRONG
+repo's HEAD — I watched it demand `style-d7e4716` for a commit in a scratchpad repo.
+
+### CHECKPOINT 6 — circuits, confirmed not re-derived
+`git diff --stat 58fff0b d7e4716 -- rh-chain/circuits-nova/ rh-chain/src/private/ '*Verifier*.sol'`
+is EMPTY. The clearance I recorded at 58fff0b therefore stands unchanged at the pinned sha; I did not
+re-derive it. transaction.circom blob bce0b2af, transaction2.circom fc836105, PoolVerifier2.sol
+4d511c61. The round-frozen uncommitted diff contains no zk surface: grepping it for
+verifier|proof|nullifier|commitment|circom|zkey|groth|merkle|shielded returned zero hits.
+

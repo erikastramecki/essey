@@ -14,6 +14,7 @@ how a stranded mutant survived a run once already.
 """
 
 import hashlib
+import re
 import json
 import pathlib
 import subprocess
@@ -27,17 +28,31 @@ def git(*a):
     return subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True).stdout.strip()
 
 
+EXCLUDED = (":(exclude)docs/agents/continuity", ":(exclude)docs/agents/LESSONS.md")
+
+
 def subject():
     head = git("rev-parse", "HEAD")
+    if not re.fullmatch(r"[0-9a-f]{40}", head):
+        print(f"REFUSED: HEAD did not resolve to a sha ({head!r}).", file=sys.stderr)
+        sys.exit(1)
     dirty = git("status", "--porcelain")
     tree = hashlib.sha256(git("ls-files", "-s").encode()).hexdigest()[:16]
-    work = hashlib.sha256((git("diff") + git("diff", "--cached")).encode()).hexdigest()[:16]
+    diff = git("diff", "--", *EXCLUDED) + git("diff", "--cached", "--", *EXCLUDED)
+    untracked = "\n".join(
+        l for l in git("ls-files", "--others", "--exclude-standard").splitlines()
+        if not l.startswith("docs/agents/")
+    )
+    work = hashlib.sha256((diff + untracked).encode()).hexdigest()[:16]
     return {"head": head, "tree": tree, "work": work, "dirty": dirty}
 
 
 cmd = sys.argv[1] if len(sys.argv) > 1 else "check"
 
 if cmd == "open":
+    if PIN.exists():
+        print("REFUSED: a round is already open. Close it deliberately before re-pinning.", file=sys.stderr)
+        sys.exit(1)
     s = subject()
     PIN.parent.mkdir(exist_ok=True)
     if s["dirty"]:
@@ -66,4 +81,4 @@ if moved:
     print(f"  now    head {now['head'][:12]} tree {now['tree']} work {now['work']}", file=sys.stderr)
     print("  Discard every verdict from this window and re-open on the new sha.", file=sys.stderr)
     sys.exit(1)
-print(f"round INTACT on {pinned['head'][:12]} (tree {pinned['tree']})")
+print(f"round INTACT — observed head {now['head'][:12]} tree {now['tree']} work {now['work']}")

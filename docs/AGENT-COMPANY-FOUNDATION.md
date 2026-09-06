@@ -281,12 +281,17 @@ charter that does not read its own slice, or a missing continuity file.
 **Be honest about its limit.** It checks the *wiring*, which is falsifiable. It cannot check that an
 agent read or understood anything. Do not let a passing gate feel like a working culture.
 
-**And be honest about where it runs.** The charter files live outside the repo, so on a build machine
-that has no `~/.claude/agents` the gate exits 0 — including for the LESSONS.md and fingerprint
-problems it has *already* collected by that point, which need no charters at all. Measured
-2026-09-05 (L-017): one identical broken lessons file, exit 1 on the developer machine and exit 0 on
-build-machine conditions. Until the early exit is moved below the reporting step, "fails the build"
-above means the build you run locally, not the deploy.
+**And be honest about where it runs.** The charter files live outside the repo, so a build machine
+with no `~/.claude/agents` can never check a charter. It used to exit 0 there for the LESSONS.md and
+fingerprint problems it had *already* collected too, which need no charters at all (L-017, measured
+2026-09-05: one identical broken lessons file, exit 1 on the developer machine and exit 0 on
+build-machine conditions). `e032187` split that: lesson-structure checks are pure repo and now bind
+everywhere, and only the roster FINGERPRINT is skipped where the charters are absent, which is stated
+in the output rather than implied. Re-measured 2026-09-06 in an isolated `git archive HEAD` tree with
+`HOME` pointed at a directory holding no charters: a stripped `**Applies to:**` line exits 1 and names
+the lesson, a duplicated `L-` id exits 1 and names the collision, and the unmodified tree exits 0. So
+"fails the build" above now means the deploy too — for the repo half. The charter half is still
+local-only, and that is inherent.
 
 **And be honest about what a string-matching gate can see at all.** The pre-commit hook blocks
 absolute home paths in the `/Users/<name>/...` form, which is the form the incident that motivated it
@@ -419,4 +424,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: a964f5c190bb8c36 -->
+<!-- STRUCTURE-FINGERPRINT: 47fd7442fd9af36b -->

@@ -162,7 +162,7 @@ function TreasuryBar({ st }: { st: TreasuryState | null }) {
             {st
               ? st.unpricedHeld === 0
                 ? "none"
-                : `${st.unpricedSymbols.join(" ")} — no price source`
+                : `${st.unpricedSymbols.join(" ")} — no live mark (feed stale or absent)`
               : "—"}
           </span>
         </div>

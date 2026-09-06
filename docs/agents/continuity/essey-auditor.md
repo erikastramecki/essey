@@ -196,3 +196,169 @@ the parameter is at a value the team itself suspects is too low, and it can neve
 narrating internal state — open decisions, gaps, where the guards are not. I audited them for PATHS
 and did not, at first, audit them for STRATEGY. Next pre-push: read every continuity file as if the
 adversary is the reader, before any grep.
+
+## 2026-09-06 — frozen round on d7e4716 (member 1 of 3), auditing what is ALREADY LIVE
+
+Charter on disk matched my spawn copy. Round pinned with the new `tools/audit-round.py`; I am its
+first user and I did not take it on trust.
+
+### CHECKPOINT 1 — the freeze tool itself
+Watched it go red: appended one line to `rh-chain/src/EsseyPool.sol` (tracked, dirty) → `ROUND VOID
+(work)` exit 1; restored from a scratch copy, sha256 identical, `round INTACT` exit 0. So I may cite
+it for TRACKED content.
+It has a hole: `subject()` compares only `head`, `tree` (= sha of `git ls-files -s`, the INDEX) and
+`work` (= sha of `git diff` + `git diff --cached`). It RECORDS `dirty` (`git status --porcelain`) and
+never compares it. Proven: `echo … > rh-chain/src/PlantedMidRound.sol` (untracked) → still
+`round INTACT`, exit 0. An entire new contract can be dropped into the audited tree mid-round without
+voiding it — and untracked `.sol` files are exactly what this repo's working tree carries between
+rounds. Fix: add `"dirty"` to the compared key list, or hash `git status --porcelain` into `work`.
+
+### CHECKPOINT 2 — the subshell fix is three shapes wide, and its commit message is wrong
+`e032187` fixed `git_segments()` by stripping `^[(){}\s]+`. Measured against the real script with the
+real payload shape: `( )`, `(( ))`, `{ ; }` now exit 2. TWELVE other shapes still exit 0 —
+`sh -c`, `bash -c`, `eval`, `env`, `command`, `time`, `\git`, `$(…)`, backticks, `if …; then`,
+`xargs`, `nohup`.
+The commit message states, in public, that `sh -c "git push"` "against this hook it already exits 2,
+so I am recording that half as not reproduced." It does not. Both registered PreToolUse guards
+(guard-git.py AND guard-deploy.py) return 0 for `sh -c "git push"` and for
+`sh -c "git push origin main"`, while bare `git push` returns 2.
+Confirmed through the REAL caller, not a harness: bare `git push audit-probe-nonexistent-remote main
+--dry-run` → hook BLOCKED it; `sh -c "git push audit-probe-nonexistent-remote main --dry-run"` →
+reached git and returned git's own exit 128. With `origin` in place of the probe remote that is an
+unapproved production push.
+**Lesson for me: when a fix closes a bypass CLASS, the fix must be measured against the class, not
+against the one example in the report.** A leading-character strip is a whitelist of three
+characters; the class is "git not in command-initial position".
+
+### CHECKPOINT 3 — the Supercycle checksum fix works, and it did not generalise
+`app/web/check-reserve-basket.mjs` now asserts every BASKET entry through viem's `getAddress`, and
+the assertion sits BEFORE the RPC call so the L-017 SKIP path cannot swallow it. Watched red twice:
+replanting the exact shipped address `0x8fA1248c…` → exit 1 naming it; the all-lowercase form → exit
+1. Restored byte-identically (sha256 `61703c6a…`), round re-checked INTACT.
+Measured viem's actual contract so I was not guessing at severity: `isAddress(lowercase)` true and it
+ENCODES fine; `isAddress(bad mixed case)` false and `encodeFunctionData` throws `InvalidAddressError`.
+So the gate is STRICTER than the consumer (it also rejects lowercase). False-positive-only direction;
+accepted, and worth it because it forces a canonical form.
+The commit's own "NOT PINNED BY ANY TEST" said only BASKET is checked. I checked the rest: 84 address
+literals across `app/web/src` + the gates, and **2 fail viem**. One is a test sink. The other is
+`app/web/src/live.ts:69` `BUNDLE = "0x…B0B1"`, reached by `live-ui.tsx:551` and `:862` →
+`flows.setPayoutToken` (`live.ts:678`) → `send()` → `writeContract`. Proven by encoding the real
+`setPayoutToken(uint256,address)` ABI with the real literal: `InvalidAddressError`. Correct form is
+all-lowercase `…b0b1`. The "Get paid in → Bundle" button on the live site cannot ever build a
+transaction.
+**Lesson for me: when a fix is scoped to one list, the audit job is to enumerate the rest of the
+class in the same pass — it cost one `node -e` over 84 literals and it found a live one.**
+
+### CHECKPOINT 4 — the frozen lending changeset (`_growth` / MAX_FORGIVEN_GAP)
+Audited from an isolated copy of the EXACT frozen subject, not the worktree: `git archive HEAD` →
+`git apply` of `git diff` → copied `rh-chain/lib` (55M, untracked, and I may not symlink it because
+guard-git RULE 0 blocks a link into ~/Developer). Verified the copy by sha256 against the live file
+before running anything. This is now my standard rig when the subject includes uncommitted work.
+Verified the comment's own claim rather than believing it: `EsseyMarkets.MAX_BASELINE_AGE = 1 hours`
+(`rh-chain/src/EsseyMarkets.sol:370`) really does match `MAX_FORGIVEN_GAP` (`EsseyPool.sol:100`), and
+`kinkBps` really exists (`EsseyPool.sol:124`) — the DeployMarkets diff swapped a line-number citation
+for that symbol, which is the right direction and the exact fix H-3 needs.
+
+**8 mutants, 7 killed, and the survivor is NULL — I checked before reporting it.**
+`dt <= MAX_FORGIVEN_GAP` → `dt <` survives all four pause tests. It is not a test gap: at
+`dt == gap` the `<` form falls through, `dt -= gap` makes dt 0, and the very next line
+`if (dt == 0 || totalBorrows == 0)` returns the same forgiven result. Provably equivalent at every
+input. **Nearly reported this as a finding.** New habit: before writing up a surviving mutant, trace
+the mutated path to an OBSERVABLE difference; if there is none, the mutant is null and saying so is
+the finding.
+Killed: bound→0, bound→24h, bound→30min (all three caught by the literal-span fixtures — the author
+had already been bitten by parameterising fixtures on the constant under test, and says so in the
+test), `&&`→`||`, dropping the current-read half, reverting to the unbounded pre-fix return, and
+latching `pauseObserved = true`.
+
+**Residual I proved with a PoC, then talked DOWN myself.** MAX_FORGIVEN_GAP bounds what ONE witness
+pair buys; it does not bound total forgiveness against actual paused time. PoC in the isolated tree:
+12 hours elapsed, **12 seconds actually paused**, borrower witnesses each brief pause →
+charge 0 vs 95,890 (6-dec) unpaused. Then I went to the chain instead of stopping at a scary number:
+`cast logs` for `Paused(address)`/`Unpaused(address)` on USDG `0x5fc5360D…d168` over all 56,147,495
+mainnet blocks returns **0 and 0**, and `paused()` is false. So the precondition has no historical
+basis → LOW, accepted with the rationale written down.
+Honest caveat I am recording rather than burying: USDG is a proxy and I did NOT prove its pause path
+emits OZ `Pausable` events, so a zero event count is weaker evidence than it looks. What would settle
+it: the issuer's implementation source, or a storage-slot read of the paused flag across history.
+
+### CHECKPOINT 5 — the round protocol and MY charter are in direct conflict, and I hit it
+I appended checkpoints 1-3 to THIS FILE mid-round. It is tracked, so `work` moved and
+`audit-round.py check` returned **ROUND VOID** — by my own hand, doing exactly what my charter
+orders ("WRITE YOUR MEMORY BEFORE YOU REPORT"). A peer's sweep caught it before I did; credit to it,
+because I would have reported a verdict that did not count.
+Recovery: `git diff docs/agents/continuity/essey-auditor.md > scratchpad/my-continuity.patch`,
+`git show HEAD:<path> > <path>`, re-check → INTACT, audit finished against the frozen bytes, patch
+re-applied at the end. **Every auditor in every future round will hit this**, so it is a tool defect,
+not my mistake alone. Recommended fix is in my report.
+**Rule for me: the FIRST thing I do in a frozen round is ask which files my own process will touch,
+and stage those writes outside the subject.** Scratchpad first, repo last.
+
+### CHECKPOINT 6 — the biggest finding of the day was a fix that was scoped to its example
+`9e45758` is titled "stop telling the public that lending is audited." It corrected `BASE-LAYER.md`
+— the file I named yesterday — and left the same false claim live in `docs/TOKENOMICS-v3.md:178`,
+which `app/web/gen-docs.mjs:47` publishes to the site. I did not stop at the repo: I pulled the LIVE
+bundle, `https://essey.xyz/assets/index-DPnMhTNW.js`, and grepped it. The string
+*"provably-solvent RWA lending protocol (AAPL/NVDA borrow markets already built + audited)"* is in
+production right now. `MAINNET-ACTIVATION.md:129` also still reads "BUILT + AUDITED + PUSHED" against
+the standing retraction at `:1582` and `:1841` of the same file.
+**The pattern, and it repeated four times today:** a fix closes the INSTANCE the auditor named, not
+the CLASS. BASE-LAYER but not TOKENOMICS-v3. BASKET but not `BUNDLE`. `( )` but not `sh -c`. The
+literal `/Users/` form but not `~`, `$HOME` or `Downloads`.
+**So my re-audit method is now: for every fix, name the class it belongs to, enumerate the class
+mechanically, and check the remainder.** Every one of those four cost a single command.
+
+### CHECKPOINT 7 — verify a commit message's negative claims, not just its positive ones
+`e032187` states in public that `sh -c "git push"` "against this hook it already exits 2, so I am
+recording that half as not reproduced." I ran it. Both registered PreToolUse guards return 0. I had
+been reading commit messages for what they CLAIM TO HAVE FIXED; the false statement was in what the
+author claimed he did NOT need to fix. A "not reproduced" is an experimental result and it expires
+exactly like a green test.
+
+### Game contracts, Wolf Game lens (new source in this push, NOT deployed)
+`HitterNFTV2` PASSES lens 1: `favorOf` is written only in `entropyCallback` (`:198-205`), a provider
+callback, never in a player tx; `forceRevealFloor` (`:209-217`) hands out the FLOOR band so forcing
+can never be gamed upward. Good design and the comments show they knew why.
+The gap I did find is lens 5 + griefing: `forceRevealFloor` does not check `revealPending[id]`.
+`favorCommit` is a public mapping (`:64`) and also emitted at mint (`:152`), so once the entropy
+callback is in the pending block — and RH 4663 has a PUBLIC MEMPOOL — anyone can compute
+`_bandFor(keccak(randomNumber, favorCommit[id]))` before it lands and, for any Hitter past the 30-day
+`FORCE_REVEAL_TIMEOUT`, front-run a Rare/Legendary down to Common for gas. Fix: revert
+`forceRevealFloor` while `revealPending[id]`. Pre-deployment, so it is cheap to fix now.
+
+### CHECKPOINT 8 — I RETRACT the USDG evidence in checkpoint 4, and a peer's lesson is why
+In checkpoint 4 I wrote that `cast logs` for `Paused`/`Unpaused` on USDG returned 0 over all
+56,147,495 mainnet blocks, and used that to talk the flapping-pause residual down to LOW. Then I put a
+POSITIVE CONTROL under it — `Transfer` logs on the same address, which cannot be zero for a live
+stablecoin — and it also returned 0. The raw output was
+`Error: Max retries exceeded HTTP error 429 ... Too Many Requests` from Cloudflare; my
+`| grep -c blockNumber` counted zero lines and I read it as zero events. **The bug was in the probe,
+not the chain**, which is the exact failure my own CLAUDE.md records from a JSON-encoded Redis key.
+essey-harness's L-023 (grep/ugrep exits 0 on a search it refused to run) is the same shape one layer
+up and is what made me go back and check.
+So: the flapping-pause residual's severity is **UNSETTLED, not LOW-because-measured**. What would
+settle it: USDG's pause history read when the RPC is not rate-limiting — a narrow-range
+`cast logs` sweep with a Transfer positive control passing FIRST, or the issuer's implementation
+source to confirm the pause path even emits OZ `Pausable` events (USDG is a proxy; it may not).
+**Rule I am adopting: a negative result about the chain is not evidence until a positive control on
+the SAME query path has passed in the same session.** Run the control first, not after.
+
+### The handoff, and what I would look at first if I were them
+- **essey-protocol-engineer** gets the two contract-side items: the `BUNDLE` checksum one-liner
+  (`app/web/src/live.ts:69` → all-lowercase `…b0b1`) and `forceRevealFloor` needing a
+  `revealPending[id]` guard before HitterNFTV2 is ever deployed. The BUNDLE fix is 1 character-class
+  wide but the REAL work is the gate that would have caught it: extend the viem assertion beyond
+  `BASKET` to every address literal in `app/web/src`.
+- **essey-web-designer / jester** get the live-site one: `docs/TOKENOMICS-v3.md:178` is rendered to
+  production and says lending is audited. Fixing the file is not enough — the site must be REBUILT and
+  the served bundle re-grepped, which is how I confirmed it (fetch `/`, extract
+  `/assets/index-*.js`, `grep -F`).
+- **essey-deployment-manager** gets `MAINNET-ACTIVATION.md:129` contradicting `:1582`/`:1841` in his
+  own register, and the fact that the H-2/H-3 corrections exist ONLY in an uncommitted working tree —
+  so nothing about the public repo has actually changed yet.
+- **The founder** gets the guard-git hole, because it is his deploy gate and the fix is his call.
+- **What I would look at first if I were any of them:** not my finding, but the CLASS behind it
+  (L-024). Every one of these was the second member of a class whose first member was already fixed.
+- **Feedback I still owe myself to collect:** I have not yet asked the engineer or the web designer
+  what form they actually want findings in (patch-ready diff vs file:line + repro). Ask next round and
+  record the answer here — my reports assume file:line is enough and I have never checked.

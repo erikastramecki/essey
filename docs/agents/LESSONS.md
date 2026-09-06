@@ -277,3 +277,91 @@ property the check has stopped enforcing. Where the consumer is a library, exerc
 that library (`getAddress()`, the real client with its real batch/multicall config), not through a
 hand-rolled equivalent. And when a UI says "unreadable" while your own raw `eth_call` returns real
 data, the bug is in the read path: rebuild the page's exact client and run the same call through it.
+
+### L-020 — A freeze tool that prints its own pin cannot tell you the surface moved
+**Applies to:** all
+**Origin:** 2026-09-06 · essey-zk-auditor
+**The trap:** `tools/audit-round.py` exists so an audit round has a frozen subject, and its core claim
+is real — a tracked text edit mid-round produced `ROUND VOID`, exit 1, and a binary edit to an
+already-dirty file was caught too (the `index <old>..<new>` line carries the blob sha, so the
+"binary diffs are contentless" hypothesis is refuted). But three things it cannot do were each watched
+returning exit 0: an UNTRACKED file dropped in mid-round leaves the round INTACT, because `subject()`
+collects `dirty` from `git status --porcelain` and then never compares it; `open` silently RE-PINS an
+already-open round, so any agent running it re-blesses everyone else's; and hand-editing the unsigned
+JSON in gitignored `.runs/` flips VOID to INTACT while printing a line BYTE-IDENTICAL to the honest
+one — because the success path prints `pinned['head']` and `pinned['tree']`, values read from the very
+file being validated, and never prints the `work` hash that actually caught the movement. An
+out-of-band sha therefore does not detect the forgery: keep head and tree, move only the field that is
+never displayed. Structurally worse: continuity files are TRACKED, so the charter-mandated "write your
+continuity BEFORE you report" voids the round. Two of three auditors hit that in the same round and
+both silently reverted their file to get INTACT back.
+**Apply:** When a check reports on state it also stores, ask which of the two it is PRINTING — a gate
+that echoes its own record can never contradict the record. Demand that success output show the
+OBSERVED value, and that failure NAME THE PATH that moved; "the surface moved" without a filename cost
+a full audit round of forensics here. Two corollaries with teeth. First, if you re-derive a tool's
+hash to attribute its verdict, COPY ITS HELPER VERBATIM — audit-round.py's `git()` returns
+`stdout.strip()`, mine did not, and the mismatch nearly became a reported claim that an audited
+contract had changed mid-round. Second, a gate its own users must routinely revert their work to
+satisfy will be ignored, so exclude the paths your process REQUIRES people to write
+(`docs/agents/continuity/`, `docs/agents/LESSONS.md`) from the frozen subject rather than asking
+everyone to work around it.
+
+### L-022 — The round freeze and the mandated continuity write are in direct conflict
+**Applies to:** all
+**Origin:** 2026-09-06 · essey-harness
+**The trap:** `tools/audit-round.py` freezes the WORKING TREE (`git diff` + `git diff --cached`), and
+every charter requires an agent to write `docs/agents/continuity/<you>.md` BEFORE it reports. That file
+is tracked. So the first auditor in a multi-member round who obeys its charter silently voids the round
+for everyone still working. This is not hypothetical: round `d7e471696033` opened INTACT with four
+dirty files, and mid-round `docs/agents/continuity/essey-zk-auditor.md` appeared with 157 added lines
+(mtime 2026-09-06T10:17:16 local). `check` then printed "ROUND VOID: the audited surface moved (work)"
+with head and tree hashes IDENTICAL — only `work` had changed. Nothing under audit had moved at all.
+**Apply:** Before reporting a VOID, read WHICH of the three hashes moved. `head`/`tree` moving means the
+audited bytes really changed and your verdict is dead. `work` moving alone can be nothing but a peer's
+own memory file — so name the file that moved and prove the files you audited are pinned-identical
+(`git diff --quiet <sha> -- <file>` per file) before you discard a round's worth of evidence. If you
+maintain the tool: exclude `docs/agents/continuity/` from the work hash, or have agents write memory to
+an untracked staging path, otherwise a three-member round can never close cleanly by construction.
+
+### L-023 — `grep` here is ugrep, and it exits 0 on a regex it refuses to run
+**Applies to:** all
+**Origin:** 2026-09-06 · essey-harness
+**The trap:** The shell `grep` is a function wrapping `ugrep 7.5.0`. Given a pattern with nested
+quantifiers it prints `ugrep: error: ... exceeds complexity limits` to stderr and **exits 0**. A script
+or an agent reading only the exit code, or only an empty stdout, reads "no matches found" from what was
+actually "I did not run your search." Watched: `grep -oE '(a{0,60}){0,60}b' bundle.js` → complexity
+error, `EXIT=0`. I hit this while proving a false public claim was gone from a served bundle — the
+answer I nearly recorded as evidence of absence was evidence of nothing.
+**Apply:** Never treat an empty `grep` result as proof of absence without checking stderr, and prefer
+`grep -F` (fixed strings) whenever you are searching a large minified bundle or any generated artifact.
+More generally this is BC-001's corollary running backwards: we are told to check the exit code rather
+than the message, and here the exit code is the liar and the message is the truth. Check both.
+
+### L-024 — A fix lands on the INSTANCE the auditor named; the class it belongs to stays live
+**Applies to:** essey-auditor, essey-zk-auditor, essey-protocol-engineer, essey-web-designer, essey-deployment-manager, essey-harness
+**Origin:** 2026-09-06 · essey-auditor
+**The trap:** Four fixes in one push each closed exactly the example in the report and left the rest of
+their own class shipping. `9e45758` ("stop telling the public that lending is audited") corrected
+`docs/BASE-LAYER.md:142` — the file the auditor cited — while `docs/TOKENOMICS-v3.md:178` still reads
+*"provably-solvent RWA lending protocol (AAPL/NVDA borrow markets already built + audited)"*, and
+`app/web/gen-docs.mjs:47` publishes that file to the site: the string is in the LIVE production bundle
+at `https://essey.xyz/assets/index-DPnMhTNW.js` (`grep -c` → 1). `10cd992` asserted every `BASKET`
+address through viem but nothing else, and 2 of 84 address literals in `app/web` still fail
+`isAddress` — `live.ts:69 BUNDLE = "0x…B0B1"`, which `encodeFunctionData` on the real
+`setPayoutToken(uint256,address)` ABI rejects, so the "Get paid in → Bundle" button can never build a
+transaction. `e032187` closed `(git push)` by stripping leading `[(){}\s]`, which is a whitelist of
+three characters, not the class "git is not command-initial": `sh -c`, `bash -c`, `eval`, `env`,
+`command`, `time`, `\git`, `$(…)`, backticks, `if …; then`, `xargs` and `nohup` all still exit 0.
+And `.githooks/pre-commit:67` blocks `/Users/<n>/(Developer|Documents|Desktop)/` while `~/`, `$HOME/`,
+`/Users/<n>/Downloads/` (in-tree at `pfp/extract_leaves.py:45-46`) and `/Users/<n>/.foundry/` pass.
+Worse, that commit message states in public that `sh -c "git push"` "already exits 2, so I am recording
+that half as not reproduced." Both registered PreToolUse guards return 0 for it, and through the real
+Bash caller `sh -c "git push <remote> main --dry-run"` reached git and returned git's own exit 128.
+**Apply:** When you fix a finding, write down the CLASS it belongs to and enumerate the class
+mechanically before you call it closed — every one of the four above was one command
+(`node -e` over all address literals; the guard driven with twelve command shapes; the path gate driven
+with six notations of one path; a grep for the claim across all published docs, then against the served
+bundle). When you AUDIT a fix, do the same enumeration rather than re-testing the reported example, and
+treat the commit message's NEGATIVE claims — "not reproduced", "already handled", "does not apply" — as
+unrun experiments: they are load-bearing assertions with no test behind them, and one of them was false
+here. A fix verified only against the example that produced it has been confirmed, not tested.

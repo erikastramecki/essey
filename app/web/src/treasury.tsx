@@ -328,7 +328,7 @@ function Balance({ st }: { st: TreasuryState | null }) {
           value={st ? usd(st.upsideUsd8) : "…"}
         />
         <Stat
-          label="Excluded · no price source"
+          label="Excluded · no live mark"
           value={
             excluded.length === 0 ? (st ? "none" : "…") : excluded.join(" · ")
           }
