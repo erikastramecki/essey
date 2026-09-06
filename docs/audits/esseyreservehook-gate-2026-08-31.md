@@ -3,7 +3,12 @@
 **Date:** 2026-08-31
 **Scope:** `rh-chain/src/market/EsseyReserveHook.sol` (3-bucket fee model) + `rh-chain/src/market/LaunchSeeder.sol`
 **Gate:** standing 3-agent audit gate — Lens A (economics/solvency/value-extraction), Lens B (access-control/reentrancy/authorization), Lens C (test-integrity/mutation). Requirement: **3 consecutive rounds, all three lenses clean, on byte-identical code.**
-**Verdict:** **MET.** Three consecutive complete-clean rounds on the hardened suite (source byte-identical throughout).
+> ⚠️ **THIS VERDICT IS WITHDRAWN.** A later real-PoolManager fork harness found HIGHs A-1/A-3 in
+> the shipping bytes, and the G1 counter was reset to ZERO — see
+> the G1 row in `docs/MAINNET-ACTIVATION.md`. The round below is kept as an audit trail;
+> do not cite it as a passed gate.
+
+**Verdict (WITHDRAWN — see banner):** **MET.** Three consecutive complete-clean rounds on the hardened suite (source byte-identical throughout).
 **Profile:** `FOUNDRY_PROFILE=v4` (via_ir). Tests: **92 passed, 0 failed** (71 hook + 19 launch-seed + 2 fork; fork RPC live).
 
 ## What the hook is

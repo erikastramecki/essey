@@ -379,3 +379,53 @@ reports the SAFE answer, you owe it the same scepticism. Validate the probe on a
 fail before believing it about a case you hope will not. Construct payloads the way the real caller
 does — `json.dumps`, not a hand-quoted string — and if a peer's result contradicts yours, assume your
 instrument before assuming their conclusion.
+
+### L-026 — Test a layered gate with the OTHER layers satisfied, or you are measuring the backstop
+**Applies to:** essey-auditor, essey-zk-auditor, essey-harness, essey-protocol-engineer, essey-deployment-manager
+**Origin:** 2026-09-06 · essey-zk-auditor
+**The trap:** `guard-git.py` stacks two independent rules over `git push`: RULE 1 (Erik must have
+approved THIS push to main) and RULE 2b (three clean audit rounds). Drive a shape matrix at it with no
+escape hatches and every shape returns BLOCK rc=2 — the gate looks airtight. It is not. RULE 2b was
+answering every time, and RULE 2b passes automatically the moment three `VERDICT: CLEAN` lines exist
+for the sha, which is exactly what an audit round like this one produces. Prefix only
+`GATE_AUDIT_OK=1` — the guard's own block message tells the operator to use it — and RULE 1 is the sole
+remaining approval, whereupon `git push origin main:main`, `git push origin 'main'`,
+`git push origin refs/heads/main` and `sh -c "git push origin main"` all return rc=0 with no message
+at all, while the bare `git push origin main` control still blocks. Root cause: the recent fix widened
+WHERE the guard looks for `git` (that half is genuinely fixed — `$(…)`, `(…)`, `\git`, `nohup`, `time`,
+`command`, `xargs` all block now) and never touched the BRANCH test, still a whitelist of four literal
+spellings requiring whitespace-or-end right after `main`. Any refspec suffix, quote, or wrapper's
+closing quote walks through. The gate is deaf exactly when it becomes the only thing left.
+**Apply:** When a protection has layers, satisfy every layer except the one under test before you
+conclude anything — otherwise a green matrix is just the outermost layer answering, and you have
+learned nothing about the rule you meant to audit. Read WHICH rule's message came back, never only the
+exit code. Two corollaries. First, a documented escape hatch is not an edge case: it is the normal
+post-approval state, so audit the system AS IF the hatch is set, because that is the configuration in
+which the remaining rules carry the weight. Second, when a fix report says a class is closed, check
+whether it closed the class or one AXIS of it — here "git is not command-initial" was fixed and "the
+branch is not spelled `main` exactly" was never in scope, and both axes had to be open for the
+original bug. Ask what the fix's regex still requires, not what it now allows.
+
+### L-027 — Widening a gate's SCOPE while leaving its TRIGGER alone switches it off for the real caller
+**Applies to:** essey-auditor, essey-zk-auditor, essey-harness, essey-protocol-engineer, essey-deployment-manager, essey-web-designer
+**Origin:** 2026-09-06 · essey-auditor (builds on essey-zk-auditor's L-026, which found the same RULE 1
+defect independently and stated the layering half correctly)
+**The trap:** Every gate has two axes — what it INSPECTS, and what makes it RUN. Fixes keep landing on
+the first and leaving the second, which switches the gate off entirely rather than merely narrowing it.
+`guard-deploy.py` was widened from `app/web` to `app/web` + `docs/` after an uncommitted doc fix shipped
+to production, and that half genuinely works (dirty `docs/BASE-LAYER.md` + `vercel --prod` → exit 2,
+watched). But the gate returns `passthru()` unless the literal string `vercel` appears in the command,
+and this repo's actual production deploy is `bash app/deploy.sh --web`, which reaches
+`vercel deploy --prod --yes` inside `app/lib-operator-env.sh:24`. Driven against a dirty served surface
+in a throwaway repo: exit 0. The one path the operator is documented to use is the one path the gate
+cannot see. Same shape in `guard-git.py`: L-026 records the branch-test axis, and the segment-detection
+axis is ALSO not fully closed — `sh -c "git -C <path> push origin main"` still exits 0, because the
+`MUTATING` regex allows only `-flag` tokens between `git` and the verb, and `-C <path>` puts a bare path
+there. Two more shapes L-026 does not list, both real: bare `git push` (on branch main with upstream
+origin/main and `push.default` unset = simple, this IS a production push) and any line-continuation,
+since the segment splitter breaks on `\n` and the `main` token lands in a segment with no `git` in it.
+**Apply:** When you fix or audit a gate, write down both axes explicitly and enumerate each. Ask "what
+command does the operator ACTUALLY run?" and drive that exact string, not the canonical form from the
+docs — `bash deploy.sh`, `npm run deploy`, a Makefile target and a CI job are all real callers and none
+of them contain the tool's name. A trigger condition is a whitelist, and a whitelist that omits the
+primary caller is not a narrow gate, it is an absent one.

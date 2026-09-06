@@ -213,3 +213,46 @@ The five doc corrections held, but the sweep was scoped to `docs/*.md` and the s
 three React copy sites (`lend-ui.tsx:179`, `App.tsx:1074`, `market.tsx:417`). When I hand a copy
 finding forward I will name BOTH surfaces explicitly — rendered markdown AND `app/web/src` JSX — because
 "the docs say X" and "the site says X" are different greps and only one of them was run.
+
+## 2026-09-06 (Saturday) — clean round member 2/3 on frozen `017f0d8e89c6`
+
+Checkpoint 1, written mid-run per L-010.
+
+### The two false "audited" claims that SURVIVED the fix sweep (found in the SERVED bytes)
+Served bundle `https://essey.xyz/assets/index-CyLBkAtV.js`, sha256
+`f59a8478db101a810ed589767b58aca4be89519ee5744f73a37f8fcc7b76f549`, 4,559,158 B.
+`docs/SCOPE-robinhood-chain.md` is a PUBLISHED doc (`app/web/gen-docs.mjs:40`, PROTOCOL/"The engine"),
+and two claims in it are live on the page right now:
+- `:253` "…**ported to `rh-chain` … and audited (three consecutive clean 3-agent rounds), but NOT yet
+  deployed**" — 1 occurrence in the served bundle.
+- `:262` "| **2 — RH hazards** | … | ✅ **Built + audited** — `CollateralReconciler` …" — 1 occurrence.
+Both contradict the standing ruling at `docs/MAINNET-ACTIVATION.md:1790` ("lending is
+`built-not-audited`") and `:35` ("the old '3 clean rounds' claim is retracted as unevidenced").
+Worse, `:261` is self-contradictory INSIDE ONE TABLE CELL: "✅ **BUILT, NOT AUDITED (gate 0 of 3)**
+(ported to `rh-chain`, 3 clean rounds)".
+
+### Probe failure I caught on myself — L-025 running exactly as written
+My first pass used `grep -c -F` for `` ✅ **Built + audited** — `CollateralReconciler` `` and got
+**count=0 with empty stderr** — the safe answer, and it was wrong. Inside `docs.generated.ts` the
+markdown is embedded in a JS string where backticks are escaped as `\``, so my literal never matched.
+Re-run with `str.count()` on the decoded text: 1. **Never search a generated/minified bundle for a
+string containing a character the generator escapes** — search a fragment with no backticks, no
+quotes and no backslashes first, then widen. An empty stderr does not make a zero trustworthy.
+
+### The payout button: it ENCODES now, and it still cannot succeed
+`live.ts:69` is fixed to `0x…b0b1` and viem 2.55.10 `encodeFunctionData` on the real
+`setPayoutToken(uint256,address)` ABI returns calldata (old uppercase `B0B1` threw
+`InvalidAddressError`; probe validated both directions plus mixed case).
+But the deployed Bell `0x8a7749e47E79964B265B6ee6216FD5d017701552` on 46630 has
+`converter() == address(0)` and `defaultPayout() == address(0)` (cast reads). `Bell.sol:218` reverts
+`UnsupportedPayoutToken()` when the converter is unset. Simulated read-only as the real owner of
+Don #1 (`0x9Cec219bCdA1a901D4a7154B55648bdAE5433582`):
+- non-owner → `0xf8050c92` = `NotSeatOwner()`
+- owner + BUNDLE → `0xe4a83899` = `UnsupportedPayoutToken()`
+- owner + `address(0)` (clear) → `0x` success
+Three distinct outcomes = the probe discriminates. The UI's own gate `live-ui.tsx:23`
+`CONVERTER_LIVE = ADDR.converter !== ZERO` reads the FRONTEND constant, not `bell.converter()` — the
+comment at `:21-22` states the intent ("no half-working UI pointing at a converter that isn't there")
+and the check asks the wrong source. Same shape as L-019: the gate normalised away the property the
+consumer depends on. **Lesson for me: when a UI gate decides whether a control is shown, verify it
+against the CONTRACT STATE the control writes to, not against a config constant.**

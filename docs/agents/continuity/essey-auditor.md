@@ -362,3 +362,83 @@ the SAME query path has passed in the same session.** Run the control first, not
 - **Feedback I still owe myself to collect:** I have not yet asked the engineer or the web designer
   what form they actually want findings in (patch-ready diff vs file:line + repro). Ask next round and
   record the answer here — my reports assume file:line is enough and I have never checked.
+
+## 2026-09-06 (round 2) — frozen round on 017f0d8e89c6, member 1 of 3
+
+Charter on disk matched my spawn copy again. Verified BEFORE trusting: `audit-round.py` now excludes
+`docs/agents/continuity` + `LESSONS.md` from the work hash AND hashes untracked files. Watched both:
+planting `rh-chain/src/AuditProbePlanted.sol` (untracked) → `ROUND VOID (work)` exit 1 (my checkpoint-1
+hole from last round is CLOSED); appending to my own continuity file → `round INTACT` exit 0; appending
+to `rh-chain/src/EsseyPool.sol` → VOID exit 1. So I can write memory mid-round now, and L-022 is real.
+
+### CHECKPOINT A — the guard-git fix moved the hole, it did not close it
+The widened `MUTATING` regex genuinely fixed SEGMENT DETECTION. It did not touch TARGET DETECTION, and
+RULE 2b (`0 of 3 clean audit rounds`) was MASKING that the whole time — every bypass I tried on the live
+repo returned exit 2 with the audit-receipt message, not the production message. **That mask lifts the
+moment this round closes**, which is the only moment RULE 1 matters.
+Method that found it: drive the hook in a throwaway repo with a forged 3-CLEAN receipt for THAT repo's
+sha, so RULE 2b is satisfied and RULE 1 stands alone. 13 of 17 push-to-main shapes then exit 0, incl.
+bare `git push` (branch main, upstream origin/main, push.default unset = simple), quoted `'main'`,
+`origin HEAD`, `--all`, `refs/heads/main`, `main:main`, and any line-continuation.
+Real-caller confirmation, zero risk, nonexistent remote: `... push audit-probe-nonexistent main
+--dry-run` → hook exit 2; the same with `'main'` quoted → reached git, exit 128.
+**Lesson: when a rule never fires because an EARLIER rule blocks everything first, that rule is
+untested, not working. Satisfy the earlier gate and re-run before believing the later one.**
+
+### CHECKPOINT B — guard-deploy was widened on the wrong axis
+The `docs/` widening is correct and I watched it work (dirty `docs/BASE-LAYER.md` → `vercel --prod`
+exit 2). But the gate only ever fires when the literal string `vercel` is in the command, and this
+project's real deploy is `bash app/deploy.sh --web`, which reaches `vercel deploy --prod --yes` inside
+`app/lib-operator-env.sh:24`. Driven against a dirty served surface it exits 0. The SCOPE axis was
+widened; the INVOCATION axis was never audited.
+**Lesson for me: for any gate, enumerate BOTH axes — what it inspects, and what it is triggered by. A
+trigger condition is a whitelist too.**
+
+### CHECKPOINT C — HIGH-1 recurred, in the place it does the most damage
+The six lending "audited" surfaces really were fixed — I proved it on the SERVED artifact, not the repo:
+new bundle `/assets/index-CyLBkAtV.js`, positive control `grep -c -F "Essey"` = 137 first, then
+"built + audited" = 0 and seven surfaces reading "built-not-audited (gate 0 of 3)". Good fix.
+Two classes were missed, both confirmed live in that same bundle:
+1. `docs/SCOPE-robinhood-chain.md` — the retraction hit the TABLE ROW (`:261`) and not the PROSE eight
+   lines above it (`:253`, still "audited (three consecutive clean 3-agent rounds)"), nor the next row
+   (`:262`, "✅ Built + audited — CollateralReconciler", which is a base class of EsseyPool). And the
+   "fixed" line now self-contradicts inside one table cell: "BUILT, NOT AUDITED (gate 0 of 3) (ported
+   to rh-chain, 3 clean rounds)". A fix that edits the badge and not the clause beside it.
+2. `docs/audits/esseyreservehook-gate-2026-08-31.md:6` — a PUBLISHED audit receipt, one of the 17 docs
+   `gen-docs.mjs` PICKs, still reads "Verdict: MET. Three consecutive complete-clean rounds". The
+   register's own reconciliation table says G1 is "REOPENED — round counter ZERO, two HIGHs (A-1/A-3)
+   in the shipping bytes, accept-in-writing withdrawn" (`MAINNET-ACTIVATION.md:1344`, `:1355`) and
+   notes the stale MET was "cited ~15 places". `:919` is one of those places, uncorrected.
+   `grep -c -F "REOPENED" bundle.js` = 0.
+**Lesson: I scoped my own HIGH-1 to the word "lending" and the class is "any published audit verdict
+that the register has since reopened." Next round I enumerate by GATE NAME (G1/G2/G3/G-LEND), not by
+product word, and diff every published receipt against the register's current state of that gate.**
+
+### CHECKPOINT D — a peer's fan-out was right on volume and wrong on discrimination
+The subagent sweep found `SCOPE-robinhood-chain.md:253` independently, which is the finding of the
+round, and its Class B/C/D enumeration is better than mine would have been alone (it derived
+`loop.sh:49 DUMMY_PK` to the RFC 8032 test-vector-1 Ed25519 PUBLIC key rather than reporting a scary
+name — exactly right). But it flagged `README.md:35`, `market.tsx:339` and `GAME-OUTSTANDING.md:17,21`
+as class-A hits. Those say the MARKET LAYER is audited, which is TRUE (rounds 1-6 are published), and
+`market.tsx:416` explicitly scopes it away from lending. I checked each before repeating it.
+**Rule I am keeping: a fan-out agent finds STRINGS; deciding which string is a false CLAIM is mine and
+cannot be delegated. Verify every inherited hit against what the claim actually asserts before it
+enters a verdict.** Delegate the enumeration, never the adjudication.
+
+### MED-4 re-derived → LOW, and MED-5 re-derived → LOW
+MED-4: drove the repo's OWN `.githooks/pre-commit` in a throwaway repo, one notation per commit.
+Controls blocked (Developer/Documents/Desktop, exit 1); 11 other notations of the SAME private path
+passed exit 0 — `~/`, `$HOME/`, `${HOME}/`, `Downloads/`, `.foundry/`, `.claude/`, bare `/Users/<n>/`,
+`/home/`, `C:\Users`, `src/`, `Projects/`. 3 of 14. Also `:13` scans only
+`git diff --cached --name-only --diff-filter=ACM`, so leaks already in the tree are never re-surfaced —
+which is why `rh-chain/xyz.essey.game-keeper.plist` sits public carrying the very form the gate blocks.
+Severity DOWN to LOW and here is the reasoning, not a shrug: the username is already public in the repo
+URL itself (`github.com/erikastramecki/essey`), nothing leaked is a credential, key or unpublished
+address, and private repo NAMES are not a security control. It goes back up the moment a leaked path
+points at a secrets file.
+MED-5: DOWN to LOW. `snipeSeconds` and `snipeStartBps` are `public immutable` with a public
+`surchargeBpsAt(uint256)` view (`rh-chain/src/market/EsseyReserveHook.sol:67-69, :210`), and the whole
+contract is already public on origin/main. The schedule is readable on chain BY DESIGN — a decaying
+surcharge only deters if it is known. The continuity file's incremental disclosure is one soft signal
+("the team has an open ask about raising it"), and the parameter is not yet deployed, so it is still
+the founder's to set. I over-rated this last round by treating an open-source deterrent as a secret.

@@ -329,3 +329,136 @@ re-derive it. transaction.circom blob bce0b2af, transaction2.circom fc836105, Po
 4d511c61. The round-frozen uncommitted diff contains no zk surface: grepping it for
 verifier|proof|nullifier|commitment|circom|zkey|groth|merkle|shielded returned zero hits.
 
+
+## 2026-09-06 — frozen round (member 3 of 3), pinned 017f0d8e89c6 / tree b4709b41343af88f
+
+Charter on disk byte-matched my spawn copy again (read both). BC-001 already ACKed at line 14.
+Round held INTACT for the whole session; I confirmed at start and before the verdict.
+
+### The fixes that ARE real — I attacked each and failed to break it
+- audit-round.py's `EXCLUDED` pathspec genuinely works, and I watched it hold under LIVE conditions
+  rather than in a harness: mid-round, essey-auditor's and essey-harness's continuity files both went
+  dirty (` M docs/agents/continuity/{essey-auditor,essey-harness}.md`) and `work` did NOT move —
+  b160b8ae48a50d66 at my first check and at my last. L-022's primary complaint is closed.
+- guard-git's command-position fix is real. Ten wrapper shapes the peer named — `$(…)`, `(…)`,
+  `\git`, `nohup`, `time`, `command`, `xargs` — now all BLOCK on RULE 1, rc=2, with the RULE 1
+  message. Verb-anywhere was the right call.
+- guard-deploy blocks for real: dirty `app/web/src/main.tsx` -> rc=2, dirty `docs/BASE-LAYER.md` ->
+  rc=2, clean -> rc=0. Positive control watched in an isolated clone.
+- `open` does now refuse to re-pin (rc=1, "REFUSED: a round is already open").
+
+### HIGH — RULE 1 was fixed at the verb and left broken at the BRANCH
+The fix widened WHERE git is matched. It did not touch the branch test, which is still
+`(?:^|\s)(?:main|master|HEAD:main|origin\s+main)(?:\s|$)` — a whitelist of four literal spellings
+requiring whitespace-or-end immediately after `main`. Watched, real hook, json.dumps payloads,
+`GATE_AUDIT_OK=1` prefix only (the guard's OWN documented post-audit invocation):
+  BLOCK rc=2  git push origin main            <- control, RULE 1 message
+  PASS  rc=0  git push origin main:main
+  PASS  rc=0  git push origin 'main'
+  PASS  rc=0  git push origin refs/heads/main
+  PASS  rc=0  sh -c "git push origin main"
+Also PASS: `"main"`, `+main`, `HEAD:refs/heads/main`, backticks, `eval`, `bash -c`, bare `git push`.
+Single-variable control is the first pair: identical intent, one appends `:main`.
+WHY IT BITES: without a hatch these all still die on RULE 2b ("0 of 3 clean audit rounds"). RULE 2b
+passes automatically once three `VERDICT: CLEAN` lines exist for the sha — i.e. the instant a round
+like THIS one succeeds. At that moment RULE 1 is the only per-instance approval left, and it is deaf
+to every spelling above. The gate is weakest exactly when it becomes load-bearing.
+MY OWN TRAP AVOIDED: at 0-of-3 every shape blocks, so a lazy matrix reads "all green". I had to
+supply the hatch to see the hole. When a gate has layers, test each layer with the OTHER layers
+satisfied, or you are measuring the backstop.
+
+### audit-round.py — two of my four findings were fixed at the instance, not the class
+- UNTRACKED CONTENT still invisible. The fix hashes `ls-files --others` NAMES. Watched: `Backdoor.sol`
+  present at `open` holding `contract Benign {}`, rewritten to `contract Drain { function rug()
+  external {} }` -> `round INTACT`, exit 0. My reported instance was "a NEW file appears"; that is
+  what got fixed. Last round's tree carried ten untracked .sol files and forge compiles from the
+  directory. Zero untracked files right now, so THIS round is unaffected.
+- PIN STILL FORGEABLE, and the fix aimed at the wrong field. `check` printing observed values is a
+  real improvement, but `open` prints only head and tree — it never prints `work`. So the coordinator
+  cannot distribute the one value that moves when the working tree moves, and the working tree is
+  where this round's audited content lives (3 modified .sol). Watched: void the round, hand-edit ONLY
+  `work` in the gitignored unsigned JSON -> `round INTACT — observed head 017f0d8e89c6 tree
+  b4709b41343af88f work 0f0bef4813a8737e`, exit 0, head+tree matching my out-of-band values exactly.
+  ONE-LINE FIX: print `work` in the `open` message.
+- `close` has no guard at all, so the re-pin refusal is a two-command speed bump: void -> `open`
+  REFUSED -> `close` (exit 0, no checks) -> `open` (exit 0) -> `check` INTACT. All watched.
+- `tree` is computed from `git ls-files -s` with NO exclusions, so a STAGED continuity file still
+  voids (rc=1, "moved (tree)") while an unstaged one does not. Half of L-022.
+
+### guard-deploy scope — wrong on BOTH sides, and I confirmed the third input
+- OVER-scoped: `docs/agents/**` is not in gen-docs.mjs's `PICK` list (gen-docs.mjs:37; the only
+  "agents" hit is `audits/README.md` at :45), so it is never served — yet it is in scope and is dirty
+  by charter on every audit day. It blocked MY OWN tool call today, rc=2, "2 uncommitted change(s)",
+  from two peers' memory files. That is the exact regression the gate's comment says the widening was
+  meant to cure, one directory deeper — and jester holds standing blog-publish authority.
+- UNDER-scoped, and this is the third build input: `git status` CANNOT see gitignored files, and
+  `app/web/public/{allowlist,builder,traits,og}` are gitignored (.gitignore:35,36,39; app/web/.gitignore:5)
+  yet copied verbatim into the bundle — proved by `app/web/dist/allowlist/proofs.json` existing on
+  disk while `git ls-files --error-unmatch` on the source errors "did not match any file(s) known to
+  git". So the allowlist Merkle proof set ships to production and is not reconstructible from git
+  EVER, not merely when dirty. The gate's stated property is false for it by construction.
+- LATENT, not live: `@essey/sui-sdk` -> `app/sui-sdk/src/index.ts` is aliased (vite.config.ts:98,
+  tsconfig.json:17) and outside the scope — dirtying it PASSES. But ZERO source files import the
+  specifier, so it is dead config today. I nearly reported it as a live hole; the grep that saved me
+  was for the import, not the alias. `.env.production` likewise: 9 VITE_ keys defined, zero
+  `import.meta.env` reads in app/web/src. `pfpReserve` reads `.reservations.json` under
+  `configureServer` only (vite.config.ts:18) — dev, not build.
+- LOW: guard-deploy does not strip heredoc bodies the way guard-git.py does, so writing a FILE that
+  merely CONTAINS the deploy string is treated as a deploy. That is the precise false positive
+  guard-git.py's docstring exists to commemorate, reintroduced in the sibling guard.
+
+### The tilde leak (my MEDIUM-1 / L-018): patch validated, and it is bigger than we said
+Baseline at this sha, real hook, real staged blobs, cwd as git execs it — absolute form BLOCK rc=1
+(control), and tilde/`$HOME`/`${HOME}`/Desktop and the REAL in-tree line
+`docs/DEPLOY-CHECKLIST.md:170` all PASS rc=0.
+MY PROPOSED PATCH A IS CORRECT AND DOES NOT CRY WOLF: all five leak notations flip to BLOCK while
+`~/.claude/agents/essey-zk-auditor.md`, a repo-relative path, the prose "~5 Developer/hours" and a
+benign doc all stay PASS, and the absolute control still blocks. `.claude` is safe because the rule's
+directory alternation is only (Developer|Documents|Desktop).
+BUT PATCH A INHERITS THE SHIPPED RULE'S THREE-DIRECTORY WHITELIST — L-024 applied to my own proposal.
+Patch B (home-in-any-notation + first segment, minus an allowlist of `.claude|.config|.local|.cache`)
+catches everything A does PLUS `/Users/<n>/Downloads/` and `~/Downloads/`, with the same zero false
+positives. RECOMMEND B, NOT A. Neither catches the slug form
+`-Users-erikastramecki-Developer-assay` (no slashes) at docs/agents/continuity/jester.md:14 — that
+needs its own rule and I do not claim coverage.
+SCALE, measured with `git grep` at 017f0d8e: 18 tracked files carry the tilde/$HOME form, and they
+expose a FOURTH private repo name nobody has named yet — `dregg-lab` — in three live shell scripts
+(app/operator-api/test-borrow-sui.sh:12, app/sui-harness/dev-up-sui.sh:14, borrow-flow.sh:8).
+Separately `/Users/erikastramecki/Downloads/` sits at pfp/extract_leaves.py:45-46 and
+pfp/extract_structure.py:29-30 — the founder's real username, in the ABSOLUTE form the shipped rule
+was written for, missed only because of the directory whitelist.
+
+### MY OWN PROBE ERROR THIS ROUND — caught, and it is the L-025 shape exactly
+My first patch matrix returned BLOCK on EVERY case including the benign doc. The instinct was "the
+patch is broken." It was not: an earlier attack script had left `docs/agents/continuity/essey-zk-auditor.md`
+STAGED in the clone (my `reset()` did `git checkout --` which restores the worktree and does NOT
+unstage), and MY OWN continuity file contains `~/Developer/essey-ceremony/...` because I quote it in
+these notes. Patch A was correctly blocking my own leak. Two lessons: (1) when a probe reports the
+same answer for every input, suspect the fixture, not the subject — a uniform result is a broken
+instrument whether the uniform answer is safe OR unsafe; (2) `git checkout -- .` does not clean an
+index, and a dirty index silently widens every hook test that iterates staged files.
+
+### Circuits — CONFIRMED at this sha, not re-derived
+`git diff --stat 58fff0b 017f0d8e -- rh-chain/circuits-nova/ rh-chain/src/private/ '*Verifier*.sol'`
+is EMPTY. Blob ids unchanged from my recorded clearance: transaction.circom bce0b2af,
+transaction2.circom fc836105. The round's uncommitted diff touches 0 lines under circuits-nova or
+src/private and returns 0 case-insensitive hits for verifier|proof|nullifier|commitment|circom|
+zkey|groth|merkle|shielded. Clearance stands.
+
+### HIGH-1 re-confirmed through the REAL Bash caller (not my harness), nonexistent remote
+  BLOCKED (RULE 1)  GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main
+  REACHED GIT 128   GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push nosuchremote-probe main:main
+  REACHED GIT 128   GATE_AUDIT_OK=1 GATE_STALE_OK=1 sh -c "git push nosuchremote-probe main"
+One variable between line 1 and line 2: the suffix `:main`. Guard silent on 2 and 3.
+`git remote get-url nosuchremote-probe` -> "error: No such remote", so nothing could have shipped.
+
+### PROCESS DEADLOCK found by obeying my own charter (report, do not work around)
+Adding L-026 to LESSONS.md — which every charter requires — flips `app/web/check-agent-wiring.mjs`
+to EXIT 1: "AGENT-COMPANY-FOUNDATION.md is STALE ... stamped 1b32ee0a88c01396, live 58494e09fe307190".
+Baseline proof it is mine and not pre-existing: the same gate on the pristine clone of 017f0d8e
+(no L-026) prints "0 problem(s)". The gate is CORRECT — the prose really has drifted. But the repair
+(editing docs/AGENT-COMPANY-FOUNDATION.md) is a tracked file that is NOT in audit-round.py's
+`EXCLUDED` pair, so it would move `work` and VOID the round for both peers still working. So an
+auditor can satisfy its charter or keep the round valid, not both. I left L-026 in and did NOT
+re-stamp: `--stamp` asserts the prose matches, and stamping unreconciled prose is laundering.
+Sibling of L-022; the fix is the same shape — exclude, or stage memory outside the tree.

@@ -364,6 +364,31 @@ Steps 1–7 took an afternoon. Step 8 is the one that decides whether the rest c
 
 ---
 
+## What a gate actually needs, learned the expensive way
+
+Seven lessons arrived in two audit rounds and they are all one lesson, so it is worth stating
+separately from the mechanisms above. Every gate in this repo failed at least once, and **not one of
+them failed at the thing it inspects.** They failed at everything around it:
+
+- **Trigger.** A deploy gate covered the right directories and fired only on the literal string
+  `vercel`, while the real deploy path is a shell script that calls it. Widening a gate's SCOPE while
+  leaving its TRIGGER alone switches it off for the actual caller.
+- **Composition.** A push guard's branch rule was deaf to four spellings of `main`, and nobody noticed
+  because a *different* rule was blocking first. That mask lifts the moment the other rule passes — so
+  the gate went deaf exactly when it became load-bearing. Test a layered gate with the other layers
+  satisfied, or you are measuring the wrong one.
+- **The instrument.** Two "safe" results this week came from probes that never ran: malformed JSON,
+  and a regex the local grep silently refused. A negative result from an unvalidated probe is not a
+  negative result. Validate the probe on a case you KNOW should fail, first.
+- **The class.** Every finding in the second round was the second member of a class whose first member
+  had already been fixed. Fixing the instance an auditor names is how you get a second instance.
+- **Its users.** The round-freeze tool voided itself every time an auditor wrote the memory file its
+  own charter mandates. Two of them reverted their own notes to satisfy it. A gate whose users must
+  undo their work to pass is one everyone learns to ignore.
+
+The practical rule: when you add a gate, write down what triggers it, what masks it, what proves it
+can fail, and what it costs the people who will live with it. The inspection logic is the easy part.
+
 ## What this does not solve
 
 Stated plainly, because a structure oversold is worse than no structure:
@@ -424,4 +449,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: 1b32ee0a88c01396 -->
+<!-- STRUCTURE-FINGERPRINT: 1ecd6682b866fed7 -->

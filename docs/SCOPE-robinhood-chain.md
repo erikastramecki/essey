@@ -250,7 +250,7 @@ token in wallet.
 **Status (2026-09-01):** the **base layer is LIVE on mainnet (chainId 4663)** — $ESSEY
 (`0x3157…1610`) and EsseyReserve (`0xd970…05A7b`), adminless (see [BASE-LAYER.md](BASE-LAYER.md)). The
 **lending engine** described in this scope is **ported to `rh-chain` on the `RobinhoodMainnet` (4663)
-path and audited (three consecutive clean 3-agent rounds), but NOT yet deployed** — no borrow is live on
+path, **built-not-audited (gate 0 of 3)**, and NOT deployed on any chain** — no borrow is live on
 mainnet. What remains before lending goes live: the yield-vault mainnet-fork test, the founder-gated
 deploy (funded deployer + operator-multisig roles), the deferred Multiply swap adapter, and the
 sequencer-feed disposition (Section 6). Tracked in [OUTSTANDING.md](OUTSTANDING.md).
@@ -258,8 +258,8 @@ sequencer-feed disposition (Section 6). Tracked in [OUTSTANDING.md](OUTSTANDING.
 | Phase | Work | Status |
 |---|---|---|
 | **0 — Spike** | All assumptions verified against live mainnet with zero gas and no keys: deny-list default-open, testnet exists, and 67 contracts already hold Stock Tokens in production. `rh-chain/phase0-verify.mjs`, 7/7. | ✅ **DONE** — passed |
-| **1 — Core** | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | ✅ **BUILT, NOT AUDITED (gate 0 of 3)** (ported to `rh-chain`, 3 clean rounds); **not yet deployed to 4663**. Guard mutation-testing remains the standing discipline *(claimed-and-wrong twice before — an independent sweep of 139 mutations found 50 survivors — so treat coverage as continuously earned, not a checkbox).* |
-| **2 — RH hazards** | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | ✅ **Built + audited** — `CollateralReconciler` (per-token survival index) + fork tests against real Stock Tokens; needs a monitoring keeper. |
+| **1 — Core** | EsseyPool + Markets + Borrow + Liquidate, on-chain LTV, surplus refund, `balanceOfUI` pricing, sequencer check | ✅ **BUILT, NOT AUDITED (gate 0 of 3)** (ported to `rh-chain`); **not yet deployed to 4663**. Guard mutation-testing remains the standing discipline *(claimed-and-wrong twice before — an independent sweep of 139 mutations found 50 survivors — so treat coverage as continuously earned, not a checkbox).* |
+| **2 — RH hazards** | `adminBurn` reconciliation + shortfall path, pause-aware accrual, scheduled-multiplier handling | ✅ **Built, not audited** — `CollateralReconciler` (per-token survival index) + fork tests against real Stock Tokens; needs a monitoring keeper. |
 | **3 — Agent** | Essey MCP server, dApp borrow flow, Robinhood Wallet integration | In progress. |
 | **4 — Deploy** | Yield-vault mainnet-fork test → founder-gated mainnet deploy (chainId 4663) | ⏳ **Gates go-live** — fork test + per-instance founder authorization required. |
 | **5 — Hybrid** (optional) | Sui pools for non-Robinhood RWA; shared markets/risk config. **CCIP** already moves Stock Tokens cross-chain — evaluate, do not assume Sui is a supported lane. | — |

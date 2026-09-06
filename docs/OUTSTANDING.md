@@ -19,7 +19,8 @@ not "done." Game/market-layer open items live in [GAME-OUTSTANDING.md](GAME-OUTS
   (`docs/audits/esseyreservehook-gate-2026-08-31.md`). Ships with the mainnet launch.
 - **Lending — ported to `rh-chain`, built-not-audited (gate 0 of 3), NOT deployed on any chain.** The `RobinhoodMainnet` (4663) path is
   ported and reconciled from the essey-markets reference; StaleFeedGuard reconciled behavior-preserving;
-  three consecutive clean 3-agent rounds; pushed public (`MAINNET-ACTIVATION.md`, Update 4). No borrow is
+  pushed public (`MAINNET-ACTIVATION.md`, Update 4). The earlier "three clean rounds" claim is RETRACTED
+  as unevidenced (register :1841); the gate stands at 0 of 3. No borrow is
   live on mainnet.
 - **Shielded / private — testnet (46630), mainnet-blocked.** Real blockers stand before real value; see
   the shielded section below and [ESSEY-PRIVATE.md](ESSEY-PRIVATE.md).
