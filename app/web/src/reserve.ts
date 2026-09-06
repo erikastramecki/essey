@@ -178,6 +178,8 @@ export type TreasuryState = {
   /// Funded lines, including the ones whose balance would not read — an unreadable line is still a line.
   heldCount: number;
   pricedHeld: number;
+  equityPricedHeld: number;
+  equityHeldCount: number;
   unpricedHeld: number;
   /// Named, not just counted: "excluded" is only honest if a reader can see WHICH holdings it means.
   unpricedSymbols: string[];
@@ -323,6 +325,13 @@ export const reads = {
       equityUsd8: sum(held.filter((t) => t.kind === "equity")),
       upsideUsd8: sum(held.filter((t) => t.kind === "crypto")),
       heldCount: held.length,
+      equityPricedHeld: held.filter(
+        (t) =>
+          t.kind === "equity" &&
+          !unpriced.includes(t) &&
+          !unreadable.includes(t),
+      ).length,
+      equityHeldCount: held.filter((t) => t.kind === "equity").length,
       pricedHeld: held.length - unpriced.length - unreadable.length,
       unpricedHeld: unpriced.length,
       unpricedSymbols: unpriced.map(tokenLabel),

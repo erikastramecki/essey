@@ -290,14 +290,24 @@ function Balance({ st }: { st: TreasuryState | null }) {
   return (
     <div className="hw-note" style={{ margin: "10px 0 0" }}>
       <div className="hw-card-k" style={{ color: "var(--gold)" }}>
-        Treasury balance · indicative, display only
+        Reliable floor · tokenized equities
       </div>
       <div className="hw-card-big">
-        {st ? `${st.incomplete ? "at least " : ""}${usd(st.pricedUsd8)}` : "…"}{" "}
-        <i>
-          {st ? st.pricedHeld : "…"} of {st ? st.heldCount : "…"} holdings
-          priced
-        </i>
+        {!st ? (
+          "…"
+        ) : st.equityPricedHeld === 0 ? (
+          <>
+            — <i>no equity holding has a live mark</i>
+          </>
+        ) : (
+          <>
+            {`${st.incomplete ? "at least " : ""}${usd(st.equityUsd8)}`}{" "}
+            <i>
+              {st.equityPricedHeld} of {st.equityHeldCount} equity holdings
+              priced
+            </i>
+          </>
+        )}
       </div>
       {st?.incomplete && (
         <div className="hw-warn" style={{ margin: "10px 0" }}>
