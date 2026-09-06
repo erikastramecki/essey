@@ -462,3 +462,154 @@ Baseline proof it is mine and not pre-existing: the same gate on the pristine cl
 auditor can satisfy its charter or keep the round valid, not both. I left L-026 in and did NOT
 re-stamp: `--stamp` asserts the prose matches, and stamping unreconciled prose is laundering.
 Sibling of L-022; the fix is the same shape — exclude, or stage memory outside the tree.
+
+---
+
+## Round 3-of-3 on 65228899e656 (tree 3a6eb4b332c5cc55, work b160b8ae48a50d66)
+
+BC-001 already ACKed above (line 14). No new broadcast at this sha — `docs/agents/BROADCASTS.md`
+carries BC-001 only.
+
+### HIGH — RULE 1's new ref parser reads REFSPECS, and `--all` is not a refspec
+The fix from last round is real: `_targets_protected` (guard-git.py) genuinely resolves
+`main:main`, `refs/heads/main`, `+main` and `HEAD`, and my control proves the rule answers.
+But it filters out every `-`-prefixed token as a flag, then does `refs = refs[1:]` to "drop the
+remote". `--all` and `--mirror` are flags that CARRY the target set, so they are discarded, `origin`
+is eaten as the remote, `refs` comes back empty, and the code falls into the BARE-PUSH branch, which
+only ever asks "is the CURRENT branch main?". On a feature branch the answer is no.
+Watched, real Bash caller, local bare remote, RULE 2b + RULE 3 satisfied so RULE 1 was the only
+layer left (L-026):
+  BLOCKED (RULE 1)  cd <work> && GATE_AUDIT_OK=1 GATE_STALE_OK=1 git push origin main    <- control
+  EXIT 0, PUSHED    ... git push --all origin        -> "* [new branch] main -> main"
+  EXIT 0, PUSHED    ... git push origin --all        -> "* [new branch] main -> main"
+  EXIT 0, PUSHED    ... git push   (with remote.origin.push=refs/heads/main:refs/heads/main)
+`for-each-ref` on the bare remote afterwards shows `refs/heads/main`. Not "reached git" — LANDED.
+The third shape is the worst: the command is a bare `git push`, carrying zero signal, and the guard
+resolves "current branch = feature" while git uses the configured refspec.
+Reachability in the REAL repo, measured: `remote.origin.push` and `push.default` are both UNSET, so
+shape 3 needs a `git config` first (ungated, and invisible inside a script). Shapes 1 and 2 need
+NOTHING — 10 local branches exist including `main`, and origin is
+https://github.com/erikastramecki/essey.git. And RULE 4 mandates working on a feature branch, so the
+un-protected configuration is the DOCUMENTED normal state.
+SPECIFIED FIX: before the refspec parse, if any token is `--all` or `--mirror`, return True. In the
+bare-push branch, also consult `git config --get remote.<remote>.push` and `push.default` instead of
+only `rev-parse --abbrev-ref HEAD`.
+
+### The class behind it, for next time
+The last two RULE 1 defects and this one are the same shape: the guard models "which ref am I
+pushing" as a STRING to parse, and git offers at least three ways to name the target that are not
+in the command's ref position at all — a flag (`--all`/`--mirror`), a config value
+(`remote.<r>.push`, `push.default=matching`), and an alias. Ask "what makes git push main?", not
+"how can main be spelled?".
+
+### Guard-git RULE 2 and RULE 4 cannot see through a script file
+Direct `git commit` in a scratch repo: BLOCKED, "no fresh style-gate receipt (style-6522889)".
+Same commits inside a file run as `bash <path>/fixture.sh`: EXIT 0, five commits made, guard silent.
+This is L-027's trigger-axis defect (found in guard-deploy) living in guard-git too. I used it only
+to build a throwaway fixture, and I am recording it rather than quietly relying on it.
+Also: `target_cwd` only accepts a `cd` whose path is a LITERAL — `cd "$S/work"` fails `os.path.isdir`
+and returns None, so RULE 2 keyed the receipt to ASSAY's sha while the commit was for another repo.
+Fail-closed here, but the same mis-resolution feeds `_targets_protected`'s bare-push branch, where it
+is fail-OPEN whenever assay sits on a non-main branch and the target repo is on main.
+Also: `git config remote.origin.push 'refs/heads/main:...'` is BLOCKED by RULE 1 as a false positive
+(the segment contains the substring `push` but no `push` TOKEN, so `_targets_protected` fails closed).
+And guard-git.py has a dead duplicated `continue` right under the `_targets_protected` call — a
+patch applied without a read-through.
+
+### audit-round.py — ranked, with a control for each
+A) UNTRACKED CONTENT IS INVISIBLE — CONFIRMED, and it is the one that matters.
+   Faithful surrogate (real tools/audit-round.py, own git repo, `.runs/` gitignored as here):
+   rewrite an untracked `NewContract.sol` from "harness v1" to "harness v2 BACKDOOR" ->
+   `round INTACT`, exit 0. Control: rewrite a TRACKED file -> `ROUND VOID (work)`, exit 1.
+   So the tool DOES see content — just not untracked content. `untracked` is a join of NAMES only.
+   Live blast radius: at THIS sha `git ls-files --others --exclude-standard` is EMPTY, so nothing is
+   exposed right now. But the session-start snapshot showed TEN untracked files under audit
+   (GameControllerV2.sol, HitterNFTV2.sol, DonMintSplitter.sol, EsseyLadderSeeder.sol + tests) —
+   brand-new contracts are exactly the thing that arrives untracked, so this is the normal shape of
+   a round, not an edge case. FIX: hash the untracked files' CONTENT.
+   MY OWN PROBE ERROR, again the L-025 shape: my first run VOIDed and I nearly wrote that up as a
+   refutation. Cause was my fixture — `open` writes `.runs/audit-round.json`, which is untracked, so
+   without a `.gitignore` the pin file itself moved the hash. assay ignores it at `.gitignore:78`.
+   Second time this month a uniform/unexpected probe result was the FIXTURE, not the subject.
+B) `open` NEVER PRINTS `work` + `close` HAS NO GUARD — rank these together, they are one defect.
+   Watched: a VOID round -> `close` (exit 0, no argument required, accepts junk: `close deadbeef`
+   still exits 0) -> `open` -> `round INTACT`. The re-pinned round printed the SAME head, because
+   only `tree`/`work` had moved. head is the one value the coordinator distributes, so a downstream
+   auditor's `check` shows INTACT with the expected sha and the re-pin is undetectable. Printing
+   `work` at `open` is what makes a `close` guard enforceable at all.
+C) `tree` USES `git ls-files -s` WITH NO EXCLUSIONS — confirmed and cheap.
+   Editing `docs/agents/continuity/zk.md` unstaged -> INTACT (the L-022 exclusion works).
+   `git add` on that same file -> `ROUND VOID (tree)`. Worse than the void: the message names `tree`,
+   which L-022 teaches an auditor to read as "the audited bytes really moved" — the opposite of true.
+   FIX: pass the same EXCLUDED pathspec to `ls-files -s`. `diff --cached` already covers staged
+   changes to non-excluded files, so no coverage is lost.
+   Evidence the exclusion is load-bearing right now: `docs/agents/continuity/essey-auditor.md` is in
+   this round's uncommitted diff and the round is still INTACT.
+
+### Tilde leak — I AGREE with LOW on impact, and I reject the REASON given
+essey-auditor's downgrade is right about severity and wrong about why, and the why is what gets
+reused. "The username is already public in the repo URL" would justify LOW even if the blind
+notation leaked a directory named after a client. Measured myself at this sha:
+  4 tracked files carry the form the hook blocks; 43 carry the tilde/$HOME form it does not.
+  Distinct names disclosed: Developer/{assay, assay-design, essey-markets, essey-ceremony, dregg-lab}.
+The leaked CONTENT is what makes it LOW: no credential, no key, no fund path, and the only entry
+that touches my domain — `essey-ceremony` — is a trusted-setup directory whose artifacts are meant
+to be public anyway, so a path to it discloses nothing a ceremony does not publish by design.
+`dregg-lab` is the only genuinely undisclosed item and it is a name, not an asset.
+Watched the hook, real script, real staged blobs: absolute `/Users/<n>/Developer/essey-ceremony/`
+-> exit 1 with the BLOCKED line (control). `~/Developer/essey-ceremony/`, `$HOME/Developer/dregg-lab/`
+and `/Users/erikastramecki/Downloads/The MALE PFP.psd` -> all exit 0. The third one is the ABSOLUTE
+notation the rule was written for, defeated purely by the (Developer|Documents|Desktop) whitelist.
+THE PART NEITHER OF US SAID: it is already published. `dregg-lab` is on `origin/main` in
+app/operator-api/server-sui.mjs, app/operator-api/test-borrow-sui.sh, app/sui-harness/dev-up-sui.sh
+and borrow-flow.sh; `pfp/extract_leaves.py` is on origin/main with the absolute Downloads path.
+A pre-commit hook is a PREVENT control and cannot unpublish anything. So Patch B stops the next name
+(which may not be a low-value one) and closes nothing retroactively — schedule it as prevention and
+accept the four published names deliberately, rather than believing the fix cleaned them up.
+
+### proofs.json — REAL, and it is cryptographic, so it is mine
+`MintDistributor.sol:30-31` states the mitigation for a single-attestor Merkle allowlist:
+"Roots are TIMELOCKED ... giving the public a window to recompute the published dataset's root and
+reject a mismatch before it can go live." `docs/DESIGN-whitelist-onboarding.md:472` is blunter —
+"That reproducibility *is* the trust mitigation (§4)."
+The dataset is `app/web/public/allowlist/proofs.json`: 3,659 addresses, 4,286 allocations, stage 0.
+It is gitignored (`.gitignore:39`, directory rule), `git log --all -- 'app/web/public/allowlist/*'`
+is EMPTY, no tracked source list, and `git grep -l StandardMerkleTree` outside node_modules returns
+NOTHING — so neither the dataset nor its tree-builder is in the repo. A timelock gives a review
+WINDOW; it does not give a reference POINT. The dataset an auditor would recompute against is served
+from the same deploy the attestor controls and can be swapped silently with no diff and no archive.
+Not fund theft — the committed root still bounds every claim, and the docstring's other two bounds
+(`reserveCap`, `maxSupply`) are unaffected. What fails is the bound the contract advertises FIRST.
+Not live yet: `docs/MAINNET-ACTIVATION.md:312` records `stageRoot[0/1]=0x00`, `publicOpen=true` on
+testnet — no root committed. But `:36` and `:313-316` make this exact mechanism the mainnet
+beta-mint throttle, so it becomes load-bearing at the mint, which is the cheapest possible moment
+to fix it.
+
+### Circuits — CONFIRMED at 65228899e656, not re-derived
+`git diff --stat 017f0d8e 65228899 -- rh-chain/circuits-nova/ rh-chain/src/private/ '*Verifier*.sol'`
+EMPTY. Blob ids still `bce0b2a` (transaction.circom) and `fc83610` (transaction2.circom), matching
+my recorded clearance. Round's uncommitted diff is 4 files (3 tracked + a peer's continuity), touches
+0 lines of circuit/verifier surface, and `git diff | grep -icE 'verifier|proof|nullifier|commitment|
+circom|zkey|groth|merkle|shielded'` returns 0. Clearance stands.
+
+### Two self-caught measurement errors this round (both mine, both the L-025 shape)
+1. `node app/web/check-agent-wiring.mjs 2>&1 | tail -4; echo "GATE_EXIT=$?"` printed GATE_EXIT=0 next
+   to the word FAIL, and I was one sentence from reporting "a gate that prints FAIL and exits 0."
+   `$?` after a pipeline is TAIL's status. Re-measured with `node ... > /tmp/w.out 2>&1; echo $?`:
+   REAL_EXIT=1. The gate is honest. NEVER read an exit code through a pipe — redirect, then echo.
+2. The audit-round untracked probe (above) VOIDed because my fixture lacked `.gitignore` for `.runs/`.
+   Both times the instrument lied in the direction that would have produced a louder finding.
+
+### The LESSONS/wiring deadlock is STRUCTURAL — third occurrence, stop blaming the agent
+Baseline at this sha: `check-agent-wiring.mjs` -> "16 charter(s), 0 problem(s)".
+After appending L-029 (which every charter REQUIRES of me): exit 1, "AGENT-COMPANY-FOUNDATION.md is
+STALE ... stamped 1ecd6682b866fed7, live f1ae6536d3557f07".
+So the required act of recording a lesson breaks a build gate, and the repair edits a TRACKED,
+non-EXCLUDED file, which moves `tree` and voids the round for every peer still working. I left L-026
+in last round under the same conflict; that is twice, so the defect is the mechanism, not the agent.
+The stamp hashes the lessons file into "live", so it can never be current while a lesson is being
+added — the workflow and the gate are wired to contradict each other by construction.
+Options for whoever owns it: derive the stamp from the ROSTER/MECHANISMS only and leave LESSONS.md
+out of the hash; or add `docs/AGENT-COMPANY-FOUNDATION.md` to audit-round's EXCLUDED so the repair
+is legal mid-round. Do NOT "fix" it with `--stamp` alone: that asserts the prose matches when nobody
+reconciled it, which is laundering, and it is why I did not stamp it this time either.

@@ -318,3 +318,93 @@ Live page: `$280.65 · 1 of 15 holdings priced`, `$0.00 Equities · Chainlink fe
 (balances read from `0xd970…05A7b` on 4663). So the headline is ~85% thin-pool FLR mark on a weekday
 and 100% on a weekend. The weekend is the amplifier, not the cause — and I would have reported the
 weekend as the whole story if I had not multiplied it out.
+
+## 2026-09-06 (later) — clean round member 2/3 on frozen `65228899e656`
+
+Round opened INTACT (`observed head 65228899e656 tree 3a6eb4b332c5cc55 work b160b8ae48a50d66`) and
+stayed INTACT across two peers' continuity writes AND my own — the `EXCLUDED` tuple at
+`tools/audit-round.py:29` is doing its job, and `check` now prints the OBSERVED hashes
+(`:84`), not the pinned ones. That closes the half of L-020 that mattered most. Still open: the VOID
+line names the hash that moved, never the PATH.
+
+### I claimed to file a lesson and never filed it
+My last entry says "Filed as L-028." **There is no L-028.** `grep -n '^### L-0' docs/agents/LESSONS.md`
+goes L-027 → L-029, and a peer took L-029 during this round, so the id is now an orphaned gap.
+`check-agent-wiring.mjs:30-35` catches DUPLICATE ids and nothing catches a GAP, so the build stayed
+green over a lesson that existed only in my private file. **A note-to-self that a lesson is filed is
+not a filed lesson** — the same failure shape I audit other people for. I filed it for real this round.
+
+### The deployed fixes: verified on the SERVED bytes, and the probe verified against itself
+Bundle `https://essey.xyz/assets/index-DIFHWnfq.js`, sha256
+`47bab46a5c9e401fcdf755842201f1123209a06bb0e8c9a4f264b9950e293c28`, 4,559,562 B.
+Both SCOPE claims are GONE: `audited (three consecutive clean 3-agent rounds)` = 0,
+`Built + audited` = 0, controls `Essey`=203 / `audited`=33. **I did not trust the zeros until I had
+watched the probe find them**: injected both strings in the generator's escaped form into a copy of
+the served text → count 1 each. Same run reconfirmed the trap — `` \`CollateralReconciler\` `` = 2 in
+escaped form, **0** searched with a raw backtick.
+Then the CLASS, per L-024: dumped all 33 `audited` contexts. Every one is honest — the two survivors
+of a naive grep (`3 clean rounds`, `three consecutive clean`) read "the audit gate stands at 0 of 3
+clean rounds" and the EsseyReserveHook receipt, which is a different contract with a real gate.
+Treasury copy live in the DOM: `price stale` on 6 rows (matches `prices.ts:88-95 unpricedReason`),
+stat labelled `Excluded · no live mark`.
+
+### I nearly filed a false MED off a 60-char truncation
+I captured `a[href="/private"]` on `/` and my slice showed the anchor text ending `…EXPERIMENTAL Turn on`,
+which I read as a **button labelled "Turn on" that turns nothing on**. It is not. "Turn on" is the first
+two words of the card's `mech-line` body copy, and the card's badge is `EXPERIMENTAL` with the line
+"Experimental — not yet live on mainnet." Honest. **I truncated the evidence and then interpreted the
+truncation.** Rule for me: when a finding turns on the WORDING of an element, re-read that element in
+full before drafting anything — a `slice(0,60)` is a probe, and L-025 applies to it like any other.
+
+### The four gates, all four watched red at THIS sha, through the real caller
+Isolated root from `git archive HEAD` + a COPY of node_modules (a symlink is blocked by
+`guard-git.py` — "symlink into a real repo" — which I watched block my real attempt). Caller is
+literally `( cd app/web && npm run build )` from `app/deploy.sh:39`. Baseline exit 0.
+- reserve-basket: drop AMZN from BASKET → `FAIL — 1 tokenized equity(s) … not on the page`, **exit 1**;
+  restored to sha `61703c6a…2170`.
+- custody-audit: strip the verdict words from the `## EsseyReserve` section → `FAIL`, **exit 1**.
+- agent-wiring: remove `docs/agents/continuity/essey-harness.md` → `16 charter(s), 1 problem(s)` →
+  `FAIL`, **exit 1**.
+- blog-cadence: **the only way I could make it fail was to CREATE a file git does not have.**
+
+### blog-cadence is dead on every build except Erik's laptop, and that is new
+`check-blog-cadence.mjs:20` reads `docs/JESTER-BUILD-LOG.md`. `git check-ignore -v` →
+`.gitignore:58`. It is absent from `git archive HEAD`. So on any git-sourced build the gate takes
+`:47 blog-cadence: SKIP` and **exit 0, unconditionally**. Watched both ways: no log → exit 0; log
+written with a 2099 date → `FAIL — the gap is 26416 days`, exit 1. This is L-017's shape with a
+sharper edge: the SKIP is not an occasional degraded state, it is the PERMANENT state everywhere the
+author is not. **Check `git check-ignore` on every file a gate reads.** Filed as L-030.
+
+### The container configuration, enumerated instead of assumed
+`HOME=<empty>`: `agent-wiring: charter checks SKIPPED … repo checks still enforced`, exit 0.
+Blocked RPC (`NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:1`): `reserve-basket: SKIP`, exit 0.
+I then tested the SKIP message's OWN claim rather than quoting it, because last round I nearly called
+it a lie off a bad anchor. Read `check-agent-wiring.mjs:22-45,54-93,156-161,163-180` first, THEN
+mutated. Under empty HOME the surviving checks are the LESSONS ones only: stripped `**Apply:**` from
+inside the L-026 block → **exit 1 in BOTH** configurations, naming L-026. Real HOME reported
+`2 problem(s)` to empty HOME's `1` — the extra is the FOUNDATION fingerprint, which is roster-derived
+and correctly cannot run without charters. So the message is TRUE for what it covers; what it does not
+say is that the blueprint fingerprint is also gone. One word, worth one word.
+
+### Treasury: the copy is honest, the HIERARCHY still is not — re-measured at this block
+Read from the page's own origin (the RPC 403s a non-browser caller — noting that, it cost me a probe):
+block **56208103**, chain time **2026-09-06T18:55:40Z**. All 7 equity feeds stale 45.0h–62.4h against
+`prices.ts:38 MAX_STALENESS = 86_400 + 3_600`. Equities at the feeds' OWN last answers = **$48.55**
+(SPY 25.36, NVDA 8.58, GOOGL 6.64, TSLA 2.57, MSTR 2.67, AAPL 2.07, QQQ 0.66). Live hero: **$280.65**,
+`1 of 15 holdings priced`, `$0.00 Equities`, `$280.65 Crypto · thin-pool mark`. So the largest type on
+the page is **100% today, ~85% on a weekday**, a thin-pool FLR mark — on a page whose own section
+header calls those lines "Additive upside … do not count toward the reliable floor."
+Root cause is one expression: `treasury.tsx:296` renders `usd(st.pricedUsd8)`, and
+`reserve.ts:322 pricedUsd8: sum(held)` sums BOTH classes. Everything needed to fix it already exists
+(`equityUsd8`, `upsideUsd8`, `poolMarked`). Second, smaller defect in the same block: the
+`Equities · Chainlink feed` tile prints `$0.00` for a class where every line is stale — the page
+refuses to zero a missing line at ROW level ("price stale") and then zeroes the CLASS total anyway,
+against `prices.ts:1-4`'s own stated rule ("never a number and never $0").
+
+### Route sweep, 26 routes + the link graph
+Every route renders; no console errors; 13/13 docs slugs resolve (control: a bad slug renders the docs
+INDEX with no "not found", unlike `/blog/:slug` which says "Post not found" — LOW inconsistency).
+`GAME_ON` evaluated IN THE PAGE on essey.xyz = **false**, and all 10 game routes render coming-soon, so
+the `CONVERTER_LIVE` payout button is unreachable for a visitor to the live host — severity holds.
+`/explorer` sits on "reading the reserve…" for ~25–30s from cold before every figure fills; `/treasury`
+reads the same reserve in ~2s. Not broken, but it is the slowest thing a visitor meets.

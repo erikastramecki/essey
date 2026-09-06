@@ -394,6 +394,18 @@ runs**, so putting a mutation and the guarded command in one shell call tests no
 the tree as it was. And do not commit while a round is open. I did, moving the exact file two findings
 were in, and the freeze tool correctly voided the round.
 
+### The gate that cannot be green while its users work
+
+Worth stating because it recurred three rounds running. The blueprint's own drift stamp hashes the
+lessons file — and every agent's charter requires writing lessons there. So the build went red every
+time an auditor did its job, and each round an auditor correctly refused to re-stamp, because
+stamping prose nobody reconciled is laundering.
+
+That is the same defect as a freeze tool that voids on mandated memory writes, and as a deploy gate
+that blocks on agent files it never publishes. Three instances, one shape: **a gate whose normal
+operating condition is red teaches everyone to route around it.** When you add a gate, ask what its
+users must do every day and whether that trips it.
+
 ## What this does not solve
 
 Stated plainly, because a structure oversold is worse than no structure:
@@ -454,4 +466,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: 1ecd6682b866fed7 -->
+<!-- STRUCTURE-FINGERPRINT: 38174223c143db83 -->

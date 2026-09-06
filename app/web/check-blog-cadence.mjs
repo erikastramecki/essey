@@ -24,7 +24,9 @@ const STALE_DAYS = 7; // loud backstop only — the daily check is the real mech
 const DAY = 86_400_000;
 
 const newestDateIn = (text) => {
-  const found = [...text.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map((m) => m[1]);
+  const found = [...text.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map(
+    (m) => m[1],
+  );
   return found.length ? found.sort().at(-1) : null;
 };
 
@@ -35,23 +37,38 @@ const newestPost = () => {
     const m = readFileSync(join(POSTS, f), "utf8").match(/^date:\s*(\S+)/m);
     if (!m) continue;
     const d = m[1].slice(0, 10);
-    if (!best.date || d > best.date) best = { date: d, slug: f.replace(/\.md$/, "") };
+    if (!best.date || d > best.date)
+      best = { date: d, slug: f.replace(/\.md$/, "") };
   }
   return best;
 };
 
-const logDate = existsSync(LOG) ? newestDateIn(readFileSync(LOG, "utf8")) : null;
+const logDate = existsSync(LOG)
+  ? newestDateIn(readFileSync(LOG, "utf8"))
+  : null;
 const post = newestPost();
 
-if (!logDate || !post.date) {
-  console.log("blog-cadence: SKIP (no build log or no dated posts)");
+if (!post.date) {
+  console.log("blog-cadence: SKIP (no dated posts yet)");
   process.exit(0);
+}
+
+if (!logDate) {
+  console.error(
+    "\nblog-cadence: FAIL — docs/JESTER-BUILD-LOG.md is missing, so this gate cannot run.\n" +
+      "  It is gitignored, which means it is absent from every checkout and CI container and this\n" +
+      "  check has been passing by default everywhere but the author's machine. Track the file, or\n" +
+      "  set BLOG_CADENCE_OPTIONAL=1 for a build that deliberately has no log.\n",
+  );
+  process.exit(process.env.BLOG_CADENCE_OPTIONAL === "1" ? 0 : 1);
 }
 
 const gapDays = Math.round((Date.parse(logDate) - Date.parse(post.date)) / DAY);
 
 if (gapDays <= 0) {
-  console.log(`blog-cadence: current (newest post ${post.date} "${post.slug}", log ${logDate})`);
+  console.log(
+    `blog-cadence: current (newest post ${post.date} "${post.slug}", log ${logDate})`,
+  );
   process.exit(0);
 }
 

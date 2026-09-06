@@ -11,7 +11,7 @@ not "done." Game/market-layer open items live in [GAME-OUTSTANDING.md](GAME-OUTS
   plus the FLR bootstrap position, redemption in units (not dollars) with a 5% exit fee, floor ratchets
   up only. Full description: [BASE-LAYER.md](BASE-LAYER.md). Register flow #1
   ([MAINNET-ACTIVATION.md](MAINNET-ACTIVATION.md)).
-- **Fee hook — code gate MET, not yet deployed.** `EsseyReserveHook` (default split **45 floor / 40 holders
+- **Fee hook — code gate WITHDRAWN (counter ZERO), not deployed.** `EsseyReserveHook` (default split **45 floor / 40 holders
   / 15 dons** — `script/DeployEsseyV4Pool.s.sol:47-49`; corrected 2026-09-02 from an inherited "50/40/10",
   which was the RAILS mistaken for the SPLIT; NO burn; rails `MIN_RESERVE_BPS=4000` /
   `MAX_HOLDERS_BPS=5000` / `MAX_DONS_BPS=2000`) passed three

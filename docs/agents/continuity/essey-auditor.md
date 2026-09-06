@@ -442,3 +442,127 @@ contract is already public on origin/main. The schedule is readable on chain BY 
 surcharge only deters if it is known. The continuity file's incremental disclosure is one soft signal
 ("the team has an open ask about raising it"), and the parameter is not yet deployed, so it is still
 the founder's to set. I over-rated this last round by treating an open-source deterrent as a secret.
+
+## 2026-09-06 (round 3) — frozen round on 65228899e656, member 1 of 3
+
+ACK BC-001 — I may not cite a gate as evidence in a verdict until I have driven the exact bypass it
+claims to stop and watched it exit 2 for that shape; a gate I only saw pass is a decoration and I say
+so in the report rather than counting it as coverage.
+
+Charter on disk matched my spawn copy (third round running; still worth the 2 seconds).
+`audit-round.py check` → `round INTACT on 65228899e656 tree 3a6eb4b332c5cc55 work b160b8ae48a50d66`.
+
+### CHECKPOINT A — RULE 1 is fixed on the AXIS that was reported and fails OPEN on three others
+The refspec parser (`_targets_protected`, guard-git.py:109-147) genuinely closed everything L-026 and
+L-027 named. Measured with RULE 2b satisfied (`GATE_AUDIT_OK=1`) from a scratch clone on branch
+`develop`, positive control first: bare `git push origin main` → BLOCK rc=2 in the same rig.
+Then BLOCK for `refs/heads/main`, `main:main`, `HEAD:main`, `'main'`, `+main`, `-u origin main`,
+`--follow-tags`, `-o ci.skip origin main`, `git -C <abs> push origin main`,
+`sh -c "git -C <abs> push origin main"`, `sh -c "git push origin main"`, `eval "…"`, line
+continuation, `--delete main`, `:main`. That half is real work and it holds.
+**Four shapes still exit 0, and three of them really push main.** Confirmed through the REAL Bash
+caller with `--dry-run` against a scratch bare remote, output `* [new branch]  main -> main`:
+`git push --all origin`, `git push --mirror origin`, `git push origin $B` (B=main), and
+`echo main | xargs git push origin`. The parser's contract is inverted: it returns True (protected)
+only when it can SEE a protected ref, so any command where the ref is absent (`--all`, `--mirror`) or
+supplied by the shell/another process (`$VAR`, `${VAR}`, `$(…)`, backticks, `xargs`) is read as "some
+other branch" and allowed. Its own comment at :101-102 says it fails closed. It does not.
+**The rule I am keeping: for a parser-based gate, ask what it does when it CANNOT parse. `except
+ValueError: return True` covers malformed quoting and nothing else — the common case is a
+well-formed command whose ref is not yet a string.**
+
+### CHECKPOINT B — the docs fix, checked on the SERVED bytes, and the class is still open
+Method: fetched `https://essey.xyz/` → `/assets/index-DIFHWnfq.js` (4,559,562 bytes), grep -F with two
+positive controls — `Essey` = 137, and the NEW corrected string `built-not-audited (gate 0 of 3)` = 2,
+which is the control that proves I am looking at the POST-fix bundle and not a stale one. Then the
+four false strings = 0 and `THIS VERDICT IS WITHDRAWN` / `GATE WITHDRAWN` = 1 each. The reported
+instances are genuinely gone from production.
+Then I enumerated the class instead of re-testing the instances: 33 occurrences of `audited` in the
+served bundle, read in context. Two are still false and both are live:
+- `docs/BASE-LAYER.md:141` — "Fee hook … | code gate **MET**, **not yet deployed**". BASE-LAYER is the
+  doc the site headlines as "if you read one protocol doc, read this". G1 is REOPENED with the counter
+  at ZERO and two HIGHs in the shipping bytes (`MAINNET-ACTIVATION.md:1344`, `:1355`).
+- `docs/audits/esseyreservehook-gate-2026-08-31.md:117` — the WITHDRAWN banner landed at `:6-12`, and
+  the `## Status` section 105 lines below still opens "Code gate **MET** for the three clean rounds".
+  Both strings `grep -c -F` = 1 in the served bundle.
+And in the register itself, `MAINNET-ACTIVATION.md:399` (the G1 row of the table whose own header at
+`:391` declares it "the current state") still reads "✅ MET 2026-08-31 — 3 consecutive complete-clean
+3-lens rounds", with the same claim in prose at `:386-387`. G3's row in that same table WAS updated to
+REOPENED, so the table is maintained — G1 was simply missed.
+**Lesson for me, sharper than last round's: "enumerate the class" is not enough if I enumerate by the
+string the fix used. I searched `audited` last round and `MET` this round and they are the same class
+under two vocabularies. Next round I enumerate by GATE IDENTITY — for each of G1/G2/G3/G-LEND, diff
+every assertion about it in every published doc against the register's current row — and I do it on
+the served bundle, not the repo.**
+
+### CHECKPOINT C — guard-deploy: the docs/agents exclusion is correct; the trigger axis is not
+Watched both directions in a scratch clone: dirty `docs/agents/continuity/essey-auditor.md` +
+`vercel --prod` → rc=0 (intended), dirty `docs/BASE-LAYER.md` → rc=2, dirty `app/web/src/App.tsx` →
+rc=2, and dirty `docs/agentsNOTADIR.md` → rc=2, so the pathspec does not over-exclude. Cross-checked
+that the exclusion cannot re-open the published-docs hole: `app/web/gen-docs.mjs:38-58` PICKs 17 docs
+and none is under `docs/agents`. Good, narrow fix.
+**L-027's finding is unchanged and now two rounds open:** `bash app/deploy.sh --web` with a dirty
+`docs/BASE-LAYER.md` → rc=0, while `vercel --prod --yes` in the identical rig → rc=2. The real deploy
+reaches vercel inside `app/lib-operator-env.sh:24`, and `guard-deploy.py:76` never runs unless the
+literal string `vercel` is in the command.
+
+### CHECKPOINT D — the guard was patched UNDER me mid-round, and the class half-closed again
+At 12:05, while I was measuring, `~/.claude/bin/guard-git.py` gained `--all`/`--mirror` handling
+(`:125-128`) and a `remote.origin.push`/`push.default` read on the bare-push path (`:141-147`). I
+re-ran the whole 27-shape matrix against the new bytes rather than reporting the old result: `--all`,
+`--mirror` and `cd … && git push --all origin` now BLOCK. Genuinely fixed.
+`$B`, `${B}`, `$(git branch --show-current)`, backticks and `xargs` still exit 0, and I re-confirmed
+two of them through the REAL Bash caller against the NEW bytes — `* [new branch] main -> main` both
+times. **Same L-024 shape a third time: the two shapes I had `--dry-run` output for got fixed, and the
+two I named in the same sentence without output did not.** Next time I hand a bypass list to a fixer I
+give each shape its own reproduction line, because a finding without a receipt beside it reads as an
+aside and gets dropped.
+**And a freeze gap worth more than the bypass:** `audit-round.py` pins the REPO. The guards it
+certifies live in `~/.claude/bin`, which the pin cannot see, so a gate can be edited mid-round with
+the round still reporting INTACT — which is exactly what happened. If the guards are part of the
+audited system, their sha256 belongs in `subject()`.
+
+### CHECKPOINT E — what a receipt is worth, measured
+Isolated `HOME`, so the real receipt store was never touched. Negative controls first: no receipt →
+`BLOCKED: 0 of 3`; two lines → `BLOCKED: 2 of 3`. Then three lines reading
+`VERDICT: CLEAN I did not audit anything` → rc 0, and three reading
+`VERDICT: CLEAN  (round-5 A standing)` → rc 0.
+Corpus: 82 `audit-*` receipts, 56 would satisfy RULE 2b, and 24 of those 56 carry at least one clean
+line self-labelled carried/standing/same-review/format-compliance. In `audit-08fc5da`, `audit-0c3070a`,
+`audit-6bbe74d` and `audit-b152aaf` all three lines are carried — zero rounds run, gate open.
+`audit-0bac067` states it in its own header.
+Second half, watched: the receipt keys on `git rev-parse --short HEAD` only, so with a valid receipt
+in place I appended to `rh-chain/src/EsseyPool.sol` — a file frozen INTO this round — and rc stayed 0.
+`audit-round.py` already computes head+tree+work and RULE 2b throws two of the three away.
+**The thing I got right by accident and want to keep on purpose: I nearly proposed "sign the receipt".
+It buys nothing — the auditor and any forger run as the same user on the same box. The property that
+IS achievable is non-transferability: bind the line to the subject triple and require three distinct
+author fields, and 24 carried receipts go inert without editing one of them.**
+
+### CHECKPOINT F — I checked whether my own finding was already ruled, and half of it was
+`forceRevealFloor` being permissionless is DELIBERATE and fork-proven — `docs/TESTNET-GAME-E2E.md:90`
+records a random wallet flooring a sealed Hitter after `warp(+30d+1)`, logged as PASS. I did not
+re-raise it. The half nobody has ruled is the missing `revealPending[id]` check, and it is worth more
+than I rated it last round: `entropyCallback` (`:198`) reverts on `!sealed_[id]`, so a front-run floor
+STICKS and the owner's entropy fee is spent. Public mempool re-verified fresh on BOTH chains today —
+`eth_getBlockByNumber("pending", true)` returned 8 pending txs on 4663 (chainId 0x1237) and 2 on 46630
+(0xb626), each carrying full `input` calldata.
+Also: my own continuity at `:322`/`:327` published that unfixed exploit, and those lines are on
+`origin/main` now. Continuity became a public surface when it was committed; I wrote it when it was
+not. That is my own fix-first violation and I am reporting it rather than quietly deleting it.
+
+### The USDG probe, third attempt — instrument now validated, coverage still 40 blocks
+Last round I retracted a "0 events" result that was a 429. This time the control ran first and the
+instrument works: 40-block window on `0x5fc5360D…d168` → Transfer 618, Paused 0, Unpaused 0, and
+`paused()` returns false. A 2000-block Transfer query returns `exceeds limit of 10000` and the
+historical sweep still 429s. So the query PATH is correct and the COVERAGE is four seconds of chain.
+The flapping-pause residual stays **UNSETTLED, not LOW-because-measured**, unchanged from last round.
+What settles it: an archive/authenticated RPC, or USDG's implementation source.
+
+### Round bookkeeping
+`origin/main == HEAD == 65228899e656` (`git rev-list --count origin/main..HEAD` = 0, fetch 7s old), so
+this round is NOT a pre-push gate — every doc finding below is already public and two are live on
+essey.xyz. I did NOT add to `docs/agents/LESSONS.md` mid-round: adding a lesson moves the wiring gate's
+fingerprint, and re-stamping requires editing `docs/AGENT-COMPANY-FOUNDATION.md`, which is NOT excluded
+from the work hash and would have VOIDED the round. Highest allocated id is already **L-029**, not
+L-028 as my task stated. The lesson text is in my report for the coordinator to land after close.

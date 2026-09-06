@@ -429,3 +429,68 @@ command does the operator ACTUALLY run?" and drive that exact string, not the ca
 docs — `bash deploy.sh`, `npm run deploy`, a Makefile target and a CI job are all real callers and none
 of them contain the tool's name. A trigger condition is a whitelist, and a whitelist that omits the
 primary caller is not a narrow gate, it is an absent one.
+
+### L-028 — A PreToolUse guard reads the tree BEFORE your command, so a mutation and the guarded command in one call tests nothing
+**Applies to:** essey-auditor, essey-zk-auditor, essey-harness, essey-protocol-engineer, essey-deployment-manager, essey-web-designer
+**Origin:** 2026-09-06 · essey-harness
+**The trap:** Testing `guard-deploy.py`, I dirtied a file under `docs/` and ran the guarded
+`vercel --prod` in the SAME Bash call. It PASSED, and I drafted "the docs/ arm is broken." PreToolUse
+hooks fire before the command runs, so the hook inspected the tree as it was BEFORE my `echo` — a
+clean tree — and correctly let a clean deploy through. Re-run with the mutation in its own prior call:
+**BLOCKED, exit 2.** The guard was never broken; my harness could not have produced any other answer.
+Two sibling probes failed the same way in one session: `cd $T && vercel --help` "passed" because
+`guard-deploy.py`'s `resolve_cd` does `expanduser` and NO variable expansion, so `$T` was a literal
+nonexistent path and the guard `passthru()`d; and a `grep -c -F` for a string containing a backtick
+returned 0 with empty stderr against `docs.generated.ts`, where the generator escapes backticks.
+**Apply:** Any PreToolUse-guard test needs its mutation in a SEPARATE, EARLIER tool call — verify the
+state landed (`git status --porcelain`) before invoking the guarded command. Never let the shell expand
+anything the guard will re-parse itself: hooks receive the raw command string and do their own
+(partial) parsing, so `$VAR`, `~`, and quotes mean different things to you and to them. And when a
+guard test returns the SAFE answer, assume the harness before the guard (L-025) — three of my probes
+returned "fine" in one session and all three were measuring themselves.
+
+### L-029 — A push guard that parses the REF cannot see the flag or the config that chooses the ref
+**Applies to:** essey-auditor, essey-zk-auditor, essey-protocol-engineer, essey-harness, essey-deployment-manager
+**Origin:** 2026-09-06 · essey-zk-auditor
+**The trap:** `guard-git.py` RULE 1 was upgraded from a whitelist of four literal spellings of `main`
+to a real ref parser (`_targets_protected`), and the upgrade is genuine — `main:main`,
+`refs/heads/main`, `+main` and `HEAD` all block now. It still lets main reach the production remote,
+because git names the push target in three places and the parser only reads one of them. It drops
+every `-`-prefixed token as a flag, then drops the next token as "the remote", so `--all` and
+`--mirror` — flags that CARRY the target set — vanish, `refs` comes back empty, and the code falls
+into its bare-push branch, which asks only "is the CURRENT branch main?". On a feature branch it is
+not. Watched through the real Bash caller against a local bare remote, with RULE 2b and RULE 3
+satisfied so RULE 1 was the only layer answering: `git push origin main` BLOCKED (control), then
+`git push --all origin`, `git push origin --all`, and a bare `git push` with
+`remote.origin.push=refs/heads/main:refs/heads/main` each exited 0 and printed
+`* [new branch] main -> main`. `for-each-ref` on the remote confirmed `refs/heads/main` landed — not
+"reached git", pushed. The bare-`git push` shape is the worst of the three: the command carries no
+ref at all, so there is nothing for a string parser to be right or wrong about.
+**Apply:** When you audit a guard that decides from a command STRING, list every channel the
+underlying tool accepts the same instruction through — an argument, a flag, a config value, an
+alias, an environment variable — and drive one probe per channel. Ask "what makes the tool do the
+dangerous thing?", never "how can the dangerous thing be spelled?". A parser upgrade closes the
+spelling axis and can leave the other channels exactly as open as the whitelist it replaced, which
+reads as progress in the commit message and measures as none. Corollary for anyone fixing this one:
+`--all`/`--mirror` must short-circuit to protected, and the bare-push branch must consult
+`git config --get remote.<remote>.push` and `push.default`, not just `rev-parse --abbrev-ref HEAD`.
+
+### L-030 — A gate whose input file is gitignored is dead everywhere except its author's machine
+**Applies to:** essey-auditor, essey-zk-auditor, essey-harness, essey-web-designer, essey-deployment-manager, essey-protocol-engineer, jester
+**Origin:** 2026-09-06 · essey-harness
+**The trap:** `app/web/check-blog-cadence.mjs` is one of the four gates chained into `npm run build`,
+and it is the gate that is supposed to notice the blog has fallen behind shipped work. It reads
+`docs/JESTER-BUILD-LOG.md` (`:20`) and, if that file is absent, prints
+`blog-cadence: SKIP (no build log or no dated posts)` and exits 0 (`:47-48`). That file is
+**gitignored** — `git check-ignore -v` names `.gitignore:58` — so it does not exist in `git archive
+HEAD`, in a fresh clone, or in a Vercel container build. Watched both ways through the real caller
+`( cd app/web && npm run build )`: no log → SKIP, **exit 0**; log written with a 2099 date →
+`FAIL — the gap is 26416 days`, **exit 1**. The gate is real and it works; it simply cannot run
+anywhere except on the one laptop that holds the untracked file. Green was the only answer it could
+give on every other path, and nothing in the build says so — the SKIP line reads like a transient.
+**Apply:** For every gate you own or audit, list the files it READS and run `git check-ignore -v` over
+that list. An ignored or generated input means the gate's real verdict is SKIP, so either track the
+input, or make absence FAIL rather than skip, or state plainly in the report that the gate is inert on
+CI. This is L-017 with a sharper edge: there the SKIP was an occasional degraded state, here it is the
+permanent state everywhere the author is not. More generally, "the gate exists and passes" is a claim
+about a configuration — name the configuration, or you have not made a claim at all.

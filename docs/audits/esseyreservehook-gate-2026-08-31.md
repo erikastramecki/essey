@@ -114,5 +114,5 @@ One of the two is wrong. Resolve before deploy: either the founder confirms and 
 or the receipt's "founder-confirmed" claim is downgraded. Cosmetic in form, load-bearing in fact.
 
 ## Status
-Code gate **MET** for the three clean rounds of 2026-08-31. **The push is separately BLOCKED** as of
+Code gate was MET for the three clean rounds of 2026-08-31; that verdict is **WITHDRAWN** (see banner). **The push is separately BLOCKED** as of
 2026-09-02 pending a fresh 3-round clean after the corrections above (H-2/H-3 doc fixes; S-1/S-2 open). Remaining before mainnet: the two deploy-config checks above, per-instance founder deploy authorization, and a cosmetic cleanup of the stale `// PENDING FOUNDER CONFIRMATION` comments on the rail constants (rails now founder-confirmed at 40/50/20). Contracts + tests are untracked (`??`); this receipt grounds the audit-clean state for the product tracker.
