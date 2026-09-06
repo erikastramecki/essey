@@ -93,7 +93,7 @@ utilization builds → the dynamic curve takes over and you dial incentives down
 ## 5. How Essey implements it (implemented in `EsseyPool`; params set at deploy)
 
 The dynamic kinked curve above is **already implemented** in the Solidity `EsseyPool` (ported to
-`rh-chain`, audited). There is no fixed `rate_bps`; the rate is a function of utilization, evaluated on
+`rh-chain`, built-not-audited). There is no fixed `rate_bps`; the rate is a function of utilization, evaluated on
 every accrual. The curve params are set at deploy — **lending is not yet live on mainnet**:
 - The curve params live in the pool: `baseBps, slope1Bps, slope2Bps, kinkBps, reserveBps`, with
   `kinkBps = 8000` (the 80% target) and the sum of the legs bounded by `MAX_RATE_BPS`.

@@ -139,7 +139,7 @@ deploy (gate doc, "Status"). The hook is **not yet deployed to mainnet**; $ESSEY
 | $ESSEY token (fixed supply, adminless) | **LIVE mainnet 4663** |
 | EsseyReserve (adminless floor, 12-token basket + FLR bootstrap) | **LIVE mainnet 4663** |
 | Fee hook (default split 45 floor / 40 holders / 15 dons; rails 40/50/20; no burn) | code gate **MET**, **not yet deployed** |
-| Lending (borrow vs Stock Tokens) | ported to `rh-chain`, audited, **not yet deployed** — see [MAINNET-LENDING-SCOPE.md](MAINNET-LENDING-SCOPE.md) |
+| Lending (borrow vs Stock Tokens) | ported to `rh-chain`, **built-not-audited**, **not deployed on any chain** — nine adversarial rounds have run and the audit gate stands at 0 of 3 clean; see [MAINNET-LENDING-SCOPE.md](MAINNET-LENDING-SCOPE.md) |
 | Shielded / private transfers | **testnet (46630)**, mainnet-blocked — see [ESSEY-PRIVATE.md](ESSEY-PRIVATE.md) |
 
 The whole cross-flow register lives in [MAINNET-ACTIVATION.md](MAINNET-ACTIVATION.md); protocol-only open

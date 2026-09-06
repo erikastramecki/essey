@@ -17,7 +17,7 @@ not "done." Game/market-layer open items live in [GAME-OUTSTANDING.md](GAME-OUTS
   `MAX_HOLDERS_BPS=5000` / `MAX_DONS_BPS=2000`) passed three
   consecutive clean 3-agent rounds on byte-identical code
   (`docs/audits/esseyreservehook-gate-2026-08-31.md`). Ships with the mainnet launch.
-- **Lending — ported to `rh-chain`, audited, NOT yet deployed.** The `RobinhoodMainnet` (4663) path is
+- **Lending — ported to `rh-chain`, built-not-audited (gate 0 of 3), NOT deployed on any chain.** The `RobinhoodMainnet` (4663) path is
   ported and reconciled from the essey-markets reference; StaleFeedGuard reconciled behavior-preserving;
   three consecutive clean 3-agent rounds; pushed public (`MAINNET-ACTIVATION.md`, Update 4). No borrow is
   live on mainnet.
@@ -36,7 +36,7 @@ shipped product.
 split) is code-sound but has not yet passed a mainnet-fork test against real Stock Tokens and real feeds.
 That fork run is the standing gate before the founder-gated deploy.
 
-**2. Founder-gated mainnet deploy.** The lending contracts are audited and public but undeployed. Deploy
+**2. Founder-gated mainnet deploy.** The lending contracts are public and undeployed; the audit gate stands at 0 of 3. Deploy
 needs a funded deployer, the admin/guardian roles assigned to the operator multisig (not a throwaway
 deployer), and the founder's per-instance authorization. Never self-deploy.
 

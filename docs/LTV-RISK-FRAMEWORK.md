@@ -5,7 +5,7 @@ how the big lenders do it, and the concrete schema for our assets (esp. the RWA 
 that makes tokenized equities special: a market-closed gap that an always-priced asset
 never has).
 
-> **Status:** these are the risk **params set at the lending deploy**. Lending is ported and audited but
+> **Status:** these are the risk **params set at the lending deploy**. Lending is ported but built-not-audited (audit gate 0 of 3) and
 > **not yet live on mainnet** (chainId 4663) — no borrow exists on-chain yet. See
 > [OUTSTANDING.md](OUTSTANDING.md). The methodology below is what the founder-gated deploy configures.
 
