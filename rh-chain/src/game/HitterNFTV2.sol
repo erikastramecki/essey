@@ -51,6 +51,9 @@ contract HitterNFTV2 is ERC721, IEntropyConsumer, ReentrancyGuard {
     address public immutable feeSink;
     /// Sealed past this window => anyone may floor-reveal at Common.
     uint256 public constant FORCE_REVEAL_TIMEOUT = 30 days;
+    /// How long an in-flight entropy request blocks a force. Long enough that a real callback lands,
+    /// short enough that a provider outage cannot seal a Hitter forever.
+    uint256 public constant IN_FLIGHT_TIMEOUT = 1 days;
 
     /// The Favor bands: Common 70% / Uncommon 20% / Rare 8.5% / Legendary 1.5% —
     /// published on-chain before any mint is sold (odds disclosed up front).
@@ -66,6 +69,7 @@ contract HitterNFTV2 is ERC721, IEntropyConsumer, ReentrancyGuard {
     mapping(uint256 => bool) public sealed_; // true until the Favor reveals
     mapping(uint256 => uint8) public favorOf; // 0 Common ... 3 Legendary (valid once revealed)
     mapping(uint256 => bool) public revealPending; // entropy in flight
+    mapping(uint256 => uint64) public revealRequestedAt;
     mapping(uint64 => uint256) public seqToHitter;
 
     // Game flags — written ONLY by the RAID_MODULE (one scoped power each).
@@ -180,6 +184,7 @@ contract HitterNFTV2 is ERC721, IEntropyConsumer, ReentrancyGuard {
         if (!sealed_[id]) revert AlreadyRevealed();
         if (revealPending[id]) revert RevealInFlight();
         revealPending[id] = true;
+        revealRequestedAt[id] = uint64(block.timestamp);
 
         uint256 fee = entropyFee();
         if (msg.value < fee) revert InsufficientFee();
@@ -211,6 +216,14 @@ contract HitterNFTV2 is ERC721, IEntropyConsumer, ReentrancyGuard {
         _requireOwned(id);
         if (!sealed_[id]) revert AlreadyRevealed();
         if (block.timestamp < uint256(mintedAt[id]) + FORCE_REVEAL_TIMEOUT) revert NotYetForceable();
+        // Without this, the floor was a free option on a draw already in flight. favorCommit is public
+        // and the callback carries randomNumber in a public mempool, so anyone could compute the band
+        // and, on a good roll, front-run the callback with forceRevealFloor — which then makes the
+        // callback revert on !sealed_, so the Common sticks. Cost to the attacker: gas, paid only when
+        // the outcome was worth stealing.
+        if (revealPending[id] && block.timestamp < uint256(revealRequestedAt[id]) + IN_FLIGHT_TIMEOUT) {
+            revert RevealInFlight();
+        }
         sealed_[id] = false;
         revealPending[id] = false;
         favorOf[id] = 0; // Common — "an empty envelope"
