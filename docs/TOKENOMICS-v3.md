@@ -175,7 +175,7 @@ for its floor, so it never trades below, and the desk can never be arbitraged ag
 
 ## 8. Borrow against your Don (`DonLoan` — this is our core product)
 
-Essey **is** a provably-solvent RWA lending protocol (AAPL/NVDA borrow markets already built + audited). A
+Essey **is** a provably-solvent RWA lending protocol (AAPL/NVDA borrow markets built, **not audited** — gate at 0 of 3 — and not deployed). A
 Don plugs in as a new collateral type:
 
 - **Fixed-term, fixed-draw.** `borrow(donId, termSeconds)` draws **exactly `ltvBps` of the live floor** — no
