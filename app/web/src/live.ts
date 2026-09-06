@@ -66,7 +66,7 @@ export const ADDR = {
 
 // The BundleConverter's BUNDLE sentinel (address(0xB0B1)) — the "pay me the basket" payout target.
 // Matches BundleConverter.BUNDLE; used as the Don payout election for the default mix.
-export const BUNDLE = "0x000000000000000000000000000000000000B0B1" as Address;
+export const BUNDLE = "0x000000000000000000000000000000000000b0b1" as Address;
 
 // Don whitelist scope (daodon/Homes/TravelSwap snapshot): 4,286 free mints across 3,659 wallets.
 export const WHITELIST_MINTS = 4286;
