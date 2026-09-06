@@ -38,12 +38,20 @@ else {
   }
 }
 
-const roster = existsSync(AGENTS)
-  ? readdirSync(AGENTS).filter((f) => f.endsWith(".md") && owned(f))
-  : [];
+if (!existsSync(AGENTS)) {
+  console.log(
+    `agent-wiring: SKIP (no charter directory at ${AGENTS} — not a developer machine).`,
+  );
+  console.log(
+    "  This gate gives no coverage here. It enforces on machines that hold the charters.",
+  );
+  process.exit(0);
+}
+
+const roster = readdirSync(AGENTS).filter((f) => f.endsWith(".md") && owned(f));
 if (!roster.length)
   problems.push(
-    "No essey/don/jester agent charters found — cannot verify wiring.",
+    "Charter directory exists but holds no essey/don/jester charters.",
   );
 
 for (const f of roster) {
