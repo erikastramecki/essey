@@ -281,6 +281,19 @@ charter that does not read its own slice, or a missing continuity file.
 **Be honest about its limit.** It checks the *wiring*, which is falsifiable. It cannot check that an
 agent read or understood anything. Do not let a passing gate feel like a working culture.
 
+**And be honest about where it runs.** The charter files live outside the repo, so on a build machine
+that has no `~/.claude/agents` the gate exits 0 — including for the LESSONS.md and fingerprint
+problems it has *already* collected by that point, which need no charters at all. Measured
+2026-09-05 (L-017): one identical broken lessons file, exit 1 on the developer machine and exit 0 on
+build-machine conditions. Until the early exit is moved below the reporting step, "fails the build"
+above means the build you run locally, not the deploy.
+
+**And be honest about what a string-matching gate can see at all.** The pre-commit hook blocks
+absolute home paths in the `/Users/<name>/...` form, which is the form the incident that motivated it
+took. Measured 2026-09-05 (L-018): the same paths written as `~/Developer/...` pass it, and three
+private repo names re-entered public history that way while both the hook and an independent scan
+returned zero. A gate that matches one notation of a value has not covered the value.
+
 ---
 
 ## The culture layer, which is not decoration
@@ -406,4 +419,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: f5d0600ab689eb3d -->
+<!-- STRUCTURE-FINGERPRINT: f8677f2d67db19bf -->

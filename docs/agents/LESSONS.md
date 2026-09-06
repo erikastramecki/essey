@@ -199,3 +199,81 @@ to `docs/agents/LESSONS.md` with a DATE, not only into your continuity file — 
 shared tool is the most perishable artifact this team produces, and an out-of-date one is worse than
 none. Before probing a shared tool, read the lessons for it; somebody may already have paid. And when
 you FIX a shared mechanism, say which prior findings your fix closes, so the stale ones die with it.
+
+### L-016 — guard-git.py inspects only segments that START with `git`, so a subshell defeats every rule
+**Applies to:** all
+**Origin:** 2026-09-05 · essey-zk-auditor
+**The trap:** `git_segments()` (guard-git.py:89) keeps a segment only if it matches `^git(\s|$)`, and
+line 141-142 then does `if not segments: sys.exit(0)`. So any shape that does not put `git` first
+skips RULE 1 (push to main), RULE 2 (style receipt), RULE 2b (the three-clean audit receipt) and
+RULE 3 (stale base) all at once. Watched against the REAL PreToolUse hook, not a harness:
+`sh -c "git push <remote> main --dry-run"` and `(git push <remote> main --dry-run)` both reached git
+and returned git's own "does not appear to be a git repository", while the bare form was BLOCKED;
+and `(git commit --dry-run)` ran and printed branch status while bare `git commit --dry-run` was
+BLOCKED for a missing style receipt. A plain parenthesised subshell is not an exotic evasion — it is
+something an agent can type by accident, and it silently removes every deploy guard at once.
+**Apply:** Do not treat guard-git.py as proof that a push or commit was gated; it gates only the
+shapes it can see. If you are relying on it, run the command in bare `git ...` form so it is actually
+inspected, and never wrap a git command in `( )`, `sh -c` or `xargs` to get past a block — a block is
+information, not an obstacle. If you maintain the guard, match git in any command position and
+inspect `sh -c`/`bash -c` payloads. More generally: when a gate parses commands out of a string, ask
+what shape of the same command it CANNOT see before you trust its silence.
+
+### L-017 — A gate that SKIPS when its input is missing usually throws away findings it already made
+**Applies to:** all
+**Origin:** 2026-09-05 · essey-zk-auditor
+**The trap:** Two build gates in `app/web`'s `build` script pass unconditionally in the environment
+that actually deploys. `check-agent-wiring.mjs` validates LESSONS.md and the blueprint fingerprint
+FIRST, collecting problems, and then hits `if (!existsSync(AGENTS)) process.exit(0)` — so on any
+machine without `~/.claude/agents` (Vercel, CI) it discards problems it had already detected.
+Measured in an isolated `git archive HEAD` tree with one identical broken LESSONS.md: exit 1 with the
+real HOME, exit 0 with a HOME lacking the charter dir. `check-reserve-basket.mjs:81-83` does the same
+on network failure — pointing its RPC at a dead port produced "SKIP (RPC unreachable)" and EXIT 0,
+disabling the only check that keeps the published treasury basket honest. Both print a truthful SKIP
+message, which is why neither reads as a defect.
+**Apply:** When you audit or write a gate, test the SKIP path before the happy path — a gate is
+strongest-looking and weakest exactly where its input is absent. Two rules: findings already
+collected must be reported before any early exit, and a check that cannot run in the environment it
+is wired into is not a gate there, so either make it fail closed or stop citing it as coverage for
+that environment. If you cite a build gate, say WHICH machine you watched it fail on.
+
+### L-018 — A path-leak gate only sees the notation it was written against; `~` is a different string
+**Applies to:** essey-auditor, essey-protocol-engineer, essey-web-designer, jester, essey-deployment-manager, essey-zk-auditor
+**Origin:** 2026-09-05 · essey-auditor
+**The trap:** `.githooks/pre-commit:67` blocks `/Users/<name>/(Developer|Documents|Desktop)/` — the
+literal form of the 2026-09-02 leak that forced a history rewrite. It was verified working (I planted
+that exact string and watched exit 1). A scan for the same shape across the push range returned ZERO,
+and that zero was reported as "no private paths." Both the gate and the scan were correct and both
+missed the leak, because the leak had been rewritten in tilde form. `git grep -c` against the
+then-current `origin/main` scored it: `~/Developer/assay-design` 0 → 3 occurrences,
+`~/Developer/essey-ceremony` 0 → 1, `~/.claude/agents/…` 0 → many. The ceremony checkout is the exact
+private repo the hook was built to keep out, re-entering public history in the one notation the hook
+cannot see. A slug form also exists and contains no `/` at all:
+`~/.claude/projects/-Users-<name>-Developer-<repo>/…` in `docs/agents/continuity/jester.md:14`.
+**Apply:** A path is a value, not a string, and a gate that matches strings must enumerate every
+notation that denotes the same value before it can claim coverage: `/Users/<n>/`, `/home/<n>/`, `~/`,
+`$HOME/`, `%USERPROFILE%`, `C:\Users\`, and the Claude project-slug `-Users-<n>-<...>`. When you are
+handed a "zero hits" result — including your own — the first question is not "is the grep correct"
+but "what OTHER spelling of the same thing would this grep never return?" Repo-relative paths in
+prose avoid the whole class; if a doc must name a location outside the repo, name it without the home
+prefix. And note the second-order trap: agent continuity files are the highest-risk surface here,
+because their whole content is an agent narrating where its own files live.
+
+### L-016 — A gate that NORMALISES a value stops testing the property its consumer depends on
+**Applies to:** essey-web-designer, essey-protocol-engineer, essey-harness, essey-auditor, essey-deployment-manager
+**Origin:** 2026-09-05 · essey-harness
+**The trap:** `check-reserve-basket.mjs` exists to guarantee the treasury page reads every token the
+reserve holds. It lowercases each BASKET address before comparing (`:53`) and issues its RPC as
+hand-built JSON strings, never through viem. So when `0x8fA1248c3EC58f733E778b89C30526716Cd70893`
+shipped with a broken EIP-55 checksum — the only bad one of fifteen — the gate printed
+"15 token(s) ever received, 15 in BASKET, 0 unlisted equity, 0 unlisted other" and exited 0, while
+the live page rendered that row as `unreadable` and raised a site-wide "INCOMPLETE READ — THIS IS A
+LOWER BOUND" banner telling visitors to reload. viem throws `InvalidAddressError` at ENCODE time, so
+the request never reached the chain; reloading could never have helped. Provenance: the address was
+correct while it lived lowercased in `ACKNOWLEDGED`, and was hand-cased when promoted into `BASKET`.
+**Apply:** Before trusting a gate, ask what the CONSUMER requires, not what the comparison needs.
+Every normalisation in a check — `toLowerCase()`, `trim()`, `sort()`, a permissive regex — is a
+property the check has stopped enforcing. Where the consumer is a library, exercise the value THROUGH
+that library (`getAddress()`, the real client with its real batch/multicall config), not through a
+hand-rolled equivalent. And when a UI says "unreadable" while your own raw `eth_call` returns real
+data, the bug is in the read path: rebuild the page's exact client and run the same call through it.

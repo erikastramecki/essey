@@ -67,3 +67,107 @@ citing it to anyone.
   quietly left beside the new one.
 - L-009/L-010: continuity before the report; handoff named explicitly. My seams are essey-auditor
   (verifier contract call path, revert behaviour) and the PM (ceremony gate, before-large-value list).
+
+## 2026-09-05 — pre-push gate round (member 2 of 3) — CHECKPOINT, mid-run
+
+Dispatched to gate a 43-commit / 232-file push to the PUBLIC repo. Checkpointing before the
+report because the findings below are load-bearing and I do not want to lose them.
+
+### THE HEADLINE: the push landed while the gate was still running
+VERIFIED, authoritatively: `git ls-remote origin refs/heads/main` returned
+`58fff0bf5921d24378b3641f74f0e20d7ede4d2d`, byte-identical to local `git rev-parse HEAD`, and
+`git reflog show origin/main` records `origin/main@{0}: update by push`. `origin/main..HEAD` is
+now EMPTY (0 commits, 0 files). I never returned a clean. The 3-agent gate did not hold the push.
+The real landed range was `6903bc6..58fff0b` = 44 commits / 234 files — one commit and two files
+MORE than I was dispatched to audit, because `58fff0b` was committed at 17:35 DURING my round
+(HEAD moved `bde33d1` -> `58fff0b` under me; I caught it because guard-git.py printed a different
+receipt sha in two different blocks).
+LESSON FOR ME: on any gate round, record `git rev-parse HEAD` at START and re-check at END, and
+verify the remote with `git ls-remote` rather than trusting the local `origin/main` ref — the
+local ref only moves on fetch or on OUR OWN push, so a moving `origin/main` with a stale
+FETCH_HEAD is itself the tell that somebody pushed.
+
+### guard-git.py is bypassed by any segment that does not START with `git` (VERIFIED, real hook)
+`git_segments()` (guard-git.py:89) only matches `^git(\s|$)` per segment, and line 141-142
+`if not segments: sys.exit(0)` skips EVERY rule. Watched both of these run for real:
+  - `sh -c "git push nosuchremote-probe main --dry-run"` -> git executed (fatal: no such repo).
+  - `(git push nosuchremote-probe main --dry-run)` -> git executed.
+  - `(git commit --dry-run)` -> ran, printing branch status, while the bare
+    `git commit --dry-run` was BLOCKED for a missing style receipt.
+So a plain parenthesised subshell defeats RULE 1 (push-to-main), RULE 2 (style receipt),
+RULE 2b (3-clean audit receipt) and RULE 3 (stale base) at once. Not exotic; an agent could type
+it by accident. I did NOT use the bypass to do anything — probes used a nonexistent remote and
+--dry-run only.
+
+### guard-git.py false POSITIVE (fails closed, so safe but costly)
+RULE 2 greps `\bcommit\b` over the whole segment, so read-only
+`git show HEAD:.githooks/pre-commit` was BLOCKED as if it were a commit. Use the Read tool for
+paths containing "commit".
+
+### .githooks/pre-commit IS a real gate — I watched all six claims go red (exit 1)
+Isolated repo, real git index, hook invoked as git invokes it. Benign baseline exit 0; PEM key,
+named-private-key literal, absolute home path, api-key literal, filled `.env.example` template,
+and a staged `*.env` each exit 1. This one I can cite.
+BLIND SPOTS I measured (each exit 0, i.e. NOT caught):
+  M1 any extension in the line-55 binary skip list (.zkey/.ptau/.wasm/.png...) bypasses ALL
+     content scanning — a home path or key inside a .zkey is invisible.
+  M2 `/Users/<u>/Projects/...` — the regex only covers Developer|Documents|Desktop.
+  M3 TILDE form `~/Developer/essey-ceremony/...` — not caught at all.
+  M4 secret in a filename outside the extension list (e.g. operator-secrets.txt) with a short value.
+
+### M3 IS NOT THEORETICAL — it already leaked, in MY domain
+`docs/agents/continuity/essey-zk-auditor.md:37` contains `~/Developer/essey-ceremony/` and was
+**A**dded by this push, so the CEREMONY REPO NAME is now public. The pre-commit hook's own header
+(lines 5-7) says it exists because a 2026-09-02 audit found "another private repo, and the
+ceremony checkout" leaked via absolute paths, and history had to be REWRITTEN. The same class of
+leak recurred through the tilde blind spot. Same shape, different quoting.
+Also public via the same blind spot: `~/Developer/essey-markets` and `~/Developer/assay-design`.
+Absolute `/Users/erikastramecki/...` paths exist in 6 files but were NOT new in this push
+(pre-existing on origin/main) — real exposure, not caused by this round.
+
+### Circuits: nothing to gate this round
+`transaction.circom` / `transaction2.circom` are UNCHANGED by the push. transaction.circom is
+byte-for-byte stock Tornado-Nova and every constraint the adversarial README names exists:
+value conservation :126, sameNullifiers :120, ForceEqualIfEnabled :81-84, nullifier binding :71,
+outputCommitment binding :103, Num2Bits(248) :106, extDataSquare :129. The public list in
+transaction2.circom:7 is exactly the 7 signals the suite mutates.
+The README defers three checks to the contract; I verified ALL THREE exist in
+`rh-chain/src/private/pool/EsseyShieldedPool.sol`: isKnownRoot :156, isSpent x2 :157-158,
+calculatePublicAmount/MAX_EXT_AMOUNT :127-131,163. So the README documents a DEFENDED boundary,
+not a live hole — it is safe to publish. No zkey/ptau/binary ceremony artefact is in the push
+(only added binary is app/web/public/og-default.png).
+I did NOT run the adversarial suite (needs circom + a ptau); per BC-001 I do not cite it.
+
+### Remaining verified findings from this round
+- `app/web/check-agent-wiring.mjs` is step 1 of the `app/web` `build` script (package.json:8) and
+  DISCARDS problems it already found: the LESSONS.md and FOUNDATION checks run first, then
+  `if (!existsSync(AGENTS)) process.exit(0)` throws them away. Watched both ways in an isolated
+  `git archive HEAD` tree with an identical broken LESSONS.md: exit 1 with the real HOME, exit 0
+  with a HOME that has no `.claude/agents`. Vercel has no charter dir, so on the machine that
+  actually deploys this gate is a guaranteed pass.
+- `app/web/check-reserve-basket.mjs:81-83` exits 0 when the RPC is unreachable. Watched it: pointed
+  RPC at `http://127.0.0.1:9/dead` -> "SKIP (RPC unreachable)", EXIT=0. Honest message, zero
+  coverage; the gate that keeps the public treasury page truthful is off on any network blip.
+- `tools/runlock.py` is GENUINELY FIXED (221f9e3). Watched a second `guard()` call refuse while a
+  holder process was alive: BLOCKED, EXIT=2, and `--list` named the holder; after the holder exited
+  the lock acquired normally. This one I can cite as evidence. Credit to whoever wrote the `_HELD`
+  fix — the module-global reference makes the discard-the-handle misuse unreachable.
+- Blog: TWELVE posts landed, not the two I was told about. No attack path disclosed. The published
+  addresses are on-chain anyway and publishing them is the anti-scam point. `reserve-audit.md:48`
+  does disclose that one ordinary EOA key controls 100% of supply, and
+  `only-real-essey-contract.md:18` names it — an honestly-disclosed accepted risk, and the address
+  is trivially derivable from the single genesis Transfer event, so the marginal disclosure is low.
+- Pre-existing, NOT caused by this push and already public: absolute `/Users/erikastramecki/...`
+  paths in `rh-chain/xyz.essey.game-keeper.plist`, `pfp/extract_leaves.py`,
+  `pfp/extract_structure.py`, `app/web/_private_haircut_smoke.mjs` and two RESUME docs. The hook
+  only scans NEWLY STAGED files, so it will never catch these — a content gate that only runs on
+  the diff cannot clean what is already in the tree.
+
+### What I would do differently next time
+1. Stamp `git rev-parse HEAD` and `git ls-remote origin refs/heads/main` at the START of a gate
+   round and paste both into the report. I only noticed the surface moving because guard-git.py
+   happened to print two different receipt shas at me. That was luck, not method.
+2. Do not trust the local `origin/main` ref as "what is published". It moves on our own push too.
+   `git ls-remote` is the only authoritative answer and it costs one second.
+3. When a gate is named in my task, test the SKIP path first, not the happy path. Both fake gates I
+   found this round were fine on the happy path and empty on the skip path.

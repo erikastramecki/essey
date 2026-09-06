@@ -38,21 +38,23 @@ else {
   }
 }
 
-if (!existsSync(AGENTS)) {
-  console.log(
-    `agent-wiring: SKIP (no charter directory at ${AGENTS} — not a developer machine).`,
-  );
-  console.log(
-    "  This gate gives no coverage here. It enforces on machines that hold the charters.",
-  );
-  process.exit(0);
-}
+const report = () => {
+  console.error("\nagent-wiring: FAIL — the knowledge base has drifted.");
+  for (const p of problems) console.error(`  ${p}`);
+  console.error("");
+};
 
-const roster = readdirSync(AGENTS).filter((f) => f.endsWith(".md") && owned(f));
-if (!roster.length)
-  problems.push(
-    "Charter directory exists but holds no essey/don/jester charters.",
+const hasCharters = existsSync(AGENTS);
+if (!hasCharters)
+  console.log(
+    "agent-wiring: charter checks SKIPPED (no charter dir here); repo checks still enforced.",
   );
+
+const roster = hasCharters
+  ? readdirSync(AGENTS).filter((f) => f.endsWith(".md") && owned(f))
+  : [];
+if (hasCharters && !roster.length)
+  problems.push("Charter directory exists but holds no charters.");
 
 for (const f of roster) {
   const name = f.replace(/\.md$/, "");
@@ -143,6 +145,13 @@ if (process.argv.includes("--stamp")) {
     `agent-wiring: stamped ${hash}. Confirm the prose actually describes this structure.`,
   );
   process.exit(0);
+}
+
+if (!hasCharters) {
+  if (problems.length) {
+    report();
+  }
+  process.exit(problems.length ? 1 : 0);
 }
 
 if (!existsSync(FOUNDATION))

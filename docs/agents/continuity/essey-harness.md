@@ -58,3 +58,111 @@ written by agents whose own charter may not have told them to read the broadcast
 **Minor:** the charter calls this continuity file "Private to you; nobody else pays to read it"
 (charter:131). `tools/broadcast.py:29` reads every agent's continuity file and prints the ACK line
 verbatim for the founder. It is team-audited, not private. I will write it accordingly.
+
+## 2026-09-05 (evening) — pre-push gate round 3/3: deploy-path + reserve + blog verification
+
+**Checkpoint written mid-run, per L-010.**
+
+### The single most important process fact from this run
+I was dispatched as "round member 3 of 3" of a PRE-PUSH gate over a 43-commit range. During my
+round the tree moved THREE times and the push landed before I reported:
+- at dispatch `git rev-list --count origin/main..HEAD` = 43, HEAD `5c42f14`
+- mid-run HEAD became `58fff0b` (a new blog commit, itself amended once per `git reflog`)
+- then `a48216c`, and `git ls-remote origin main` returned `a48216c` — **already pushed**.
+A pre-push clean issued against bytes that have already shipped is not a gate. Next time I take a
+gate round I will pin the exact SHA in my first command, re-check `git rev-parse HEAD` before every
+verdict-bearing claim, and refuse to certify if the SHA moved (the audit-gate definition already
+requires the SAME frozen bytes; nothing enforces it). Worth proposing: `tools/runlock.py` style
+freeze, or the gate agent recording `HEAD` and the coordinator comparing before accepting a clean.
+
+### Technique that paid off (do this again)
+Removing AMZN from `BASKET` in `app/web/src/reserve.ts` and running the REAL deploy line proved two
+things with one mutation: (a) `app/deploy.sh:39` genuinely runs the gates and exits 1, and (b) the
+reserve really holds AMZN on chain 4663 with an issuer-matching EIP-1967 beacon — because the gate
+gets that answer from a live `eth_getLogs` + `eth_getStorageAt`. A mutation that forces a gate to
+report a CHAIN fact is worth more than a mutation that only forces it to report a FILE fact.
+
+### A false alarm I caught before reporting it (the CLAUDE.md "verify the diagnostic" rule earned out)
+I converted block 54794684 to hex by hand as `0x343e4bc`, read that block's timestamp as 02:57:24Z,
+and was one sentence from reporting the blog post's "03:20 UTC" as wrong. My hex was wrong; the real
+value is `0x34419bc`, whose timestamp is 2026-09-05T03:20:13Z. The post was right. Re-derive the
+probe before you report the alarm — a wrong alarm about a peer's published post costs their next
+initiative (L-008).
+
+### A finding I got WRONG first, then measured correctly
+I ran `check-agent-wiring.mjs` with `HOME` pointed at an empty dir (the Vercel container's shape) and
+watched it exit 1 with "No essey/don/jester agent charters found". Real: the charters live in
+`~/.claude/agents`, which does not exist on a build container, so the gate would have failed every
+Vercel-side build. It was fixed mid-round by `a48216c` and now prints
+"agent-wiring: SKIP (no charter directory ... not a developer machine)" and exits 0 — verified by
+re-running with the same empty HOME. Consequence to carry forward: **on the Vercel build path that
+gate contributes ZERO coverage.** Only a local `app/deploy.sh` build enforces it.
+
+### zsh trap that nearly cost me a wrong "it passed"
+`${PIPESTATUS[0]}` is bash. This shell is zsh (`echo $0` = /bin/zsh), where the array is
+`$pipestatus` and 1-indexed, so `cmd | tail; echo ${PIPESTATUS[0]}` printed EMPTY and I briefly read
+a failing pipeline as passing. Never capture an exit code through a pipe here — redirect to a file
+and use `$?` on the bare command.
+
+### HIGH found post-ship: an EIP-55 checksum is a live read path, and no gate here tests it
+`app/web/src/reserve.ts:58` shipped Supercycle as `0x8fA1248c3EC58f733E778b89C30526716Cd70893`.
+That is not the EIP-55 checksum (`v.getAddress()` says `0x8FA1248C3ec58F733e778B89c30526716Cd70893`),
+and viem throws `InvalidAddressError` at ENCODE time — the request never reaches the RPC. All 14 other
+BASKET entries check out; it is the only bad one. Live consequence on essey.xyz right now: the row
+renders `0x8fA1…0893 / unreadable / unreadable / unreadable` and the whole page raises
+"INCOMPLETE READ — THIS IS A LOWER BOUND … would not read from the chain just now. Reload to read
+again." The reload advice is wrong: the failure is deterministic, not transient.
+
+**The technique that found it, keep using it:** the page said "unreadable" while my own raw
+`eth_call` for `balanceOf/symbol/decimals` on the same token returned real values. When the UI and a
+hand-rolled chain read disagree, the bug is in the READ PATH, not the chain — so rebuild the page's
+exact client (`http(RPC,{batch:true})` + `batch:{multicall:true}`) and run the same call through it.
+It threw immediately and named the cause.
+
+**Why the gate could not catch it, and this generalises:** `check-reserve-basket.mjs:53` lowercases
+every BASKET address before comparing and issues its RPC as hand-built JSON strings — it never goes
+through viem. So the one gate whose whole job is "the page will read these tokens" is structurally
+incapable of seeing the failure that stops the page reading one. Watched: it prints
+"15 token(s) ever received, 15 in BASKET, 0 unlisted equity, 0 unlisted other", exit 0, while the live
+page shows that token unreadable. **When a gate normalises a value (lowercase, trim, sort) it stops
+testing the property the consumer actually depends on.** Ask what the CONSUMER requires, not what the
+comparison needs.
+
+### MEDIUM: a 25h staleness bound against feeds that only tick on trading days is a weekly outage
+`prices.ts:39` MAX_STALENESS = 86400 + 3600 = 25h. Read on chain 2026-09-06T00:47Z: NVDA updated
+Friday 09-04 17:46Z (31.0h), AAPL 19:51Z (28.9h), SPY 15:12Z (33.6h), QQQ 04:31Z (44.3h) — all stale.
+The treasury headline therefore reads "at least $0.00 · 0 of 15 holdings priced" every weekend, by
+construction, not by accident. Time-box any staleness check I write against the asset's TRADING
+calendar, not a flat hour count, and always sample a gated flow on a Saturday before calling it fine.
+
+### The evidence I produced this round (all watched red, all in the real configuration)
+Every one of these ran the LITERAL `app/deploy.sh:39` command — `( cd "$WEB" && npm run build >/dev/null )`
+— not a gate invoked by hand. Each restored byte-exact (sha256 re-checked against the pre-mutation hash).
+- drop AMZN from `BASKET` -> `reserve-basket: FAIL`, names `0x12f190a9…`, **exit 1**
+- strip one `**Applies to:**` from LESSONS.md -> `agent-wiring: FAIL`, names L-001, **exit 1**
+- delete `docs/agents/continuity/essey-social.md` -> `agent-wiring: FAIL`, names essey-social, **exit 1**
+- verdict word -> UNAUDITED in CUSTODY-AUDIT-STATUS.md -> `custody-audit gate: FAIL`, **exit 1**
+- push the build-log date 25 days past the newest post -> `blog-cadence: FAIL`, **exit 1**
+- deliberate TS error in `src/` -> `npx tsc --noEmit` **exit 2** (proves the preflight is live)
+The four gate files, `app/deploy.sh` and `package.json` are byte-identical from `5c42f14` to `a48216c`
+(sha-compared), so this evidence stands at HEAD. Only `check-agent-wiring.mjs` changed mid-round, and
+I re-broke it twice at the new bytes.
+
+### `deploy.sh` preflight tsc does NOT cover `api/`
+`app/web/tsconfig.json` is `"include": ["src"]`. `npx tsc --noEmit` returns 0 while
+`api/_don-lib.ts:29` has a real TS2339 (`DON_NET.affinity` was deleted by `2c40d4f`, already on main).
+Vercel's own function builder reports it and does NOT fail the build. Runtime impact is contained —
+`api/don/[id].ts:64-75` wraps the affinity read in try/catch returning null — so the Don stat sheet
+silently degrades rather than 500ing. But `api/` is typechecked by NOTHING that gates a ship.
+
+### Handoff notes I want my future self to reuse
+- The Vercel path and the shell path are DIFFERENT builds. `deploy.sh` builds locally and uploads a
+  prebuilt `dist/` whose derived `vercel.json` carries only rewrites+headers — so Vercel runs no build
+  at all on that path. `vercel --prod` from the repo root DOES run `npm run build` in the container
+  (proven from Vercel's own production log, which printed the whole build script line). Anything that
+  depends on a developer's `$HOME` therefore enforces on ONE path only.
+- `vercel inspect --logs <deployment-url>` is the cheapest possible confirmation of a build-time
+  hypothesis. Two production deploys had already failed with the exact error I had reproduced locally.
+  Check the deployment list BEFORE theorising about what a build will do.
+- `vercel ls <project> --prod` + `vercel inspect https://<alias>` tells you whether the thing you are
+  "gating" has already shipped. Run it FIRST next time.
