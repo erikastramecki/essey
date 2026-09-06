@@ -389,6 +389,11 @@ them failed at the thing it inspects.** They failed at everything around it:
 The practical rule: when you add a gate, write down what triggers it, what masks it, what proves it
 can fail, and what it costs the people who will live with it. The inspection logic is the easy part.
 
+One more, added after a round I voided myself: **a PreToolUse guard reads the tree BEFORE your command
+runs**, so putting a mutation and the guarded command in one shell call tests nothing — the guard saw
+the tree as it was. And do not commit while a round is open. I did, moving the exact file two findings
+were in, and the freeze tool correctly voided the round.
+
 ## What this does not solve
 
 Stated plainly, because a structure oversold is worse than no structure:

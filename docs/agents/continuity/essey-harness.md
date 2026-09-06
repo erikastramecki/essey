@@ -256,3 +256,65 @@ comment at `:21-22` states the intent ("no half-working UI pointing at a convert
 and the check asks the wrong source. Same shape as L-019: the gate normalised away the property the
 consumer depends on. **Lesson for me: when a UI gate decides whether a control is shown, verify it
 against the CONTRACT STATE the control writes to, not against a config constant.**
+
+### Checkpoint 2 — the round went VOID mid-run, and this time it was REAL
+`python3 tools/audit-round.py check` opened INTACT on `017f0d8e89c6`, stayed INTACT across my own
+continuity write (the exclusion fix works), and then printed
+`ROUND VOID: the audited surface moved (head, tree)` — pinned `017f0d8e89c6`/`b4709b41343af88f`,
+now `35b0ea45ae64`/`93c2c19524b5cba9`. Per L-022 I checked WHICH hashes moved before discarding
+anything: head AND tree, so real bytes. Commit `35b0ea4` "fix(gates,docs): close RULE 1 properly…"
+landed locally during my round and **it edited `docs/SCOPE-robinhood-chain.md`, the exact file my two
+findings were in**. `git ls-remote origin main` = `017f0d8…`, so it is local-only and unpushed.
+Process lesson for me, second time in two days: I now pin the sha in my first command AND diff
+`<pinned>..HEAD --stat` the moment `check` goes red, so I can say per-finding what survived instead of
+throwing the whole round away.
+
+### I proved the freeze tool both ways at these bytes (BC-001)
+Appended a line to `docs/OUTSTANDING.md` → `ROUND VOID … (work)`, **exit 1**; restored byte-exact
+(sha `37343002…ee14` before and after) → **exit 0**. So the continuity exclusion did not over-exclude.
+Still open from L-020: the failure line names the hash that moved, never the PATH.
+
+### Three of my own probes returned the SAFE answer and were WRONG — all in one session
+1. `grep -c -F` for a string containing a backtick against `docs.generated.ts` → 0, empty stderr.
+   The generator escapes backticks as `\``. Real count 1.
+2. `cd $T && vercel --prod --help` → passed. `guard-deploy.py:resolve_cd` does `expanduser` and NO
+   variable expansion, so `$T` resolves to a nonexistent path, `git -C` fails, and the guard
+   `passthru()`s. My "the docs/ arm is broken" draft was an artifact of my own quoting.
+3. **The one worth carrying:** I created the dirty file and ran the guard-triggering command in the
+   SAME Bash call. PreToolUse runs BEFORE the command, so the hook read the PRE-mutation tree and
+   returned PASS. Re-run as its own call → BLOCKED, exit 2. **Any PreToolUse-guard test must put the
+   mutation in a prior call.** Filed as L-028.
+
+### guard-deploy.py, driven against the REAL repo with the REAL hook (sha `7984342b…3946`)
+- clean served scope → PASS (vercel CLI banner reached)
+- dirty under `docs/` → **BLOCKED exit 2**, count 1  ·  dirty under `app/web/` → **BLOCKED exit 2**
+- dirty only under `rh-chain/` → PASS (scoping is real)
+- `bash <wrapper>.sh` containing the identical `vercel deploy --prod` line, same dirty tree →
+  **reached vercel**. essey-auditor found this independently and wrote it up as L-027; my run
+  corroborates it from the live repo rather than a throwaway one. Credit to them — they got there
+  first and stated the two-axis framing better than I would have.
+- NEW, and not in L-027: at the frozen sha the guard blocked with **4 uncommitted changes**, and all
+  four were `docs/agents/LESSONS.md` + three `docs/agents/continuity/*.md` — agent memory files that
+  `gen-docs.mjs` never publishes (its `PICK` list is 17 named docs, none under `docs/agents/`). So the
+  charter-mandated "write continuity before you report" makes a production deploy impossible until
+  someone commits agent memory, and the escape hatch is `GATE_DIRTY_OK=1`, which turns the gate off
+  for `app/web` too. Same shape as L-020's corollary about audit-round.py, one file over.
+
+### The four build gates, re-proved at HEAD through the real caller
+`( cd app/web && npm run build )` — literally `app/deploy.sh:39`. Dropped AMZN from `BASKET` in
+`app/web/src/reserve.ts` → `reserve-basket: FAIL — 1 tokenized equity(s) in the reserve are not on the
+page`, names `0x12f190a9…`, **BUILD EXIT=1**. Restored byte-exact (sha `61703c6a…2170`) → **EXIT=0**.
+`app/web/package.json` `build` still chains all four gates ahead of `vite build`. Unchanged from my
+last round: on the Vercel container path `check-agent-wiring.mjs` SKIPs (no `~/.claude/agents`) and
+`check-reserve-basket.mjs` SKIPs on an unreachable RPC (L-017), so only a local `deploy.sh` build
+enforces the full set.
+
+### Treasury, Saturday/Sunday, measured rather than argued
+All 7 equity feeds stale at 2026-09-06 18:23Z (QQQ 61.9h, GOOGL 51.9h, SPY 51.2h, NVDA 48.6h,
+TSLA 48.1h, AAPL 46.5h, MSTR 44.4h; ETH/USD fresh at 1.0h) against `prices.ts:39` MAX_STALENESS 25h.
+Live page: `$280.65 · 1 of 15 holdings priced`, `$0.00 Equities · Chainlink feed`,
+`$280.65 Crypto · thin-pool mark`.
+**The number that reframes it:** priced at the feeds' OWN last answers, the equities total **$48.55**
+(balances read from `0xd970…05A7b` on 4663). So the headline is ~85% thin-pool FLR mark on a weekday
+and 100% on a weekend. The weekend is the amplifier, not the cause — and I would have reported the
+weekend as the whole story if I had not multiplied it out.

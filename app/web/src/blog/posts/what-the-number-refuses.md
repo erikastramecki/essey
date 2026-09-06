@@ -33,7 +33,7 @@ The convenient thing to do with those is count them as zero and move on. It is e
 
 We do not do it, because zero is a claim and it is a false one. A holding worth something that gets summed as nothing is a wrong number with a good conscience.
 
-So the page lists them by ticker, under a stat labelled "Excluded · no price source," and leaves them out of the total. You can see exactly which holdings the dollar figure does not cover, and the header tells you how many of the reserve's holdings got priced out of how many it has. If we ever get a source for one, it moves into the total and you will see it move.
+So the page lists them by ticker, under a stat labelled "Excluded · no live mark," and leaves them out of the total. You can see exactly which holdings the dollar figure does not cover, and the header tells you how many of the reserve's holdings got priced out of how many it has. If we ever get a source for one, it moves into the total and you will see it move.
 
 ## Why the explanation is behind a click now
 

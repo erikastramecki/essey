@@ -348,7 +348,7 @@ function MarkMethod() {
         <div>
           <p style={{ margin: "0 0 8px" }}>
             <b>Equities</b> — live Chainlink feed on Robinhood Chain. Those
-            feeds run 24/5, so a line reads <i>price unavailable</i> rather than
+            feeds run 24/5, so a line reads <i>price stale</i> rather than
             showing a stale mark.
           </p>
           <p style={{ margin: "0 0 8px" }}>
