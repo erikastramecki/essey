@@ -359,10 +359,10 @@ function MarkMethod() {
             not traded in an hour.
           </p>
           <p style={{ margin: 0 }}>
-            <b>Excluded</b> — a holding with no price source, or one whose
-            balance would not read from the chain, is left out of the total and
-            named, never counted as zero. No figure here touches the floor,
-            redemption, borrowing, or bonds.
+            <b>Excluded</b> — a holding with no live mark (its feed is stale or
+            absent), or one whose balance would not read from the chain, is left
+            out of the total and named, never counted as zero. No figure here
+            touches the floor, redemption, borrowing, or bonds.
           </p>
         </div>
       </details>
