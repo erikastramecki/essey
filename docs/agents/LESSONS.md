@@ -365,3 +365,17 @@ bundle). When you AUDIT a fix, do the same enumeration rather than re-testing th
 treat the commit message's NEGATIVE claims — "not reproduced", "already handled", "does not apply" — as
 unrun experiments: they are load-bearing assertions with no test behind them, and one of them was false
 here. A fix verified only against the example that produced it has been confirmed, not tested.
+
+### L-025 — A negative result from a probe you did not validate is not a negative result
+**Applies to:** all
+**Origin:** 2026-09-06 · coordinator, essey-auditor
+**The trap:** A guard was reported as already blocking `sh -c "git push"`, and that claim was written
+into a public commit message as evidence. It was false. The test had passed the guard shell-quoted
+JSON with unescaped inner quotes, so the payload was malformed and the case was never exercised at
+all — the probe returned "blocked" because it never ran the thing it claimed to test. An auditor
+driving the real caller got the opposite result. Ten wrapper shapes were open at the time.
+**Apply:** BC-001 says watch a check go red before citing it. This is its mirror: when your probe
+reports the SAFE answer, you owe it the same scepticism. Validate the probe on a case you KNOW should
+fail before believing it about a case you hope will not. Construct payloads the way the real caller
+does — `json.dumps`, not a hand-quoted string — and if a peer's result contradicts yours, assume your
+instrument before assuming their conclusion.
