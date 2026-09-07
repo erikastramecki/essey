@@ -94,6 +94,11 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// Ceiling on the SUM of curve legs. borrow_rate returns base + slope1 + slope2 at the top of
     /// the curve, so bounding the legs individually would permit 3x this (the R2-2 lesson).
     uint256 public constant MAX_RATE_BPS = 100_000; // 1000% APR
+    /// How long ONE observed pause vouches for. Two `paused()` reads are evidence about their own two
+    /// instants; without a bound `_growth` spent them as evidence about the whole interval between,
+    /// so two unrelated pause episodes forgave the unpaused year in the middle (R9 LOW-1). Same shape
+    /// and same value as EsseyMarkets.MAX_BASELINE_AGE, and for the same reason: a reading goes stale.
+    uint256 public constant MAX_FORGIVEN_GAP = 1 hours;
 
     EsseyMarkets public immutable markets;
     /// Constructor caller (admin EOA or the deploy script). Grants only the one-shot setNoteArt wiring
@@ -261,14 +266,23 @@ contract EsseyPool is ERC4626, ReentrancyGuard, CollateralReconciler {
     /// R8 MED-1: forgive an interval only when the pause was seen at BOTH endpoints. `paused()` is a
     /// bare boolean and the live USDG proxy exposes no timestamp variant, so the closing read is
     /// evidence about its own instant and nothing else — treating it as evidence about the interval
-    /// let any address erase a fully unpaused year of lender interest for gas. Ambiguous windows
-    /// therefore resolve toward the lender, and witnessing one costs a single permissionless
-    /// `accrue()`: an unwitnessed pause is charged, because on chain it did not happen.
+    /// let any address erase a fully unpaused year of lender interest for gas. An unwitnessed pause is
+    /// charged, because on chain it did not happen.
+    ///
+    /// R9 LOW-1: a PAIR of reads is still only evidence about two instants, so the same error survived
+    /// at the other end — two unrelated pause episodes forgave the unpaused year they bracketed. Each
+    /// witness therefore vouches for MAX_FORGIVEN_GAP and no more, and every second past that is
+    /// charged. The trade-off is deliberate and is the design's own principle applied consistently: a
+    /// genuinely long pause stays free, but it has to be witnessed at that cadence by someone, and
+    /// witnessing costs one permissionless `accrue()` that anyone may make.
     function _growth() internal view returns (uint256 num, uint256 denom, bool paused) {
         denom = BPS * SECONDS_PER_YEAR;
         paused = _borrowAssetPaused();
-        if (paused && pauseObserved) return (denom, denom, paused); // suspended: both endpoints paused
         uint256 dt = block.timestamp - lastAccrual;
+        if (paused && pauseObserved) {
+            if (dt <= MAX_FORGIVEN_GAP) return (denom, denom, paused); // suspended: both endpoints paused
+            dt -= MAX_FORGIVEN_GAP; // the endpoints vouch for a bounded window; the rest is charged
+        }
         if (dt == 0 || totalBorrows == 0) return (denom, denom, paused); // nothing to accrue, clock still runs
         return (denom + borrowRateBps() * dt, denom, paused);
     }

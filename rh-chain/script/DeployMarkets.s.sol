@@ -19,7 +19,7 @@ import {ScaledUIStockMock} from "../src/testnet/ScaledUIStockMock.sol";
 
 /// WS1: a market's rate curve is a per-listing CONFIG choice, not a contract. Fixed mode is the
 /// same EsseyPool with slope1 = 0 — flat at the policy rate up to the pool's kink (80% util,
-/// EsseyPool.sol:108) — and slope2 KEPT nonzero as the emergency leg above it. Tydro shipped a
+/// `EsseyPool.kinkBps`) — and slope2 KEPT nonzero as the emergency leg above it. Tydro shipped a
 /// zero-slope curve and sat exposed at 87% utilization with no rate to pull liquidity back;
 /// RateModes.t.sol pins that a fixed listing here can never ship that shape.
 library RateModes {

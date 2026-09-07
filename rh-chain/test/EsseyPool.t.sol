@@ -617,8 +617,13 @@ contract EsseyPoolTest is Test {
     }
 
     /// The pause moves in BOTH directions inside one measured span, against a control that varies
-    /// only time. The witnessed paused year must contribute exactly nothing and the two unpaused
+    /// only time. The witnessed paused window must contribute exactly nothing and the two unpaused
     /// days must contribute exactly what they would have with no pause at all.
+    ///
+    /// R9 LOW-1: this test used to forgive a 365-day window from TWO accrue() calls, which is the
+    /// defect — it asserted that an interval nothing bounds costs nothing, so the bounded fix turned
+    /// it red. Rewritten to witness at the cadence a witness is actually good for; the property it was
+    /// named for survives, and the straddle it permitted is pinned by the test below.
     function test_onlyTheWitnessedPausedWindowIsForgiven() public {
         (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
         uint256 snap = vm.snapshotState();
@@ -631,14 +636,82 @@ contract EsseyPoolTest is Test {
         vm.warp(block.timestamp + 1 days);
         usdg.setPausedWord(1);
         p2.accrue(); // charges day one, and WITNESSES the pause
-        vm.warp(block.timestamp + 365 days);
-        p2.accrue(); // both endpoints paused: forgiven
+        for (uint256 i = 0; i < 12; i++) {
+            vm.warp(block.timestamp + 1 hours);
+            p2.accrue(); // both endpoints paused, and no witness is stretched past what it vouches for
+        }
         usdg.setPausedWord(0);
         vm.warp(block.timestamp + 1 days);
         p2.accrue(); // charges day two
 
         assertGt(twoUnpausedDays, 700e6, "the control really accrued, so this is not vacuous");
-        assertEq(p2.debtOf(id), twoUnpausedDays, "the witnessed paused year cost the borrower nothing");
+        assertEq(p2.debtOf(id), twoUnpausedDays, "the witnessed paused window cost the borrower nothing");
+    }
+
+    /// R9 LOW-1. TWO unrelated pause episodes, bracketing a year in which repayment was possible on
+    /// every second. The contract cannot tell this world from a year that was genuinely paused
+    /// throughout and witnessed only at its two ends — which is the whole reason a pair of reads may
+    /// not buy the interval between them. Only MAX_FORGIVEN_GAP is forgiven, so the straddled world
+    /// must charge EXACTLY what an unpaused world charges over a span one gap shorter.
+    function test_aStraddlingPausePairCannotForgiveTheUnpausedYearBetween() public {
+        (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
+        uint256 t0 = block.timestamp;
+        uint256 snap = vm.snapshotState();
+
+        vm.warp(t0 + 365 days - 1 hours);
+        p2.accrue();
+        uint256 chargedLessOneGap = p2.debtOf(id);
+        uint256 lenderAssets = p2.totalAssets();
+        vm.revertToState(snap);
+
+        usdg.setPausedWord(1);
+        vm.prank(address(0xBAD));
+        p2.accrue(); // episode one: a stranger witnesses, and pays only gas
+        usdg.setPausedWord(0); // the pause lifts; every second of the next year is repayable
+        vm.warp(t0 + 365 days);
+        usdg.setPausedWord(1); // episode two, a year later and unrelated
+        vm.prank(address(0xBAD));
+        p2.accrue();
+
+        assertGt(chargedLessOneGap, 700e6, "the control really accrued, so this is not vacuous");
+        assertEq(p2.debtOf(id), chargedLessOneGap, "a straddled year is charged but for the one gap witnessed");
+        assertEq(p2.totalAssets(), lenderAssets, "and no lender interest is destroyed");
+    }
+
+    /// The bound is a comparison on a money path, so its boundary is pinned rather than left to the
+    /// magnitude tests: exactly MAX_FORGIVEN_GAP is forgiven whole, one second more is charged for
+    /// that one second and not for the gap.
+    ///
+    /// Every span below is a LITERAL, deliberately. Written against `p2.MAX_FORGIVEN_GAP()` these
+    /// fixtures rescaled with the constant, so the bound could be moved to 0, to 1 second or to 24
+    /// hours with all three tests still green — the fixture co-varied with the thing it existed to
+    /// pin, and the gate caught it as M49/M50/M51 surviving. A test parameterised by the value under
+    /// test cannot see that value change.
+    function test_theForgivenGapBoundaryIsExact() public {
+        (EsseyPool p2, uint256 id) = _pausePoolWithABorrower();
+        uint256 t0 = block.timestamp;
+        uint256 snap = vm.snapshotState();
+
+        assertEq(p2.MAX_FORGIVEN_GAP(), 1 hours, "the bound is a chosen magnitude, pinned here directly");
+
+        usdg.setPausedWord(1);
+        p2.accrue();
+        vm.warp(t0 + 1 hours);
+        p2.accrue();
+        assertEq(p2.debtOf(id), 700e6, "exactly one gap is forgiven whole");
+        vm.revertToState(snap);
+
+        vm.warp(t0 + 1);
+        p2.accrue();
+        uint256 oneSecond = p2.debtOf(id);
+        vm.revertToState(snap);
+
+        usdg.setPausedWord(1);
+        p2.accrue();
+        vm.warp(t0 + 1 hours + 1);
+        p2.accrue();
+        assertGt(oneSecond, 700e6, "one second really does accrue, so this is not vacuous");
+        assertEq(p2.debtOf(id), oneSecond, "one second past the gap is charged for one second");
     }
 
     /// The accepted residual, pinned so a later "fix" that forgives it goes red. `paused()` is a bare
