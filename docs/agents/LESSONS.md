@@ -494,3 +494,124 @@ input, or make absence FAIL rather than skip, or state plainly in the report tha
 CI. This is L-017 with a sharper edge: there the SKIP was an occasional degraded state, here it is the
 permanent state everywhere the author is not. More generally, "the gate exists and passes" is a claim
 about a configuration — name the configuration, or you have not made a claim at all.
+
+### L-031 — A negative control proves the endpoint rejects nonsense; it does NOT prove you aimed it at the right instance
+**Applies to:** essey-research-intern, essey-protocol-engineer, essey-deployment-manager, essey-auditor, essey-zk-auditor, essey-launch-economist
+**Origin:** 2026-09-07 · essey-research-intern
+**The trap:** Researching an off-Essey target, I queried Lighter's public API for the desk's account
+index 22627 on `mainnet.zklighter.elliot.ai` and got a REAL, well-formed, HTTP-200 account that was
+empty — 0.0067 collateral, zero positions, and a different `l1_address`. My negative control was clean
+(index `99999999` → `{"code":29404,"message":"not found"}`, HTTP 400), so by the letter of BC-001 the
+lookup was "validated" and I was one sentence from reporting that a live fund was fabricated. It was
+not. There are TWO Lighter deployments and **account indices are not shared between them**; on
+`api.rh.lighter.xyz` the same index holds $32.6k and 23 positions, with an `l1_address` matching the
+project's published wallet exactly. The control answered "does this server refuse a fake input" and I
+had silently read it as "is this the right server". Two different questions; I had only asked one.
+The same day, the same shape twice more: Blockscout's API returns **403 for every request lacking a
+browser User-Agent**, real and fabricated address alike, so the control passed while measuring the WAF
+rather than the explorer; and a `recentTrades?limit=500` call (limit is capped at 100) returned an
+error body that my script read as an empty result set, which looked exactly like "the desk stopped
+trading".
+**Apply:** Before a lookup earns VERIFIED, run TWO controls, not one. (1) A fake input must be
+REJECTED. (2) A known-good input must return a NON-EMPTY, RIGHT-SHAPED answer on that same host —
+a positive control. I found the real deployment only because I then queried an unrelated active
+account and watched full positions come back. Where an identity can be cross-checked out-of-band,
+check it: `l1_address` matching a separately-published address is what pinned the account, not the
+index. And treat host/chain-id/deployment as a claim in its own right — say WHICH RPC, WHICH API host
+and WHICH chain id produced every number you report, because "the address was empty" and "I was on the
+wrong chain" are indistinguishable in a result and opposite in meaning. Corollary for anyone writing a
+probe: a collapse to empty after you changed one query parameter is evidence about the PARAMETER
+before it is evidence about the world — read the response body, never just the array length.
+
+### L-032 — "More data points" does not fix a short window: sampling frequency buys ZERO statistical power
+**Applies to:** don-economist, essey-launch-economist, essey-research-intern, essey-deployment-manager, essey-product-manager
+**Origin:** 2026-09-07 · don-economist
+**The trap:** Asked whether a third-party trading desk had real edge, the instinct — mine, and the one
+in the inherited scope — was to collect harder: poll faster, capture every fill, build the biggest
+dataset the venue allows. That instinct is worthless here and I proved it rather than asserting it.
+The standard error on an **annualised** Sharpe ratio is `~ sqrt(1/T_years)`: it is set by the CALENDAR
+SPAN of the observation and is **independent of the sampling rate**. Measured by Monte Carlo, holding
+span fixed at 30 days and raising the sampling rate **1,440×** (1/day → 1/minute, 30 → 43,200
+observations) moved detection power from **8.3% to 7.9%** — i.e. nowhere. The analytic detection floor
+`2/sqrt(T_years)` matched the simulation to one decimal. Concretely: over a 44-hour window the 95%
+interval on an annualised Sharpe is **± 28**, so a claim of "Sharpe 4.01" and a claim of "Sharpe 0"
+are the same claim. A 13-minute equity series in the same run produced a Sharpe of **−356 whose
+bootstrap CI excluded zero** — a fully significant, entirely meaningless result that a search for a
+headline would have found and reported.
+**Apply:** When anyone (including you) proposes to settle a performance question by gathering more
+data, ask first whether they mean more SPAN or more SAMPLES — only the first one counts. Before
+running any evaluation, compute the detection floor `2/sqrt(T_years)` for the span you will actually
+have and state it up front; if the floor is above the effect you are looking for, the study cannot
+answer the question and saying so IS the deliverable. And pre-register the decision rule before you
+look, because at short spans noise routinely manufactures a Sharpe of 2–3 with an interval that
+excludes zero. This generalises past trading: any "is X better than Y" claim measured over a short
+window has the same shape, and the same cure — a longer window, or no claim.
+
+### L-033 — A poller needs a FRESHNESS counter, not a round counter, and a 403 endpoint often has an unauthenticated sibling
+**Applies to:** essey-research-intern, essey-harness, don-economist, essey-protocol-engineer, essey-deployment-manager
+**Origin:** 2026-09-07 · don-economist
+**The trap, part one:** I built a collector that swept 57 markets concurrently and logged
+`round 3 seen=3942 elapsed=1.0s` — healthy-looking rounds, incrementing steadily. **Every single
+request was returning HTTP 429 and the data file had not grown since the first backfill.** A round
+counter increments on failure, so it can only ever go up; the tell was that the *unique-records*
+counter stopped moving. Measured limit: 0.75 s spacing → 9/20 succeeded, 1.05 s → 20/20. Related
+false negative in the same session: recovering a gzip torn by the killed writer, feeding the whole
+stream to `zlib.decompress()` at once raised and discarded the partial output, so my probe printed
+"0 records" — which reads as "the file is empty" and is not a finding at all.
+**The trap, part two:** the inherited scope reported it could not verify whether the target ran a
+second venue account, because `accountTxs` returns HTTP 403 — and that assumption was load-bearing for
+every PnL number in the document. There was an **unauthenticated sibling endpoint**,
+`accountsByL1Address`, that enumerates every sub-account under an address directly. It answered the
+question in one call (3 sub-accounts, two empty and inactive), with fabricated addresses returning
+HTTP 400 as a negative control.
+**Apply:** Instrument any collector with a counter that can only move when NEW data actually lands,
+and alert on it going flat — never on loop iterations. Add an explicit coverage check where the source
+is a rolling window (mine caught 3 silent gaps in 20 minutes) so data loss is a measured number rather
+than an invisible one. When a probe returns the convenient answer — "empty", "zero", "nothing found" —
+validate the probe on a case you KNOW should be non-empty before believing it (this is L-025 running
+backwards). And when an endpoint 403s on a load-bearing question, enumerate the API's other routes
+before writing "cannot be verified": a sibling that answers the same question without auth is common,
+and one call there beats a paragraph of caveats.
+
+### L-034 — A reconstruction seeded from an ABSOLUTE state field cannot be validated by its end state
+**Applies to:** essey-research-intern, don-economist, essey-launch-economist, essey-harness, essey-auditor, essey-protocol-engineer
+**Origin:** 2026-09-07 · essey-research-intern
+**The trap:** I rebuilt a trading desk's per-instrument position purely from a public trade tape and
+tied it back to the venue's account endpoint: 8 of 8 instruments matched to <1e-6, and I wrote "the
+method is validated" into the deliverable. Then I tried to watch the check fail (BC-001) by deleting a
+fill from the tape — **and it stayed green**. The reason is structural, not a bug: each trade record
+carries `taker_position_size_before`, which is ABSOLUTE STATE, so the LAST fill re-anchors the whole
+series. The end-state comparison therefore validates exactly one row per instrument and is blind to a
+row dropped anywhere in the middle — which is precisely the failure the dataset was most exposed to,
+since 19 rate-limit gaps had already been recorded mid-collection. Deleting the last fill produced
+`PLTR reconstructed 100.348000 vs account 99.622000`, exit 1; deleting a middle fill produced 0
+mismatches, exit 0. Same check, same data, opposite verdicts on equally-bad corruption.
+**Apply:** When a derived series is seeded from absolute state (a balance, a `*_before` field, a
+snapshot, a checkpoint) rather than accumulated from deltas, comparing the final value to an oracle
+proves almost nothing about the interior. Before citing such a tie-out, ask **which rows the check
+actually touches**, and add a second check whose failure mode is complementary — here, chain
+continuity (`state_after(i) == state_before(i+1)` within a series), watched failing on a deleted
+middle row at exit 1. Two checks with individually-proven, non-overlapping failure modes beat one
+check that passes. The payoff is not the checks: once continuity ran clean it PROVED the captured rows
+form an unbroken chain, which located the data loss precisely (all of it at the front, none in the
+middle) and turned an unusable-looking sample into a usable one.
+
+### L-035 — Two agents polling one external API poison each other, and `runlock.py` does not see it
+**Applies to:** essey-research-intern, don-economist, essey-launch-economist, essey-deployment-manager, essey-harness
+**Origin:** 2026-09-07 · essey-research-intern, don-economist
+**The trap:** Two of us independently ran sustained collectors against the same rate-limited public API
+(`api.rh.lighter.xyz`, measured limit ~1 req/s) at the same time, into the same output directory. I
+found out only because a directory I had not created appeared in my `ls`. Their log showed HTTP 429s;
+mine recorded 19 exhausted-retry gaps; those are substantially each other. This is L-003's shape — two
+runs voiding both results — but the contended resource is an EXTERNAL HOST, so `tools/runlock.py`,
+which guards the working tree, cannot see it and reports nothing. Worse, on a source that is a fixed
+rolling window with no pagination, a dropped request is unrecoverable: the data it would have returned
+is gone forever, and neither collector's log looks broken while it happens.
+**Apply:** Before starting any sustained polling of an external host, check whether a peer is already
+on it — `ls` the shared output directory and `ps` for a collector — and read their script for a
+measured rate limit before choosing your own pacing (theirs said 0.75 s → 9/20 OK, 1.0 s → 20/20 OK;
+I was at 0.45 s). If a peer is already collecting, **yield to the better instrument rather than adding
+throughput**: merge their output with a `source` column and attribution, and say in your report which
+one you stopped and why. Adding a second collector does not double coverage on a rolling window; it
+halves both. And instrument for the contention you cannot see: record every failed request as a named
+gap with host, path and timestamp, never as an interpolated value.

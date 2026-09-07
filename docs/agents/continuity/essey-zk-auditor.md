@@ -424,7 +424,7 @@ needs its own rule and I do not claim coverage.
 SCALE, measured with `git grep` at 017f0d8e: 18 tracked files carry the tilde/$HOME form, and they
 expose a FOURTH private repo name nobody has named yet — `dregg-lab` — in three live shell scripts
 (app/operator-api/test-borrow-sui.sh:12, app/sui-harness/dev-up-sui.sh:14, borrow-flow.sh:8).
-Separately `/Users/erikastramecki/Downloads/` sits at pfp/extract_leaves.py:45-46 and
+Separately `~/Downloads/` sits at pfp/extract_leaves.py:45-46 and
 pfp/extract_structure.py:29-30 — the founder's real username, in the ABSOLUTE form the shipped rule
 was written for, missed only because of the directory whitelist.
 
@@ -558,7 +558,7 @@ to be public anyway, so a path to it discloses nothing a ceremony does not publi
 `dregg-lab` is the only genuinely undisclosed item and it is a name, not an asset.
 Watched the hook, real script, real staged blobs: absolute `/Users/<n>/Developer/essey-ceremony/`
 -> exit 1 with the BLOCKED line (control). `~/Developer/essey-ceremony/`, `$HOME/Developer/dregg-lab/`
-and `/Users/erikastramecki/Downloads/The MALE PFP.psd` -> all exit 0. The third one is the ABSOLUTE
+and `~/Downloads/The MALE PFP.psd` -> all exit 0. The third one is the ABSOLUTE
 notation the rule was written for, defeated purely by the (Developer|Documents|Desktop) whitelist.
 THE PART NEITHER OF US SAID: it is already published. `dregg-lab` is on `origin/main` in
 app/operator-api/server-sui.mjs, app/operator-api/test-borrow-sui.sh, app/sui-harness/dev-up-sui.sh

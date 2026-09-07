@@ -181,6 +181,14 @@ red. A check you have never seen fail is a decoration.
 
 `**Applies to:** all` is the universal tag. Everything else routes.
 
+**Lessons do not have to come from the product to belong here.** The corpus now carries entries
+learned on a side investigation with no Essey code in it at all — a statistical evaluation of a
+third-party trading desk — because the craft transferred cleanly: that a poller must count NEW
+records rather than loop iterations or it reports health while returning 429 to every request, and
+that "collect more data" is not a remedy for a short observation window because the precision of an
+annualised ratio is set by calendar span, not sample count. Route those by role like any other. An
+agent that only records lessons from inside the product will keep relearning the general ones.
+
 An agent reads its slice with one command:
 
 ```bash
@@ -466,4 +474,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: 38174223c143db83 -->
+<!-- STRUCTURE-FINGERPRINT: d34c5fc75f860855 -->
