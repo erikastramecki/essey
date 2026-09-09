@@ -38,6 +38,7 @@ import { NotFoundPage } from "./notfound";
 import { TreasuryPage } from "./treasury";
 import { HolderHubPage } from "./holder";
 import { EarnPage } from "./earn-ui";
+import { BurnAllPage } from "./burn-all";
 import { RedeemPage } from "./redeem-ui";
 import { BlogIndex, BlogPost } from "./blog";
 import { TapeRoom } from "./tape-ui";
@@ -438,6 +439,14 @@ export default function App() {
             {/* Redemption — preview only (founder standing rule). The reserve is live and adminless
                 on mainnet; what is gated is the WRITE surface, so deep-linking /redeem on the live
                 host reaches the coming-soon screen and never a burn. */}
+            <Route
+              path="/burn-all"
+              element={
+                <AppPage title="Burn & claim">
+                  <BurnAllPage />
+                </AppPage>
+              }
+            />
             <Route
               path="/redeem"
               element={

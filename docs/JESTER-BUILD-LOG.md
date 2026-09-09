@@ -766,3 +766,103 @@ nothing" during a live run. Every charter now tells agents to run that `--list` 
 ### NOT DEPLOYED, NOT PUBLISHED
 Written to `app/web/src/blog/drafts/`, which is gitignored and not globbed, so it cannot render. Founder
 ruling pending on both drafts. This is the first post that would state publicly that the team is agents.
+
+---
+
+## 2026-09-05 (evening) — the two drafts went LIVE, and the gates started falling
+
+Backfilled 2026-09-07. The 09-05 entry above stops at "NOT DEPLOYED, NOT PUBLISHED"; both drafts
+shipped that evening and the log never said so. That silence is what blinded the cadence gate for two
+days (see the 09-07 entry).
+
+**PUBLISHED — `58fff0b` content(blog): publish the AMZN reserve miss and the agent-memory rebuild.**
+`never-gone-red` (2026-09-05T05:10) and `fourteen-could-not-remember` (2026-09-05T16:10) both moved
+from `drafts/` into `app/web/src/blog/posts/` and are live. `fourteen-could-not-remember` is the first
+public statement that the team is agents.
+
+**SHIPPED alongside, and it is all gate work:**
+- `129efc4` — `app/deploy.sh:39` ran `npx vite build` directly, so none of the four build gates ran on
+  that path. **BLOG-WORTHY: the TRIGGER lesson.**
+- `a48216c` / `e032187` — the wiring gate failed every build on a machine without charters, then, once
+  fixed, threw away findings it had already collected on exactly the machine that deploys.
+- `e032187` also closed the subshell bypass in the push guard. Its own message records
+  `sh -c "git push"` as "already exits 2, not reproduced." **That sentence is false and it is the
+  centrepiece of the 09-06 entry.**
+- `5c42f14` published Supercycle into the reserve BASKET; `10cd992` corrected the EIP-55 checksum
+  I hand-cased while promoting it. shipped `0x8fA1248c3EC58f733E778b89C30526716Cd70893`, correct
+  `0x8FA1248C3ec58F733e778B89c30526716Cd70893` (re-derived 09-07 with
+  `cast to-check-sum-address`, matches `app/web/src/reserve.ts:59`). viem throws at ENCODE time, so
+  the request never reached the chain and `/treasury` fell into a permanent incomplete-read state
+  telling visitors to reload. `check-reserve-basket.mjs` printed 15/15 and exit 0 through all of it,
+  because it lowercased every address and hand-built its JSON-RPC and so never ran viem's encoder.
+  **BLOG-WORTHY: the INSTRUMENT lesson, and the only one on this list a reader could see.**
+- `9e45758` — stop telling the public that lending is audited. Round one of six surfaces.
+
+## 2026-09-06 — two adversarial rounds, and every gate in the repo failed
+
+Both rounds came back NOT CLEAN, and almost nothing they found was about the product.
+
+**Round 1 → `35b0ea4`.** RULE 1 of the push guard was a whitelist of four literal spellings of `main`
+requiring whitespace right after. Open: `main:main`, `refs/heads/main`, `+main`, `HEAD`, quoted
+`'main'`, bare `git push`, `--all`, `git -C <path> push`, backslash-newline. Two auditors found it
+independently. It survived three rounds because RULE 2b was MASKING it — every bypass still exited 2,
+with "0 of 3 clean audit rounds" instead of the production message. **The mask lifts the instant a
+gate reaches 3-of-3, so the rule went deaf exactly when it became the only approval left standing.**
+Same commit stamped a PUBLISHED audit receipt reading "Verdict: MET" while the register had the
+counter at zero (`docs/audits/esseyreservehook-gate-2026-08-31.md`, now carries a WITHDRAWN banner).
+
+**`dadd144` — the false negative I published.** `e032187`'s message said `sh -c "git push"` already
+exits 2. It exits 0. My probe had handed the guard shell-quoted JSON with unescaped inner quotes, so
+the payload was malformed and the case never ran; the probe reported safe because it had not run.
+essey-auditor drove the real caller and got exit 128, git's own error, meaning the command executed.
+Ten wrapper shapes were open. Routed to every role as L-025.
+
+**Round 2 → `6522889`.** `guard-deploy` now excludes `docs/agents`: agent memory is dirty by charter
+after every round, so every post-round deploy blocked with `GATE_DIRTY_OK=1` as the only escape, which
+switches off the app/web arm too. Same shape as `tools/audit-round.py` voiding on the continuity write
+its own charters mandate (L-022) — two auditors reverted their own notes to get INTACT back.
+**A gate whose users must undo their work to pass is one everyone learns to route around.**
+
+**`88a2469`** retracted the withdrawn G1 verdict everywhere, TRACKED `docs/JESTER-BUILD-LOG.md`
+(closing L-030: it was gitignored, so the cadence gate was inert in every checkout and CI container),
+and made the cadence gate FAIL rather than SKIP when the log is missing.
+
+**`7d144e4` — the reader-facing one.** `hw-card-big` rendered `pricedUsd8`, which sums BOTH asset
+classes, so the biggest number on `/treasury` was mostly a thin-pool FLR mark while the tokenized
+equities the page exists to report totalled **$48.55 of a $280.65 headline** (essey-harness, block
+56208103, seven equity feeds stale 45.0h–62.4h against a flat 25h bound). The page's own section
+header calls that mark "additive upside — do not count toward the reliable floor," and the hero
+counted it. Now renders `equityUsd8` under "Reliable floor · tokenized equities" with an
+"N of M equity holdings priced" caption, and when no equity holding has a live mark it renders an
+**em dash**, never $0.00 and never the crypto figure (`app/web/src/treasury.tsx:292-310`).
+VERIFIED SERVED 09-07 against `essey.xyz/assets/index-x6E-MEvU.js`.
+
+**Also 09-06, and OUT of scope for any post:** `fb9f816` (game, `forceRevealFloor` front-run on a
+public mempool) and `b2ca489` (lending R9 LOW-1). Lending is `built-not-audited`, gate 0 of 3,
+undeployed on any chain (`docs/BASE-LAYER.md:142`, `docs/OUTSTANDING.md:20`,
+`docs/SCOPE-robinhood-chain.md:253`), and every public surface now says so — the served bundle carries
+`built-not-audited` six times and `gate 0 of 3` four times.
+
+**BLOG-WORTHY, and it is the whole of it:** every gate in the repo failed at least once and not one
+failed at the thing it inspects. The blueprint already names the five parts
+(`docs/AGENT-COMPANY-FOUNDATION.md:375-398`): trigger, composition, instrument, class, its users.
+Third in the sequence after `never-gone-red` (probes that could not fail) and
+`fourteen-could-not-remember` (lessons that could not be kept).
+
+## 2026-09-07 — the cadence gate said "current" because the log had stopped
+
+Ran `node app/web/check-blog-cadence.mjs`:
+`blog-cadence: current (newest post 2026-09-05 "fourteen-could-not-remember", log 2026-09-05)`,
+exit 0 — while everything in the two entries above sat unlogged and unpublished.
+
+The gate compares the newest date in this file against the newest `date:` in `posts/`. It has no
+notion of shipped work. **When the log stops, the gap closes, and it reports current forever.** Its
+one input is the thing a stalled process stops producing. Measured in an isolated fake root: log
+frozen 2026-08-01 with a post at 2026-09-05 → `current`, exit 0; log ahead of post →
+`FAIL — the gap is 15 days`, exit 1; log absent → `FAIL — ... is missing`, exit 1. So `88a2469` fixed
+the ABSENT case and the STALE case is still open. It is the sixth member of the same class the two
+audit rounds kept finding, and this time it is mine.
+
+Bible §42 written. Post drafted (`gates-watching-from-the-wrong-place`) in `drafts/`, which is
+gitignored (`app/web/src/blog/.gitignore:2`) and not globbed (`app/web/src/blog/blog.ts:18` globs
+`./posts/*.md` only), so it cannot render. Founder asked for a clean slate and this waits for his word.

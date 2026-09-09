@@ -113,3 +113,110 @@ piped exit code is not the exit code. Never report one taken through a pipe.
 Honest limit on my own A/B, per essey-legal-advisor's caveat: the run exits 1 both before and after
 my append (essey-product-manager is still pending), so the signal I verified is LIST MEMBERSHIP
 moving PENDING -> ACK, not the exit status. Saying otherwise would be the error BC-001 exists to stop.
+
+## 2026-09-07 — the cadence gate reported "current" while five days went unlogged
+
+**THE FINDING, and it is mine and it is about my own instrument.** `app/web/check-blog-cadence.mjs`
+compares the newest date in `docs/JESTER-BUILD-LOG.md` against the newest `date:` in
+`app/web/src/blog/posts/`. It has no notion of shipped work. So when the LOG stops, `gapDays <= 0` and
+it prints `current` and exits 0 forever. Measured in an isolated fake root (copy of the gate + one
+post + a fixture log), all three states:
+  A. log frozen 2026-08-01, post 2026-09-05 -> `blog-cadence: current`, **exit 0**  <- the hole
+  B. log 2026-09-20, post 2026-09-05        -> BACKLOG + `FAIL — the gap is 15 days`, exit 1
+  C. log absent                              -> `FAIL — ... is missing`, exit 1
+Case C is the one `88a2469` built (it also TRACKED the log — `git check-ignore` now exits 1, closing
+essey-harness's L-030). Case A is what it did to me today: real run against the real tree printed
+`current (newest post 2026-09-05 "fourteen-could-not-remember", log 2026-09-05)` while 09-05-evening
+through 09-06 shipped ~20 commits and nothing was logged.
+**The gate's single input is the thing a stalled process stops producing.** It watches the right
+property (log-ahead-of-blog is the literal definition of a backlog, and that reasoning is still
+correct) from the wrong place. Same family as everything in the two audit rounds: trigger, not
+inspection. §37 needs an addendum and I wrote it as §42.
+
+**BC-001 discipline this session — seven probes, five reds I watched myself.** All PreToolUse guards
+driven with `json.dumps` payloads (L-025), never shell-quoted:
+- `guard-deploy.py` current: dirty app/web -> exit 2 for BOTH `bash app/deploy.sh --web` and
+  `vercel --prod`; clean tree -> exit 0 for both; `echo hello` -> 0.
+- `guard-deploy.py` PRE-FIX (reconstructed in scratch by reverting only the DEPLOY_SCRIPTS clause):
+  same dirty tree, `bash app/deploy.sh --web` -> **exit 0**, `vercel --prod` -> exit 2. That is the
+  TRIGGER defect, measured, not relayed.
+- `guard-git.py` backup `.bak-20260906` (the pre-fix branch whitelist at its `:150`): all six
+  push-to-main shapes exit 2, but FIVE carry "0 of 3 clean audit rounds", not the production message.
+  Re-run with `GATE_AUDIT_OK=1 GATE_STALE_OK=1` prefixed (the only configuration where RULE 1 is
+  observable): `main:main`, `refs/heads/main`, `+main`, bare `git push`, `--all` all -> **exit 0**.
+  Current guard, same mask lifted: 9 of 9 shapes exit 2 with "BLOCKED: push to main/production."
+  **A matrix that only reads exit codes returns all-green and teaches you nothing.** The message is
+  what tells you WHICH rule fired. Read it.
+- `check-agent-wiring.mjs` on an isolated copy (needs tools/*.py + AGENT-HIERARCHY.md copied too, or
+  the `mech` filter changes the fingerprint and the baseline fails for the wrong reason): clean copy
+  exit 0; append one properly-tagged lesson -> exit 1, blueprint STALE. The mandated write breaks it.
+- `check-reserve-basket.mjs` on an isolated copy with a node_modules symlink: baseline
+  "15 token(s) ever received, 15 in BASKET", exit 0; replant the exact miscased Supercycle address
+  that shipped in `5c42f14` -> exit 1, naming the address and the correction. The checksum arm sits
+  BEFORE the network call, so it binds offline too (L-017 done right, worth noting as a good example
+  rather than a trap).
+- Served-bundle probe with BOTH controls: positive "treasury" -> 42 hits exit 0, negative
+  "zzz_jester_negative_control_zzz" -> 0 hits **exit 1**. Only then did I believe "Reliable floor"
+  (1 hit) and "no equity holding has a live mark" (1 hit) mean the treasury fix is live.
+
+**COULD NOT REPRODUCE, and I am not publishing it: L-023's ugrep exit-0.** essey-harness recorded
+`grep -oE '(a{0,60}){0,60}b' bundle.js` -> complexity error, EXIT=0. In my hands that exact pattern
+does not error at all, and the pattern that DOES error
+(`((a{0,60}){0,60}){0,60}b`) exits **2**, not 0. The only exit 0 I could produce was through a pipe
+(`... | head -1` -> 0), which is the already-known zsh pipe trap, a different defect. Their core
+advice (prefer `grep -F`, check stderr) is right and I followed it all session. The exit-code half
+does not reproduce here. Told them; not filed as a correction to the lesson because the difference may
+be the haystack, and I would rather they re-measure than have me overwrite their record from one shell.
+
+**SEAM I HIT AND SHOULD RAISE, not swallow.** `guard-deploy.py`'s served scope is
+`["app/web", "docs", ":(exclude)docs/agents"]`. `docs/JESTER-BUILD-LOG.md` is now TRACKED and is NOT
+under `docs/agents`, and `gen-docs.mjs`'s PICK list (`:37-56`) does not include it, so it is never
+published. So writing my own mandated log dirties the deploy scope and blocks the blog-only deploy
+§33 grants me, for a file no reader can ever see. Exact same shape as the `docs/agents` exclusion
+`6522889` already added. One-token fix; not mine to make.
+
+**Link discipline (§19).** Verified the repo is PUBLIC (github.com/erikastramecki/essey resolves) and
+opened all five commit URLs I embed, checking the subject line matches what I claim. Do this every
+time; the previous post cut a link because blockscout sat behind a challenge and a bogus hash returned
+the same 200.
+
+**A thing I nearly did not check, and it is the one that would hurt most.**
+`docs/JESTER-PERSONA-BIBLE.md` is GITIGNORED (`.gitignore:57`; `git ls-files --error-unmatch` errors
+on it). My character file, the file that IS my continuity across every session, exists on exactly one
+disk with no version history. That is L-030's shape one level up: `88a2469` tracked the build log for
+precisely this reason and left the bible behind. Forty-two sections of accumulated voice, rulings and
+lore, one `rm` from gone. Raised to Erik; his call, because it contains internal day-records (§26
+COMMS-HOLD material) and going public with it is a disclosure decision, not a hygiene one. A private
+mirror outside the repo would solve it without that question.
+
+**A judgement call I made and want on the record.** My cadence finding generalises across roles, so
+L-015 says it belongs in `docs/agents/LESSONS.md`, not only here. I did NOT write it there. Appending
+one lesson breaks the build until `docs/AGENT-COMPANY-FOUNDATION.md` is reconciled by hand and
+re-stamped, which I proved again this session (clean copy exit 0, one lesson appended exit 1), and the
+founder asked for a clean tree while he works elsewhere. Handing someone a red build to make a point
+about gates costing their users is the exact failure the lesson describes. So I wrote the entry text
+into my report for whoever owns the blueprint. Second session running that I have declined this for
+the same structural reason: **that is the signal that the STRUCTURE is wrong, not my judgement.** The
+lessons file needs to be appendable without a second manual reconciliation, or lessons will keep not
+being written by the agents most likely to have one.
+
+**HANDOFF.** Next hands: Erik (word to publish), then essey-web-designer / essey-deployment-manager
+for the blog-only deploy, then essey-social for the X block.
+- READY: `app/web/src/blog/drafts/gates-watching-from-the-wrong-place.md` + `.x.md`. Front-matter
+  parsed with the build's own regex; title/summary present, date `2026-09-07T12:40:00` parses and
+  sorts newest. Ten tweets, all under 280, zero em-dashes outside fenced tool output.
+- ONE `mv` FROM LIVE: `drafts/` is gitignored and not globbed, so promotion is
+  `mv app/web/src/blog/drafts/gates-watching-from-the-wrong-place.md app/web/src/blog/posts/`.
+- SHARP: the date stamp is 12:40 UTC on 09-07. If it publishes later, restamp it to the real publish
+  moment (§32) or the "this morning" in the cadence section drifts.
+- SHARP: `docs/JESTER-BUILD-LOG.md` is dirty and it is under `docs/`, so `guard-deploy` blocks the
+  deploy until it is committed. Watched: the REAL hook returned
+  "BLOCKED: production deploy with 1 uncommitted change(s) under app/web or docs" on my own probe
+  call. Commit the log first, then deploy. Do not reach for GATE_DIRTY_OK=1; it switches off the
+  app/web arm too.
+- WHAT I WOULD LOOK AT FIRST in their shoes: whether the OG card renders, since the title is long
+  (60 chars) and I could not verify `/og/gates-watching-from-the-wrong-place.png` without a build.
+- ASKED AT THE SEAM (record answers next session): for the designer, whether a 2,350-word post with
+  five fenced code blocks reads on a phone or wants a pull-quote treatment; for the deployment
+  manager, whether the build-log-blocks-deploy seam is worth one token in `guard-deploy`'s exclude
+  list or whether they would rather I always commit the log first.
