@@ -13,6 +13,7 @@ import {
   exitFeeOn,
   previewRedeem,
   reads,
+  esseyAbi,
   redeemAbi,
   type Position,
   type Quote,
@@ -36,6 +37,7 @@ const fmt = (v: bigint, dec: number, sig = 6): string => {
 
 export function BurnAllPage() {
   const w = useMainnetWallet();
+  const approveTx = useMainnetTx();
   const burnTx = useMainnetTx();
   const claimTx = useMainnetTx();
   const [st, setSt] = useState<RedeemState | null>(null);
@@ -63,6 +65,27 @@ export function BurnAllPage() {
     st && balance > 0n ? previewRedeem(balance, st.tokens, st.params) : [];
   const fee = st && balance > 0n ? exitFeeOn(balance, st.params) : 0n;
   const nonZero = quotes.filter((q) => q.units > 0n);
+
+  const allowance = pos?.allowance ?? 0n;
+  const approved = balance > 0n && allowance >= balance;
+
+  // redeem() pulls the ESSEY with transferFrom, so it reverts ERC20InsufficientAllowance (0xfb8f41b2)
+  // without this. Exact amount, never max: the approval is consumed by this one burn.
+  const approve = async () => {
+    if (balance === 0n) return;
+    setErr(null);
+    const ok = await approveTx.run({
+      address: RESERVE.essey,
+      abi: esseyAbi,
+      functionName: "approve",
+      args: [RESERVE.reserve, balance],
+    });
+    if (ok && w.address)
+      reads
+        .position(w.address)
+        .then(setPos)
+        .catch(() => {});
+  };
 
   const burn = async () => {
     if (!st || balance === 0n) return;
@@ -169,15 +192,50 @@ export function BurnAllPage() {
           </div>
 
           <div className="hw-card">
-            <div className="hw-card-k">Step 1 — burn</div>
+            <div className="hw-card-k">Step 1 — approve</div>
             <button
               className="hw-btn"
-              disabled={balance === 0n || burnTx.state.phase === "pending"}
+              disabled={
+                balance === 0n ||
+                approved ||
+                approveTx.state.phase === "pending"
+              }
+              onClick={approve}
+            >
+              {approved
+                ? "approved ✓"
+                : approveTx.state.phase === "pending"
+                  ? "confirm in wallet…"
+                  : "Approve the reserve to pull your $ESSEY"}
+            </button>
+            {approveTx.state.hash && (
+              <p>
+                <a
+                  href={txUrl(approveTx.state.hash)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  approve tx
+                </a>
+              </p>
+            )}
+            {approveTx.state.error && (
+              <div className="hw-warn">{approveTx.state.error}</div>
+            )}
+          </div>
+
+          <div className="hw-card">
+            <div className="hw-card-k">Step 2 — burn</div>
+            <button
+              className="hw-btn"
+              disabled={!approved || burnTx.state.phase === "pending"}
               onClick={burn}
             >
-              {burnTx.state.phase === "pending"
-                ? "confirm in wallet…"
-                : `Burn all ${fmt(balance, ESSEY_DECIMALS, 0)} $ESSEY`}
+              {!approved
+                ? "approve first"
+                : burnTx.state.phase === "pending"
+                  ? "confirm in wallet…"
+                  : `Burn all ${fmt(balance, ESSEY_DECIMALS, 0)} $ESSEY`}
             </button>
             {burnTx.state.hash && (
               <p>
@@ -197,7 +255,7 @@ export function BurnAllPage() {
           </div>
 
           <div className="hw-card">
-            <div className="hw-card-k">Step 2 — claim the basket</div>
+            <div className="hw-card-k">Step 3 — claim the basket</div>
             <button
               className="hw-btn"
               disabled={receiptId === null || claimTx.state.phase === "pending"}
