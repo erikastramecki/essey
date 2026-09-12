@@ -20,7 +20,7 @@ audited. The gate matches on word boundaries for exactly that reason.
 Round 1 came back CLEAN on the money (receipt `~/.claude/gate-receipts/audit-esseyreserve-r1`), but that
 is an internal receipt, not a published report, and rounds 2 and 3 have not run. So the honest state is
 not "audited" — it is "one clean round, carried deliberately." What is being accepted: n=1, three
-unpatchable residuals (R-1, R-2, R-3), and an exit path never exercised on mainnet (`receiptCount()` = 0).
+unpatchable residuals (R-1, R-2, R-3), and ~~an exit path never exercised on mainnet~~ — **CLOSED 2026-09-09: the entire supply (8,888,888,888 $ESSEY) was redeemed and claimed end to end. `receiptCount()` = 1, `totalSupply()` = 0, `claimed(0, token)` true across the basket, and the 5% exit fee retained exactly 5.00% of AMZN, SPY and FLR against their pre-burn balances. Proven by execution, not review.
 This converts to CLEAN when a redacted report is published to `docs/audits/` and the founder signs it off.
 
 - **Status 2026-09-03: ROUND 1 CLEAN on the money.** It was UNAUDITED at the time value was

@@ -474,4 +474,4 @@ The honest limit remains: the write is enforced by instruction, not by a lock. T
 missing write is what is mechanised. Whoever orchestrates the team should treat "agent completed but
 its continuity file did not change" as unfinished work and send it back.
 
-<!-- STRUCTURE-FINGERPRINT: d34c5fc75f860855 -->
+<!-- STRUCTURE-FINGERPRINT: 21fc18323ba3a7ec -->

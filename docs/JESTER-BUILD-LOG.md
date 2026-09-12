@@ -866,3 +866,132 @@ audit rounds kept finding, and this time it is mine.
 Bible §42 written. Post drafted (`gates-watching-from-the-wrong-place`) in `drafts/`, which is
 gitignored (`app/web/src/blog/.gitignore:2`) and not globbed (`app/web/src/blog/blog.ts:18` globs
 `./posts/*.md` only), so it cannot render. Founder asked for a clean slate and this waits for his word.
+
+## 2026-09-08 — nothing shipped
+
+No commits. `git log` between `7556fbb` (2026-09-06 22:29 PDT) and `39382e6` (2026-09-09 16:05 PDT)
+is empty. Recording the quiet day rather than leaving a hole, so a future gap does not get read as a
+missing entry.
+
+## 2026-09-09 — the entire supply was burned, and the reserve paid out exactly what it says it pays
+
+The biggest single event the reserve has had, and the whole of it fits in three commits.
+
+**`39382e6` — a one-time burn-and-claim console at `/burn-all`.** Founder wanted the redemption path
+exercised for real: connect the ops wallet, burn its entire $ESSEY, pull the basket. Throwaway by
+design, route deleted afterwards. Almost nothing new was written — `redeem.ts` and `redeem-ui.tsx`
+already model the two-step the contract requires (`EsseyReserve.sol:29-32`): `redeem(amount)` burns
+and mints a receipt that pays nothing, then `claimMany` pulls the per-token slices. That split is why
+a paused stock token cannot strand a whole redemption. The commit's own NOT VERIFIED line reads
+"`receiptCount()` is 0 — this path has never executed on mainnet."
+
+**`d09434b` — the console was missing the approve step.** The burn reverted `0xfb8f41b2`.
+`cast sig 'ERC20InsufficientAllowance(address,uint256,uint256)'` returns exactly that, checked here
+rather than taken from the commit message. `redeem()` pulls the $ESSEY with `transferFrom`
+(`EsseyReserve.sol:106`), so the reserve needs an allowance, and the ops wallet's was 0. Not a contract
+fault: it refused a transfer it had never been permitted to make. `reads.position()`
+(`app/web/src/redeem.ts:204-220`) returns `allowance` in the same object as `essey`
+(`app/web/src/redeem.ts:184`), so the number was already in hand and the balance got rendered while the
+allowance beside it did not. The working `/redeem` page has had an approve step at
+`app/web/src/redeem-ui.tsx:141-151` since it was written, gated on `needsApproval` at `:132`. A new
+console was built next to a working one without reading what the working one did. Fixed to three steps
+with the burn disabled until the allowance covers the balance.
+
+**`549e177` — console removed, path proven.** `app/web/src/burn-all.tsx` is gone (303 deletions);
+`ls` on the path errors and a grep for `burn-all|burnAll|BurnAll` across `app/web/src/` returns nothing.
+
+**WHAT THE CHAIN SAYS.** All of this read directly, `https://rpc.mainnet.chain.robinhood.com`, chain
+4663, head block 59379932 (ts 1789040987 = 2026-09-10 11:49:47 UTC):
+
+| Read | Value |
+|---|---|
+| `$ESSEY.totalSupply()` | **0** |
+| `$ESSEY.balanceOf(ops 0x93e6…4B9E)` | 0 |
+| `$ESSEY.balanceOf(0xdEaD)` | **0** — so `_remove()` took the real `burn()` branch (`EsseyReserve.sol:114-120`), not the strand fallback |
+| `receiptCount()` | **1** (was 0) |
+| `receipts(0)` | (`0x93e6e42CcC676614FB3635b0983d60F35dDE4B9E`, 8888888888000000000000000000) |
+| `claimBase()` | 8888888888000000000000000000 |
+| `circulatingSupply()` | 0 |
+| `EXIT_FEE_BPS()` | 500 |
+| `claimed(0, token)` | **true for all 15** tokens in `app/web/src/reserve.ts:44-60` |
+
+- redeem: tx `0x4df5445ec50fb9dc444904cecdb1316ea24333c8a27dad1a51991cbdd0e1f4e4`, block 58931401,
+  ts 1788995699 = **2026-09-09 23:14:59 UTC**, status 1, gasUsed 115,297. `Redeemed` topics carry
+  receiptId 0 and owner ops; data decodes to 8888888888000000000000000000.
+- claim: tx `0xdca0a6d24f88eb59173b0b0d1c1477488eb01c0673bf7151502a53982409e2cb`, block 58931577,
+  ts 1788995717 = **23:15:17 UTC**, status 1, gasUsed 1,513,567, 41 logs, **all 15 legs in one
+  `claimMany`**. Eighteen seconds between burning the supply and being paid for it.
+- **The token's entire history is THREE `Transfer` events.** `eth_getLogs` from block 0: 49634440
+  `0x0`→ops; 58931401 ops→reserve; 58931401 reserve→`0x0`. Each one for the full 8,888,888,888.
+
+**THE EXIT FEE LANDED EXACTLY.** For every token, `paid` (from its `Claimed` event) plus what the
+reserve still holds reconstructs the pre-burn balance, and the retained share is
+**5.000000% on all fifteen**, six decimals, a tokenized equity and a memecoin agreeing. NVDA 5.000000,
+AAPL 5.000000, GOOGL 5.000000, TSLA 5.000000, GLD 5.000000, MSTR 5.000000, QQQ 5.000000,
+NFLX 5.000000, DJT 5.000000, CASHCAT 5.000000, PONS 5.000000, FLR 5.000000, AMZN 5.000000,
+Supercycle 5.000000, SPY 5.000000.
+
+**ONE CAVEAT ON THAT TABLE, and it is why the figure has to be dated.** Read today, SPY's ratio is
+**20.142733%**, not 5%, because SPY is the only basket token that received a further deposit after the
+claim: 6,247,648,429,307,173 at block 59152096 from `0xe2f08818e9ea2b35fa0846437a5d704d29120cc3`
+(291 bytes of code, referenced nowhere in this repo). Back that single deposit out and SPY was exactly
+5.000000% at the claim like the rest. Verified by running `eth_getLogs` with topics
+`[Transfer, null, reserve]` from block `0x3833979` over all fifteen tokens: SPY is the only one with any
+inbound since. `549e177`'s commit message quotes the SPY figure and was true when written.
+**So: 5% is a property of the contract, 20.14% is a measurement of today. Never publish the second
+without the first.**
+
+**WHY IT MATTERS — the accepted risk that closed by execution.**
+`docs/CUSTODY-AUDIT-STATUS.md:19` carries the reserve at **ACCEPTED-RISK**, not CLEAN. Line 23 names
+what is being accepted, in its own words: "n=1, three unpatchable residuals (R-1, R-2, R-3), and an
+exit path never exercised on mainnet (`receiptCount()` = 0)." One clean round, rounds 2 and 3 never
+run, and a redemption nobody had ever pulled. `receiptCount()` is 1 now, for the entire supply, both
+legs, fifteen tokens.
+**AND THAT SENTENCE IS NOW FALSE ON DISK.** `549e177`'s own NOT PINNED section says so and left it for
+a separate changeset. The custody file still reads ACCEPTED-RISK and still cites the unexercised path.
+Someone owns that edit.
+
+**BLOG-WORTHY, and it is the whole of it:** reviewed-clean and executed-once are different kinds of
+confidence, and only the second survives contact. An audit tells you somebody looked. It cannot tell
+you the path runs. Fourth in the sequence after `never-gone-red` (probes that could not fail),
+`fourteen-could-not-remember` (lessons that could not be kept) and
+`gates-watching-from-the-wrong-place` (gates watching the right property from the wrong place) — and
+here the thing nobody had watched at all was the door.
+
+## 2026-09-10 — five live sentences went false at 23:14:59 UTC yesterday, and they are still served
+
+Not a ship. A reader-facing defect I found while grounding the burn post, and the most urgent item in
+this entry.
+
+The burn falsified five published sentences. Verified **SERVED**, not committed (L-004), against
+`https://essey.xyz/assets/index-BnhyDNnu.js`, 4,559,908 bytes, with both controls run first: positive
+`treasury` → 42 hits exit 0; negative `zzz_jester_negative_control_zzz` → 0 hits **exit 1**, so the
+probe is capable of going red. Then, `grep -c -F`:
+
+| String in the served bundle | Hits | Why it is now false |
+|---|---|---|
+| `8,888,888,888` | 11 | `totalSupply()` is 0 |
+| `You can read that balance yourself` | 1 | the balance it points at reads 0 |
+| `still sit in the treasury wallet` | 1 | ops holds 0 |
+| `Exactly one transfer event exists` | 1 | there are three, listed above |
+
+Sources: `app/web/src/blog/posts/only-real-essey-contract.md:18` and `:77`,
+`app/web/src/blog/posts/reserve-audit.md:48`, `app/web/src/blog/posts/front-door-two-sided.md:28`,
+`app/web/src/blog/posts/base-layer-live.md:14`. `app/web/src/docs.generated.ts` carries the same
+fixed-supply framing into `/docs`.
+
+**The sharpest one is on the anti-scam post.** `only-real-essey-contract.md:18` tells a reader to go
+read the treasury balance themselves. They read zero. The honest conclusions available to them are
+"robbed" or "lying," and both are worse than the truth.
+
+**THE BIND, stated plainly because it is not mine to resolve:** every one of those corrections
+discloses the burn, and the burn is under a disclosure hold pending the founder's timing. So the fix
+and the post are gated on the same call. §38 said a correction that is committed and not deployed is
+worth zero to the reader; this is one level up from that — a correction I am not permitted to publish
+is a founder decision, not a backlog item, and it goes at the top of the report rather than into a
+queue.
+
+**Post drafted:** `app/web/src/blog/drafts/the-door-nobody-had-opened.md` (+ `.x.md`). DRAFT ONLY, in
+`drafts/`, which is gitignored (`app/web/src/blog/.gitignore:2`) and not globbed
+(`app/web/src/blog/blog.ts:18` globs `./posts/*.md`), so it physically cannot render. Written to read
+correctly whenever it publishes; carries no mention of anything that has not happened.

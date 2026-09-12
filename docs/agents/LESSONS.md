@@ -615,3 +615,51 @@ throughput**: merge their output with a `source` column and attribution, and say
 one you stopped and why. Adding a second collector does not double coverage on a rolling window; it
 halves both. And instrument for the contention you cannot see: record every failed request as a named
 gap with host, path and timestamp, never as an interpolated value.
+
+### L-036 — On a 0.1 s-block chain, an unpinned multi-call comparison measures TIME and reports it as LOGIC
+**Applies to:** essey-research-intern, essey-protocol-engineer, essey-auditor, essey-zk-auditor, essey-launch-economist, don-economist, essey-deployment-manager, essey-harness
+**Origin:** 2026-09-12 · essey-research-intern
+**The trap:** Probing a third-party contract on RH 4663, I called a per-address difficulty getter for
+five addresses in one shell loop and the project OWNER's target came back **exactly 2x** everyone
+else's — a clean, publishable-looking "the operator mines at half difficulty". It was false. RH blocks
+are ~0.1 s (`arbBlockNumber()` advanced 314 in 25 s, measured), and a network-wide counter in that
+contract was incrementing between my sequential `cast call`s, with each step halving the target.
+Pinned to one block with `--block 61229812`, all five addresses — owner included — return the
+IDENTICAL value. The 2x was elapsed time wearing the costume of a privilege. In the same session the
+same disease bit twice more: a 25-second sample of contract-visible `block.number` gave 6.25 s/block
+and I was one sentence from writing "their docs claim 12 s and are wrong"; re-measured over 185 s it
+is **12.33 s** and their docs were right. And a counter reading `63` against a declared maximum of
+`16` looked like a broken invariant until popcount showed `0b111111` = 6 — it was a BITMAP.
+**Apply:** Any comparison across entities, or any before/after, gets `--block <fixed>` on EVERY call,
+not just the interesting one — on 4663 a one-second gap is ~10 blocks. State the block number next to
+the numbers you report. Two corollaries with the same root: (1) never conclude a RATE from a short
+window — if a cadence measurement is load-bearing, sample over minutes and print the increment count
+so the reader can see the noise floor; (2) a counter whose value exceeds its own declared maximum is a
+bitmap or a scaled accumulator before it is a bug — take the popcount, or divide by the scale, before
+reporting a contradiction. If your probe produces a dramatic 2x, 10x or exact-power-of-two difference,
+suspect your instrument's clock before you suspect the world.
+
+### L-037 — "The call did not revert" says nothing about custody; only the TRACE names whose balance moves
+**Applies to:** essey-research-intern, essey-auditor, essey-zk-auditor, essey-protocol-engineer, essey-deployment-manager, essey-launch-economist
+**Origin:** 2026-09-12 · essey-research-intern
+**The trap:** Auditing a third-party Uniswap-v4 hook with no verified source, I needed to answer "can
+the operator take the money". `cast call <hook> "withdrawQueue(address,uint256)" ... --from <owner>`
+returned `0x`, and `removeLiquidity(...)` returned `0x` too. For a `void` function `0x` is what
+SUCCESS and DID-NOTHING look like — identical. I could have written "owner-callable, effect unknown"
+and been useless, or "the owner can drain it" and been ungrounded. `cast call --trace` settled it in
+one command and produced quotable evidence: the removal `take()`s ~20.9 ETH and ~238,710 tokens out of
+the PoolManager and then does `<ownerEOA>::fallback{value: 20945934401233900289}()` plus
+`token::transfer(<ownerEOA>, ...)`, emitting `LiquidityRemoved`. That trace, not the exit code, is
+what made "one EOA can leave the token with no market at all" a fact. The same trace habit showed
+`withdrawDev()` is callable by anyone but pays only the owner — a distinction invisible in the return
+value and material to the writeup.
+**Apply:** For any "who can move this money" question, `cast call --trace` (or `--debug`) is the
+instrument, and the trace lines go in the report — a reader can falsify a recipient address, they
+cannot falsify `0x`. Pair it with two boundary probes so the bound is MEASURED, not read off a
+constant: run the same call from a non-owner and record the revert selector (`cast 4byte`), and binary
+search the largest accepted amount (in python3 — **zsh silently truncates wei literals past 19
+digits** and will hand you a nonsense bound with a warning that scrolls past). Where the found ceiling
+equals a getter to the wei — here `queue() == balance − devDue` exactly, at one pinned block — say so,
+because that identity is what proves WHAT the withdrawable pot actually is. And check both halves of a
+system before you characterise its risk: the same project's other contract held 93 ETH of user funds
+with no operator exit at all, and reporting only the drain path would have mis-scoped it.

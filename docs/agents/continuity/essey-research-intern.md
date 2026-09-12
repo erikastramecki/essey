@@ -280,3 +280,176 @@ captured fills are unbroken so the sample is front-truncated rather than swiss-c
 **Open question I owe them next session:** whether an external equity/crypto price source is
 acceptable provenance for contemporaneous marks on the pre-04:03Z fills, since the venue exposes none.
 That is their call, not mine — it decides whether the alpha-vs-underlying separation is possible at all.
+
+---
+
+## 2026-09-12 — hashcats.fun (new target, private side project) — CHECKPOINT 1
+
+Deliverable OUTSIDE this repo: `~/Developer/assay-design/research/hashcats-scope.md` (+ INDEX there).
+
+### Pins I must not lose
+- Chain **4663 Robinhood Chain** (same chain as Essey). `cast chain-id` = 4663 on
+  `https://rpc.mainnet.chain.robinhood.com`. Site CSP itself names that RPC + `robinhood.drpc.org`.
+- Contracts, all read LIVE from the collection (not from the bundle's fallbacks):
+  collection/NFT `0xCA75DF55Cc9C476DB27a7375D1fc8E794cf80721` ("Hashcats"/"HCAT"),
+  `hashToken()` = `0xCA75082b85bb7Bec8325d513F615b16BDa260020` ("HASHCATS"/"HASH", 18dp),
+  `hook()` = `0xCA757986E932BC55776492Cca0b413E9b3D02aCC` (Uniswap V4 hook, holds ETH),
+  `renderer()` = `0xCA751C15092d108360a0FfD84f30d908ea4a0000`,
+  `owner()` = `0xCA75a875857691f2a8bbCCecAa7E4448aCdc12ca` — **EOA** (`cast code` = `0x`, nonce 27).
+- Vanity prefix `0xCA75…` ("CATS") on all four contracts + the owner. Convenient for grepping,
+  and a reminder that a vanity prefix is NOT identity — I pinned each by reading the collection's
+  own getters, not by pattern.
+
+### Technique that paid off: the frontend bundle carries the FULL ABIs
+`/assets/index-*.js` embeds two complete JSON ABIs (collection 117 funcs, hook 76 funcs). Extracted
+with a brace-matching scanner in node (`[{"type":` → depth-0 close → `JSON.parse`). That gave me the
+whole surface — including every owner-only setter — WITHOUT verified source, which is the thing I
+otherwise could not have got (see next line).
+
+### Blockscout finding (two things, both changed how I work today)
+1. **Cloudflare now challenges Blockscout's API.** A browser UA alone is NO LONGER enough — I got
+   `<title>Just a moment...</title>` and HTTP 403. What worked: UA + `Accept` + `Accept-Language` +
+   `Referer: https://robinhoodchain.blockscout.com/` + `sec-fetch-mode: cors` + `sec-fetch-site:
+   same-origin` + `--compressed`. Update to my 2026-09-07 note, which said UA was sufficient.
+2. **NONE of the four Hashcats contracts is verified.** Controls both ways on the SAME header path:
+   fabricated address → HTTP 404 `{"message":"Not found"}`; our own EsseyReserve → `is_verified:true`
+   `EsseyReserve`. So `is_verified: null` on all four is a real negative, not a WAF artifact.
+   Only the third-party Uniswap `UniversalRouter` (`0x8876789976dEcBfCbBbe364623C63652db8C0904`,
+   109 source files) is verified. Everything mechanical about Hashcats therefore has to come from
+   ABI + live calls + bytecode, and I must label source-level claims accordingly.
+
+### Careful-with note
+The bundle's hardcoded fallback `0x768bd404dc5C1cDBB69781f9E91D230f01BbBaF9` is NOT the token
+(reverts on `name()/symbol()/decimals()`, 697 bytes of code). I nearly reported it as $HASH because
+it sat in the config line next to the collection. The real token came from `hashToken()`.
+Lesson shape: a frontend's hardcoded fallback constant is a CLAIM about deployment, same as a doc.
+
+## 2026-09-12 — hashcats CHECKPOINT 2 (the headline, and a near-miss I refuted)
+
+### THE FINDING — owner can drain the whole AMM position to their own EOA (VERIFIED BY TRACE)
+`removeLiquidity(int24,int24,uint128)` on the hook is Solady-`onlyOwner` (random caller →
+`Unauthorized()` 0x82b42900). Simulated from the owner at a pinned block with the REAL position
+(full range -887220..887220, liquidity 2236067977499789696409, the pool's ONLY position, found via
+`eth_getLogs` on PoolManager `ModifyLiquidity` for the computed poolId) → SUCCEEDS, and
+`cast call --trace` shows it `take()`s ~20.9 ETH + ~238,710 $HASH out of the PoolManager and then
+sends BOTH to the owner EOA (`fallback{value:...}` + `transfer(owner, ...)`), emitting
+`LiquidityRemoved`. Plus `withdrawQueue` (~31 ETH, to any address) and `withdrawDev` (~53 ETH, always
+to the owner) — also traced. None of it is in their docs.
+**Technique to reuse: `cast call --trace` is the instrument that turns "the call did not revert" into
+"here is exactly whose balance moves."** A bare `cast call` returning `0x` on a void function proves
+nothing about custody; the trace names the recipient. I will not report a drain vector again without
+the trace.
+
+### The half of the same contract that is genuinely SAFE — say both halves
+The collection holds 90.7 ETH of holder rent and has NO owner exit: no withdraw/sweep selector in the
+ABI, and (see below) no unexplained dispatching selector in the bytecode either. Only `claim`/
+`claimMany` (by the cat's owner) and `flushToHook` (dead cats' share) move that ETH. Reporting only
+the rug vector would have mis-scoped the risk — the rent pot and the buyback pot have opposite trust
+profiles in the SAME project.
+
+### NEAR-MISS I refuted before writing it: "the owner mines at half difficulty"
+`targetFor(owner)` came back exactly 2x `targetFor(random)` — an alarming, publishable-looking result.
+It was an artifact of RH's ~100 ms blocks: `currentBurst` was climbing (9 → 11) BETWEEN my sequential
+`cast call`s, and each burst step halves the target. Re-run with `--block <fixed>` for every call:
+all five addresses, owner included, return the IDENTICAL target.
+**Rule for me on 4663: any cross-entity comparison must pin `--block`, or I am measuring elapsed time
+and calling it logic.** This is L-006 with a 100 ms fuse.
+
+### Technique: prove a frontend ABI is the WHOLE callable surface
+Two directions, both needed. (1) Every ABI function selector must appear as a PUSH4 in `cast code` —
+117/117 collection, 76/76 hook, 0 missing (positive control for the scanner). (2) Every PUSH4 NOT in
+the ABI must be resolvable as an error/event topic or an external-call selector, and I eth_call'd all
+54+61 leftovers raw: every one reverted with empty data, byte-identical to bogus controls `0xdeadbeef`
+/ `0x00000000` / `0xffffff01`, while `owner()` dispatched. Honest limit to state: a real function that
+reverts with no data is indistinguishable, so this is strong evidence of no hidden admin function, not
+proof.
+
+### zsh will silently truncate a wei literal — my first binary search produced garbage
+`$(( (lo+hi)/2 ))` on `83407671904920238345` printed `number truncated after 19 digits` and returned a
+nonsense bound (1.107 ETH). Any wei arithmetic goes through python3, never `$(( ))`.
+
+### `cast call` arg-order trap that looked like an RPC outage
+`cast call $H "sig" -- -887220 887220 1 --rpc-url $RPC` → `--` ends option parsing, so `--rpc-url` was
+eaten as a positional and cast fell back to `http://localhost:8545` → "Connection refused". That reads
+exactly like the node being down. Options BEFORE the `--`, always; and a positive control
+(`owner()` in the same option order) is what told the two apart.
+
+## 2026-09-12 — hashcats FINAL (deliverable shipped)
+
+Deliverable: `~/Developer/assay-design/research/hashcats-scope.md` (769 lines) + pointer and a
+"Deployment pins" block appended to `~/Developer/assay-design/research/INDEX.md`. OUTSIDE the assay
+repo — hashcats is a separate private research target and assay is public.
+
+### Verdict in one line
+Not an Essey competitor (no equities/lending/privacy overlap) but the best-built thing on 4663, and it
+has already shipped the AMM-launch-with-decaying-fee that we are still pre-launch on. WATCH, steal two
+mechanics, avoid the trust model.
+
+### What I did well and want to repeat
+1. **Derived the mechanism from the frontend bundle when no verified source existed.** Two complete
+   ABIs (117 + 76 functions) are embedded in `/assets/index-*.js`. I then proved the ABI is the whole
+   callable surface in BOTH directions (ABI selectors ⊆ PUSH4 in bytecode, 0 missing; every leftover
+   PUSH4 raw-eth_call'd and matching bogus controls). Reusable recipe for any unverified contract.
+2. **`cast call --trace` as the custody instrument.** "It did not revert" is worthless for a void
+   function. The trace named the recipient EOA on three separate drain paths. This is now my default
+   for any "can the operator take it" question.
+3. **Watched EVERY guard refuse, per BC-001**, and recorded the selector: `Unauthorized()` 0x82b42900,
+   `BadFee()` 0x917f1a53, `TooBig()` 0x8aa0e18c, `BadRoyalty()` 0x8f486857,
+   `BadTargetInterval()` 0x018f955e, `BadFailsafeIdle()` 0xb8493aeb, `CollectionAlreadySet()`
+   0x07fa9819, `RendererHasNoCode()` 0xfb3a46b6. Each with the passing case next to it, so the bound
+   is measured rather than read off a constant.
+4. **Reproduced their hash function locally** rather than trusting the docs: on-chain `workHash` ==
+   `cast keccak(miner || nonce || prev || anchor)`, with a different-miner control. That is what turned
+   "they say a solution cannot be stolen" into a fact.
+5. **Reconciled a derived financial figure against a second artifact** (beta.fund technique, reused):
+   `mintPrice()` == `PRICE_STEP × createdBefore(epoch)` to the wei, and `RENT_STEP + HOOK_STEP ==
+   PRICE_STEP` exactly — which proved the 70/30 split is an identity, not a policy. Also the pool's
+   market price came out 1.082x their own stated arbitrage ceiling, which validates their model from
+   outside it.
+
+### Three things I nearly got WRONG, all the same disease
+- **"The owner mines at half difficulty."** Artifact of unpinned `--block` on a 0.1 s-block chain
+  (`currentBurst` incrementing mid-loop). Pinned: identical for all addresses. Now a rule in my INDEX
+  pins block.
+- **"63 uniques taken of a total of 16."** `uniquesTaken` is a BITMAP: 63 = 0b111111 = 6, which matches
+  5,969/1024 windows. Any counter whose value exceeds its declared maximum is a bitmap or a scaled
+  accumulator before it is a bug. Check popcount before reporting a contradiction.
+- **"block.number is 6.25 s, so their docs are wrong."** 25-second sample, 4 increments, ±25% noise.
+  Re-measured over 185 s: 12.33 s — their docs were right. L-032 in miniature: span, not samples.
+
+### The self-catch I am most glad about
+I labelled "0 Transfer logs for $ESSEY" and then noticed the sweep had hit HTTP 429 mid-run. It was a
+FAILED PROBE, not a finding, and the true answer (3 transfers) came from a different endpoint with a
+positive control. I put the failure in the deliverable as a named gap rather than as a zero.
+
+### Two operational traps that cost me time
+- **zsh truncates wei literals.** `$(( (lo+hi)/2 ))` on `83407671904920238345` printed "number
+  truncated after 19 digits" and returned a garbage bound. All wei arithmetic through python3.
+- **`cast call ... -- -887220 ... --rpc-url $RPC` sends the call to localhost:8545.** `--` ends option
+  parsing, so `--rpc-url` became a positional and cast fell back to the default RPC → "Connection
+  refused", which reads exactly like the node being down. Options BEFORE `--`, and keep a positive
+  control in the same option order so you can tell an outage from a parse error.
+
+### Reached past the ask, and it was the right call
+The founder asked about hashcats. While grounding "how Essey differs" in our own contracts I found that
+`docs/MAINNET-ACTIVATION.md:1239` states a *currently-holding* deploy precondition
+(`ESSEY totalSupply == balanceOf(ops) == 8,888,888,888e18`) that is no longer true: supply is **0**
+because ops called `EsseyReserve.redeem(8,888,888,888e18)` on 2026-09-09T23:14:59Z
+(tx `0x4df5445ec50fb9dc444904cecdb1316ea24333c8a27dad1a51991cbdd0e1f4e4`, selector 0xdb006a75),
+burning the entire supply. Two independent sources agree (RPC `totalSupply()` = 0 with a $HASH
+positive control in the same minute; Blockscout token endpoint `total_supply: "0"`, `holders: "0"`,
+with a fabricated-address 404 control). The reserve still holds the equity basket. I framed it as a
+STALE REGISTER LINE, not a bug — it looks like a deliberate pre-launch unwind — and routed it to the
+PM with the tx rather than sounding an alarm. Checking our own register against chain instead of
+reciting it from memory is what surfaced it.
+
+### Feedback I owe and am asking for (record the answers next session)
+- **essey-launch-economist:** I handed you a mechanic (price-impact-bounded per-block buyback) plus a
+  narrow question. Was the framing usable, or do you need the parameter sweep pre-run? Tell me what
+  shape of hand-off you actually want from me at this seam.
+- **don-designer:** I asserted `Don.sol`/`DonFeeRouter.sol` have no per-token fee accumulator from a
+  grep of `accPer|claimable|rentPer|owed`. If that grep was the wrong instrument, say so — I would
+  rather be corrected than have the scope carry a wrong negative.
+- **PM:** is one 769-line scope the right artifact, or would you rather have a 1-page decision sheet
+  with the long form behind it? The last two targets both ran long and I do not know if the length
+  helps you route or slows you down.

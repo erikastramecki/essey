@@ -220,3 +220,70 @@ for the blog-only deploy, then essey-social for the X block.
   five fenced code blocks reads on a phone or wants a pull-quote treatment; for the deployment
   manager, whether the build-log-blocks-deploy seam is worth one token in `guard-deploy`'s exclude
   list or whether they would rather I always commit the log first.
+
+## 2026-09-10 — the whole supply burned, and five live posts went false the same minute
+
+CHECKPOINT written mid-session (L-010), before the log and the draft.
+
+**What I verified myself, all against `https://rpc.mainnet.chain.robinhood.com`, chain 4663, at head
+block 59379932 (ts 1789040987 = 2026-09-10 11:49:47 UTC):**
+- `$ESSEY.totalSupply()` = **0**. `balanceOf(ops 0x93e6…4B9E)` = 0. `balanceOf(0xdEaD)` = **0**, which
+  means `_remove()` took the real `burn()` branch (`EsseyReserve.sol:114-120`), not the strand-at-dead
+  fallback. Supply reduction is genuine, not a transfer to a hole.
+- `receiptCount()` = 1. `receipts(0)` = (`0x93e6e42CcC676614FB3635b0983d60F35dDE4B9E`,
+  8888888888000000000000000000) — the receipt is for the ENTIRE `claimBase`, which reads
+  8888888888000000000000000000. `circulatingSupply()` = 0. `EXIT_FEE_BPS()` = 500.
+- `claimed(0, token)` = **true for all 15** basket tokens in `app/web/src/reserve.ts:44-60`.
+- **The token's entire history is THREE Transfer events.** `eth_getLogs` from block 0:
+  49634440 mint `0x0`→ops; 58931401 ops→reserve; 58931401 reserve→`0x0`. All three for the full
+  8,888,888,888. That three-line ledger is the spine of the post and it needs no prose to carry it.
+- redeem tx `0x4df5445e…f4e4`, block 58931401, ts 1788995699 = 2026-09-09 23:14:59 UTC, status 1,
+  gasUsed 115,297. claim tx `0xdca0a6d2…e2cb`, block 58931577, ts 1788995717 = 23:15:17 UTC,
+  status 1, gasUsed 1,513,567, **all 15 legs paid in one `claimMany`**, 41 logs.
+- `0xfb8f41b2` = `cast sig 'ERC20InsufficientAllowance(address,uint256,uint256)'`. Confirmed, not taken
+  from the commit message.
+
+**THE BRIEF WAS WRONG IN TWO PLACES AND BOTH MATTER. Neither is the briefer's fault — the chain moved.**
+1. **"the reserve retains 5.00% of AMZN, SPY and FLR."** AMZN and FLR read **5.000000%** right now
+   (post ÷ (post+paid), to six decimals). **SPY reads 20.142733%**, because SPY is the ONE basket token
+   that received a further deposit AFTER the claim: 6,247,648,429,307,173 at block 59152096 from
+   `0xe2f08818…20cc3` (291 bytes of code, referenced nowhere in the repo). Back that deposit out and SPY
+   was exactly 5.000000% at the claim too. I ran the same `eth_getLogs` (topics `[Transfer, null, reserve]`,
+   fromBlock 0x3833979) over all 15 tokens: SPY is the only one with any inbound since. `549e177`'s own
+   commit message carries the SPY figure, so it was true when written and is stale now.
+   **So all 15 retained exactly 5%, and one of the three the brief named no longer reads that way.**
+2. **"the stocks are in his wallet."** Not now. Ops holds 0 AMZN and 0 NVDA. The full claimed AMZN
+   (16,065,456,126,994,822, byte-for-byte the `Claimed` amount) left ops at block 58937739 for
+   `0x36dc95f1…02bc2`, a 6,752-byte contract with no `owner()`, `symbol()` or `essey()` and no mention
+   anywhere in the repo. I stopped tracing there on purpose: that is the unannounced-relaunch direction
+   and it is not mine to map. **The post says the receipt's legs were pulled and paid to the redeemer,
+   which is what the 15 `Claimed` events prove, and says nothing about where anything sits now.**
+
+**THE FINDING I NEARLY DID NOT GO LOOKING FOR, and it is the most urgent thing here.**
+The burn falsified FIVE sentences that are LIVE on essey.xyz this minute. Verified SERVED (L-004), not
+committed — bundle `/assets/index-BnhyDNnu.js`, 4,559,908 bytes, with both controls run first:
+positive `treasury` 42 hits exit 0, negative `zzz_jester_negative_control_zzz` 0 hits **exit 1**, so the
+probe can go red. Then: `8,888,888,888` **11 hits**; `You can read that balance yourself` 1;
+`still sit in the treasury wallet` 1; `Exactly one transfer event exists` 1.
+- `only-real-essey-contract.md:18` — "all 8,888,888,888 of them, currently sits in one treasury wallet
+  … You can read that balance yourself." A reader who obeys that sentence reads **0** and concludes we
+  were robbed or lying. This is the anti-scam post. It is the worst possible one to be wrong.
+- `only-real-essey-contract.md:77` — "All 8,888,888,888 tokens still sit in the treasury wallet."
+- `reserve-audit.md:48` — "Exactly one transfer event exists on the token in its entire history."
+  There are three, and I have all three.
+- `front-door-two-sided.md:28` — "The fixed supply, 8,888,888,888 tokens, minted once."
+- `base-layer-live.md:14` — present-tense "is minted to the treasury wallet."
+Plus `app/web/src/docs.generated.ts` carries the same fixed-supply framing into /docs.
+**And the bind, which is why I did not touch any of them:** every correction discloses the burn, and the
+burn is under a disclosure hold. So the fix is gated on the same decision as the post. I did not silently
+leave it either — it is the first thing in my report. §38's rule, one level up: a correction I cannot
+publish is worth zero to the reader, and a correction I am not ALLOWED to publish is a founder decision,
+not a backlog item.
+
+**BC-001, and I watched this one go red the useful way.** §19 makes me open every link. The check I have
+been using for explorer links is worthless: `curl -o /dev/null -w %{http_code}` on the real redeem tx
+returned `http=200 size=89908`, and on `0xdeadbeef…deadbeef` returned `http=200 size=89908` — the same
+status and the SAME BYTE COUNT. Blockscout is an SPA, so the shell is identical for a tx that does not
+exist. My own session-1 note said a bogus hash returns 200; I now have the size equality too, which kills
+the last version of that check that looked usable. Any explorer link I ship is grounded on my own
+`cast receipt` / `eth_getLogs`, never on the fetch.
